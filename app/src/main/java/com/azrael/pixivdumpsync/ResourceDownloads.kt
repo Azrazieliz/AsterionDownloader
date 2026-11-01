@@ -36,18 +36,19 @@ object ResourceDownloads {
 
     fun render(a:Activity,body:LinearLayout,games:Boolean){
         val ui=NocturneDesign
-        val title=if(games)"Games & Visual Novels" else "EPUB Books"
+        val title=if(games)"Games & Visual Novels" else "Books & Novels"
         val folder=if(games)"Games" else "Books"
         body.addView(ui.text(a,title,23f,ui.white,true),ui.lp(a,18))
         body.addView(ui.text(a,if(games)
             "Search and download game torrents; choose all required game assets and play through a compatible Android runtime."
-            else "Search public EPUB editions by title and download only EPUB files.",
+            else "Search EPUB titles; direct and local books also support PDF, CBZ and archives.",
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
+        if(!games)CreatorArchiveUi.render(a,body,ArchiveSection.BOOKS)
         if(!games){
             TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
             val libraries=ui.card(a)
-            libraries.addView(ui.text(a,"BOOK LIBRARIES · EPUB",16f,ui.white,true),ui.lp(a,3))
+            libraries.addView(ui.text(a,"BOOK LIBRARIES · MULTIFORMAT",16f,ui.white,true),ui.lp(a,3))
             libraries.addView(ui.text(a,"Standard Ebooks and Wikisource are searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))
             libraries.addView(action(a,"BROWSE MANYBOOKS LIBRARY"){
                 a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://manybooks.net/search-book")))
@@ -98,7 +99,7 @@ object ResourceDownloads {
         files.addView(ui.text(a,"LOCAL FILES",15f,ui.white,true),ui.lp(a,3))
         files.addView(action(a,"OPEN EXISTING ARCHIVE / GAME"){
             val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                type=if(games)"*/*" else "application/epub+zip"
+                type="*/*"
                 addCategory(Intent.CATEGORY_OPENABLE)
             }
             a.startActivityForResult(intent,if(games)5202 else 5201)
@@ -140,9 +141,6 @@ object ResourceDownloads {
             PortableGameExporter.export(a,uri,name.ifBlank{"game.zip"})
             return
         }
-        if(request==5201 && !name.endsWith(".epub",true)){
-            note(a,"Book files must be EPUB");return
-        }
         val lower=name.lowercase()
         val engine=when{
             lower.endsWith(".apk")->"Native Android package: open with the Android installer."
@@ -176,9 +174,6 @@ object ResourceDownloads {
             return
         }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
-        if(folder=="Books" && !path.endsWith(".epub")){
-            note(a,"Books accept EPUB only. Search by title above.");return
-        }
         when{
             path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
             raw.contains("nyaa.si/view/")||raw.contains("sukebei.nyaa.si/view/")||
@@ -196,7 +191,7 @@ object ResourceDownloads {
             val uri=URI(url)
             val file=(filename?:uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"})
                 .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
-            require(folder!="Books" || file.endsWith(".epub",true)){"Books require an EPUB file"}
+            require(folder!="Books" || listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi",".azw3").any{file.endsWith(it,true)}){"Unsupported book format"}
             val d=a.getSystemService(DownloadManager::class.java)
             val request=DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(file)
