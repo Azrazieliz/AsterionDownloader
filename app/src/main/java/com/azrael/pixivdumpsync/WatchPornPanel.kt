@@ -19,7 +19,14 @@ object WatchPornPanel {
         val doc=Jsoup.connect(url).timeout(18000).maxBodySize(3_000_000)
             .userAgent("Mozilla/5.0 (Android 17) Chrome/131.0").get()
         val tokens=name.trim().lowercase().split(Regex("\\s+")).filter{it.isNotBlank()}
-        return doc.select("a[href*=/models/]").mapNotNull{node->
+        val slug=name.trim().lowercase().replace(Regex("[^a-z0-9]+"),"-").trim('-')
+        val direct=if(slug.isBlank())null else runCatching{
+            val url="https://watchporn.to/models/"+slug+"/"
+            val page=Jsoup.connect(url).timeout(14000).userAgent("Mozilla/5.0")
+                .maxBodySize(1_000_000).get()
+            if(page.select("a[href*=/video/]").isEmpty())null else Performer(name.trim(),url)
+        }.getOrNull()
+        val indexed=doc.select("a[href*=/models/]").mapNotNull{node->
             val link=node.absUrl("href")
             val page=runCatching{URI(link)}.getOrNull()
             if(page?.host!="watchporn.to" || !page.path.matches(
@@ -30,6 +37,7 @@ object WatchPornPanel {
             if(tokens.any{!title.contains(it,true)})return@mapNotNull null
             Performer(title,link)
         }.distinctBy{it.url}.take(40)
+        return (listOfNotNull(direct)+indexed).distinctBy{it.url}
     }
     fun render(a:Activity,body:LinearLayout){
         val ui=NocturneDesign
