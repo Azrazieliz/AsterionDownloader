@@ -77,6 +77,7 @@ class AsterionHomeActivity:Activity(){
         window.statusBarColor=theme.background
         window.navigationBarColor=theme.background
         GalleryDb(this).use{it.seedCatalogOnce(this)}
+        AlohaDefaults.ensure(this)
         ChapterRecovery.ensure(this)
         CreatorArchiveScheduler.ensure(this)
         XPhotoScheduler.ensure(this)
