@@ -38,7 +38,7 @@ class CatalogDiscoveryTest {
         assertTrue(hits.any{it.kind==CatalogKind.GAME_ARCHIVE})
         assertTrue(hits.any{it.kind==CatalogKind.APK})
     }
-    @Test fun publicArchiveBooksRetainOriginalFormatsAndCovers() {
+    @Test fun publicArchiveBooksAreEpubOnly() {
         val json="""{"metadata":{},"files":[
           {"name":"Novel/book.pdf","size":"1048576"},
           {"name":"Novel/volume.cbz","size":"2097152"},
@@ -46,14 +46,10 @@ class CatalogDiscoveryTest {
           {"name":"Novel/locked.acsm","size":"100"},
           {"name":"Novel/loan_lcp.epub","size":"100"}]}"""
         val hits=CatalogDiscovery.archiveFiles(json,"book123","Original Novel",false)
-        assertEquals(3,hits.size)
-        assertTrue(hits.any{it.kind==CatalogKind.BOOK_FILE &&
-            it.filename.endsWith(".pdf")})
-        assertTrue(hits.any{it.kind==CatalogKind.BOOK_FILE &&
-            it.filename.endsWith(".cbz")})
-        assertTrue(hits.any{it.kind==CatalogKind.EPUB})
-        assertTrue(hits.all{it.url.startsWith("https://archive.org/download/book123/")})
-        assertTrue(hits.all{it.coverUrl=="https://archive.org/services/img/book123"})
+        assertEquals(1,hits.size)
+        assertEquals(CatalogKind.EPUB,hits.first().kind)
+        assertTrue(hits.first().filename.endsWith(".epub"))
+        assertTrue(hits.first().coverUrl.endsWith("book123"))
     }
     @Test fun rssTorrentIsSelectableFromANameSearch() {
         val xml="""<rss><channel><item><title>Example Visual Novel Game</title>
