@@ -44,6 +44,16 @@ object ResourceDownloads {
             else "Search public EPUB editions by title and download only EPUB files.",
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
+        val torrent=ui.card(a)
+        torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
+        torrent.addView(ui.text(a,
+            "Game torrents: search by TITLE above, select a torrent result, choose the complete game files, then monitor verified peer "+
+            "transfers below. Completed files are exported to Downloads/AsterionDownloader/Games/Torrents; run only with a compatible external Android app.",
+            12f,ui.secondary),ui.lp(a,7))
+        torrent.addView(action(a,"ACTIVE / COMPLETED TORRENTS · PAUSE / RESUME"){
+            TorrentTransfers.showQueue(a)
+        },ui.lp(a,10))
+        if(games)body.addView(torrent,ui.lp(a,14))
         val card=ui.card(a)
         card.addView(ui.text(a,"ADVANCED DIRECT LINK",13f,ui.secondary,true),ui.lp(a,6))
         val field=EditText(a).apply{
@@ -100,16 +110,7 @@ object ResourceDownloads {
             },ui.lp(a,7))
         }
         body.addView(files,ui.lp(a,14))
-        val torrent=ui.card(a)
-        torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
-        torrent.addView(ui.text(a,
-            "Native libtorrent transfers. Select specific ZIPs or game files; monitor verified peer "+
-            "transfers, pause/resume and export completed files to public Downloads.",
-            12f,ui.secondary),ui.lp(a,7))
-        torrent.addView(action(a,"TORRENT TRANSFER STATUS / PAUSE / RESUME"){
-            TorrentTransfers.showQueue(a)
-        },ui.lp(a,10))
-        if(games)body.addView(torrent,ui.lp(a,14))
+
     }
 
     fun onFilePicked(a:Activity,request:Int,uri:Uri?){

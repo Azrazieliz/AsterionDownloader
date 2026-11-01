@@ -191,6 +191,7 @@ class AsterionHomeActivity:Activity(){
             when(target){
                 "Pixiv"->startActivity(Intent(this@AsterionHomeActivity,MainActivity::class.java))
                 "Kyora"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java))
+                "Koikatsu"->startActivity(Intent(this@AsterionHomeActivity,KoikatsuCardActivity::class.java))
                 "Site"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java)
                     .putExtra(com.azrael.galleryflow.MainActivity.EXTRA_ADD_SITE,true))
                 else->open(target)
@@ -243,6 +244,9 @@ class AsterionHomeActivity:Activity(){
             sourceTile("Video Search","Direct sites · Videos & previews",
                 R.drawable.ic_source_video,theme.primary,"Videos")
         )
+        put(body,button("KOIKATSU · CHARACTER CARD SEARCH"){
+            startActivity(Intent(this,KoikatsuCardActivity::class.java))
+        },12)
         val all=card()
         put(all,text("ALL ARTIST SYNC CONTROLS",13f,theme.secondary,true),0)
         put(all,text("Enable or disable Pixiv, X and Kyora together. Site catalog entries start disabled until you choose them.",12f,theme.secondary))

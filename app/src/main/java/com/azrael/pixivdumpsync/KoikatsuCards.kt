@@ -1,0 +1,199 @@
+package com.azrael.pixivdumpsync
+
+import android.app.*
+import android.content.*
+import android.net.Uri
+import android.os.*
+import android.provider.MediaStore
+import android.widget.*
+import com.azrael.galleryflow.SiteSession
+import org.json.JSONObject
+import org.jsoup.Jsoup
+import java.net.*
+import java.io.*
+import kotlin.concurrent.thread
+
+data class KoikatsuCard(val name:String,val author:String,val download:String,
+                         val source:String,val page:String)
+object KoikatsuCards {
+    private fun encode(s:String)=URLEncoder.encode(s,"UTF-8")
+    internal fun parseBepis(json:String):List<KoikatsuCard>{
+        val array=JSONObject(json).optJSONObject("data")?.optJSONArray("cards")?:return emptyList()
+        return (0 until minOf(array.length(),100)).mapNotNull{i->
+            val card=array.optJSONObject(i)?:return@mapNotNull null
+            if(card.optString("cardType")!="KK")return@mapNotNull null
+            val id=card.optInt("id")
+            if(id<=0)return@mapNotNull null
+            val meta=card.optJSONObject("cardData")
+            val name=listOf(meta?.optString("firstName").orEmpty(),
+                meta?.optString("lastName").orEmpty()).filter{it.isNotBlank()}
+                .joinToString(" ").ifBlank{"Card "+id}
+            val author=card.optJSONObject("uploader")?.optString("username").orEmpty()
+            val png="https://db.bepis.moe/card/full/KK_"+id.toString().padStart(6,'0')+".png"
+            KoikatsuCard(name,author,png,"BepisDB","https://db.bepis.moe/koikatsu/view/"+id)
+        }
+    }
+    private fun safe(url:String):Boolean=runCatching{
+        val u=URL(url)
+        u.protocol=="https" && u.host.lowercase() in setOf("db.bepis.moe","koikatsucards.com")
+    }.getOrDefault(false)
+    private fun response(url:String):String{
+        require(safe(url)){"Untrusted card source"}
+        val c=URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout=12000;c.readTimeout=16000;c.instanceFollowRedirects=false
+        c.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 17) Chrome/131")
+        SiteSession.cookie(url)?.let{c.setRequestProperty("Cookie",it)}
+        try{
+            require(c.responseCode==200){"HTTP "+c.responseCode}
+            return c.inputStream.bufferedReader().use{it.readText().take(2_000_000)}
+        }finally{c.disconnect()}
+    }
+    internal fun parseArchive(html:String,base:String):List<KoikatsuCard> {
+        val doc=Jsoup.parse(html,base)
+        return doc.select("a.card[href*=/contents/]").take(75).mapNotNull{link->
+            val page=link.absUrl("href")
+            if(!safe(page))return@mapNotNull null
+            KoikatsuCard(link.text().trim().take(160).ifBlank{"Character card"},"",
+                page,"KoikatsuCards",page)
+        }.distinctBy{it.page}
+    }
+    fun search(name:String):Pair<List<KoikatsuCard>,List<String>>{
+        require(name.trim().length in 2..120){"Enter a character name"}
+        val results=ArrayList<KoikatsuCard>()
+        val errors=ArrayList<String>()
+        runCatching{
+            for(page in 1..3){
+                val found=parseBepis(response("https://db.bepis.moe/api/frontend/search?cardType=KK&name="+
+                    encode(name.trim())+"&page="+page))
+                if(found.isEmpty())break
+                results+=found
+            }
+        }.onFailure{errors+="BepisDB: "+it.message}
+        runCatching{
+            // KoikatsuCards exposes work/character filters but no documented public name API.
+            val base="https://koikatsucards.com/search?types=type-character-card"
+            results+=parseArchive(response(base),base).filter{
+                it.name.contains(name.trim(),true)}
+        }.onFailure{errors+="KoikatsuCards: "+it.message}
+        return results.distinctBy{it.page}.take(90) to errors
+    }
+    internal fun parseArchiveDownload(html:String,base:String):String?{
+        val doc=Jsoup.parse(html,base)
+        return doc.select("div.download-menu-panel a.download-menu-item,"+
+            "div.tag-group.download-link-group a.link-pill").map{it.absUrl("href")}
+            .firstOrNull{safe(it) && URL(it).path.startsWith("/api/downloads/")}
+    }
+    fun resolve(card:KoikatsuCard):String {
+        return if(card.source=="BepisDB")card.download
+        else parseArchiveDownload(response(card.page),card.page)
+            ?:error("No accessible card file; sign in on KoikatsuCards if required")
+    }
+    fun download(a:Activity,url:String,title:String):String{
+        require(safe(url)){"Untrusted host"}
+        val conn=URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout=18000;conn.readTimeout=40000
+        conn.instanceFollowRedirects=false
+        conn.setRequestProperty("User-Agent","Mozilla/5.0 (Android 17)")
+        SiteSession.cookie(url)?.let{conn.setRequestProperty("Cookie",it)}
+        try{
+            require(conn.responseCode==200){"HTTP "+conn.responseCode}
+            val output=ByteArrayOutputStream()
+            conn.inputStream.use{input->
+                val buf=ByteArray(65536)
+                while(true){
+                    val n=input.read(buf);if(n<0)break
+                    output.write(buf,0,n)
+                    require(output.size()<=64*1024*1024){"Card exceeds 64 MiB"}
+                }
+            }
+            val data=output.toByteArray()
+            require(data.size>256 && data.take(8)==listOf(137,80,78,71,13,10,26,10)
+                .map{it.toByte()}){"Not an original PNG card"}
+            val name=title.replace(Regex("[^A-Za-z0-9_. -]"),"_").take(65)
+                .ifBlank{"Koikatsu"}+".png"
+            val v=ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME,name)
+                put(MediaStore.Downloads.MIME_TYPE,"image/png")
+                put(MediaStore.Downloads.RELATIVE_PATH,"Download/AsterionDownloader/Koikatsu/Cards/")
+                put(MediaStore.Downloads.IS_PENDING,1)
+            }
+            val uri=a.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v)
+                ?:error("Unable to create PNG in Downloads")
+            try{
+                a.contentResolver.openOutputStream(uri,"w")!!.use{it.write(data)}
+                a.contentResolver.update(uri,ContentValues().apply{
+                    put(MediaStore.Downloads.IS_PENDING,0)
+                },null,null)
+            }catch(e:Throwable){a.contentResolver.delete(uri,null,null);throw e}
+            return uri.toString()
+        }finally{conn.disconnect()}
+    }
+}
+
+class KoikatsuCardActivity:Activity(){
+    private val ui=NocturneDesign
+    private lateinit var results:LinearLayout
+    private lateinit var status:TextView
+    override fun onCreate(savedInstanceState:Bundle?){
+        super.onCreate(savedInstanceState)
+        val body=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(ui.px(this@KoikatsuCardActivity,15),ui.px(this@KoikatsuCardActivity,15),
+                ui.px(this@KoikatsuCardActivity,15),ui.px(this@KoikatsuCardActivity,15))
+            setBackgroundColor(ui.background)
+        }
+        body.addView(ui.text(this,"KOIKATSU CARDS",24f,ui.white,true))
+        body.addView(ui.text(this,"Search by character name. Original PNG cards are saved to Downloads/AsterionDownloader/Koikatsu/Cards.",12f,ui.secondary),ui.lp(this,7))
+        val query=EditText(this).apply{
+            hint="Character name";setSingleLine(true)
+            setTextColor(ui.white);setHintTextColor(ui.secondary)
+        }
+        body.addView(query,ui.lp(this,9))
+        status=ui.text(this,"Sources: BepisDB + KoikatsuCards",12f,ui.secondary)
+        body.addView(ui.action(this,"SEARCH CARDS BY NAME",true){
+            val term=query.text.toString().trim()
+            if(term.length<2){status.text="Enter at least 2 characters";return@action}
+            status.text="Searching…";results.removeAllViews()
+            thread(name="koikatsu-name-search"){
+                val found=runCatching{KoikatsuCards.search(term)}
+                runOnUiThread{found.onSuccess{(cards,errors)->
+                    status.text=cards.size.toString()+" cards"+if(errors.isEmpty())"" else
+                        " · "+errors.joinToString(" | ").take(180)
+                    cards.forEach{addCard(it)}
+                }.onFailure{status.text="Search failed: "+it.message}}
+            }
+        },ui.lp(this,9))
+        body.addView(status,ui.lp(this,7))
+        val row=ui.row(this)
+        for((name,url) in listOf("BEPISDB" to "https://db.bepis.moe/koikatsu",
+             "KOIKATSUCARDS FILTERS" to "https://koikatsucards.com/search?types=type-character-card")){
+            row.addView(ui.action(this,name,false){
+                startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
+            },LinearLayout.LayoutParams(0,-2,1f))
+        }
+        body.addView(row,ui.lp(this,6))
+        results=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        body.addView(ScrollView(this).apply{addView(results)},LinearLayout.LayoutParams(-1,0,1f))
+        setContentView(body)
+    }
+    private fun addCard(card:KoikatsuCard){
+        val v=ui.card(this)
+        v.addView(ui.text(this,card.name,16f,ui.white,true))
+        v.addView(ui.text(this,card.source+(if(card.author.isBlank())"" else " · "+card.author),
+            12f,ui.secondary),ui.lp(this,4))
+        if(card.source=="BepisDB"){
+            val preview=ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER}
+            v.addView(preview,LinearLayout.LayoutParams(-1,ui.px(this,160)))
+            RemoteImageLoader.load(this,preview,card.download,card.page)
+        }
+        v.addView(ui.action(this,"DOWNLOAD CARD PNG",true){
+            status.text="Retrieving "+card.name
+            thread(name="koikatsu-card-download"){
+                val done=runCatching{KoikatsuCards.download(this,KoikatsuCards.resolve(card),card.name)}
+                runOnUiThread{done.onSuccess{status.text="Saved original PNG: "+card.name}
+                    .onFailure{status.text="Download failed: "+it.message}}
+            }
+        },ui.lp(this,8))
+        results.addView(v,ui.lp(this,10))
+    }
+}

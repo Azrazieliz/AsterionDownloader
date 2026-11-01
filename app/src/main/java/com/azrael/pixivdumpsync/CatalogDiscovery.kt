@@ -151,8 +151,8 @@ object CatalogDiscovery {
         val title=query.trim()
         require(title.length in 2..150){"Enter a title (2–150 characters)"}
         val providers: List<Pair<String, () -> List<CatalogHit>>> =
-            if(games)listOf("Internet Archive" to {searchArchive(title,true)},
-                "Nyaa and Sukebei" to {searchTorrents(title)})
+            if(games)listOf("Nyaa and Sukebei" to {searchTorrents(title)},
+                "Bitsearch / Knaben / Pirate Bay" to {MultiTorrentSearch.search(title).first})
             else listOf("Project Gutenberg" to {searchGutenberg(title)},
                 "Internet Archive" to {searchArchive(title,false)})
         val pool=Executors.newFixedThreadPool(providers.size)
@@ -174,11 +174,11 @@ object CatalogDiscovery {
                 }
             }
         }finally{pool.shutdownNow()}
-        val results=all.filter{games || it.kind==CatalogKind.EPUB}
+        val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else it.kind==CatalogKind.EPUB}
             .filter{relevance(title,it.title+" "+(if(games)"" else it.details))>0}
-            .distinctBy{SearchRanking.canonicalKey(it.url)}
+            .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
-                .thenBy{it.source}).take(60)
+                .thenBy{it.source}).take(100)
         return CatalogOutcome(results,failures,providers.size)
     }
 }

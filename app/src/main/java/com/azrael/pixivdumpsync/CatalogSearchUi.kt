@@ -18,19 +18,20 @@ object CatalogSearchUi {
 
     private fun decode(raw:String):List<CatalogHit> = runCatching {
         val arr=JSONArray(raw)
-        (0 until minOf(60,arr.length())).mapNotNull { i ->
+        (0 until minOf(100,arr.length())).mapNotNull { i ->
             val item=arr.optJSONObject(i)?:return@mapNotNull null
             val kind=runCatching{CatalogKind.valueOf(item.getString("kind"))}.getOrNull()
                 ?:return@mapNotNull null
             CatalogHit(item.optString("title"),item.optString("source"),
                 item.optString("url"),kind,item.optString("filename"),
                 item.optString("details"))
-        }.filter{SearchRanking.validUrl(it.url)}
+        }.filter{SearchRanking.validUrl(it.url) ||
+            it.url.startsWith("magnet:?xt=urn:btih:",true)}
     }.getOrDefault(emptyList())
 
     private fun persist(a:Activity,games:Boolean,title:String,hits:List<CatalogHit>) {
         val array=JSONArray()
-        hits.take(60).forEach{hit->
+        hits.take(100).forEach{hit->
             array.put(JSONObject().apply{
                 put("title",hit.title);put("source",hit.source);put("url",hit.url)
                 put("kind",hit.kind.name);put("filename",hit.filename);put("details",hit.details)
@@ -48,7 +49,7 @@ object CatalogSearchUi {
         val card=ui.card(a)
         card.addView(ui.text(a,"SEARCH "+name.uppercase()+" BY NAME",17f,ui.white,true),ui.lp(a,4))
         card.addView(ui.text(a,if(games)
-            "Search public game archives and torrent catalogs. Download first, then use a compatible external Android runtime or native APK."
+            "Search torrent catalogs by game title. Tap a result to choose files, then watch the transfer queue. Games are saved to Downloads for external Android players."
             else "Search public EPUB editions. Only EPUB files are shown and downloaded.",
             12f,ui.secondary),ui.lp(a,8))
         val query=EditText(a).apply{
@@ -86,7 +87,7 @@ object CatalogSearchUi {
                     CatalogKind.EPUB->"DOWNLOAD EPUB"
                     CatalogKind.APK->"DOWNLOAD ANDROID APK"
                     CatalogKind.GAME_ARCHIVE->"DOWNLOAD GAME ZIP"
-                    CatalogKind.TORRENT->"SELECT TORRENT FILES TO DOWNLOAD"
+                    CatalogKind.TORRENT->"DOWNLOAD VIA TORRENT · SELECT FILES"
                 }
                 item.addView(ui.action(a,label,true){
                     when(hit.kind){

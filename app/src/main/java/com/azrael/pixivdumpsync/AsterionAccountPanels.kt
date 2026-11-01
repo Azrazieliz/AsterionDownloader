@@ -231,6 +231,32 @@ object AsterionAccountPanels {
                     }
                 }.start()
         }
+        val specific=card(a,p)
+        add(a,specific,ui.text(a,"DOWNLOAD A SPECIFIC KYORA LIST / GALLERY",17f,ui.white,true),0)
+        add(a,specific,ui.text(a,"Provide a public or signed-in collection URL. Only that collection is enrolled for backfill; original images, tag exclusions and progress remain handled by Kyora.",12f,ui.secondary))
+        val listUrl=entry(a,"Collection / creator album URL")
+        add(a,specific,listUrl)
+        action(a,specific,"SAVE LIST AND BACKFILL",true){
+            val link=listUrl.text.toString().trim()
+            if(!com.azrael.galleryflow.SiteSession.validLoginUrl(link)){
+                say(a,"Enter an HTTPS collection URL")
+            }else{
+                Thread{
+                    val result=runCatching{
+                        val entity=AdapterRegistry.forUrl(link).resolveEntity(link)
+                        GalleryDb(a).use{it.addEntity(entity)}
+                        entity.stableId
+                    }
+                    a.runOnUiThread{
+                        result.onSuccess{
+                            cosplaySync(a,GallerySyncMode.BACKFILL,it)
+                            say(a,"Kyora collection enrolled for backfill")
+                            refresh()
+                        }.onFailure{say(a,"List cannot be indexed: "+it.message)}
+                    }
+                }.start()
+            }
+        }
         add(a,p,ui.text(a,"Followed creators & websites",19f,ui.white,true),20)
         if(entities.isEmpty())add(a,p,
             ui.text(a,"No cosplay sources linked in this installation.",13f,ui.secondary))
@@ -341,6 +367,30 @@ object AsterionAccountPanels {
                 XPhotoScheduler.ensure(a);XPhotoEngine.start(a)
                 say(a,"X account linked and backfill queued");refresh()
             }else say(a,"Invalid or already followed X account")
+        }
+        val xLists=card(a,p)
+        add(a,xLists,ui.text(a,"DOWNLOAD A SPECIFIC X LIST",17f,ui.white,true),0)
+        add(a,xLists,ui.text(a,"Enter an X list URL. The signed-in browser captures its photo posts and queues originals; downloaded images remain outside the app.",12f,ui.secondary))
+        val listInput=entry(a,"https://x.com/i/lists/123456789...")
+        add(a,xLists,listInput)
+        action(a,xLists,"SAVE LIST & OPEN IMAGE DOWNLOAD",true){
+            val url=XMediaCaptureActivity.normalizeList(listInput.text.toString())
+            if(url==null)say(a,"Enter a valid X list URL")
+            else{
+                val prefs=a.getSharedPreferences("asterion_x_lists",Activity.MODE_PRIVATE)
+                val all=prefs.getStringSet("urls",emptySet()).orEmpty().toMutableSet()
+                all.add(url);prefs.edit().putStringSet("urls",all).apply()
+                a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                    .putExtra(XMediaCaptureActivity.EXTRA_LIST_URL,url))
+            }
+        }
+        val savedLists=a.getSharedPreferences("asterion_x_lists",Activity.MODE_PRIVATE)
+            .getStringSet("urls",emptySet()).orEmpty().sorted()
+        for(listUrl in savedLists){
+            action(a,xLists,"OPEN LIST "+listUrl.substringAfterLast('/'),false){
+                a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                    .putExtra(XMediaCaptureActivity.EXTRA_LIST_URL,listUrl))
+            }
         }
         add(a,p,ui.text(a,"Followed X accounts",19f,ui.white,true),20)
         if(accounts.isEmpty())add(a,p,ui.text(a,
