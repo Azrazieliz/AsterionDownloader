@@ -30,6 +30,9 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return writableDatabase.insertWithOnConflict("watches", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
     }
+    fun resetWatchBackfill(id:Long){
+        writableDatabase.execSQL("UPDATE watches SET last_check=0,error=NULL WHERE id=?",arrayOf(id))
+    }
     fun removeWatch(id: Long) { writableDatabase.delete("watches", "id=?", arrayOf("$id")) }
     fun enableWatch(id: Long, enabled: Boolean) {
         writableDatabase.update("watches", ContentValues().apply { put("enabled", if(enabled) 1 else 0) }, "id=?", arrayOf("$id"))
