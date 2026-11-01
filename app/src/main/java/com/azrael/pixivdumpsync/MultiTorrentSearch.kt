@@ -84,28 +84,7 @@ object MultiTorrentSearch {
                 "Seeders: "+row.optInt("seeders")+" · metadata only")
         }
     }
-    fun search(q:String):Pair<List<CatalogHit>,List<String>>{
-        val results=ArrayList<CatalogHit>()
-        val errors=ArrayList<String>()
-        fun source(label:String,fn:()->List<CatalogHit>){
-            runCatching{fn()}.onSuccess{results+=it}
-                .onFailure{errors+=label+": "+(it.message?:"Unavailable")}
-        }
-        source("Bitsearch"){
-            bitsearch(request("https://bitsearch.eu/api/v1/search?q="+enc(q)+"&category=6&limit=70"))
-        }
-        source("Knaben"){
-            val post=JSONObject().apply {
-                put("search_type","score");put("search_field","title");put("query",q)
-                put("size",80);put("hide_unsafe",true);put("hide_xxx",false)
-            }.toString()
-            knaben(request("https://api.knaben.org/v1",post))
-        }
-        source("The Pirate Bay"){
-            apibay(request("https://apibay.org/q.php?q="+enc(q)+"&cat=400"))
-        }
-        return results to errors
-    }
+    fun search(q:String):Pair<List<CatalogHit>,List<String>>=search(q,TorrentArea.GAMES)
 
     fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
         val hits=ArrayList<CatalogHit>()
@@ -141,22 +120,26 @@ object MultiTorrentSearch {
                         name.contains("adult")||name.contains("erotic")
                     TorrentArea.BOOKS->name.contains("book")||name.contains("epub")||
                         name.contains("novel")
-                    TorrentArea.GAMES->name.contains("game")||name.contains("vn")||
-                        name.contains("pc")
+                    TorrentArea.GAMES->Regex("(?i)\\b(games?|software|visual.novel|ren.?py|eroge|rpg|vn)\\b")
+                        .containsMatchIn(name) &&
+                        !Regex("(?i)\\b(porn.?video|anime.?episode|movie|jav|video.?rip)\\b")
+                            .containsMatchIn(name)
                 }
             }
         }
         if(area==TorrentArea.ADULT || area==TorrentArea.GAMES){
             provider("Sukebei"){
-                val url="https://sukebei.nyaa.si/?page=rss&q="+enc(q)
+                // Adult games rather than all adult releases (especially video).
+                val cat=if(area==TorrentArea.GAMES)"&c=1_3" else ""
+                val url="https://sukebei.nyaa.si/?page=rss"+cat+"&q="+enc(q)
                 val data=org.jsoup.Jsoup.connect(url).ignoreContentType(true)
                     .userAgent("Mozilla/5.0").timeout(14000).execute().body()
                 CatalogDiscovery.torrentRss(data,url,"Sukebei")
             }
         }
-        if(area==TorrentArea.BOOKS){
-            provider("Nyaa"){
-                val url="https://nyaa.si/?page=rss&q="+enc(q)
+        if(area==TorrentArea.GAMES){
+            provider("Nyaa · software games"){
+                val url="https://nyaa.si/?page=rss&c=6_2&q="+enc(q)
                 val data=org.jsoup.Jsoup.connect(url).ignoreContentType(true)
                     .userAgent("Mozilla/5.0").timeout(14000).execute().body()
                 CatalogDiscovery.torrentRss(data,url,"Nyaa")
