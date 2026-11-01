@@ -26,6 +26,18 @@ class KoikatsuTorrentSearchTest {
         assertTrue(TorrentTransfers.hasGamePayload(listOf("Game Release.7z")))
         assertFalse(TorrentTransfers.hasGamePayload(listOf("Game video.mp4")))
     }
+    @Test fun chineseGameIndexerSearchReturnsRealGameDetailsOnly(){
+        val html="""<html><body>
+          <a href="/view.so?id=12345" title="[RPG] Example Adventure Windows">Open</a>
+          <a href="/view.so?id=12345" title="[RPG] Example Adventure Windows">Duplicate</a>
+          <a href="/view.so?id=999" title="Movie video only">Movie</a>
+          <a href="https://attacker.example/view.so?id=5" title="Example Adventure">Unsafe</a>
+        </body></html>"""
+        val results=MultiTorrentSearch.ggbasesListing(html,"Example Adventure")
+        assertEquals(1,results.size)
+        assertEquals("https://www.ggbases.com/view.so?id=12345",results.single().url)
+        assertEquals(CatalogKind.TORRENT,results.single().kind)
+    }
     @Test fun searchApisRejectInvalidHashes(){
         val h="a".repeat(40)
         val json="{\"results\":[{\"title\":\"Game\",\"infohash\":\""+h+"\",\"seeders\":5}]}"
