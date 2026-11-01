@@ -166,12 +166,15 @@ class AsterionHomeActivity:Activity(){
         }
         when(page){
             "Home"->renderHome()
-            "Pixiv"->{AsterionAccountPanels.pixiv(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.ARTWORK)}
-            "Toonily"->renderToonily()
+            "Pixiv"->{AsterionAccountPanels.pixiv(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.ARTWORK)
+                AlohaSources.render(this,body,listOf(AlohaArea.ARTWORK),"ARTWORK & IMAGE TOOLS")}
+            "Toonily"->{renderToonily();AlohaSources.render(this,body,listOf(AlohaArea.COMICS),"COMIC & MANGA SOURCES")}
             "X"->AsterionAccountPanels.x(this,body){render()}
-            "Site"->{AsterionAccountPanels.cosplay(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.COSPLAY)}
-            "Videos"->renderAdd()
-            "Porn"->renderPorn()
+            "Site"->{AsterionAccountPanels.cosplay(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.COSPLAY)
+                AlohaSources.render(this,body,listOf(AlohaArea.COSPLAY),"KYORA & COSPLAY SITES")}
+            "Videos"->{renderAdd();AlohaSources.render(this,body,listOf(AlohaArea.VIDEOS),"GENERAL VIDEO SOURCES")}
+            "Porn"->{renderPorn();AlohaSources.render(this,body,
+                listOf(AlohaArea.ADULT,AlohaArea.HENTAI),"ADULT & HENTAI VIDEO SOURCES")}
             "Assets"->AssetsPanel.render(this,body)
             "Books"->ResourceDownloads.render(this,body,false)
             "Games"->ResourceDownloads.render(this,body,true)
@@ -763,6 +766,7 @@ class AsterionHomeActivity:Activity(){
             startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
         })
         put(body,settings,12)
+        AlohaSources.render(this,body,listOf(AlohaArea.STUDY),"RELATED SAVED REFERENCE")
         put(body,text("Cloud uploads are not marked verified without confirmation from the destination. Originals are retained.",12f,theme.secondary))
     }
 }
