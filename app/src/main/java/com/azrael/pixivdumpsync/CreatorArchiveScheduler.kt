@@ -8,6 +8,7 @@ import kotlin.concurrent.thread
 /** Durable periodic creator updates with bounded history pagination. */
 object CreatorArchiveScheduler {
     private const val JOB=41082
+    private val scanning=AtomicBoolean(false)
     fun ensure(context:Context){
         val jobs=context.getSystemService(JobScheduler::class.java)
         val enabled=CreatorArchiveStore.list(context).isNotEmpty()
@@ -24,40 +25,74 @@ object CreatorArchiveScheduler {
         if(!AppPower.enabled(context))return
         thread(name="asterion-creator-refresh"){scan(context)}
     }
-    fun scan(context:Context){
-        if(!AppPower.enabled(context))return
-        val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
-        val selected=CreatorArchiveStore.list(context)
-        for(creator in selected){
-            if(!AppPower.enabled(context))break
-            if(!prefs.getBoolean("active_"+creator.url.hashCode(),true))continue
-            val key="cursor_"+creator.url.hashCode()
-            val previous=prefs.getInt(key,0)
-            val errors=ArrayList<String>()
-            var newlyQueued=0
-            val offsets=listOf(0,previous,previous+50,previous+100).distinct()
-            for(offset in offsets){
-                if(offset>50000)break
-                val page=runCatching{CreatorArchives.posts(creator,offset)}
-                page.onSuccess{posts->
-                    if(posts.isEmpty()){
-                        if(offset>0)prefs.edit().putBoolean("complete_"+key,true).apply()
-                    }else{
-                        val outcome=CreatorArchiveDownloads.enqueue(context,posts,40)
-                        newlyQueued+=outcome.queued
-                        if(outcome.failed>0)errors+=outcome.failed.toString()+" attachments could not queue"
-                        if(offset>0 && posts.size==50)
-                            prefs.edit().putInt(key,offset+50).apply()
-                        if(offset>0 && posts.size<50)
-                            prefs.edit().putBoolean("complete_"+key,true).apply()
+    /**
+     * Continue historical pages only after *every* attachment on the current page has
+     * either been queued or was already successfully/pending downloaded. Advancing the
+     * cursor after a 40-file batch silently discarded the remainder of dense pages.
+     */
+    fun scan(context:Context,shouldStop:()->Boolean={false}){
+        if(!AppPower.enabled(context)||!scanning.compareAndSet(false,true))return
+        try{
+            val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
+            for(creator in CreatorArchiveStore.list(context)){
+                if(shouldStop()||!AppPower.enabled(context))break
+                if(!prefs.getBoolean("active_"+creator.url.hashCode(),true))continue
+                val key="cursor_"+creator.url.hashCode()
+                var cursor=prefs.getInt(key,0).coerceIn(0,50000)
+                var completed=prefs.getBoolean("complete_"+key,false)
+                val errors=ArrayList<String>()
+                var newlyQueued=0
+                var deferred=0
+
+                // Refresh the newest page every run. Its downloads are deduplicated.
+                val latest=runCatching{CreatorArchives.posts(creator,0)}
+                latest.onSuccess{page->
+                    val outcome=CreatorArchiveDownloads.enqueue(context,page,40)
+                    newlyQueued+=outcome.queued
+                    deferred+=outcome.deferred
+                    if(outcome.failed>0)errors+=outcome.failed.toString()+" latest attachments failed"
+                    if(cursor==0 && outcome.deferred==0 && outcome.failed==0){
+                        if(page.size==50){cursor=50;completed=false}
+                        else completed=true
                     }
-                }.onFailure{errors+=it.message?:"Source unavailable"}
-                if(page.isFailure)break
+                }.onFailure{errors+="Latest posts: "+(it.message?:"source unavailable")}
+
+                // A saved historical cursor is the next *uncompleted* page, not the
+                // next page after an arbitrary batch. Resume it on subsequent runs.
+                if(latest.isSuccess && !completed && cursor>0 &&
+                    !shouldStop() && AppPower.enabled(context)){
+                    val history=runCatching{CreatorArchives.posts(creator,cursor)}
+                    history.onSuccess{page->
+                        val outcome=CreatorArchiveDownloads.enqueue(context,page,40)
+                        newlyQueued+=outcome.queued
+                        deferred+=outcome.deferred
+                        if(outcome.failed>0)errors+=outcome.failed.toString()+" older attachments failed"
+                        if(outcome.deferred==0 && outcome.failed==0){
+                            if(page.size<50)completed=true
+                            else if(cursor<50000)cursor+=50
+                            else completed=true
+                        }
+                    }.onFailure{errors+="Backfill: "+(it.message?:"source unavailable")}
+                }
+
+                // If the archive was completed, recheck the overlapping second page:
+                // newly published items may push recently seen posts off the first.
+                if(latest.isSuccess && completed && cursor>0 &&
+                    !shouldStop() && AppPower.enabled(context)){
+                    runCatching{CreatorArchives.posts(creator,50)}.onSuccess{page->
+                        val outcome=CreatorArchiveDownloads.enqueue(context,page,40)
+                        newlyQueued+=outcome.queued
+                        deferred+=outcome.deferred
+                        if(outcome.failed>0)errors+=outcome.failed.toString()+" overlap attachments failed"
+                    }.onFailure{errors+="Overlap: "+(it.message?:"source unavailable")}
+                }
+                prefs.edit().putInt(key,cursor).putBoolean("complete_"+key,completed)
+                    .putInt("pending_"+key,deferred)
+                    .putLong("last_"+key,System.currentTimeMillis())
+                    .putInt("queued_"+key,newlyQueued)
+                    .putString("error_"+key,errors.joinToString(" | ").take(500)).apply()
             }
-            prefs.edit().putLong("last_"+key,System.currentTimeMillis())
-                .putInt("queued_"+key,newlyQueued)
-                .putString("error_"+key,errors.joinToString(" | ").take(500)).apply()
-        }
+        }finally{scanning.set(false)}
     }
     fun enabled(context:Context,creator:ArchiveCreator):Boolean=
         context.getSharedPreferences("asterion_creator_sync",0)
@@ -74,6 +109,8 @@ object CreatorArchiveScheduler {
         val error=prefs.getString("error_"+key,"").orEmpty()
         return (if(at==0L)"Not yet checked" else "Last checked "+java.util.Date(at))+
             " · historical offset "+prefs.getInt(key,0)+
+            (if(prefs.getBoolean("complete_"+key,false))" · full history checked" else " · backfill pending")+
+            (if(prefs.getInt("pending_"+key,0)>0)" · "+prefs.getInt("pending_"+key,0)+" files deferred" else "")+
             if(error.isEmpty())"" else " · "+error
     }
 }
@@ -82,7 +119,7 @@ class CreatorArchiveJob:JobService(){
     override fun onStartJob(params:JobParameters):Boolean{
         stopped.set(false)
         thread(name="asterion-archive-periodic"){
-            try{if(!stopped.get())CreatorArchiveScheduler.scan(applicationContext)}
+            try{if(!stopped.get())CreatorArchiveScheduler.scan(applicationContext){stopped.get()}}
             finally{jobFinished(params,false)}
         }
         return true
