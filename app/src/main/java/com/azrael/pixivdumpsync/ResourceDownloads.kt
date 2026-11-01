@@ -179,7 +179,11 @@ object ResourceDownloads {
         when{
             path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
             raw.contains("nyaa.si/view/")||raw.contains("sukebei.nyaa.si/view/")||
-                raw.contains("thepiratebay.")||raw.contains("1337x.")->
+                raw.contains("thepiratebay.")||raw.contains("1337x.")||
+                (URI(raw).host.orEmpty().removePrefix("www.")=="ggbases.com" &&
+                    path=="/view.so")||
+                (URI(raw).host.orEmpty().removePrefix("www.")=="onejav.com" &&
+                    path.startsWith("/torrent/"))->
                 openTorrentSource(a,raw,folder)
             else->http(a,raw,folder)
         }
