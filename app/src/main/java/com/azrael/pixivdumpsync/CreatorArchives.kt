@@ -225,6 +225,7 @@ object CreatorArchiveStore {
         all.forEach{a.put(JSONObject().put("host",it.host.name).put("service",it.service)
             .put("id",it.id).put("name",it.name))}
         prefs(c).edit().putString("creators",a.toString()).apply()
+        CreatorArchiveScheduler.ensure(c)
     }
     fun isSaved(c:Context,creator:ArchiveCreator)=list(c).any{it.url==creator.url}
 }
@@ -258,7 +259,8 @@ object CreatorArchiveDownloads {
                 }?:false
                 if(active){skipped++;continue}
             }
-            val folder="AsterionDownloader/Creators/${post.creator.host.name.lowercase(Locale.ROOT)}/${post.creator.service}/${post.creator.id}"
+            val kind=ArchiveContent.category(file,post)
+            val folder="AsterionDownloader/"+kind.folder+"/"+post.creator.host.name.lowercase(Locale.ROOT)+"/"+post.creator.service+"/"+post.creator.id
             val name="${post.id}_${index+1}_${filename(file.title)}"
             try{
                 val request=DownloadManager.Request(Uri.parse(file.url)).apply{
