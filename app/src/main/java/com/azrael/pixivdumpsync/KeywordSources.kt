@@ -27,7 +27,7 @@ object KeywordSources {
     /** Separate actual search sources for each of the three requested categories. */
     private val hentaiSites=listOf(
         "html|https://hanime.tv/search?query={query}|Hanime",
-        "html|https://hentai.tv/?s={query}|HentaiTV",
+        "html|https://hentai.tv/series?search={query}|HentaiTV",
         "html|https://hentaihaven.xxx/?s={query}|HentaiHaven"
     )
     private val pornSites=listOf(
@@ -205,10 +205,10 @@ object KeywordSources {
         val doc=connection(context,url).get()
         return htmlPageHits(doc,url,provider,keyword,area)
     }
-    private fun htmlPageHits(doc:Document,url:String,provider:SearchProvider,
+    internal fun htmlPageHits(doc:Document,url:String,provider:SearchProvider,
         keyword:String,area:VideoSearchArea):List<RankedHit>{
         val found=ArrayList<RankedHit>()
-        val selectors="li.pcVideoListItem a[href], .videoBox a[href], "+
+        val selectors=".cat-card a[href], li.pcVideoListItem a[href], .videoBox a[href], "+
             ".thumb-block a[href], [class*=video-thumb] a[href], "+
             "[class*=video-card] a[href], [class*=thumb] a[href], "+
             "[class*=video] a[href], article a[href], "+
@@ -226,13 +226,13 @@ object KeywordSources {
             val searchHost=URI(url).host.orEmpty().removePrefix("www.")
             if(resultHost!=searchHost && !resultHost.endsWith("."+searchHost))continue
             val container=node.closest(
-                "li.pcVideoListItem, .videoBox, .thumb-block, "+
+                ".cat-card, li.pcVideoListItem, .videoBox, .thumb-block, "+
                 "[class*=video-thumb], [class*=video-card], article, "+
                 "[class*=thumb], [class*=video]")
             val image=(node.selectFirst("img")?:container?.selectFirst("img"))
             val description=container?.text().orEmpty().take(500)
             val titles=listOf(
-                container?.selectFirst("h3,h2,[class*=title]")?.text().orEmpty(),
+                container?.selectFirst(".cat-title,h3,h2,[class*=title]")?.text().orEmpty(),
                 node.attr("title"),node.attr("aria-label"),
                 image?.attr("alt").orEmpty(),node.text(),
                 container?.attr("title").orEmpty()

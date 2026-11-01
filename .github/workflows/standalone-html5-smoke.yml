@@ -1,0 +1,38 @@
+name: Standalone HTML5 Android Package Smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feature/asterion-unified-downloads-20261030"]
+    paths:
+      - "tools/package_html5_android.py"
+      - ".github/workflows/standalone-html5-smoke.yml"
+jobs:
+  standalone-game-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Generate original playable HTML5 fixture
+        run: |
+          python - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('/tmp/html5-example.zip','w') as z:
+              z.writestr('game/index.html', '<!doctype html><title>Smoke Game</title><button id="go">Start</button><script src="main.js"></script>')
+              z.writestr('game/main.js', 'document.getElementById("go").onclick=()=>document.title="Playing";')
+          PY
+      - name: Package HTML5 game as independent Android APK
+        run: |
+          python tools/package_html5_android.py --zip /tmp/html5-example.zip --out artifact-standalone --package com.asterion.portable.smoke --label "Standalone Test Game"
+          gradle -p artifact-standalone assembleDebug --stacktrace
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging artifact-standalone/app/build/outputs/apk/debug/app-debug.apk | grep "com.asterion.portable.smoke"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Independent-HTML5-Sample-APK
+          path: artifact-standalone/app/build/outputs/apk/debug/app-debug.apk

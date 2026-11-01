@@ -77,7 +77,7 @@ object SearchRanking {
         if(host=="hentaihaven.xxx" &&
             (path.startsWith("/watch/") || path.startsWith("/video/")))return true
         if(host=="hentai.tv" &&
-            (path.startsWith("/episode/")||path.startsWith("/watch/")||
+            (path.startsWith("/series/")||path.startsWith("/episode/")||path.startsWith("/watch/")||
              path.startsWith("/anime/")||path.startsWith("/hentai/")))return true
         if(host.contains("xvideos.com") && Regex("^/video(?:[._0-9]|/)").containsMatchIn(path))return true
         if(host.contains("pornhub.com") && path=="/view_video.php")
