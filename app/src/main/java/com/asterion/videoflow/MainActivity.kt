@@ -336,6 +336,13 @@ class MainActivity:Activity() {
                 DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(w.lastCheck)),
                 11f,grey),7)
             if(w.error!=null)add(c,text("Issue: "+w.error,12f,amber),7)
+            if(w.address.startsWith("https://watchporn.to/models/")){
+                add(c,button("BACKFILL ALL PERFORMER VIDEOS",false){
+                    db.resetWatchBackfill(w.id)
+                    requestTransfer(true)
+                    toast("Full performer archive scan requested")
+                },11)
+            }
             add(c,button("REMOVE PAGE",false){
                 AlertDialog.Builder(this).setTitle("Remove page?")
                     .setNegativeButton("Cancel",null)
