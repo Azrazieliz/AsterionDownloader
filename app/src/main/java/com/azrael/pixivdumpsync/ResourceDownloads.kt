@@ -48,7 +48,7 @@ object ResourceDownloads {
             TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
             val libraries=ui.card(a)
             libraries.addView(ui.text(a,"BOOK LIBRARIES · EPUB",16f,ui.white,true),ui.lp(a,3))
-            libraries.addView(ui.text(a,"Standard Ebooks is searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))
+            libraries.addView(ui.text(a,"Standard Ebooks and Wikisource are searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))
             libraries.addView(action(a,"BROWSE MANYBOOKS LIBRARY"){
                 a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://manybooks.net/search-book")))
             },ui.lp(a,6))

@@ -164,10 +164,10 @@ object AsterionAccountPanels {
             .onFailure{say(a,"Cosplay sync error: "+it.message)}
     }
     fun cosplay(a:Activity,p:LinearLayout,refresh:()->Unit){
-        CreatorPreviews.kyora(a,p)
         val entities=GalleryDb(a).use{it.listEntities()}
         title(a,p,"Cosplay · Creators & Galleries",
             "Saved creators, websites and galleries with new-post sync and full backfill.")
+        CreatorPreviews.kyora(a,p)
         val controls=card(a,p)
         add(a,controls,ui.text(a,"${entities.size} connected sources",
             17f,ui.white,true),0)
@@ -310,11 +310,11 @@ object AsterionAccountPanels {
         }
     }
     fun x(a:Activity,p:LinearLayout,refresh:()->Unit){
-        CreatorPreviews.x(a,p)
         val accounts=XPhotoQueue(a).use{it.allSources()}
         val count=XPhotoQueue(a).use{it.counts()}
         title(a,p,"X · Artists & Photo Archive",
             "Follow X accounts, save all posted images and keep checking for new photos.")
+        CreatorPreviews.x(a,p)
         val summary=card(a,p)
         add(a,summary,ui.text(a,"${accounts.size} X accounts · "+
             "${count["done"]?:0} images saved",17f,ui.white,true),0)

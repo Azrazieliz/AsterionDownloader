@@ -60,10 +60,27 @@ object WebDiscovery {
         }
         return found.values.take(limit.coerceIn(1,350))
     }
+
+    /** Extracts only original public-site MP4 links from the source page, not trailers. */
+    internal fun watchPornDirect(html:String):String?{
+        val regex=Regex("""(?:video_alt_url|video_url)\s*:\s*'([^']+)'""")
+        return regex.findAll(html).map{it.groupValues[1].replace("&amp;","&")}
+            .filter{
+                val u=runCatching{URI(it)}.getOrNull()
+                u?.scheme=="https" && u.host=="watchporn.to" &&
+                    u.path.orEmpty().contains("/get_file/") &&
+                    u.path.orEmpty().contains(".mp4") &&
+                    !u.path.orEmpty().contains("preview",true)
+            }.lastOrNull()
+    }
+
     fun directMedia(address:String):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
         val page=open(address)
+        if(URI(address).host.orEmpty().endsWith("watchporn.to")){
+            watchPornDirect(page.html())?.let{return it}
+        }
         for(node in page.select("video[src],video source[src],source[src],meta[property=og:video],meta[property=og:video:url],meta[itemprop=contentUrl]")){
             val source=node.attr("abs:src").ifBlank{node.attr("content")}
             val resolved=runCatching{URI(page.location()).resolve(source).toString()}.getOrNull()?:continue

@@ -69,7 +69,18 @@ class XMediaCaptureActivity:Activity() {
             settings.allowContentAccess=false
             android.webkit.CookieManager.getInstance().setAcceptCookie(true)
             addJavascriptInterface(Bridge(),"AsterionMedia")
-            webViewClient=WebViewClient()
+            webViewClient=object:WebViewClient(){
+                override fun onPageFinished(view:WebView?,url:String?){
+                    super.onPageFinished(view,url)
+                    if(feed)view?.let{browser->browser.postDelayed({
+                        browser.evaluateJavascript("""(function(){
+                          const tabs=Array.from(document.querySelectorAll('[role="tab"]'));
+                          const following=tabs.find(x=>x.textContent.trim().toLowerCase()==='following');
+                          if(following)following.click();
+                        })()""",null)
+                    },1300)}
+                }
+            }
         }
         outer.addView(browser,LinearLayout.LayoutParams(-1,0,1f))
         outer.addView(ui.action(this,"CAPTURE VISIBLE PHOTOS",true){capture()},ui.lp(this,7))
@@ -128,7 +139,7 @@ class XMediaCaptureActivity:Activity() {
                 links.filter{it.startsWith("https://pbs.twimg.com/media/")}.forEach{observed.add(it)}
                 if(auto){
                     queueObserved()
-                    XPhotoEngine.start(this@XMediaCaptureActivity)
+                    if(passes%15==0)XPhotoEngine.start(this@XMediaCaptureActivity)
                 }
                 update()
             }

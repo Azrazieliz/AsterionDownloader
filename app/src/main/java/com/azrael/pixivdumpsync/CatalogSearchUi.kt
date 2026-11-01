@@ -71,7 +71,8 @@ object CatalogSearchUi {
             results.addView(ui.text(a,hits.size.toString()+" matching files / listings",
                 12f,ui.secondary),ui.lp(a,5))
             hits.forEach{hit->
-                if(!games && hit.kind!=CatalogKind.EPUB)return@forEach
+                if((!games && hit.kind!=CatalogKind.EPUB) ||
+                    (games && hit.kind!=CatalogKind.TORRENT))return@forEach
                 val item=ui.card(a)
                 item.addView(ui.text(a,hit.title,15f,ui.white,true),ui.lp(a,5))
                 val type=when(hit.kind){

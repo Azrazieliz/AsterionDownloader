@@ -50,8 +50,10 @@ object CreatorPreviews {
             12f,ui.secondary),ui.lp(a,7))
     }
     fun x(a:Activity,p:LinearLayout){
-        val previews=XPhotoQueue(a).use{it.recent(150)}
-            .distinctBy{it.photo}.take(18)
+        val previews=XPhotoQueue(a).use{db->
+            val followed=db.allSources().map{it.url}.toSet()
+            db.recent(500).filter{it.source in followed}
+        }.distinctBy{it.photo}.take(18)
         strip(a,p,"X · LATEST FOLLOWED ARTWORKS",
             "Thumbnails from saved and newly discovered X photos. Tap an artist to see their media."){
             row->
