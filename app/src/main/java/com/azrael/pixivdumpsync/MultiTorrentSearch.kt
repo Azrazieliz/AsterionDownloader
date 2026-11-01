@@ -84,6 +84,41 @@ object MultiTorrentSearch {
                 "Seeders: "+row.optInt("seeders")+" · metadata only")
         }
     }
+
+    /** GGBases is a Chinese game-specific torrent/magnet catalog, unlike
+     * unrestricted RSS feeds which mixed adult video releases into Games. */
+    internal fun ggbasesListing(html:String,query:String):List<CatalogHit>{
+        val base="https://www.ggbases.com/"
+        val doc=Jsoup.parse(html,base)
+        val visited=HashSet<String>()
+        val items=ArrayList<CatalogHit>()
+        for(a in doc.select("a[href*='view.so?id=']").take(2000)){
+            val url=a.absUrl("href")
+            val uri=runCatching{java.net.URI(url)}.getOrNull()?:continue
+            if(uri.scheme!="https" || uri.host!="www.ggbases.com" ||
+                uri.path!="/view.so" ||
+                !Regex("(?:^|&)id=[0-9]{1,12}(?:&|$)").containsMatchIn(
+                    uri.rawQuery.orEmpty()))continue
+            val name=a.attr("title").takeIf{it.length>=4}
+                ?:a.text().trim().takeIf{it.length>=4}
+                ?:continue
+            if(CatalogDiscovery.relevance(query,name)<=0 ||
+                !visited.add(url))continue
+            items+=CatalogHit(name.take(220),"GGBases · Chinese game torrents",
+                url,CatalogKind.TORRENT,"",
+                "Game release listing · original torrent/magnet resolved on the detail page")
+            if(items.size>=45)break
+        }
+        return items
+    }
+    private fun searchGGBases(q:String):List<CatalogHit>{
+        val url="https://www.ggbases.com/search.so?p=0&title="+enc(q)
+        val response=Jsoup.connect(url).timeout(20000)
+            .userAgent("Mozilla/5.0 (Linux; Android 17) Chrome/131.0")
+            .maxBodySize(3_000_000).get()
+        return ggbasesListing(response.outerHtml(),q)
+    }
+
     fun search(q:String):Pair<List<CatalogHit>,List<String>> = search(q,TorrentArea.GAMES)
 
     fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
@@ -126,6 +161,9 @@ object MultiTorrentSearch {
                             .containsMatchIn(name)
                 }
             }
+        }
+        if(area==TorrentArea.GAMES)provider("GGBases · CN games"){
+            searchGGBases(q)
         }
         if(area==TorrentArea.ADULT || area==TorrentArea.GAMES){
             provider("Sukebei"){
