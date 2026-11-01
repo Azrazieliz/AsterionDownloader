@@ -19,12 +19,12 @@ class KoikatsuTorrentSearchTest {
         assertEquals("https://koikatsucards.com/api/downloads/content-file/token/demo",actual)
     }
     @Test fun gameTorrentMustContainIdentifiableGamePayload(){
-        assertFalse(TorrentTransfers.hasGamePayload(listOf(
+        assertFalse(GameTorrentPolicy.hasGamePayload(listOf(
             "Movie 1080p.mkv", "preview/clip.mp4", "Extras/trailer.zip")))
-        assertTrue(TorrentTransfers.hasGamePayload(listOf(
+        assertTrue(GameTorrentPolicy.hasGamePayload(listOf(
             "Game/game.exe", "Game/Assets/cutscene.mp4", "Game/data.rpa")))
-        assertTrue(TorrentTransfers.hasGamePayload(listOf("Game Release.7z")))
-        assertFalse(TorrentTransfers.hasGamePayload(listOf("Game video.mp4")))
+        assertTrue(GameTorrentPolicy.hasGamePayload(listOf("Game Release.7z")))
+        assertFalse(GameTorrentPolicy.hasGamePayload(listOf("Game video.mp4")))
     }
     @Test fun chineseGameIndexerSearchReturnsRealGameDetailsOnly(){
         val html="""<html><body>
