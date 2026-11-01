@@ -51,7 +51,7 @@ object CatalogSearchUi {
         card.addView(ui.text(a,"SEARCH "+name.uppercase()+" BY NAME",17f,ui.white,true),ui.lp(a,4))
         card.addView(ui.text(a,if(games)
             "Search torrent catalogs by game title. Tap a result to choose files, then watch the transfer queue. Games are saved to Downloads for external Android players."
-            else "Search title/author across public libraries for original EPUB, PDF, comic archives and other accessible book formats.",
+            else "Search book title and author for EPUB editions. Comic chapter ZIPs are in Comics.",
             12f,ui.secondary),ui.lp(a,8))
         val query=EditText(a).apply{
             hint=if(games)"Game, visual novel or eroge title" else "Book title or author"
@@ -72,7 +72,7 @@ object CatalogSearchUi {
             results.addView(ui.text(a,hits.size.toString()+" matching files / listings",
                 12f,ui.secondary),ui.lp(a,5))
             hits.forEach{hit->
-                if((!games && hit.kind!=CatalogKind.EPUB && hit.kind!=CatalogKind.BOOK_FILE) ||
+                if((!games && hit.kind!=CatalogKind.EPUB) ||
                     (games && hit.kind!=CatalogKind.TORRENT))return@forEach
                 val item=ui.card(a)
                 if(SearchRanking.validUrl(hit.coverUrl)){
