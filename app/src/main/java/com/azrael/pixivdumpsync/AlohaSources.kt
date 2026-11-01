@@ -158,11 +158,11 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             }
             AlohaArea.COMICS->{
                 browse(a,site)
-                status.text="Use a series URL in Comics to queue chapter ZIPs on supported hosts"
+                status.text="Chapter ZIP download for this site requires a verified adapter; existing Toonily/MangaRead downloads are preserved."
             }
             AlohaArea.BOOKS,AlohaArea.GAMES->{
                 browse(a,site)
-                status.text="Open a title or accessible original file; torrent transfers use Games/Books"
+                status.text="Browse source; native EPUB/game transfer requires a directly resolved original URL."
             }
             AlohaArea.REFERENCE,AlohaArea.STUDY->{
                 browse(a,site)
@@ -200,6 +200,23 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             CreatorPreviews.sourceThumbnail(a,thumbnail,site.url)
             selection.addView(ui.text(a,site.name,15f,ui.white,true),ui.lp(a,5))
             selection.addView(ui.text(a,site.url,11f,ui.secondary),ui.lp(a,4))
+            val nativeSync=site.area in listOf(AlohaArea.COSPLAY,AlohaArea.ADULT,AlohaArea.HENTAI) &&
+                site.host!="onejav.com"
+            val info=when {
+                nativeSync && AlohaDefaults.seeded(a,site)->
+                    "Enabled in existing sync/backfill queue. Download coverage varies by source."
+                nativeSync -> AlohaDefaults.error(a,site)?.let{
+                    "Source enrollment failed; retry on next app start: "+it.take(150)
+                } ?: "Enrollment into existing sync engine is pending."
+                site.host=="onejav.com" ->
+                    "Torrent index: magnet or .torrent links use native file selection."
+                site.area==AlohaArea.BOOKS ->
+                    "EPUB-only source. A dedicated chapter-to-EPUB adapter is not yet verified."
+                site.area==AlohaArea.COMICS ->
+                    "Dedicated chapter ZIP adapter not yet verified for this site."
+                else -> "Original-file downloads and individual source capabilities vary."
+            }
+            selection.addView(ui.text(a,info,11f,ui.secondary),ui.lp(a,7))
             val isReference=site.area in listOf(AlohaArea.REFERENCE,AlohaArea.STUDY)
             val action=when(site.area){
                 AlohaArea.COSPLAY,AlohaArea.ARTWORK->"FOLLOW / BACKFILL WITH EXISTING IMAGE ENGINE"
