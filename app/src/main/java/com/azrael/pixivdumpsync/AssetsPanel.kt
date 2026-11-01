@@ -168,8 +168,12 @@ object AssetsPanel {
         body.addView(ui.action(a,"KOIKATSU CHARACTER CARDS",true){
             a.startActivity(Intent(a,KoikatsuCardActivity::class.java))
         },ui.lp(a,10))
-        body.addView(ui.action(a,"GUMROAD · BROWSE 3D ASSETS",false){
-            a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://gumroad.com/discover?query=3d%20model")))
+        body.addView(ui.action(a,"GUMROAD · SEARCH & DOWNLOAD ORIGINAL ASSETS",true){
+            val q=input.text.toString().trim()
+            val address=if(q.startsWith("https://"))q
+                else "https://gumroad.com/discover?query="+Uri.encode(q.ifBlank{"3d model"})
+            a.startActivity(Intent(a,AssetMarketplaceActivity::class.java)
+                .putExtra(AssetMarketplaceActivity.EXTRA_URL,address))
         },ui.lp(a,7))
         body.addView(ui.action(a,"OPEN LOCAL BLENDER / MODEL / ARCHIVE",false){
             a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
