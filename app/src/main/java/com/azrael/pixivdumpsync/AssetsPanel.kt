@@ -16,7 +16,7 @@ object AssetsPanel {
         .userAgent("AsterionDownloader/1.3 Android")
         .ignoreContentType(true).timeout(19000).maxBodySize(6000000).execute().body()
     private fun safe(url:String)=runCatching{
-        val u=URI(url);u.scheme=="https" && u.host=="dl.polyhaven.org"
+        val u=URI(url);u.scheme=="https" && u.host in setOf("dl.polyhaven.org","ambientcg.com")
     }.getOrDefault(false)
     private fun download(a:Activity,id:String,files:List<Pair<String,String>>){
         val dm=a.getSystemService(DownloadManager::class.java)
@@ -89,6 +89,8 @@ object AssetsPanel {
             results.removeAllViews();status.text="Searching Poly Haven"
             thread(name="asset-search"){
                 val outcome=runCatching{JSONObject(fetch("https://api.polyhaven.com/assets?type=models"))}
+                val ambient=runCatching{JSONObject(fetch("https://ambientcg.com/api/v3/assets?q="+
+                    java.net.URLEncoder.encode(q,"UTF-8")+"&limit=12&include=title,tags,downloads"))}
                 a.runOnUiThread{
                     outcome.onSuccess{data->
                         var found=0
@@ -108,7 +110,39 @@ object AssetsPanel {
                             if(++found>=18)break
                         }
                         status.text=found.toString()+" models found"
-                    }.onFailure{status.text="Source error: "+it.message}
+                    }.onFailure{status.text="Poly Haven: "+it.message}
+                    ambient.onSuccess{catalog->
+                        val rows=catalog.optJSONArray("assets")
+                        for(i in 0 until minOf(rows?.length()?:0,12)){
+                            val item=rows?.optJSONObject(i)?:continue
+                            val id=item.optString("id")
+                            if(!id.matches(Regex("[A-Za-z0-9_-]{3,80}")))continue
+                            val files=item.optJSONArray("downloads")
+                            val originals=(0 until (files?.length()?:0)).mapNotNull{j->
+                                val f=files?.optJSONObject(j)?:return@mapNotNull null
+                                val url=f.optString("url")
+                                if(!safe(url))return@mapNotNull null
+                                f.optString("attributes","pack")+".zip" to url
+                            }
+                            val tile=ui.card(a)
+                            val image=ImageView(a).apply{scaleType=ImageView.ScaleType.CENTER_CROP}
+                            tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,145)))
+                            CreatorPreviews.sourceThumbnail(a,image,"https://ambientcg.com/a/"+id)
+                            tile.addView(ui.text(a,item.optString("title",id),16f,ui.white,true),ui.lp(a,6))
+                            tile.addView(ui.text(a,"ambientCG · complete PBR texture ZIPs",12f,ui.secondary),ui.lp(a,3))
+                            tile.addView(ui.action(a,"CHOOSE ORIGINAL PACK RESOLUTION",true){
+                                val selected=BooleanArray(originals.size)
+                                AlertDialog.Builder(a).setTitle(id+" material packs")
+                                    .setMultiChoiceItems(originals.map{it.first}.toTypedArray(),
+                                        selected){_,j,v->selected[j]=v}
+                                    .setNeutralButton("ALL PACKS"){_,_->download(a,id,originals)}
+                                    .setPositiveButton("SELECTED"){_,_->
+                                        download(a,id,originals.filterIndexed{j,_->selected[j]})
+                                    }.setNegativeButton("CANCEL",null).show()
+                            },ui.lp(a,8))
+                            results.addView(tile,ui.lp(a,9))
+                        }
+                    }.onFailure{status.text=status.text.toString()+" · ambientCG: "+it.message}
                 }
             }
         },ui.lp(a,8))
