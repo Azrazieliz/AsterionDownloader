@@ -44,7 +44,7 @@ object ResourceDownloads {
             else "Search EPUB titles; direct and local books also support PDF, CBZ and archives.",
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
-        if(!games)CreatorArchiveUi.render(a,body,ArchiveSection.BOOKS)
+        CreatorArchiveUi.render(a,body,if(games)ArchiveSection.GAMES else ArchiveSection.BOOKS)
         if(!games){
             TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
             val libraries=ui.card(a)
