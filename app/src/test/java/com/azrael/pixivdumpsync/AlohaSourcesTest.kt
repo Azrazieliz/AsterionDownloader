@@ -4,23 +4,36 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AlohaSourcesTest {
-    @Test fun allFourExportsContainTheSame76UniqueSites(){
-        val entries=AlohaSources.all
-        assertEquals(76,entries.size)
-        assertEquals(76,entries.map{it.url}.toSet().size)
-        assertTrue(entries.all{it.url.startsWith("https://")})
-        assertFalse(entries.any{it.url.contains("slot-id=")})
+    @Test fun userApprovedBookmarksOnly() {
+        val sites=AlohaSources.all
+        assertEquals(43,sites.size)
+        assertEquals(43,sites.map{it.url}.toSet().size)
+        assertTrue(sites.all{it.url.startsWith("https://")})
+        assertTrue(sites.none{it.url.contains("slot-id=")})
+        assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
+            it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK ||
+            it.area==AlohaArea.VIDEOS})
+        assertEquals(8,AlohaSources.by(AlohaArea.COSPLAY).size)
+        assertEquals(19,AlohaSources.by(AlohaArea.ADULT).size)
+        assertEquals(7,AlohaSources.by(AlohaArea.HENTAI).size)
+        assertEquals(3,AlohaSources.by(AlohaArea.COMICS).size)
+        assertEquals(4,AlohaSources.by(AlohaArea.BOOKS).size)
+        assertEquals(1,AlohaSources.by(AlohaArea.GAMES).size)
+        assertEquals(1,AlohaSources.by(AlohaArea.ASSETS).size)
     }
-    @Test fun sitesAreCategorizedAcrossTheExistingModules(){
-        assertEquals(1,AlohaSources.by(AlohaArea.STUDY).size)
-        assertTrue(AlohaSources.by(AlohaArea.ADULT,AlohaArea.HENTAI).size>=25)
-        assertTrue(AlohaSources.by(AlohaArea.COMICS).any{it.host=="mangadex.org"})
-        assertTrue(AlohaSources.by(AlohaArea.BOOKS).any{it.host=="mp4directs.com"})
-        assertTrue(AlohaSources.by(AlohaArea.ASSETS).any{it.host=="db.bepis.moe"})
-        assertTrue(AlohaSources.by(AlohaArea.GAMES).any{it.host=="nyaa.si"})
-        assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="cosplaytele.com"})
-        assertTrue(AlohaSources.by(AlohaArea.ARTWORK).any{it.host=="pixiv.net"})
-        val assigned=AlohaArea.values().sumOf{area->AlohaSources.by(area).size}
-        assertEquals(76,assigned)
+    @Test fun onlyMissingSourcesAreShownInAlohaAdditions() {
+        val newSites=AlohaSources.additions
+        assertEquals(28,newSites.size)
+        assertEquals(28,newSites.map{it.host}.toSet().size)
+        assertTrue(newSites.any{it.host=="notfans.com"})
+        assertTrue(newSites.any{it.host=="archivebate.com"})
+        assertTrue(newSites.any{it.host=="sushiscan.net"})
+        assertTrue(newSites.any{it.host=="nhentai.xxx"})
+        assertTrue(newSites.any{it.host=="nhentai.net"})
+        assertTrue(newSites.any{it.host=="freewebnovel.com"})
+        assertTrue(newSites.any{it.host=="onejav.com"})
+        assertFalse(newSites.any{it.host=="cosplaytele.com"})
+        assertFalse(newSites.any{it.host=="sukebei.nyaa.si"})
+        assertFalse(newSites.any{it.host=="db.bepis.moe"})
     }
 }
