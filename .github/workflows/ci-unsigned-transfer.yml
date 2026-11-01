@@ -19,7 +19,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 41298845583 -n Asterion-Downloader-v1.2.1-Preview-APK -D "$RUNNER_TEMP/apk"
+          gh run download 41302738206 -n Asterion-Downloader-v1.2.1-Preview-APK -D "$RUNNER_TEMP/apk"
           test -s "$RUNNER_TEMP/apk/app-preview.apk"
           cp "$RUNNER_TEMP/apk/app-preview.apk" "$RUNNER_TEMP/Asterion-Downloader-v1.3.23-CI-UNSIGNED.apk"
       - name: Stage unsigned CI artifact on dedicated transfer branch
