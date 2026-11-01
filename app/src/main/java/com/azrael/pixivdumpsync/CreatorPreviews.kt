@@ -49,10 +49,25 @@ object CreatorPreviews {
         }else p.addView(ui.text(a,"No discovered artwork yet. Sync creators to populate thumbnails.",
             12f,ui.secondary),ui.lp(a,7))
     }
+    fun galleryThumbnail(a:Activity,view:ImageView,uriValue:String?,remoteUrl:String?){
+        val local=uriValue?.takeIf{it.isNotBlank()}
+        val remote=remoteUrl?.takeIf{it.startsWith("https://") || it.startsWith("http://")}
+        if(local!=null){
+            images.execute{
+                val bitmap=runCatching{
+                    a.contentResolver.loadThumbnail(Uri.parse(local),Size(256,256),null)
+                }.getOrNull()
+                if(bitmap!=null)view.post{view.setImageBitmap(bitmap)}
+                else if(remote!=null)view.post{RemoteImageLoader.load(a,view,remote,remote)}
+            }
+        }else if(remote!=null)RemoteImageLoader.load(a,view,remote,remote)
+    }
     fun x(a:Activity,p:LinearLayout){
         val previews=XPhotoQueue(a).use{db->
-            val followed=db.allSources().map{it.url}.toSet()
-            db.recent(500).filter{it.source in followed}
+            val followed=db.allSources().filter{it.enabled}.map{it.url}.toSet()
+            val lists=a.getSharedPreferences("asterion_x_lists",0)
+                .getStringSet("urls",emptySet()).orEmpty()
+            db.recent(500).filter{it.source in followed || it.source in lists || it.source=="https://x.com/home"}
         }.distinctBy{it.photo}.take(18)
         strip(a,p,"X · LATEST FOLLOWED ARTWORKS",
             "Thumbnails from saved and newly discovered X photos. Tap an artist to see their media."){
@@ -60,10 +75,17 @@ object CreatorPreviews {
             for(photo in previews){
                 val handle=runCatching{URI(photo.source).path.trim('/').substringBefore('/')}
                     .getOrDefault("")
-                tile(a,row,"@"+handle,photo.state,{
-                    if(handle.matches(Regex("[A-Za-z0-9_]{1,15}")))
-                        a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
-                            .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,handle))
+                val list=XMediaCaptureActivity.normalizeList(photo.source)
+                val isFeed=photo.source=="https://x.com/home"
+                tile(a,row,if(isFeed)"Following feed" else if(list!=null)"X list"
+                    else "@"+handle,photo.state,{
+                    if(isFeed || list!=null ||
+                        handle.matches(Regex("[A-Za-z0-9_]{1,15}")))
+                        a.startActivity(Intent(a,XMediaCaptureActivity::class.java).apply{
+                            if(isFeed)putExtra(XMediaCaptureActivity.EXTRA_FEED,true)
+                            else if(list!=null)putExtra(XMediaCaptureActivity.EXTRA_LIST_URL,list)
+                            else putExtra(XMediaCaptureActivity.EXTRA_HANDLE,handle)
+                        })
                 }){view->RemoteImageLoader.load(a,view,photo.photo,"https://x.com/")}
             }
         }
@@ -82,15 +104,7 @@ object CreatorPreviews {
                         putExtra(GalleryDetailActivity.EXTRA_TITLE,card.title)
                     })
                 }){view->
-                    val uri=Uri.parse(card.firstUri.orEmpty())
-                    images.execute{
-                        val thumbnail=runCatching{
-                            a.contentResolver.loadThumbnail(uri,Size(256,256),null)
-                        }.getOrNull()
-                        if(thumbnail!=null)view.post{view.setImageBitmap(thumbnail)}
-                    }
-                    if(card.firstUri.isNullOrBlank() && !card.firstUrl.isNullOrBlank())
-                        RemoteImageLoader.load(a,view,card.firstUrl,card.firstUrl)
+                    galleryThumbnail(a,view,card.firstUri,card.firstUrl)
                 }
             }
         }
