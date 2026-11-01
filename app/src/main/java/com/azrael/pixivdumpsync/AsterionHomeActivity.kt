@@ -166,6 +166,7 @@ class AsterionHomeActivity:Activity(){
             "X"->AsterionAccountPanels.x(this,body){render()}
             "Site"->AsterionAccountPanels.cosplay(this,body){render()}
             "Videos"->renderAdd()
+            "Creators"->CreatorArchiveUi.render(this,body)
             "Books"->ResourceDownloads.render(this,body,false)
             "Games"->ResourceDownloads.render(this,body,true)
             "Queue"->renderQueue()
@@ -244,9 +245,12 @@ class AsterionHomeActivity:Activity(){
             sourceTile("Video Search","Direct sites · Videos & previews",
                 R.drawable.ic_source_video,theme.primary,"Videos")
         )
-        put(body,button("KOIKATSU · CHARACTER CARD SEARCH"){
-            startActivity(Intent(this,KoikatsuCardActivity::class.java))
-        },12)
+        tileRow(
+            sourceTile("Creator Archives","Patreon · FANBOX · Fantia · Gumroad · OF · Fansly",
+                R.drawable.ic_source_creator,theme.primary,"Creators"),
+            sourceTile("Koikatsu Cards","Search downloadable character cards",
+                R.drawable.ic_source_koikatsu,theme.violet,"Koikatsu")
+        )
         val all=card()
         put(all,text("ALL ARTIST SYNC CONTROLS",13f,theme.secondary,true),0)
         put(all,text("Enable or disable Pixiv, X and Kyora together. Site catalog entries start disabled until you choose them.",12f,theme.secondary))
