@@ -386,6 +386,7 @@ class AsterionHomeActivity:Activity(){
         put(byLink,text("Signed-in downloads can use the access already available to your account. The app cannot unlock another website's paid content.",12f,theme.secondary))
         put(body,byLink,12)
         GeneralVideoSearch.render(this,body)
+        CreatorArchiveUi.render(this,body,ArchiveSection.VIDEOS)
 
         val general=card()
         put(general,text("VIDEOFLOW · URL AND CUSTOM SOURCE LISTS",17f,theme.white,true))
