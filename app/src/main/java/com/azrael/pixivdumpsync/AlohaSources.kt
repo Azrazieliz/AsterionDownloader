@@ -84,7 +84,8 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
         "porntrex.com","peekvids.com","tnaflix.com","xnxx.com",
         "hentaihaven.xxx","sukebei.nyaa.si","db.bepis.moe")
     val additions:List<AlohaSite> get()=all.filterNot{
-        it.host in alreadyIntegratedHosts || it.host.endsWith(".xvideos.com")
+        val siteHost=it.host.removePrefix("m.").removePrefix("fr.")
+        siteHost in alreadyIntegratedHosts
     }
     fun by(vararg areas:AlohaArea):List<AlohaSite> =
         all.filter{it.area in areas}.distinctBy{it.url}
