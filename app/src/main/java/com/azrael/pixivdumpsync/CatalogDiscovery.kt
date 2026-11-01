@@ -121,8 +121,6 @@ object CatalogDiscovery {
                 lower.endsWith("_lcp.epub")||lower.endsWith(".acsm"))continue
             val kind=when{
                 !games && lower.endsWith(".epub")->CatalogKind.EPUB
-                !games && listOf(".pdf",".cbz",".cbr",".djvu",".mobi",".azw3",
-                    ".zip",".rar",".7z").any{lower.endsWith(it)}->CatalogKind.BOOK_FILE
                 games && lower.endsWith(".apk")->CatalogKind.APK
                 games && lower.endsWith(".zip")->CatalogKind.GAME_ARCHIVE
                 else->continue
@@ -173,8 +171,10 @@ object CatalogDiscovery {
         }
     }
     private fun searchTorrents(q:String):List<CatalogHit> {
-        val providers=listOf("Nyaa" to "https://nyaa.si/?page=rss&q=",
-            "Sukebei" to "https://sukebei.nyaa.si/?page=rss&q=")
+        // Category-qualified game results only: Nyaa software/games (6_2),
+        // Sukebei art/games (1_3). All-category feeds returned video releases.
+        val providers=listOf("Nyaa · games" to "https://nyaa.si/?page=rss&c=6_2&q=",
+            "Sukebei · games" to "https://sukebei.nyaa.si/?page=rss&c=1_3&q=")
         val hits=ArrayList<CatalogHit>()
         val errors=ArrayList<String>()
         for((name,base) in providers){
@@ -226,7 +226,7 @@ object CatalogDiscovery {
             }
         }finally{pool.shutdownNow()}
         val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else
-            it.kind==CatalogKind.EPUB || it.kind==CatalogKind.BOOK_FILE}
+            it.kind==CatalogKind.EPUB}
             .filter{relevance(title,it.title+" "+(if(games)"" else it.details))>0}
             .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
