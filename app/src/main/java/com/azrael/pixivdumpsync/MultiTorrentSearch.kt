@@ -84,7 +84,7 @@ object MultiTorrentSearch {
                 "Seeders: "+row.optInt("seeders")+" · metadata only")
         }
     }
-    fun search(q:String):Pair<List<CatalogHit>,List<String>>=search(q,TorrentArea.GAMES)
+    fun search(q:String):Pair<List<CatalogHit>,List<String>> = search(q,TorrentArea.GAMES)
 
     fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
         val hits=ArrayList<CatalogHit>()
