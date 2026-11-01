@@ -32,6 +32,10 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==5204) {
+            if(resultCode==RESULT_OK)AssetsPanel.localFile(this,data?.data)
+            return
+        }
         if(requestCode in listOf(5201,5202,5203)) {
             if(resultCode==RESULT_OK)
                 ResourceDownloads.onFilePicked(this,requestCode,data?.data)
@@ -192,8 +196,8 @@ class AsterionHomeActivity:Activity(){
         contentDescription="$label. $subtitle"
         setOnClickListener{
             when(target){
-                "Pixiv"->startActivity(Intent(this@AsterionHomeActivity,MainActivity::class.java))
-                "Kyora"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java))
+                "Pixiv"->open("Pixiv")
+                "Kyora"->open("Site")
                 "Koikatsu"->startActivity(Intent(this@AsterionHomeActivity,KoikatsuCardActivity::class.java))
                 "Site"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java)
                     .putExtra(com.azrael.galleryflow.MainActivity.EXTRA_ADD_SITE,true))
