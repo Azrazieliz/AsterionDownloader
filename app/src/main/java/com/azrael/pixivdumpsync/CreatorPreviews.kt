@@ -70,7 +70,7 @@ object CreatorPreviews {
     }
     fun kyora(a:Activity,p:LinearLayout){
         val cards=GalleryDb(a).use{it.latestSelectedGalleries(40)}
-            .filter{!it.second.firstUri.isNullOrBlank()}.take(20)
+            .filter{!it.second.firstUri.isNullOrBlank() || !it.second.firstUrl.isNullOrBlank()}.take(30)
         strip(a,p,"KYORA · LATEST FOLLOWED GALLERIES",
             "Recent galleries with locally saved thumbnail covers. Tap a gallery to browse originals."){
             row->
@@ -82,13 +82,15 @@ object CreatorPreviews {
                         putExtra(GalleryDetailActivity.EXTRA_TITLE,card.title)
                     })
                 }){view->
-                    val uri=Uri.parse(card.firstUri)
+                    val uri=Uri.parse(card.firstUri.orEmpty())
                     images.execute{
                         val thumbnail=runCatching{
                             a.contentResolver.loadThumbnail(uri,Size(256,256),null)
                         }.getOrNull()
                         if(thumbnail!=null)view.post{view.setImageBitmap(thumbnail)}
                     }
+                    if(card.firstUri.isNullOrBlank() && !card.firstUrl.isNullOrBlank())
+                        RemoteImageLoader.load(a,view,card.firstUrl,card.firstUrl)
                 }
             }
         }
