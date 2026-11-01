@@ -88,6 +88,21 @@ object CreatorArchiveUi {
                 val c=ui.card(a)
                 c.addView(ui.text(a,creator.name,15f,ui.white,true),ui.lp(a,4))
                 c.addView(ui.text(a,"${creator.host.title} · ${creator.service}",12f,ui.secondary),ui.lp(a,5))
+                c.addView(ui.text(a,CreatorArchiveScheduler.status(a,creator).take(170),
+                    11f,ui.secondary),ui.lp(a,5))
+                val toggle=Switch(a).apply {
+                    text="Automatic updates"
+                    setTextColor(ui.white)
+                    isChecked=CreatorArchiveScheduler.enabled(a,creator)
+                    setOnCheckedChangeListener{_,checked->
+                        CreatorArchiveScheduler.enable(a,creator,checked)
+                    }
+                }
+                c.addView(toggle,ui.lp(a,5))
+                c.addView(ui.action(a,"SYNC NEW + CONTINUE BACKFILL",true){
+                    CreatorArchiveScheduler.scanNow(a)
+                    status.text="Background sync requested; reopen this page for latest status"
+                },ui.lp(a,7))
                 c.addView(ui.action(a,"CHECK NEW POSTS",true){openCreator(creator,0)},ui.lp(a,7))
                 c.addView(ui.action(a,"REMOVE SAVED CREATOR",false){
                     CreatorArchiveStore.set(a,creator,false)
@@ -113,7 +128,7 @@ object CreatorArchiveUi {
                 c.addView(ui.action(a,"SAVE CREATOR",false){
                     CreatorArchiveStore.set(a,creator,true)
                     renderSaved()
-                    status.text="Saved ${creator.name}; use Check New Posts any time."
+                    status.text="Saved "+creator.name+"; periodic updates scheduled."
                 },ui.lp(a,5))
                 results.addView(c,ui.lp(a,8))
             }
