@@ -85,12 +85,30 @@ object TorrentTransfers {
             }
         }
     }
+    /** A torrent labelled as a game may contain only movies. Check its actual
+     * file list before allowing a Game download; keep game assets and cutscenes
+     * together if a real game entry point/archive is present. */
+    internal fun hasGamePayload(paths:List<String>):Boolean {
+        val gameFormats=setOf("exe","apk","rpa","rpy","rpyc","xp3","nsa",
+            "ns2","unity3d","pck","obb","pak","iso","bin","cue","jar",
+            "swf","zip","7z","rar")
+        return paths.any { raw ->
+            val p=raw.lowercase()
+            val name=p.substringAfterLast('/')
+            val ext=name.substringAfterLast('.', "")
+            val extras=listOf("trailer","preview","sample","screenshots","wallpaper")
+            ext in gameFormats && extras.none{it in p}
+        } || paths.any{it.lowercase().endsWith("index.html")}
+    }
     fun prepareDescriptor(a: Activity, bytes: ByteArray, folder: String) {
         runCatching {
             require(bytes.size in 33..8_388_608) { "Invalid torrent descriptor size" }
             val info = TorrentInfo(bytes)
             require(info.isValid() && info.numFiles() in 1..20000) { "Invalid torrent file list" }
             val files = info.files()
+            if(folder=="Games")require(hasGamePayload((0 until info.numFiles()).map{
+                files.filePath(it)
+            })){"This torrent contains no identifiable game files. Video-only torrents are not shown as Games."}
             val options = Array(info.numFiles()) { i ->
                 "${files.filePath(i)}  (${files.fileSize(i) / 1024} KiB)"
             }
@@ -98,7 +116,7 @@ object TorrentTransfers {
             // Default to the whole torrent; the user may deselect unrelated extras.
             val selected = BooleanArray(info.numFiles()) { i ->
                 when(folder){
-                    "Books" -> listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi").any{files.fileName(i).endsWith(it,true)}
+                    "Books" -> files.fileName(i).endsWith(".epub",true)
                     else -> true
                 }
             }
@@ -108,9 +126,9 @@ object TorrentTransfers {
                     if (!selected.any { it }) {
                         Toast.makeText(a, "Select at least one file", Toast.LENGTH_LONG).show()
                     } else if(folder=="Books" && selected.indices.any{ i ->
-                        selected[i] && !listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi").any{files.fileName(i).endsWith(it,true)}
+                        selected[i] && !files.fileName(i).endsWith(".epub",true)
                     }) {
-                        Toast.makeText(a, "Choose supported book files (EPUB, PDF, CBZ or archives).", Toast.LENGTH_LONG).show()
+                        Toast.makeText(a, "Books only supports EPUB files.", Toast.LENGTH_LONG).show()
                     } else {
                         val hash = MessageDigest.getInstance("SHA-256").digest(bytes)
                             .take(12).joinToString("") { "%02x".format(it) }
