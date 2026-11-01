@@ -231,7 +231,7 @@ object CreatorArchiveStore {
 }
 
 object CreatorArchiveDownloads {
-    data class Result(val queued:Int,val skipped:Int,val failed:Int)
+    data class Result(val queued:Int,val skipped:Int,val failed:Int,val deferred:Int=0)
     private fun key(s:String):String=MessageDigest.getInstance("SHA-256")
         .digest(s.toByteArray()).joinToString(""){"%02x".format(it)}
     private fun filename(s:String):String=s.substringAfterLast('/').replace(
@@ -240,9 +240,9 @@ object CreatorArchiveDownloads {
         if(!AppPower.enabled(context))return Result(0,0,posts.sumOf{it.files.size})
         val pref=context.getSharedPreferences("asterion_creator_downloads",Context.MODE_PRIVATE)
         val manager=context.getSystemService(DownloadManager::class.java)
-        var queued=0;var skipped=0;var failed=0
+        var queued=0;var skipped=0;var failed=0;var deferred=0
         for(post in posts)for((index,file) in post.files.withIndex()){
-            if(queued>=maxFiles){skipped++;continue}
+            if(queued>=maxFiles){deferred++;continue}
             if(CreatorArchives.fileUrl(post.creator.host,file.url)!=file.url){failed++;continue}
             val token=key(file.url)
             val saved=pref.getLong(token,-1L)
@@ -274,6 +274,6 @@ object CreatorArchiveDownloads {
                 queued++
             }catch(e:Exception){failed++}
         }
-        return Result(queued,skipped,failed)
+        return Result(queued,skipped,failed,deferred)
     }
 }
