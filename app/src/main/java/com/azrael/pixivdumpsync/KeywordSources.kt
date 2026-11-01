@@ -64,7 +64,28 @@ object KeywordSources {
     }
     private fun searchProviders(context:Context,area:VideoSearchArea):List<SearchProvider> {
         val direct=SearchRanking.parseProviders(siteDefinitions(area).joinToString("\n"))
-        if(area!=VideoSearchArea.PIRACY_DARKWEB)return direct
+        if(area!=VideoSearchArea.PIRACY_DARKWEB){
+            val category=if(area==VideoSearchArea.PORN)AlohaArea.ADULT else AlohaArea.HENTAI
+            val nativeHosts=direct.mapNotNull{runCatching{
+                URI(it.url.replace("{query}","search")).host.orEmpty().lowercase()
+                    .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
+            }.getOrNull()}.toSet()
+            val disabled=runCatching{com.asterion.videoflow.VideoDb(context).use{db->
+                db.listWatches().filter{!it.enabled}.mapNotNull{runCatching{
+                    URI(it.address).host.orEmpty().lowercase()
+                        .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
+                }.getOrNull()}.toSet()
+            }}.getOrDefault(emptySet())
+            val extras=AlohaSources.by(category).filter{
+                it.host.removePrefix("m.").removePrefix("fr.") !in nativeHosts &&
+                it.host.removePrefix("m.").removePrefix("fr.") !in disabled &&
+                it.host!="onejav.com" // OneJAV is torrent-only, not a streaming search.
+            }.map{SearchProvider(SearchProviderKind.HTML,it.url,"Aloha · "+it.name)}
+            return (direct+extras).distinctBy{
+                URI(it.url.replace("{query}","search")).host.orEmpty().lowercase()
+                    .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
+            }
+        }
         // Saved user-supplied search templates are included without a new
         // provider settings screen. Hidden sites need an existing local proxy.
         val torEnabled=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
@@ -187,10 +208,51 @@ object KeywordSources {
                 title,detail,"Sukebei",item.selectFirst("description")?.text().orEmpty())
         }
     }
+    /** Discover an actual GET search form on an approved source; never invent
+     * a /search URL, redirect to a search-engine page, or send a keyword elsewhere. */
+    internal fun searchFormUrl(html:String,base:String,keyword:String):String?{
+        val origin=runCatching{URI(base)}.getOrNull()?:return null
+        val doc=Jsoup.parse(html,base)
+        val inputs="input[name=s],input[name=q],input[name=query],"+
+            "input[name=search],input[name=keyword],input[name=k],"+
+            "input[name=searchword],input[name=wd]"
+        for(form in doc.select("form")){
+            if(form.attr("method").isNotBlank() &&
+                !form.attr("method").equals("get",true))continue
+            val input=form.selectFirst(inputs)?:continue
+            val action=form.attr("action").ifBlank{base}
+            val url=runCatching{origin.resolve(action)}.getOrNull()?:continue
+            if(url.scheme!="https" || url.host?.lowercase()!=origin.host?.lowercase())
+                continue
+            val params=ArrayList<String>()
+            for(field in form.select("input[name]").take(30)){
+                val name=field.attr("name")
+                if(!name.matches(Regex("[a-zA-Z0-9_-]{1,40}")))continue
+                if(field.attr("type").equals("submit",true) ||
+                    field.attr("type").equals("password",true) ||
+                    field.attr("type").equals("file",true))continue
+                val value=if(field===input)keyword else field.attr("value")
+                if(field===input || value.isNotBlank())params+=
+                    URLEncoder.encode(name,"UTF-8")+"="+URLEncoder.encode(value,"UTF-8")
+            }
+            if(params.isEmpty())continue
+            return url.toString()+(if(url.rawQuery.isNullOrBlank())"?" else "&")+
+                params.joinToString("&")
+        }
+        return null
+    }
+
     private fun html(context:Context,provider:SearchProvider,keyword:String,
                      area:VideoSearchArea):List<RankedHit> {
         val encoded=URLEncoder.encode(keyword,"UTF-8")
         val url=provider.url.replace("{query}",encoded).replace("{name}",encoded)
+        if(!provider.url.contains("{query}") && !provider.url.contains("{name}")){
+            val page=connection(context,url).get()
+            val searchUrl=searchFormUrl(page.outerHtml(),page.location(),keyword)
+                ?:error("No searchable GET form on this source; site-specific adapter needed")
+            val results=connection(context,searchUrl).get()
+            return htmlPageHits(results,searchUrl,provider,keyword,area)
+        }
         if(area==VideoSearchArea.HENTAI && provider.label=="Hanime"){
             val direct=runCatching{hanimeApi(context,keyword)}
             if(direct.isSuccess && direct.getOrDefault(emptyList()).isNotEmpty())
