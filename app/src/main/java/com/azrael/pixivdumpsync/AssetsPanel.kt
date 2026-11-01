@@ -23,8 +23,24 @@ object AssetsPanel {
         val seen=a.getSharedPreferences("asterion_assets",0)
         var queued=0
         files.forEach{(path,url)->
-            if(!safe(url)||seen.contains(url))return@forEach
-            val filename=URI(url).path.substringAfterLast('/')
+            if(!safe(url))return@forEach
+            val existing=seen.getLong(url,-1L)
+            if(existing>0){
+                val current=runCatching{
+                    dm.query(DownloadManager.Query().setFilterById(existing))?.use{cursor->
+                        if(!cursor.moveToFirst())false
+                        else {
+                            val status=cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                            status in listOf(DownloadManager.STATUS_SUCCESSFUL,
+                                DownloadManager.STATUS_RUNNING,DownloadManager.STATUS_PAUSED,
+                                DownloadManager.STATUS_PENDING)
+                        }
+                    }
+                }.getOrDefault(false)
+                if(current==true)return@forEach
+            }
+            val original=URI(url).path.substringAfterLast('/')
+            val filename=if(original.contains("."))original else path.substringAfterLast('/')
             val directory=path.replace(Regex("[^A-Za-z0-9_./+-]"),"_").take(160)
             runCatching{
                 val req=DownloadManager.Request(Uri.parse(url)).apply{
