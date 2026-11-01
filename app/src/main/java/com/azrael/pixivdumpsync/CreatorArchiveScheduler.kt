@@ -11,7 +11,7 @@ object CreatorArchiveScheduler {
     private val scanning=AtomicBoolean(false)
     fun ensure(context:Context){
         val jobs=context.getSystemService(JobScheduler::class.java)
-        val enabled=CreatorArchiveStore.list(context).isNotEmpty()
+        val enabled=CreatorArchiveStore.list(context).any{creator->enabled(context,creator)}
         if(!enabled){jobs.cancel(JOB);return}
         if(jobs.allPendingJobs.any{it.id==JOB})return
         val request=JobInfo.Builder(JOB,ComponentName(context,CreatorArchiveJob::class.java))
