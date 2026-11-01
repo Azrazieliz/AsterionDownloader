@@ -47,7 +47,7 @@ class AsterionHomeActivity:Activity(){
         }else if(id>=0) toast("Browser connection was not saved; ZIP retry remains paused.")
         if(::body.isInitialized)render()
     }
-    private val pages=listOf("Home","Videos","Books","Games")
+    private val pages=listOf("Home","Videos","Books","Games","Assets")
     private val navButtons=linkedMapOf<String,TextView>()
     private fun dp(v:Int)=theme.px(this,v)
     private fun text(v:String,size:Float=14f,tint:Int=theme.white,bold:Boolean=false)=
@@ -74,6 +74,7 @@ class AsterionHomeActivity:Activity(){
         window.navigationBarColor=theme.background
         GalleryDb(this).use{it.seedCatalogOnce(this)}
         ChapterRecovery.ensure(this)
+        CreatorArchiveScheduler.ensure(this)
         XPhotoScheduler.ensure(this)
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
         val head=theme.row(this).apply{setPadding(dp(14),dp(12),dp(14),dp(12))}
@@ -101,7 +102,7 @@ class AsterionHomeActivity:Activity(){
         root.addView(scroller,LinearLayout.LayoutParams(-1,0,1f))
         val tabs=theme.row(this).apply{setPadding(dp(5),dp(7),dp(5),dp(7));setBackgroundColor(theme.surface)}
         pages.forEach{tab->
-            val title=when(tab){"Home"->"SOURCES";"Videos"->"VIDEOS";"Books"->"BOOKS";else->"GAMES"}
+            val title=when(tab){"Home"->"SOURCES";"Videos"->"VIDEOS";"Books"->"BOOKS";"Games"->"GAMES";else->"ASSETS"}
             val t=text(title,14f,if(tab==page)theme.primary else theme.secondary,tab==page).apply{
                 gravity=Gravity.CENTER;minHeight=dp(50)
                 isClickable=true;isFocusable=true
@@ -161,12 +162,13 @@ class AsterionHomeActivity:Activity(){
         }
         when(page){
             "Home"->renderHome()
-            "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
+            "Pixiv"->{AsterionAccountPanels.pixiv(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.ARTWORK)}
             "Toonily"->renderToonily()
             "X"->AsterionAccountPanels.x(this,body){render()}
-            "Site"->AsterionAccountPanels.cosplay(this,body){render()}
+            "Site"->{AsterionAccountPanels.cosplay(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.COSPLAY)}
             "Videos"->renderAdd()
-            "Creators"->CreatorArchiveUi.render(this,body)
+            "Porn"->renderPorn()
+            "Assets"->AssetsPanel.render(this,body)
             "Books"->ResourceDownloads.render(this,body,false)
             "Games"->ResourceDownloads.render(this,body,true)
             "Queue"->renderQueue()
@@ -242,14 +244,14 @@ class AsterionHomeActivity:Activity(){
         tileRow(
             sourceTile("Add Site","Bind a new website · Sign in · Backfill",
                 R.drawable.ic_source_site,theme.primary,"Site"),
-            sourceTile("Video Search","Direct sites · Videos & previews",
+            sourceTile("Video Downloads","URL · Keyword search · Transfers",
                 R.drawable.ic_source_video,theme.primary,"Videos")
         )
         tileRow(
-            sourceTile("Creator Archives","Patreon · FANBOX · Fantia · Gumroad · OF · Fansly",
-                R.drawable.ic_source_creator,theme.primary,"Creators"),
-            sourceTile("Koikatsu Cards","Search downloadable character cards",
-                R.drawable.ic_source_koikatsu,theme.violet,"Koikatsu")
+            sourceTile("Porn & Hentai","Artist archives · Providers · Torrents",
+                R.drawable.ic_source_video,theme.primary,"Porn"),
+            sourceTile("Assets · 3D","Gumroad · Blender · Koikatsu cards",
+                R.drawable.ic_source_koikatsu,theme.violet,"Assets")
         )
         val all=card()
         put(all,text("ALL ARTIST SYNC CONTROLS",13f,theme.secondary,true),0)
@@ -355,8 +357,6 @@ class AsterionHomeActivity:Activity(){
     }
     private fun renderAdd(){
         section("Video tools","Performer search, monitored sources, native torrent downloads and direct video transfers.")
-        TorrentSearchUi.render(this,body,TorrentArea.ADULT)
-        WatchPornPanel.render(this,body)
         val byLink=card()
         put(byLink,text("Download a video URL",18f,theme.white,true),0)
         put(byLink,text("Video sites and direct files. Other supported links are routed automatically.",
@@ -382,6 +382,19 @@ class AsterionHomeActivity:Activity(){
         put(byLink,text("Signed-in downloads can use the access already available to your account. The app cannot unlock another website's paid content.",12f,theme.secondary))
         put(body,byLink,12)
 
+        val general=card()
+        put(general,text("VIDEOFLOW · URL AND CUSTOM SOURCE LISTS",17f,theme.white,true))
+        put(general,text("For general video downloads, paste a direct video URL or follow a specific channel. Adult provider searches are in Porn & Hentai.",12f,theme.secondary))
+        put(general,button("OPEN VIDEOFLOW SOURCES & DOWNLOADS"){
+            startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
+        })
+        put(body,general,10)
+    }
+    private fun renderPorn(){
+        section("Porn & Hentai","Adult site libraries, performer tracking, creator video archives and torrent search.")
+        WatchPornPanel.render(this,body)
+        CreatorArchiveUi.render(this,body,ArchiveSection.VIDEOS)
+        TorrentSearchUi.render(this,body,TorrentArea.ADULT)
         val byName=card()
         put(byName,text("Search videos by name",18f,theme.white,true),0)
         put(byName,text("Search anime videos, adult videos or torrent indexes; torrent results can open in a BitTorrent client.",
