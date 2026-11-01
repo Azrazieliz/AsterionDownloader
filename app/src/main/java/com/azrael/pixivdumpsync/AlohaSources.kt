@@ -99,7 +99,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             AlohaArea.ARTWORK->"Artwork"
             AlohaArea.COSPLAY->"Cosplay"
             AlohaArea.VIDEOS->"Videos"
-            AlohaArea.ADULT,AlohaArea.HENTAI->"Videos"
+            AlohaArea.ADULT,AlohaArea.HENTAI->if(site.host=="onejav.com")"Adult" else "Videos"
             AlohaArea.COMICS->"Comics"
             AlohaArea.BOOKS->"Books"
             AlohaArea.GAMES->"Games"
@@ -134,7 +134,16 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
                     }
                 }
             }
-            AlohaArea.VIDEOS,AlohaArea.ADULT,AlohaArea.HENTAI->{
+            AlohaArea.ADULT->if(site.host=="onejav.com"){
+                browse(a,site)
+                status.text="OneJAV is a torrent source: select original torrent/magnet files. VideoFlow cannot treat its listing as MP4."
+            }else{
+                val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
+                VideoEngine.launch(a,true)
+                status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
+                    else site.name+" already watched; scan requested"
+            }
+            AlohaArea.VIDEOS,AlohaArea.HENTAI->{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
                 status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
