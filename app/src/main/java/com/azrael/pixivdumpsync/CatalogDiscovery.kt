@@ -175,9 +175,9 @@ object CatalogDiscovery {
             }
         }finally{pool.shutdownNow()}
         val results=all.filter{games || it.kind==CatalogKind.EPUB}
-            .filter{relevance(title,it.title)>0}
+            .filter{relevance(title,it.title+" "+(if(games)"" else it.details))>0}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
-            .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title)}
+            .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
                 .thenBy{it.source}).take(60)
         return CatalogOutcome(results,failures,providers.size)
     }
