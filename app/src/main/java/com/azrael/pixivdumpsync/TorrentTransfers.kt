@@ -96,12 +96,21 @@ object TorrentTransfers {
             }
             // A playable game may require DLL, data, assets and a launcher together.
             // Default to the whole torrent; the user may deselect unrelated extras.
-            val selected = BooleanArray(info.numFiles()) { true }
+            val selected = BooleanArray(info.numFiles()) { i ->
+                when(folder){
+                    "Books" -> files.fileName(i).endsWith(".epub",ignoreCase=true)
+                    else -> true
+                }
+            }
             AlertDialog.Builder(a).setTitle("Select files: " + info.name())
                 .setMultiChoiceItems(options, selected) { _, index, checked -> selected[index] = checked }
                 .setPositiveButton("DOWNLOAD SELECTED") { _, _ ->
                     if (!selected.any { it }) {
                         Toast.makeText(a, "Select at least one file", Toast.LENGTH_LONG).show()
+                    } else if(folder=="Books" && selected.indices.any{ i ->
+                        selected[i] && !files.fileName(i).endsWith(".epub",ignoreCase=true)
+                    }) {
+                        Toast.makeText(a, "Books are EPUB-only. Deselect other formats.", Toast.LENGTH_LONG).show()
                     } else {
                         val hash = MessageDigest.getInstance("SHA-256").digest(bytes)
                             .take(12).joinToString("") { "%02x".format(it) }
@@ -247,6 +256,9 @@ class TorrentTransferService : Service() {
                     "apk" -> "application/vnd.android.package-archive"
                     "pdf" -> "application/pdf"
                     "epub" -> "application/epub+zip"
+                    "mp4" -> "video/mp4"
+                    "webm" -> "video/webm"
+                    "mkv" -> "video/x-matroska"
                     else -> "application/octet-stream"
                 })
                 put(MediaStore.Downloads.RELATIVE_PATH, targetDir)

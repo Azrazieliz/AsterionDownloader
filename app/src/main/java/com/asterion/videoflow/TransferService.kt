@@ -61,12 +61,13 @@ object VideoEngine {
                             db.checked(watch.id,"Unsupported saved search; remove this source")
                             continue
                         }
-                        val hits=WebDiscovery.findOnPage(watch.address,30)
+                        val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
+                        val hits=WebDiscovery.findOnPage(watch.address,if(artistArchive)250 else 30)
                         if(hits.isEmpty()) error("No video links found on this page; use a specific feed, profile, or search watch")
                         var added=0
                         for(hit in hits) {
                             if(db.addVideo(hit.url,hit.title,watch.id)) added++
-                            if(added>=max) break
+                            if(added >= (if(artistArchive)250 else max)) break
                         }
                         db.checked(watch.id,null)
                     } catch(t:Exception) {

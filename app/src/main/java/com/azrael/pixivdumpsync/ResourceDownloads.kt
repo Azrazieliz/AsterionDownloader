@@ -40,10 +40,27 @@ object ResourceDownloads {
         val folder=if(games)"Games" else "Books"
         body.addView(ui.text(a,title,23f,ui.white,true),ui.lp(a,18))
         body.addView(ui.text(a,if(games)
-            "Direct game archives, APKs and visual novels; recognize engines and launch compatible Android content."
+            "Search and download game torrents; choose all required game assets and play through a compatible Android runtime."
             else "Search public EPUB editions by title and download only EPUB files.",
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
+        if(!games){
+            TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
+            val libraries=ui.card(a)
+            libraries.addView(ui.text(a,"BOOK LIBRARIES · EPUB",16f,ui.white,true),ui.lp(a,3))
+            libraries.addView(ui.text(a,"Standard Ebooks is searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))
+            libraries.addView(action(a,"BROWSE MANYBOOKS LIBRARY"){
+                a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://manybooks.net/search-book")))
+            },ui.lp(a,6))
+            libraries.addView(action(a,"BROWSE FEEDBOOKS PUBLIC DOMAIN"){
+                a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.feedbooks.com/publicdomain")))
+            },ui.lp(a,6))
+            libraries.addView(action(a,"BROWSE LIGHT NOVEL LIBRARY"){
+                a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://mp4directs.com/")))
+            },ui.lp(a,6))
+            body.addView(libraries,ui.lp(a,11))
+        }
+
         val torrent=ui.card(a)
         torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
         torrent.addView(ui.text(a,

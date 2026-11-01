@@ -17,6 +17,7 @@ class XMediaCaptureActivity:Activity() {
     companion object {
         const val EXTRA_HANDLE="x_handle"
         const val EXTRA_LIST_URL="x_list_url"
+        const val EXTRA_FEED="x_following_feed"
         internal fun normalizeList(value:String):String?{
             val id=Regex("^https://(?:www\\.)?(?:x\\.com|twitter\\.com)/i/lists/([0-9]{4,25})/?$")
                 .matchEntire(value.trim())?.groupValues?.getOrNull(1)
@@ -27,6 +28,7 @@ class XMediaCaptureActivity:Activity() {
     private lateinit var status:TextView
     private var handle=""
     private var listUrl=""
+    private var feed=false
     private val observed=linkedSetOf<String>()
     private var queued=0
     private var auto=false
@@ -45,7 +47,8 @@ class XMediaCaptureActivity:Activity() {
         super.onCreate(savedInstanceState)
         handle=intent.getStringExtra(EXTRA_HANDLE).orEmpty()
         listUrl=normalizeList(intent.getStringExtra(EXTRA_LIST_URL).orEmpty()).orEmpty()
-        if(listUrl.isBlank() && !handle.matches(Regex("[A-Za-z0-9_]{1,15}"))){
+        feed=intent.getBooleanExtra(EXTRA_FEED,false)
+        if(listUrl.isBlank() && !feed && !handle.matches(Regex("[A-Za-z0-9_]{1,15}"))){
             finish();return
         }
         val ui=NocturneDesign
@@ -55,7 +58,7 @@ class XMediaCaptureActivity:Activity() {
             setPadding(ui.px(this@XMediaCaptureActivity,10),ui.px(this@XMediaCaptureActivity,10),
                 ui.px(this@XMediaCaptureActivity,10),ui.px(this@XMediaCaptureActivity,10))
         }
-        outer.addView(ui.text(this,if(listUrl.isBlank())"X · @"+handle+" media"
+        outer.addView(ui.text(this,if(feed)"X · FOLLOWING FEED" else if(listUrl.isBlank())"X · @"+handle+" media"
             else "X · selected list",20f,ui.white,true))
         status=ui.text(this,"Log into X if needed; scroll or auto-collect visible photos.",13f,ui.secondary)
         outer.addView(status,ui.lp(this,8))
@@ -76,8 +79,8 @@ class XMediaCaptureActivity:Activity() {
             update()
         },ui.lp(this,6))
         outer.addView(ui.action(this,"AUTO-SCROLL LIST & DOWNLOAD",true){
-            if(listUrl.isBlank()){
-                Toast.makeText(this,"Auto collection is for a selected X list",Toast.LENGTH_LONG).show()
+            if(listUrl.isBlank() && !feed){
+                Toast.makeText(this,"Auto collection is for a selected X list or following feed",Toast.LENGTH_LONG).show()
             }else{
                 auto=true;passes=0;handler.removeCallbacks(runner);handler.post(runner)
                 update()
@@ -88,7 +91,7 @@ class XMediaCaptureActivity:Activity() {
             XPhotoEngine.start(this);update()
         },ui.lp(this,6))
         setContentView(outer)
-        browser.loadUrl(if(listUrl.isBlank())"https://x.com/"+handle+"/media" else listUrl)
+        browser.loadUrl(if(feed)"https://x.com/home" else if(listUrl.isBlank())"https://x.com/"+handle+"/media" else listUrl)
     }
     private fun capture(){
         browser.evaluateJavascript("""(function(){
@@ -104,7 +107,7 @@ class XMediaCaptureActivity:Activity() {
     }
     private fun queueObserved(){
         if(observed.isEmpty())return
-        val src=if(listUrl.isBlank())"https://x.com/"+handle else listUrl
+        val src=if(feed)"https://x.com/home" else if(listUrl.isBlank())"https://x.com/"+handle else listUrl
         XPhotoQueue(this).use{db->
             for(url in observed)
                 if(db.addPhoto(src,url.hashCode().toString(),url))queued++

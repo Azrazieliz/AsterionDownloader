@@ -58,7 +58,7 @@ object WebDiscovery {
         root.select("a[href]").forEach {a->
             add(a.attr("abs:href"),a.attr("title").ifBlank{a.text()})
         }
-        return found.values.take(limit.coerceIn(1,50))
+        return found.values.take(limit.coerceIn(1,350))
     }
     fun directMedia(address:String):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}

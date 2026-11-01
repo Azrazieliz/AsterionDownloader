@@ -10,6 +10,8 @@ import java.net.URLEncoder
 /** Public torrent metadata providers. Only HTTPS API requests; no unknown mirror redirects,
  * executable installers, site ads, or third-party "download client" binaries are accepted.
  */
+enum class TorrentArea { GAMES, BOOKS, ADULT }
+
 object MultiTorrentSearch {
     private fun enc(s:String)=URLEncoder.encode(s.trim(),"UTF-8")
     private val hashPattern=Regex("(?i)^[a-f0-9]{40}$")
@@ -69,14 +71,14 @@ object MultiTorrentSearch {
         }
         return result
     }
-    internal fun apibay(json:String):List<CatalogHit>{
+    internal fun apibay(json:String,range:IntRange=400..499):List<CatalogHit>{
         val arr=JSONArray(json)
         return (0 until minOf(arr.length(),95)).mapNotNull{i->
             val row=arr.optJSONObject(i)?:return@mapNotNull null
             val title=row.optString("name")
             val hash=row.optString("info_hash")
             val category=row.optInt("category")
-            if(!hashPattern.matches(hash) || title.isBlank() || category !in 400..499)
+            if(!hashPattern.matches(hash) || title.isBlank() || category !in range)
                 return@mapNotNull null
             CatalogHit(title,"The Pirate Bay index",magnet(hash,title),CatalogKind.TORRENT,"",
                 "Seeders: "+row.optInt("seeders")+" · metadata only")
@@ -104,4 +106,66 @@ object MultiTorrentSearch {
         }
         return results to errors
     }
+
+    fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
+        val hits=ArrayList<CatalogHit>()
+        val errors=ArrayList<String>()
+        val bit=when(area){
+            TorrentArea.GAMES->6;TorrentArea.BOOKS->9;TorrentArea.ADULT->10
+        }
+        val bay=when(area){
+            TorrentArea.GAMES->400;TorrentArea.BOOKS->600;TorrentArea.ADULT->500
+        }
+        fun provider(name:String,run:()->List<CatalogHit>){
+            runCatching{run()}.onSuccess{hits+=it}.onFailure{
+                errors+=name+": "+(it.message?:"Unavailable")
+            }
+        }
+        provider("Bitsearch"){
+            bitsearch(request("https://bitsearch.eu/api/v1/search?q="+enc(q)+
+                "&category="+bit+"&limit=100"))
+        }
+        provider("Pirate Bay"){
+            apibay(request("https://apibay.org/q.php?q="+enc(q)+"&cat="+bay),
+                bay..(bay+99))
+        }
+        provider("Knaben"){
+            val body=JSONObject().apply{
+                put("search_type","score");put("search_field","title");put("query",q)
+                put("size",80);put("hide_unsafe",true)
+            }.toString()
+            knaben(request("https://api.knaben.org/v1",body)).filter{
+                val name=(it.details+" "+it.title).lowercase()
+                when(area){
+                    TorrentArea.ADULT->name.contains("xxx")||name.contains("porn")||
+                        name.contains("adult")||name.contains("erotic")
+                    TorrentArea.BOOKS->name.contains("book")||name.contains("epub")||
+                        name.contains("novel")
+                    TorrentArea.GAMES->name.contains("game")||name.contains("vn")||
+                        name.contains("pc")
+                }
+            }
+        }
+        if(area==TorrentArea.ADULT || area==TorrentArea.GAMES){
+            provider("Sukebei"){
+                val url="https://sukebei.nyaa.si/?page=rss&q="+enc(q)
+                val data=org.jsoup.Jsoup.connect(url).ignoreContentType(true)
+                    .userAgent("Mozilla/5.0").timeout(14000).execute().body()
+                CatalogDiscovery.torrentRss(data,url,"Sukebei")
+            }
+        }
+        if(area==TorrentArea.BOOKS){
+            provider("Nyaa"){
+                val url="https://nyaa.si/?page=rss&q="+enc(q)
+                val data=org.jsoup.Jsoup.connect(url).ignoreContentType(true)
+                    .userAgent("Mozilla/5.0").timeout(14000).execute().body()
+                CatalogDiscovery.torrentRss(data,url,"Nyaa")
+            }
+        }
+        return hits.distinctBy{
+            if(it.url.startsWith("magnet:"))it.url.substringAfter("urn:btih:").substringBefore("&").lowercase()
+            else it.url
+        } to errors
+    }
+
 }

@@ -164,6 +164,7 @@ object AsterionAccountPanels {
             .onFailure{say(a,"Cosplay sync error: "+it.message)}
     }
     fun cosplay(a:Activity,p:LinearLayout,refresh:()->Unit){
+        CreatorPreviews.kyora(a,p)
         val entities=GalleryDb(a).use{it.listEntities()}
         title(a,p,"Cosplay · Creators & Galleries",
             "Saved creators, websites and galleries with new-post sync and full backfill.")
@@ -184,6 +185,10 @@ object AsterionAccountPanels {
         pair(a,controls,"SYNC NEW","BACKFILL ALL",
             {cosplaySync(a,GallerySyncMode.LIVE)},
             {cosplaySync(a,GallerySyncMode.BACKFILL)})
+        action(a,controls,"DISCOVER & DOWNLOAD COSPLAY VIDEOS",true){
+            val watched=CreatorPreviews.syncKyoraVideos(a)
+            say(a,"Monitoring "+watched+" new creator video pages; check Videos > Downloads for transfer progress")
+        }
         action(a,controls,"FULL GALLERY MANAGER & TAG FILTERS",false){
             a.startActivity(Intent(a,com.azrael.galleryflow.MainActivity::class.java))
         }
@@ -305,6 +310,7 @@ object AsterionAccountPanels {
         }
     }
     fun x(a:Activity,p:LinearLayout,refresh:()->Unit){
+        CreatorPreviews.x(a,p)
         val accounts=XPhotoQueue(a).use{it.allSources()}
         val count=XPhotoQueue(a).use{it.counts()}
         title(a,p,"X · Artists & Photo Archive",
@@ -346,6 +352,10 @@ object AsterionAccountPanels {
             {XPhotoQueue(a).use{it.setAllEnabled(false)};refresh()})
         action(a,summary,"SYNC ALL X ACCOUNTS",true){
             XPhotoEngine.start(a);say(a,"Checking X photo accounts")
+        }
+        action(a,summary,"VIEW X FOLLOWING FEED & CAPTURE PHOTOS",true){
+            a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                .putExtra(XMediaCaptureActivity.EXTRA_FEED,true))
         }
         action(a,summary,"IMPORT ACCOUNTS I FOLLOW",false){
             a.startActivity(Intent(a,XFollowingImportActivity::class.java))

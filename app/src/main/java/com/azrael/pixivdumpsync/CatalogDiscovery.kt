@@ -43,6 +43,51 @@ object CatalogDiscovery {
         }
         return hits
     }
+
+    /** Standard Ebooks uses a browsable catalog; each result is resolved to a real
+     * compatible EPUB file, never an unverified or patron-only bulk archive. */
+    private fun searchStandardEbooks(q:String):List<CatalogHit>{
+        val address="https://standardebooks.org/ebooks?per-page=24&query="+enc(q)
+        val doc=Jsoup.parse(get(address),address)
+        val hits=ArrayList<CatalogHit>()
+        for(book in doc.select("ol.ebooks-list li[typeof=schema:Book]").take(12)){
+            val page=book.selectFirst("a[property=schema:url]")?.absUrl("href").orEmpty()
+            if(!page.startsWith("https://standardebooks.org/ebooks/"))continue
+            val title=book.selectFirst("[property=schema:name]")?.text()?.trim().orEmpty()
+                .ifBlank{book.selectFirst("h3,h4")?.text()?.trim().orEmpty()}
+            if(title.isBlank())continue
+            val pageDoc=runCatching{Jsoup.parse(get(page),page)}.getOrNull()?:continue
+            val direct=pageDoc.select("a.epub[href$=.epub]").map{it.absUrl("href")}
+                .firstOrNull{it.startsWith("https://standardebooks.org/ebooks/") &&
+                    !it.contains("_advanced.epub") && !it.contains(".kepub.epub")}
+                ?:continue
+            val author=book.selectFirst("[property=schema:author]")?.text().orEmpty()
+            hits+=CatalogHit(title,"Standard Ebooks",direct,CatalogKind.EPUB,
+                safeFilename(title,"epub"),author)
+        }
+        return hits
+    }
+
+
+    /** Wikimedia prefixsearch avoids index scans of inaccessible book pages.
+     * WS Export produces a real EPUB, not a loan or HTML listing. */
+    private fun searchWikisource(name:String):List<CatalogHit>{
+        val api="https://en.wikisource.org/w/api.php?action=query&list=prefixsearch"+
+            "&pssearch="+enc(name)+"&psnamespace=0&pslimit=30&format=json"
+        val rows=JSONObject(get(api)).optJSONObject("query")?.optJSONArray("prefixsearch")
+            ?:return emptyList()
+        val hits=ArrayList<CatalogHit>()
+        for(i in 0 until rows.length()){
+            val title=rows.optJSONObject(i)?.optString("title").orEmpty()
+            if(title.isBlank()||title.contains("/")||title.startsWith("Index:"))continue
+            val export="https://ws-export.wmcloud.org/?lang=en&format=epub&page="+enc(title)
+            hits+=CatalogHit(title,"Wikisource",export,CatalogKind.EPUB,
+                safeFilename(title,"epub"),"Wikimedia WS Export · EPUB")
+            if(hits.size>=15)break
+        }
+        return hits
+    }
+
     private fun searchGutenberg(q:String):List<CatalogHit> =
         gutendex(get("https://gutendex.com/books/?mime_type=application%2Fepub&search="+enc(q)))
 
@@ -153,8 +198,8 @@ object CatalogDiscovery {
         val providers: List<Pair<String, () -> List<CatalogHit>>> =
             if(games)listOf("Nyaa and Sukebei" to {searchTorrents(title)},
                 "Bitsearch / Knaben / Pirate Bay" to {MultiTorrentSearch.search(title).first})
-            else listOf("Project Gutenberg" to {searchGutenberg(title)},
-                "Internet Archive" to {searchArchive(title,false)})
+            else listOf("Standard Ebooks" to {searchStandardEbooks(title)},
+                "Wikisource" to {searchWikisource(title)})
         val pool=Executors.newFixedThreadPool(providers.size)
         val work=ExecutorCompletionService<Pair<List<CatalogHit>,String?>>(pool)
         val all=ArrayList<CatalogHit>()

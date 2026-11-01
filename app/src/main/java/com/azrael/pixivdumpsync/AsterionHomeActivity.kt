@@ -350,7 +350,9 @@ class AsterionHomeActivity:Activity(){
         }
     }
     private fun renderAdd(){
-        section("Video tools","Secondary tools for individual video URLs and keyword searches.")
+        section("Video tools","Performer search, monitored sources, native torrent downloads and direct video transfers.")
+        TorrentSearchUi.render(this,body,TorrentArea.ADULT)
+        WatchPornPanel.render(this,body)
         val byLink=card()
         put(byLink,text("Download a video URL",18f,theme.white,true),0)
         put(byLink,text("Video sites and direct files. Other supported links are routed automatically.",
