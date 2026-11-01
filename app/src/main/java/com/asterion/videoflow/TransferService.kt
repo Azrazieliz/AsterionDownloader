@@ -62,12 +62,14 @@ object VideoEngine {
                             continue
                         }
                         val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
-                        val hits=WebDiscovery.findOnPage(watch.address,if(artistArchive)250 else 30)
+                        val hits=if(artistArchive)
+                            WebDiscovery.findWatchPornArtist(watch.address,watch.lastCheck==0L)
+                            else WebDiscovery.findOnPage(watch.address,30)
                         if(hits.isEmpty()) error("No video links found on this page; use a specific feed, profile, or search watch")
                         var added=0
                         for(hit in hits) {
                             if(db.addVideo(hit.url,hit.title,watch.id)) added++
-                            if(added >= (if(artistArchive)250 else max)) break
+                            if(!artistArchive && added>=max) break
                         }
                         db.checked(watch.id,null)
                     } catch(t:Exception) {
