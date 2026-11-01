@@ -95,6 +95,21 @@ object CreatorPreviews {
             }
         }
     }
+    fun sourceThumbnail(a:Activity,view:ImageView,sourceUrl:String){
+        if(!SearchRanking.validUrl(sourceUrl))return
+        images.execute{
+            val preview=runCatching{
+                val page=org.jsoup.Jsoup.connect(sourceUrl).userAgent("Mozilla/5.0 Android")
+                    .timeout(12000).maxBodySize(500000).get()
+                val result=page.selectFirst("meta[property=og:image]")?.attr("content")
+                    ?:page.selectFirst("meta[name=twitter:image]")?.attr("content")
+                    ?:page.selectFirst("article img[src]")?.absUrl("src")
+                val url=java.net.URI(page.location()).resolve(result.orEmpty()).toString()
+                url.takeIf{SearchRanking.validUrl(it)}
+            }.getOrNull()
+            if(preview!=null)view.post{RemoteImageLoader.load(a,view,preview,sourceUrl)}
+        }
+    }
     fun syncKyoraVideos(a:Activity):Int{
         val sites=GalleryDb(a).use{it.listEntities().filter{row->row.selected}}
         var count=0
