@@ -91,7 +91,8 @@ object TorrentTransfers {
     internal fun hasGamePayload(paths:List<String>):Boolean {
         val gameFormats=setOf("exe","apk","rpa","rpy","rpyc","xp3","nsa",
             "ns2","unity3d","pck","obb","pak","iso","bin","cue","jar",
-            "swf","zip","7z","rar")
+            "swf","zip","7z","rar","msi","dmg","pkg","xci","nsp",
+            "cia","3ds","nds","chd","rvz","wud","gdi","cso")
         return paths.any { raw ->
             val p=raw.lowercase()
             val name=p.substringAfterLast('/')
