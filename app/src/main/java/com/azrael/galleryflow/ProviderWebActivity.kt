@@ -15,6 +15,8 @@ import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
+import com.azrael.pixivdumpsync.ResourceDownloads
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -60,6 +62,23 @@ class ProviderWebActivity : Activity() {
             settings.databaseEnabled = true
             settings.userAgentString = HttpClient.USER_AGENT
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val link=request.url.toString()
+                    val folder=intent.getStringExtra(EXTRA_FOLDER).orEmpty()
+                    val torrentFolder=when(folder){
+                        "Games"->"Games"
+                        "Adult"->"Adult"
+                        "Books"->"Books"
+                        else->null
+                    }
+                    if(torrentFolder!=null && (link.startsWith("magnet:?",true) ||
+                        (link.startsWith("https://") &&
+                            URI(link).path.orEmpty().endsWith(".torrent",true)))){
+                        ResourceDownloads.route(this@ProviderWebActivity,link,torrentFolder)
+                        return true
+                    }
+                    return false
+                }
                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
                     CookieManager.getInstance().flush()
                     status.text = pageUrl ?: "Provider page"
@@ -119,6 +138,13 @@ class ProviderWebActivity : Activity() {
     }
 
     private fun providerDownloadListener() = DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+        val folder=intent.getStringExtra(EXTRA_FOLDER).orEmpty()
+        if(folder in setOf("Games","Adult","Books") &&
+            (url.startsWith("magnet:?",true) ||
+                url.startsWith("https://") && runCatching{URI(url).path.endsWith(".torrent",true)}.getOrDefault(false))){
+            ResourceDownloads.route(this,url,folder)
+            return@DownloadListener
+        }
         runCatching {
             val uri = URI(url)
             require(uri.scheme == "https" && !uri.host.isNullOrBlank()) {
