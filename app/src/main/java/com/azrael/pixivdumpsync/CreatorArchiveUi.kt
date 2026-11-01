@@ -164,9 +164,9 @@ object CreatorArchiveUi {
                             posts.addView(ui.action(a,"QUEUE NEXT UP TO 40 FILES FROM THIS PAGE",true){
                                 queue(page)
                             },ui.lp(a,10))
-                            page.map{ArchiveContent.filtered(section,it)}.filter{it.files.isNotEmpty()}.forEach{post->
+                            page.map{it to ArchiveContent.filtered(section,it)}.filter{it.second.files.isNotEmpty()}.forEach{(original,post)->
                                 val card=ui.card(a)
-                                ArchiveContent.preview(post)?.let{url->
+                                ArchiveContent.preview(original)?.let{url->
                                     val thumbnail=ImageView(a).apply{
                                         scaleType=ImageView.ScaleType.CENTER_CROP
                                         setBackgroundColor(ui.raised)
