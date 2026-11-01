@@ -21,8 +21,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 46
-        versionName = "1.3.17"
+        versionCode = 47
+        versionName = "1.3.18"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
@@ -70,6 +70,10 @@ kotlin {
 
 dependencies {
     implementation("org.jsoup:jsoup:1.18.1")
+    implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
     implementation("net.lingala.zip4j:zip4j:2.11.5")
     implementation("com.github.junrar:junrar:8.1.1")
     implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")

@@ -101,13 +101,11 @@ object ResourceDownloads {
         val torrent=ui.card(a)
         torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
         torrent.addView(ui.text(a,
-            "Supports magnets and .torrent descriptors from Sukebei, The Pirate Bay, Nyaa and other sites. "+
-            "The peer-to-peer file transfer is handled by an installed BitTorrent client; select the ZIP in that client. "+
-            "Asterion does not currently embed a BitTorrent engine.",
+            "Native libtorrent transfers. Select specific ZIPs or game files; monitor verified peer "+
+            "transfers, pause/resume and export completed files to public Downloads.",
             12f,ui.secondary),ui.lp(a,7))
-        torrent.addView(action(a,"GET ANDROID TORRENT CLIENT"){
-            a.startActivity(Intent(Intent.ACTION_VIEW,
-                Uri.parse("https://f-droid.org/packages/org.proninyaroslav.libretorrent/")))
+        torrent.addView(action(a,"TORRENT TRANSFER STATUS / PAUSE / RESUME"){
+            TorrentTransfers.showQueue(a)
         },ui.lp(a,10))
         body.addView(torrent,ui.lp(a,14))
     }
@@ -149,17 +147,17 @@ object ResourceDownloads {
     }
 
     fun route(a:Activity,raw:String,folder:String){
-        if(raw.startsWith("magnet:?",true)){openMagnet(a,raw);return}
+        if(raw.startsWith("magnet:?",true)){openMagnet(a,raw,folder);return}
         if(!SearchRanking.validUrl(raw)){
             note(a,"Enter a valid HTTPS URL or magnet link")
             return
         }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
         when{
-            path.endsWith(".torrent")->fetchTorrent(a,raw)
+            path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
             raw.contains("nyaa.si/view/")||raw.contains("sukebei.nyaa.si/view/")||
                 raw.contains("thepiratebay.")||raw.contains("1337x.")->
-                openTorrentSource(a,raw)
+                openTorrentSource(a,raw,folder)
             else->http(a,raw,folder)
         }
     }
@@ -183,7 +181,7 @@ object ResourceDownloads {
         }catch(t:Exception){note(a,"Download rejected: "+t.message)}
     }
 
-    fun openTorrentSource(a:Activity,url:String){
+    fun openTorrentSource(a:Activity,url:String,folder:String="Games"){
         if(!SearchRanking.validUrl(url)){note(a,"Invalid torrent page URL");return}
         thread(name="asterion-torrent-resolver"){
             val failure=runCatching{
@@ -193,8 +191,8 @@ object ResourceDownloads {
                 val files=page.select("a[href$=.torrent],a[href*='.torrent?']")
                     .map{it.absUrl("href")}.filter{SearchRanking.validUrl(it)}
                 val magnet=magnets.firstOrNull()
-                if(magnet!=null)a.runOnUiThread{openMagnet(a,magnet)}
-                else if(files.isNotEmpty())a.runOnUiThread{fetchTorrent(a,files.first())}
+                if(magnet!=null)a.runOnUiThread{openMagnet(a,magnet,folder)}
+                else if(files.isNotEmpty())a.runOnUiThread{fetchTorrent(a,files.first(),folder)}
                 else a.runOnUiThread {
                     note(a,"No magnet or torrent descriptor was found on that page. Opening original listing.")
                     a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
@@ -207,21 +205,10 @@ object ResourceDownloads {
         }
     }
 
-    private fun openMagnet(a:Activity,url:String){
-        runCatching{
-            a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)).apply{
-                addCategory(Intent.CATEGORY_BROWSABLE)
-            })
-        }.onFailure {
-            AlertDialog.Builder(a).setTitle("BitTorrent client needed")
-                .setMessage("A torrent client is required to download the files, including ZIP archives.")
-                .setPositiveButton("Install LibreTorrent"){_,_->
-                    a.startActivity(Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://f-droid.org/packages/org.proninyaroslav.libretorrent/")))
-                }.setNegativeButton("Cancel",null).show()
-        }
+    private fun openMagnet(a:Activity,url:String,folder:String){
+        TorrentTransfers.prepareMagnet(a,url,folder)
     }
-    private fun fetchTorrent(a:Activity,url:String){
+    private fun fetchTorrent(a:Activity,url:String,folder:String){
         thread(name="asterion-torrent-metadata") {
             val result=runCatching{
                 val u=URL(url)
@@ -248,20 +235,7 @@ object ResourceDownloads {
                 }
                 val hash=MessageDigest.getInstance("SHA-256")
                     .digest(bytes).take(10).joinToString(""){"%02x".format(it)}
-                val dir=File(a.cacheDir,"torrent-descriptors").apply{mkdirs()}
-                val file=File(dir,"$hash.torrent")
-                file.writeBytes(bytes)
-                val uri=Uri.Builder().scheme("content")
-                    .authority(a.packageName+".torrent-files").appendPath(file.name).build()
-                a.runOnUiThread {
-                    runCatching{
-                        a.startActivity(Intent(Intent.ACTION_VIEW).apply{
-                            setDataAndType(uri,"application/x-bittorrent")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        })
-                    }.onFailure{note(a,
-                        "Torrent descriptor saved, but no compatible BitTorrent client is installed.")}
-                }
+                a.runOnUiThread { TorrentTransfers.prepareDescriptor(a,bytes,folder) }
             }.exceptionOrNull()
             if(result!=null)a.runOnUiThread{note(a,"Torrent metadata error: "+result.message)}
         }
