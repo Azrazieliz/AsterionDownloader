@@ -50,7 +50,7 @@ object PortableGameExporter {
     }
     fun export(a:Activity,source:Uri,filename:String){
         val title=sanitize(filename.substringBeforeLast('.',filename)).take(55)
-        val folder="Downloads/AsterionDownloader/Games/"+title+"_"+System.currentTimeMillis()+"/"
+        val folder="Download/AsterionDownloader/Games/"+title+"_"+System.currentTimeMillis()+"/"
         val dialog=AlertDialog.Builder(a).setTitle("Exporting game outside Asterion")
             .setMessage("Extracting to the Android Downloads folder…")
             .setCancelable(false).create()

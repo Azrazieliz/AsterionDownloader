@@ -36,16 +36,18 @@ object ResourceDownloads {
 
     fun render(a:Activity,body:LinearLayout,games:Boolean){
         val ui=NocturneDesign
-        val title=if(games)"Games & Visual Novels" else "Books & Archives"
+        val title=if(games)"Games & Visual Novels" else "EPUB Books"
         val folder=if(games)"Games" else "Books"
         body.addView(ui.text(a,title,23f,ui.white,true),ui.lp(a,18))
         body.addView(ui.text(a,if(games)
             "Direct game archives, APKs and visual novels; recognize engines and launch compatible Android content."
-            else "Download EPUB, PDF, CBZ, ZIP, RAR and other book archives from direct links.",
+            else "Search public EPUB editions by title and download only EPUB files.",
             13f,ui.secondary),ui.lp(a,9))
+        CatalogSearchUi.render(a,body,games)
         val card=ui.card(a)
+        card.addView(ui.text(a,"ADVANCED DIRECT LINK",13f,ui.secondary,true),ui.lp(a,6))
         val field=EditText(a).apply{
-            hint="Paste direct download, magnet, .torrent or listing URL"
+            hint="Paste optional direct download URL"
             setSingleLine(true)
             textSize=14f
             setTextColor(ui.white)
@@ -161,12 +163,16 @@ object ResourceDownloads {
             else->http(a,raw,folder)
         }
     }
-    private fun http(a:Activity,url:String,folder:String){
+    fun downloadFile(a:Activity,url:String,folder:String,filename:String){
+        http(a,url,folder,filename)
+    }
+    private fun http(a:Activity,url:String,folder:String,filename:String?=null){
         if(!url.startsWith("https://")){note(a,"Use an HTTPS download URL");return}
         try{
             val uri=URI(url)
-            val file=uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"}
+            val file=(filename?:uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"})
                 .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
+            require(folder!="Books" || file.endsWith(".epub",true)){"Books require an EPUB file"}
             val d=a.getSystemService(DownloadManager::class.java)
             val request=DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(file)
