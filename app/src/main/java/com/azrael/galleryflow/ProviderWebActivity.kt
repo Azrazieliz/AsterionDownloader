@@ -120,6 +120,10 @@ class ProviderWebActivity : Activity() {
 
     private fun providerDownloadListener() = DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
         runCatching {
+            val uri = URI(url)
+            require(uri.scheme == "https" && !uri.host.isNullOrBlank()) {
+                "An accessible HTTPS original file URL is required"
+            }
             val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
@@ -129,17 +133,22 @@ class ProviderWebActivity : Activity() {
                 CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }?.let {
                     addRequestHeader("Cookie", it)
                 }
-                setDestinationInExternalPublicDir(
-                    Environment.DIRECTORY_DOWNLOADS,
-                    "Cosplay/GalleryFlow/provider_downloads/" + safeFileName(filename)
-                )
+                val route = intent.getStringExtra(EXTRA_FOLDER)
+                    ?.takeIf { it in setOf("Artwork","Cosplay","Videos","Comics",
+                        "Books","Games","Assets","References") }
+                val destination = if (route != null) {
+                    val host = uri.host.orEmpty()
+                        .replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
+                    "AsterionDownloader/" + route + "/" + host + "/" + safeFileName(filename)
+                } else "Cosplay/GalleryFlow/provider_downloads/" + safeFileName(filename)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,destination)
             }
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             manager.enqueue(request)
         }.onSuccess {
             Toast.makeText(
                 this,
-                "Download queued in Downloads/Cosplay/GalleryFlow/provider_downloads",
+                "Original download queued in Android Downloads",
                 Toast.LENGTH_LONG
             ).show()
         }.onFailure {
@@ -156,5 +165,6 @@ class ProviderWebActivity : Activity() {
 
     companion object {
         const val EXTRA_URL = "url"
+        const val EXTRA_FOLDER = "aloha_section_folder"
     }
 }
