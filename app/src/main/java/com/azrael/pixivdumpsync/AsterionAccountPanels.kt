@@ -187,7 +187,20 @@ object AsterionAccountPanels {
             {cosplaySync(a,GallerySyncMode.BACKFILL)})
         action(a,controls,"DISCOVER & DOWNLOAD COSPLAY VIDEOS",true){
             val watched=CreatorPreviews.syncKyoraVideos(a)
-            say(a,"Monitoring "+watched+" new creator video pages; check Videos > Downloads for transfer progress")
+            cosplaySync(a,GallerySyncMode.BACKFILL)
+            say(a,"Kyora source adapters scanning original galleries for videos and images; "+watched+" video pages monitored")
+        }
+        action(a,controls,"COSPLAYTELE · FULL VIDEO / GALLERY BACKFILL",true){
+            val selected=GalleryDb(a).use{db->
+                val matches=db.listEntities().filter{it.canonicalUrl.contains("cosplaytele.com")}
+                matches.forEach{
+                    db.setSelected(it.source,it.entityId,true)
+                    db.setLiveEnabled(it.source,it.entityId,true)
+                }
+                matches.size
+            }
+            if(selected>0)cosplaySync(a,GallerySyncMode.BACKFILL)
+            else say(a,"CosplayTele source not in current library; add its main site first")
         }
         action(a,controls,"FULL GALLERY MANAGER & TAG FILTERS",false){
             a.startActivity(Intent(a,com.azrael.galleryflow.MainActivity::class.java))
