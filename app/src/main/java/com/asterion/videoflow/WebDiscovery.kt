@@ -74,6 +74,44 @@ object WebDiscovery {
             }.lastOrNull()
     }
 
+
+    /** Follow only numbered pages of the exact performer profile. */
+    fun findWatchPornArtist(address:String,full:Boolean):List<VideoHit>{
+        val first=URI(address)
+        require(first.scheme=="https" && first.host=="watchporn.to" &&
+            Regex("^/models/[a-zA-Z0-9_-]+/?$").matches(first.path)) {
+            "Expected a WatchPorn performer URL"
+        }
+        val base="https://watchporn.to"+first.path.trimEnd('/')+"/"
+        val visited=HashSet<String>()
+        val videos=linkedMapOf<String,VideoHit>()
+        var current=base
+        for(page in 0 until (if(full)80 else 3)){
+            if(!visited.add(current))break
+            val doc=open(current)
+            require(doc.location().startsWith(base)){"Performer page redirected"}
+            val root=URI(doc.location())
+            for(a in doc.select("a[href*=/video/]").take(700)){
+                val url=runCatching{root.resolve(a.attr("href")).toString()}.getOrNull()?:continue
+                val u=runCatching{URI(url)}.getOrNull()?:continue
+                if(u.scheme!="https" || u.host!="watchporn.to" ||
+                    !Regex("^/video/[0-9]+/[^?#]*$").matches(u.path))continue
+                val title=a.attr("title").ifBlank{
+                    a.selectFirst("img[alt]")?.attr("alt").orEmpty()
+                }.ifBlank{a.text()}.ifBlank{"WatchPorn video"}
+                videos.putIfAbsent(url,VideoHit(title.take(180),url))
+                if(videos.size>=3000)return videos.values.toList()
+            }
+            val next=doc.selectFirst(".wp-pag__next a[href]")?.absUrl("href").orEmpty()
+            val target=runCatching{URI(next)}.getOrNull()
+            if(target?.scheme!="https" || target.host!="watchporn.to" ||
+                !Regex("^"+Regex.escape(first.path.trimEnd('/'))+"/[0-9]+/?$")
+                    .matches(target.path) || next in visited)break
+            current=next
+        }
+        return videos.values.toList()
+    }
+
     fun directMedia(address:String):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
