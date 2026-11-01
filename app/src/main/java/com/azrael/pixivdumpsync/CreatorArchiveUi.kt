@@ -7,6 +7,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.Toast
 import org.json.JSONArray
@@ -39,13 +40,13 @@ object CreatorArchiveUi {
         pref(a).edit().putString("query",query).putString("results",arr.toString()).apply()
     }
 
-    fun render(a:Activity,body:LinearLayout) {
+    fun render(a:Activity,body:LinearLayout,section:ArchiveSection=ArchiveSection.ARTWORK) {
         val ui=NocturneDesign
         val heading=ui.card(a)
-        heading.addView(ui.text(a,"CREATOR ARCHIVES",23f,ui.white,true),ui.lp(a,5))
+        heading.addView(ui.text(a,section.label.uppercase()+" · CREATOR SOURCES",19f,ui.white,true),ui.lp(a,5))
         heading.addView(ui.text(a,
             "Search public archives for Patreon, FANBOX, Fantia, Gumroad, OnlyFans, Fansly and other creator posts. " +
-            "These sites contain contributor uploads, not guaranteed complete archives. Protected or missing posts cannot be unlocked.",
+            "Search results are filtered to "+section.label+" file types. Preview availability and original-file access vary by source.",
             12f,ui.secondary),ui.lp(a,10))
         val query=EditText(a).apply{
             hint="Creator name or Pawchive / Kemono / Coomer creator URL"
@@ -68,7 +69,8 @@ object CreatorArchiveUi {
         lateinit var openCreator:(ArchiveCreator,Int)->Unit
 
         fun queue(items:List<ArchivePost>) {
-            val outcome=CreatorArchiveDownloads.enqueue(a,items)
+            val selected=items.map{ArchiveContent.filtered(section,it)}.filter{it.files.isNotEmpty()}
+            val outcome=CreatorArchiveDownloads.enqueue(a,selected)
             status.text=if(!AppPower.enabled(a))
                 "App OFF: no download enqueued. Re-enable downloads in the header."
             else "${outcome.queued} queued · ${outcome.skipped} already queued or past the page limit · ${outcome.failed} failed. " +
@@ -129,7 +131,7 @@ object CreatorArchiveUi {
                             openUrl(a,creator.url)
                         },ui.lp(a,7))
                     }.onSuccess{page->
-                        status.text="${page.size} posts loaded · ${creator.host.title} · offset $offset"
+                        status.text="${page.size} posts checked · ${creator.host.title} · offset $offset"
                         val header=ui.card(a)
                         header.addView(ui.text(a,creator.name,19f,ui.white,true),ui.lp(a,5))
                         header.addView(ui.text(a,creator.host.title+" · "+creator.service+" · "+creator.id,
@@ -146,8 +148,16 @@ object CreatorArchiveUi {
                             posts.addView(ui.action(a,"QUEUE NEXT UP TO 40 FILES FROM THIS PAGE",true){
                                 queue(page)
                             },ui.lp(a,10))
-                            page.forEach{post->
+                            page.map{ArchiveContent.filtered(section,it)}.filter{it.files.isNotEmpty()}.forEach{post->
                                 val card=ui.card(a)
+                                ArchiveContent.preview(post)?.let{url->
+                                    val thumbnail=ImageView(a).apply{
+                                        scaleType=ImageView.ScaleType.CENTER_CROP
+                                        setBackgroundColor(ui.raised)
+                                    }
+                                    card.addView(thumbnail,LinearLayout.LayoutParams(-1,ui.px(a,172)))
+                                    RemoteImageLoader.load(a,thumbnail,url,post.url)
+                                }
                                 card.addView(ui.text(a,post.title,15f,ui.white,true),ui.lp(a,4))
                                 card.addView(ui.text(a,
                                     (post.published.take(10).ifBlank{"Undated"})+
