@@ -280,6 +280,32 @@ object AsterionAccountPanels {
             ui.text(a,"No cosplay sources linked in this installation.",13f,ui.secondary))
         for(entity in entities){
             val c=card(a,p)
+            val galleries=GalleryDb(a).use{it.galleryCards(entity.entityId,6)}
+            if(galleries.isNotEmpty()){
+                add(a,c,ui.text(a,"RECENT ORIGINAL GALLERIES",12f,ui.secondary,true),7)
+                val images=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                for(gallery in galleries){
+                    val mini=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+                    val preview=android.widget.ImageView(a).apply{
+                        scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(ui.raised)
+                    }
+                    mini.addView(preview,LinearLayout.LayoutParams(ui.px(a,112),ui.px(a,108)))
+                    mini.addView(ui.text(a,gallery.title.take(25),11f,ui.white),ui.lp(a,3))
+                    CreatorPreviews.galleryThumbnail(a,preview,gallery.firstUri,gallery.firstUrl)
+                    mini.setOnClickListener{
+                        a.startActivity(Intent(a,com.azrael.galleryflow.GalleryDetailActivity::class.java).apply{
+                            putExtra(com.azrael.galleryflow.GalleryDetailActivity.EXTRA_GALLERY_ID,gallery.galleryId)
+                            putExtra(com.azrael.galleryflow.GalleryDetailActivity.EXTRA_SOURCE,gallery.source.wireName)
+                            putExtra(com.azrael.galleryflow.GalleryDetailActivity.EXTRA_TITLE,gallery.title)
+                        })
+                    }
+                    images.addView(mini,LinearLayout.LayoutParams(ui.px(a,120),-2))
+                }
+                c.addView(android.widget.HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false;addView(images)
+                },ui.lp(a,7))
+            }
             val image=android.widget.ImageView(a).apply{
                 scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(ui.raised)
@@ -331,6 +357,7 @@ object AsterionAccountPanels {
     fun x(a:Activity,p:LinearLayout,refresh:()->Unit){
         val accounts=XPhotoQueue(a).use{it.allSources()}
         val count=XPhotoQueue(a).use{it.counts()}
+        val recentX=XPhotoQueue(a).use{it.recent(1000)}
         title(a,p,"X · Artists & Photo Archive",
             "Follow X accounts, save all posted images and keep checking for new photos.")
         CreatorPreviews.x(a,p)
@@ -428,6 +455,33 @@ object AsterionAccountPanels {
         for(source in accounts.take(25)){
             val c=card(a,p)
             add(a,c,ui.text(a,"@"+source.handle,16f,ui.white,true),0)
+            val photos=recentX.filter{photo->
+                runCatching{
+                    val path=java.net.URI(photo.source).path.trim('/')
+                    path.substringBefore('/').equals(source.handle,true)
+                }.getOrDefault(false)
+            }.take(6)
+            if(photos.isNotEmpty()){
+                add(a,c,ui.text(a,"LATEST PHOTOS · "+photos.size+" PREVIEWS",
+                    12f,ui.secondary,true),6)
+                val thumbnails=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                for(photo in photos){
+                    val preview=android.widget.ImageView(a).apply{
+                        scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(ui.raised)
+                        setOnClickListener{
+                            a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                                .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,source.handle))
+                        }
+                    }
+                    thumbnails.addView(preview,LinearLayout.LayoutParams(ui.px(a,130),
+                        ui.px(a,130)).apply{rightMargin=ui.px(a,7)})
+                    RemoteImageLoader.load(a,preview,photo.photo,source.url)
+                }
+                c.addView(android.widget.HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false;addView(thumbnails)
+                },ui.lp(a,8))
+            }
             add(a,c,ui.text(a,if(source.cursor.isNullOrBlank())
                 "No saved pagination cursor" else "Backfill cursor saved",12f,ui.secondary))
             if(!source.error.isNullOrBlank())add(a,c,
