@@ -98,7 +98,7 @@ object TorrentTransfers {
             // Default to the whole torrent; the user may deselect unrelated extras.
             val selected = BooleanArray(info.numFiles()) { i ->
                 when(folder){
-                    "Books" -> files.fileName(i).endsWith(".epub",ignoreCase=true)
+                    "Books" -> listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi").any{files.fileName(i).endsWith(it,true)}
                     else -> true
                 }
             }
@@ -108,9 +108,9 @@ object TorrentTransfers {
                     if (!selected.any { it }) {
                         Toast.makeText(a, "Select at least one file", Toast.LENGTH_LONG).show()
                     } else if(folder=="Books" && selected.indices.any{ i ->
-                        selected[i] && !files.fileName(i).endsWith(".epub",ignoreCase=true)
+                        selected[i] && !listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi").any{files.fileName(i).endsWith(it,true)}
                     }) {
-                        Toast.makeText(a, "Books are EPUB-only. Deselect other formats.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(a, "Choose supported book files (EPUB, PDF, CBZ or archives).", Toast.LENGTH_LONG).show()
                     } else {
                         val hash = MessageDigest.getInstance("SHA-256").digest(bytes)
                             .take(12).joinToString("") { "%02x".format(it) }
@@ -170,7 +170,7 @@ class TorrentTransferService : Service() {
                 return START_STICKY
             }
             ADD -> {
-                val folder = intent.getStringExtra("folder")?.takeIf { it == "Games" || it == "Books" }
+                val folder = intent.getStringExtra("folder")?.takeIf { it == "Games" || it == "Books" || it == "Videos" || it == "Assets" }
                     ?: "Games"
                 val indices = intent.getStringExtra("indices") ?: ""
                 if (inFlight.add(id)) thread(name = "asterion-torrent-$id") {
