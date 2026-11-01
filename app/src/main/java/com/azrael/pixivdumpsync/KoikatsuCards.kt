@@ -14,7 +14,7 @@ import java.io.*
 import kotlin.concurrent.thread
 
 data class KoikatsuCard(val name:String,val author:String,val download:String,
-                         val source:String,val page:String)
+                         val source:String,val page:String,val preview:String?=null)
 object KoikatsuCards {
     private fun encode(s:String)=URLEncoder.encode(s,"UTF-8")
     internal fun parseBepis(json:String):List<KoikatsuCard>{
@@ -53,8 +53,12 @@ object KoikatsuCards {
         return doc.select("a.card[href*=/contents/]").take(75).mapNotNull{link->
             val page=link.absUrl("href")
             if(!safe(page))return@mapNotNull null
+            val thumbnail=link.selectFirst("img")?.let{img->
+                listOf("data-src","data-original","src").map{img.absUrl(it)}
+                    .firstOrNull{safe(it)}
+            }
             KoikatsuCard(link.text().trim().take(160).ifBlank{"Character card"},"",
-                page,"KoikatsuCards",page)
+                page,"KoikatsuCards",page,thumbnail)
         }.distinctBy{it.page}
     }
     fun search(name:String):Pair<List<KoikatsuCard>,List<String>>{
@@ -181,11 +185,13 @@ class KoikatsuCardActivity:Activity(){
         v.addView(ui.text(this,card.name,16f,ui.white,true))
         v.addView(ui.text(this,card.source+(if(card.author.isBlank())"" else " · "+card.author),
             12f,ui.secondary),ui.lp(this,4))
-        if(card.source=="BepisDB"){
-            val preview=ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER}
-            v.addView(preview,LinearLayout.LayoutParams(-1,ui.px(this,160)))
-            RemoteImageLoader.load(this,preview,card.download,card.page)
+        val previewUrl=card.preview ?: if(card.source=="BepisDB")card.download else null
+        val preview=ImageView(this).apply{
+            scaleType=ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(ui.raised)
         }
+        v.addView(preview,LinearLayout.LayoutParams(-1,ui.px(this,175)))
+        if(previewUrl!=null)RemoteImageLoader.load(this,preview,previewUrl,card.page)
         v.addView(ui.action(this,"DOWNLOAD CARD PNG",true){
             status.text="Retrieving "+card.name
             thread(name="koikatsu-card-download"){
