@@ -45,7 +45,7 @@ object ResourceDownloads {
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
         AlohaSources.render(a,body,if(games) listOf(AlohaArea.GAMES,AlohaArea.REFERENCE)
-            else listOf(AlohaArea.BOOKS),"BOOKMARKED "+if(games)"GAMES & DATABASES" else "NOVEL LIBRARIES")
+            else listOf(AlohaArea.BOOKS),"BOOKMARKED "+(if(games)"GAMES & DATABASES" else "NOVEL LIBRARIES"))
         CreatorArchiveUi.render(a,body,if(games)ArchiveSection.GAMES else ArchiveSection.BOOKS)
         if(!games){
             TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
