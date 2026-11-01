@@ -58,6 +58,7 @@ object AssetsPanel {
     private fun select(a:Activity,id:String,status:TextView){
         thread(name="asset-files"){
             val output=runCatching{
+                require(id.matches(Regex("[A-Za-z0-9_-]{2,120}"))){"Invalid asset ID"}
                 val root=JSONObject(fetch("https://api.polyhaven.com/files/"+id))
                 val files=ArrayList<Pair<String,String>>()
                 fun walk(obj:JSONObject,path:String,depth:Int){
@@ -111,6 +112,7 @@ object AssetsPanel {
                     outcome.onSuccess{data->
                         var found=0
                         for(id in data.keys()){
+                            if(!id.matches(Regex("[A-Za-z0-9_-]{2,120}")))continue
                             val item=data.optJSONObject(id)?:continue
                             val name=item.optString("name",id)
                             val terms=q.split(Regex("\\s+"))
