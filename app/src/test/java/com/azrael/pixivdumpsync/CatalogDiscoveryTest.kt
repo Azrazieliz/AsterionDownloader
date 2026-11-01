@@ -38,6 +38,15 @@ class CatalogDiscoveryTest {
         assertTrue(hits.any{it.kind==CatalogKind.GAME_ARCHIVE})
         assertTrue(hits.any{it.kind==CatalogKind.APK})
     }
+    @Test fun rssTorrentIsSelectableFromANameSearch() {
+        val xml="""<rss><channel><item><title>Example Visual Novel Game</title>
+            <link>https://nyaa.si/view/123456</link>
+            <enclosure url="https://nyaa.si/download/123456.torrent" />
+            </item></channel></rss>"""
+        val hits=CatalogDiscovery.torrentRss(xml,"https://nyaa.si/","Nyaa")
+        assertEquals(1,hits.size)
+        assertEquals(CatalogKind.TORRENT,hits.first().kind)
+    }
     @Test fun matchTitleAndArchiveRecord() {
         val response="""{"response":{"docs":[{"identifier":"test-123","title":"Example Novel"},
             {"identifier":"../../bad","title":"Bad"}]}}"""

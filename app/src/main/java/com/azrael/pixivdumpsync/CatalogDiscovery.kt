@@ -151,7 +151,8 @@ object CatalogDiscovery {
         val title=query.trim()
         require(title.length in 2..150){"Enter a title (2–150 characters)"}
         val providers: List<Pair<String, () -> List<CatalogHit>>> =
-            if(games)listOf("Internet Archive" to {searchArchive(title,true)})
+            if(games)listOf("Internet Archive" to {searchArchive(title,true)},
+                "Nyaa and Sukebei" to {searchTorrents(title)})
             else listOf("Project Gutenberg" to {searchGutenberg(title)},
                 "Internet Archive" to {searchArchive(title,false)})
         val pool=Executors.newFixedThreadPool(providers.size)
