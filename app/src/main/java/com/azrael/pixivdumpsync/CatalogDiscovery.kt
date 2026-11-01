@@ -14,9 +14,10 @@ import java.util.concurrent.TimeUnit
 /** Search for actual public EPUB files, downloadable game archives and torrent metadata.
  * A listing is not a completed download and does not imply engine compatibility.
  */
-enum class CatalogKind { EPUB, APK, GAME_ARCHIVE, TORRENT }
+enum class CatalogKind { EPUB, BOOK_FILE, APK, GAME_ARCHIVE, TORRENT }
 data class CatalogHit(val title:String, val source:String, val url:String,
-                      val kind:CatalogKind, val filename:String="", val details:String="")
+                      val kind:CatalogKind, val filename:String="", val details:String="",
+                      val coverUrl:String="")
 data class CatalogOutcome(val hits:List<CatalogHit>, val failures:List<String>, val searched:Int)
 
 object CatalogDiscovery {
@@ -120,6 +121,8 @@ object CatalogDiscovery {
                 lower.endsWith("_lcp.epub")||lower.endsWith(".acsm"))continue
             val kind=when{
                 !games && lower.endsWith(".epub")->CatalogKind.EPUB
+                !games && listOf(".pdf",".cbz",".cbr",".djvu",".mobi",".azw3",
+                    ".zip",".rar",".7z").any{lower.endsWith(it)}->CatalogKind.BOOK_FILE
                 games && lower.endsWith(".apk")->CatalogKind.APK
                 games && lower.endsWith(".zip")->CatalogKind.GAME_ARCHIVE
                 else->continue
@@ -127,9 +130,10 @@ object CatalogDiscovery {
             val parts=name.split('/').map{enc(it).replace("+","%20")}
             val url="https://archive.org/download/"+id+"/"+parts.joinToString("/")
             val file=name.substringAfterLast('/')
-            val extension=if(kind==CatalogKind.EPUB)"epub" else if(kind==CatalogKind.APK)"apk" else "zip"
+            val extension=file.substringAfterLast('.', "zip").lowercase().take(6)
             hits+=CatalogHit(title,"Internet Archive",url,kind,
-                safeFilename(file,extension),file+" · "+(f.optLong("size")/1024/1024)+" MiB")
+                safeFilename(file,extension),file+" · "+(f.optLong("size")/1024/1024)+" MiB",
+                "https://archive.org/services/img/"+id)
             if(hits.size>=6)break
         }
         return hits
@@ -143,7 +147,7 @@ object CatalogDiscovery {
             "&output=json&rows=12&fl%5B%5D=identifier&fl%5B%5D=title"
         val entries=archiveSearch(get(url))
         val hits=ArrayList<CatalogHit>()
-        for((id,name) in entries.take(9)) {
+        for((id,name) in entries.take(4)) {
             val metadata=runCatching{get("https://archive.org/metadata/"+id)}.getOrNull()?:continue
             hits+=archiveFiles(metadata,id,name,games)
         }
@@ -198,7 +202,9 @@ object CatalogDiscovery {
         val providers: List<Pair<String, () -> List<CatalogHit>>> =
             if(games)listOf("Nyaa and Sukebei" to {searchTorrents(title)},
                 "Bitsearch / Knaben / Pirate Bay" to {MultiTorrentSearch.search(title).first})
-            else listOf("Standard Ebooks" to {searchStandardEbooks(title)},
+            else listOf("Internet Archive" to {searchArchive(title,false)},
+                "Project Gutenberg" to {searchGutenberg(title)},
+                "Standard Ebooks" to {searchStandardEbooks(title)},
                 "Wikisource" to {searchWikisource(title)})
         val pool=Executors.newFixedThreadPool(providers.size)
         val work=ExecutorCompletionService<Pair<List<CatalogHit>,String?>>(pool)
@@ -219,7 +225,8 @@ object CatalogDiscovery {
                 }
             }
         }finally{pool.shutdownNow()}
-        val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else it.kind==CatalogKind.EPUB}
+        val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else
+            it.kind==CatalogKind.EPUB || it.kind==CatalogKind.BOOK_FILE}
             .filter{relevance(title,it.title+" "+(if(games)"" else it.details))>0}
             .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
