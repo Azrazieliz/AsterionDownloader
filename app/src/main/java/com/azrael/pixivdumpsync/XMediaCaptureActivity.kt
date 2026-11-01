@@ -30,13 +30,19 @@ class XMediaCaptureActivity:Activity() {
     private var listUrl=""
     private var feed=false
     private val observed=linkedSetOf<String>()
+    private val pending=linkedSetOf<String>()
     private var queued=0
     private var auto=false
     private var passes=0
+    private var idlePasses=0
+    private var previousCount=0
     private val handler=Handler(Looper.getMainLooper())
     private val runner=object:Runnable{
         override fun run(){
-            if(!auto || passes>=120){auto=false;update();return}
+            if(!auto || passes>=3000){auto=false;queueObserved();XPhotoEngine.start(this@XMediaCaptureActivity);update();return}
+            if(observed.size>previousCount){idlePasses=0;previousCount=observed.size}
+            else if(passes>20)idlePasses++
+            if(idlePasses>=40){auto=false;queueObserved();XPhotoEngine.start(this@XMediaCaptureActivity);update();return}
             capture()
             browser.evaluateJavascript("window.scrollBy(0,Math.floor(window.innerHeight*0.8));",null)
             passes++
@@ -90,12 +96,8 @@ class XMediaCaptureActivity:Activity() {
             update()
         },ui.lp(this,6))
         outer.addView(ui.action(this,"AUTO-SCROLL LIST & DOWNLOAD",true){
-            if(listUrl.isBlank() && !feed){
-                Toast.makeText(this,"Auto collection is for a selected X list or following feed",Toast.LENGTH_LONG).show()
-            }else{
-                auto=true;passes=0;handler.removeCallbacks(runner);handler.post(runner)
-                update()
-            }
+            auto=true;passes=0;idlePasses=0;previousCount=observed.size
+            handler.removeCallbacks(runner);handler.post(runner);update()
         },ui.lp(this,6))
         outer.addView(ui.action(this,"STOP AUTO COLLECTION",false){
             auto=false;handler.removeCallbacks(runner);queueObserved()
@@ -110,23 +112,24 @@ class XMediaCaptureActivity:Activity() {
           document.querySelectorAll('article img[src*="pbs.twimg.com/media/"], [data-testid="tweetPhoto"] img').forEach(img=>{
             const u=img.getAttribute('src')||'';
             if(u.startsWith('https://pbs.twimg.com/media/'))
-              found.add(u.replace(/([?&])name=[^&]*/,'$1name=large'));
+              found.add(u.match(/[?&]name=/) ? u.replace(/([?&])name=[^&]*/,'$1name=orig') : u+(u.includes('?')?'&':'?')+'name=orig');
           });
           AsterionMedia.found(JSON.stringify(Array.from(found)));
           return found.size;
         })()""",null)
     }
     private fun queueObserved(){
-        if(observed.isEmpty())return
+        if(pending.isEmpty())return
         val src=if(feed)"https://x.com/home" else if(listUrl.isBlank())"https://x.com/"+handle else listUrl
         XPhotoQueue(this).use{db->
-            for(url in observed)
+            for(url in pending)
                 if(db.addPhoto(src,url.hashCode().toString(),url))queued++
+            pending.clear()
         }
     }
     private fun update(){
         status.text=observed.size.toString()+" photos found · "+queued+
-            " queued · "+(if(auto)"auto-collect "+passes+"/120" else "idle")+
+            " queued · "+(if(auto)"auto-collect "+passes+"/3000" else "idle")+
             ". Results are saved to Downloads/AsterionDownloader/X."
     }
     inner class Bridge{
@@ -136,7 +139,9 @@ class XMediaCaptureActivity:Activity() {
                 (0 until minOf(300,arr.length())).map{arr.optString(it)}
             }.getOrDefault(emptyList())
             runOnUiThread{
-                links.filter{it.startsWith("https://pbs.twimg.com/media/")}.forEach{observed.add(it)}
+                links.filter{it.startsWith("https://pbs.twimg.com/media/")}.forEach{
+                    if(observed.add(it))pending.add(it)
+                }
                 if(auto){
                     queueObserved()
                     if(passes%15==0)XPhotoEngine.start(this@XMediaCaptureActivity)
