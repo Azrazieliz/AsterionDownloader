@@ -74,7 +74,7 @@ object CreatorArchiveUi {
             val outcome=CreatorArchiveDownloads.enqueue(a,selected)
             status.text=if(!AppPower.enabled(a))
                 "App OFF: no download enqueued. Re-enable downloads in the header."
-            else "${outcome.queued} queued · ${outcome.skipped} already queued or past the page limit · ${outcome.failed} failed. " +
+            else "${outcome.queued} queued · ${outcome.skipped} already in queue · ${outcome.deferred} remaining on page · ${outcome.failed} failed. " +
                 "Check Android Downloads for transfer progress. Retry failures by selecting the post again."
         }
 
@@ -161,7 +161,7 @@ object CreatorArchiveUi {
                             "No posts returned on this page. This may be an empty archive or an incomplete upstream import.",
                             12f,ui.secondary),ui.lp(a,7))
                         else{
-                            posts.addView(ui.action(a,"QUEUE NEXT UP TO 40 FILES FROM THIS PAGE",true){
+                            posts.addView(ui.action(a,"QUEUE NEXT 40 UNQUEUED FILES · REPEAT TO COMPLETE PAGE",true){
                                 queue(page)
                             },ui.lp(a,10))
                             page.map{it to ArchiveContent.filtered(section,it)}.filter{it.second.files.isNotEmpty()}.forEach{(original,post)->
