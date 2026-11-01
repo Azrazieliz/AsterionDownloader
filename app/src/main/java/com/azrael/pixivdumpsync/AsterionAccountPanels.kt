@@ -265,9 +265,15 @@ object AsterionAccountPanels {
         add(a,p,ui.text(a,"Followed creators & websites",19f,ui.white,true),20)
         if(entities.isEmpty())add(a,p,
             ui.text(a,"No cosplay sources linked in this installation.",13f,ui.secondary))
-        for(entity in entities.take(25)){
+        for(entity in entities){
             val c=card(a,p)
-            add(a,c,ui.text(a,entity.displayName,16f,ui.white,true),0)
+            val image=android.widget.ImageView(a).apply{
+                scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(ui.raised)
+            }
+            c.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,154)))
+            CreatorPreviews.sourceThumbnail(a,image,entity.canonicalUrl)
+            add(a,c,ui.text(a,entity.displayName,16f,ui.white,true),6)
             add(a,c,ui.text(a,entity.canonicalUrl.take(110),12f,ui.secondary),4)
             if(com.azrael.galleryflow.SiteSession.cookie(entity.canonicalUrl)!=null)
                 add(a,c,ui.text(a,"Website session cookies available",12f,ui.primary),4)
