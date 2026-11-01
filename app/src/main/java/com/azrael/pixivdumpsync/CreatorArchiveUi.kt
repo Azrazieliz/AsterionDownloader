@@ -9,6 +9,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ImageView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
