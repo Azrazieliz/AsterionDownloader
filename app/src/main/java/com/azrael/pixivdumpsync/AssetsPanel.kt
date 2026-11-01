@@ -181,6 +181,7 @@ object AssetsPanel {
             },5204)
         },ui.lp(a,7))
         CreatorArchiveUi.render(a,body,ArchiveSection.ASSETS)
+        AlohaSources.render(a,body,listOf(AlohaArea.ASSETS),"ASSETS · MODELS & CONVERTERS")
     }
     fun localFile(a:Activity,uri:Uri?){
         if(uri==null)return
