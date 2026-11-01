@@ -18,6 +18,14 @@ class KoikatsuTorrentSearchTest {
         val actual=KoikatsuCards.parseArchiveDownload("<div class='download-menu-panel'><a class='download-menu-item' href='/api/downloads/content-file/token/demo'>Get</a></div>",base)
         assertEquals("https://koikatsucards.com/api/downloads/content-file/token/demo",actual)
     }
+    @Test fun gameTorrentMustContainIdentifiableGamePayload(){
+        assertFalse(TorrentTransfers.hasGamePayload(listOf(
+            "Movie 1080p.mkv", "preview/clip.mp4", "Extras/trailer.zip")))
+        assertTrue(TorrentTransfers.hasGamePayload(listOf(
+            "Game/game.exe", "Game/Assets/cutscene.mp4", "Game/data.rpa")))
+        assertTrue(TorrentTransfers.hasGamePayload(listOf("Game Release.7z")))
+        assertFalse(TorrentTransfers.hasGamePayload(listOf("Game video.mp4")))
+    }
     @Test fun searchApisRejectInvalidHashes(){
         val h="a".repeat(40)
         val json="{\"results\":[{\"title\":\"Game\",\"infohash\":\""+h+"\",\"seeders\":5}]}"
