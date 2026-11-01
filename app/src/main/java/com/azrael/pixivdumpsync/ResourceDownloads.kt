@@ -41,7 +41,7 @@ object ResourceDownloads {
         body.addView(ui.text(a,title,23f,ui.white,true),ui.lp(a,18))
         body.addView(ui.text(a,if(games)
             "Search and download game torrents; choose all required game assets and play through a compatible Android runtime."
-            else "Search EPUB titles; direct and local books also support PDF, CBZ and archives.",
+            else "Books use EPUB originals only. Comic chapter ZIPs belong in Toonily / MangaRead.",
             13f,ui.secondary),ui.lp(a,9))
         CatalogSearchUi.render(a,body,games)
         AlohaSources.render(a,body,if(games) listOf(AlohaArea.GAMES,AlohaArea.REFERENCE)
@@ -50,7 +50,7 @@ object ResourceDownloads {
         if(!games){
             TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
             val libraries=ui.card(a)
-            libraries.addView(ui.text(a,"BOOK LIBRARIES · MULTIFORMAT",16f,ui.white,true),ui.lp(a,3))
+            libraries.addView(ui.text(a,"BOOK LIBRARIES · EPUB ONLY",16f,ui.white,true),ui.lp(a,3))
             libraries.addView(ui.text(a,"Standard Ebooks and Wikisource are searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))
             libraries.addView(action(a,"BROWSE MANYBOOKS LIBRARY"){
                 a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://manybooks.net/search-book")))
@@ -193,7 +193,7 @@ object ResourceDownloads {
             val uri=URI(url)
             val file=(filename?:uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"})
                 .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
-            require(folder!="Books" || listOf(".epub",".pdf",".cbz",".cbr",".zip",".rar",".7z",".mobi",".azw3").any{file.endsWith(it,true)}){"Unsupported book format"}
+            require(folder!="Books" || file.endsWith(".epub",true)){"Books only accepts EPUB files"}
             val d=a.getSystemService(DownloadManager::class.java)
             val request=DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(file)
