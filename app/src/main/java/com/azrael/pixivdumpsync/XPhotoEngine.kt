@@ -164,7 +164,9 @@ object XPhotoEngine {
         }finally{working.set(false)}
     }
     private fun fetchPhoto(context:Context,source:String):String {
-        require(source.startsWith("https://")){"Invalid image URL"}
+        val remote=URI(source)
+        require(remote.scheme=="https" && remote.host=="pbs.twimg.com" &&
+            remote.path.startsWith("/media/")){"Only X original photo CDN links can be downloaded"}
         val address=Uri.parse(source)
         val fileBase=address.lastPathSegment.orEmpty()
             .substringBefore('?').substringBeforeLast('.')
@@ -177,7 +179,9 @@ object XPhotoEngine {
         var last:Exception?=null
         repeat(4){attempt->
             try{
-                val connection=java.net.URL(source).openConnection().apply{
+                val preferred=if(attempt>=2 && source.contains("name=orig"))
+                    source.replace("name=orig","name=large") else source
+                val connection=java.net.URL(preferred).openConnection().apply{
                     connectTimeout=30000;readTimeout=45000
                     setRequestProperty("User-Agent","Mozilla/5.0")
                 }
