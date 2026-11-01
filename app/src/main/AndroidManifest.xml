@@ -44,6 +44,9 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <service android:name=".CreatorArchiveJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name=".TorrentTransferService" android:exported="false"
             android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
         <service android:name=".XPhotoService" android:exported="false" android:foregroundServiceType="dataSync" />
