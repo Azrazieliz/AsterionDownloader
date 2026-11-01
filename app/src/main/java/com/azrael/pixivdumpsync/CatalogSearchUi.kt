@@ -24,7 +24,7 @@ object CatalogSearchUi {
                 ?:return@mapNotNull null
             CatalogHit(item.optString("title"),item.optString("source"),
                 item.optString("url"),kind,item.optString("filename"),
-                item.optString("details"))
+                item.optString("details"),item.optString("coverUrl"))
         }.filter{SearchRanking.validUrl(it.url) ||
             it.url.startsWith("magnet:?xt=urn:btih:",true)}
     }.getOrDefault(emptyList())
@@ -35,6 +35,7 @@ object CatalogSearchUi {
             array.put(JSONObject().apply{
                 put("title",hit.title);put("source",hit.source);put("url",hit.url)
                 put("kind",hit.kind.name);put("filename",hit.filename);put("details",hit.details)
+                put("coverUrl",hit.coverUrl)
             })
         }
         val prefix=if(games)"games" else "books"
@@ -50,7 +51,7 @@ object CatalogSearchUi {
         card.addView(ui.text(a,"SEARCH "+name.uppercase()+" BY NAME",17f,ui.white,true),ui.lp(a,4))
         card.addView(ui.text(a,if(games)
             "Search torrent catalogs by game title. Tap a result to choose files, then watch the transfer queue. Games are saved to Downloads for external Android players."
-            else "Search public EPUB editions. Only EPUB files are shown and downloaded.",
+            else "Search title/author across public libraries for original EPUB, PDF, comic archives and other accessible book formats.",
             12f,ui.secondary),ui.lp(a,8))
         val query=EditText(a).apply{
             hint=if(games)"Game, visual novel or eroge title" else "Book title or author"
@@ -71,12 +72,21 @@ object CatalogSearchUi {
             results.addView(ui.text(a,hits.size.toString()+" matching files / listings",
                 12f,ui.secondary),ui.lp(a,5))
             hits.forEach{hit->
-                if((!games && hit.kind!=CatalogKind.EPUB) ||
+                if((!games && hit.kind!=CatalogKind.EPUB && hit.kind!=CatalogKind.BOOK_FILE) ||
                     (games && hit.kind!=CatalogKind.TORRENT))return@forEach
                 val item=ui.card(a)
+                if(SearchRanking.validUrl(hit.coverUrl)){
+                    val cover=android.widget.ImageView(a).apply{
+                        scaleType=android.widget.ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(ui.raised)
+                    }
+                    item.addView(cover,LinearLayout.LayoutParams(-1,ui.px(a,145)))
+                    RemoteImageLoader.load(a,cover,hit.coverUrl,hit.url)
+                }
                 item.addView(ui.text(a,hit.title,15f,ui.white,true),ui.lp(a,5))
                 val type=when(hit.kind){
                     CatalogKind.EPUB->"EPUB file"
+                    CatalogKind.BOOK_FILE->"Original book · "+hit.filename.substringAfterLast('.', "file").uppercase()
                     CatalogKind.APK->"Android APK"
                     CatalogKind.GAME_ARCHIVE->"ZIP game archive"
                     CatalogKind.TORRENT->"Torrent index / file list"
@@ -86,6 +96,7 @@ object CatalogSearchUi {
                     11f,ui.secondary),ui.lp(a,5))
                 val label=when(hit.kind){
                     CatalogKind.EPUB->"DOWNLOAD EPUB"
+                    CatalogKind.BOOK_FILE->"DOWNLOAD ORIGINAL BOOK FILE"
                     CatalogKind.APK->"DOWNLOAD ANDROID APK"
                     CatalogKind.GAME_ARCHIVE->"DOWNLOAD GAME ZIP"
                     CatalogKind.TORRENT->"DOWNLOAD VIA TORRENT · SELECT FILES"
@@ -93,7 +104,8 @@ object CatalogSearchUi {
                 item.addView(ui.action(a,label,true){
                     when(hit.kind){
                         CatalogKind.TORRENT->ResourceDownloads.route(a,hit.url,"Games")
-                        CatalogKind.EPUB->ResourceDownloads.downloadFile(a,hit.url,"Books",hit.filename)
+                        CatalogKind.EPUB,CatalogKind.BOOK_FILE->
+                            ResourceDownloads.downloadFile(a,hit.url,"Books",hit.filename)
                         CatalogKind.APK,CatalogKind.GAME_ARCHIVE->
                             ResourceDownloads.downloadFile(a,hit.url,"Games",hit.filename)
                     }
