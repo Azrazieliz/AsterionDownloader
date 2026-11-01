@@ -150,7 +150,7 @@ object CatalogDiscovery {
     fun search(query:String,games:Boolean):CatalogOutcome {
         val title=query.trim()
         require(title.length in 2..150){"Enter a title (2–150 characters)"}
-        val providers:List<Pair<String,()->List<CatalogHit>>>=
+        val providers: List<Pair<String, () -> List<CatalogHit>>> =
             if(games)listOf("Internet Archive" to {searchArchive(title,true)})
             else listOf("Project Gutenberg" to {searchGutenberg(title)},
                 "Internet Archive" to {searchArchive(title,false)})

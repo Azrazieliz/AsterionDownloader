@@ -60,7 +60,7 @@ object ResourceDownloads {
             val raw=field.text.toString().trim()
             route(a,raw,folder)
         },ui.lp(a,10))
-        card.addView(action(a,"OPEN TORRENT LISTING"){
+        if(games)card.addView(action(a,"OPEN TORRENT LISTING"){
             val raw=field.text.toString().trim()
             if(!SearchRanking.validUrl(raw)) {
                 note(a,"Paste the full HTTPS torrent listing URL")
@@ -71,7 +71,7 @@ object ResourceDownloads {
         files.addView(ui.text(a,"LOCAL FILES",15f,ui.white,true),ui.lp(a,3))
         files.addView(action(a,"OPEN EXISTING ARCHIVE / GAME"){
             val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                type="*/*"
+                type=if(games)"*/*" else "application/epub+zip"
                 addCategory(Intent.CATEGORY_OPENABLE)
             }
             a.startActivityForResult(intent,if(games)5202 else 5201)
@@ -109,7 +109,7 @@ object ResourceDownloads {
         torrent.addView(action(a,"TORRENT TRANSFER STATUS / PAUSE / RESUME"){
             TorrentTransfers.showQueue(a)
         },ui.lp(a,10))
-        body.addView(torrent,ui.lp(a,14))
+        if(games)body.addView(torrent,ui.lp(a,14))
     }
 
     fun onFilePicked(a:Activity,request:Int,uri:Uri?){
@@ -121,6 +121,9 @@ object ResourceDownloads {
         if(request==5203){
             PortableGameExporter.export(a,uri,name.ifBlank{"game.zip"})
             return
+        }
+        if(request==5201 && !name.endsWith(".epub",true)){
+            note(a,"Book files must be EPUB");return
         }
         val lower=name.lowercase()
         val engine=when{
@@ -155,6 +158,9 @@ object ResourceDownloads {
             return
         }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
+        if(folder=="Books" && !path.endsWith(".epub")){
+            note(a,"Books accept EPUB only. Search by title above.");return
+        }
         when{
             path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
             raw.contains("nyaa.si/view/")||raw.contains("sukebei.nyaa.si/view/")||
