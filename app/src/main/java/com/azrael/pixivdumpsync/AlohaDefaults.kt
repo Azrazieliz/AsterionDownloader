@@ -32,7 +32,8 @@ object AlohaDefaults {
             var newVideo=false
             var newGallery=false
             VideoDb(app).use{db->
-                for(site in AlohaSources.all.filter{it.area in videoAreas}){
+                for(site in AlohaSources.all.filter{it.area in videoAreas &&
+                    it.host!="onejav.com"}){
                     val key="video_"+site.host
                     if(prefs.getBoolean(key,false))continue
                     runCatching{
