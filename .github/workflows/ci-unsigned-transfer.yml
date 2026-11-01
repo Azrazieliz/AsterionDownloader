@@ -19,16 +19,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 41290094428 -n Asterion-Downloader-v1.2.1-Preview-APK -D "$RUNNER_TEMP/apk"
+          gh run download 41290795997 -n Asterion-Downloader-v1.2.1-Preview-APK -D "$RUNNER_TEMP/apk"
           test -s "$RUNNER_TEMP/apk/app-preview.apk"
-          cp "$RUNNER_TEMP/apk/app-preview.apk" "$RUNNER_TEMP/Asterion-Downloader-v1.3.19-CI-UNSIGNED.apk"
+          cp "$RUNNER_TEMP/apk/app-preview.apk" "$RUNNER_TEMP/Asterion-Downloader-v1.3.20-CI-UNSIGNED.apk"
       - name: Stage unsigned CI artifact on dedicated transfer branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan ci-unsigned-transfer
           git rm -rf . || true
-          cp "$RUNNER_TEMP/Asterion-Downloader-v1.3.19-CI-UNSIGNED.apk" .
-          git add Asterion-Downloader-v1.3.19-CI-UNSIGNED.apk
-          git commit -m "Stage verified CI v1.3.19 APK for local certificate signing"
+          cp "$RUNNER_TEMP/Asterion-Downloader-v1.3.20-CI-UNSIGNED.apk" .
+          git add Asterion-Downloader-v1.3.20-CI-UNSIGNED.apk
+          git commit -m "Stage verified CI v1.3.20 APK for local certificate signing"
           git push -f origin HEAD:refs/heads/artifacts/asterion-ci-unsigned
