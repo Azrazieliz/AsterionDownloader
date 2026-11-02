@@ -165,9 +165,7 @@ object AssetsPanel {
             }
         },ui.lp(a,8))
         body.addView(status,ui.lp(a,6));body.addView(results,ui.lp(a,6))
-        body.addView(ui.action(a,"KOIKATSU CHARACTER CARDS",true){
-            a.startActivity(Intent(a,KoikatsuCardActivity::class.java))
-        },ui.lp(a,10))
+        KoikatsuInlineSearch.render(a,body)
         body.addView(ui.action(a,"GUMROAD · SEARCH & DOWNLOAD ORIGINAL ASSETS",true){
             val q=input.text.toString().trim()
             val address=if(q.startsWith("https://"))q
