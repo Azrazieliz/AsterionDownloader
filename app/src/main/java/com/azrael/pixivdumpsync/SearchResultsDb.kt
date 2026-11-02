@@ -70,12 +70,12 @@ class SearchResultsDb(context:Context):
     }
     fun list(limit:Int=100):List<SavedSearchHit> {
         val records=ArrayList<SavedSearchHit>()
-        readableDatabase.rawQuery("""SELECT query,title,url,source,score,queued,checked_at
+        readableDatabase.rawQuery("""SELECT query,title,url,source,score,queued,checked_at,thumbnail
             FROM results ORDER BY checked_at DESC,score DESC LIMIT ?""",
             arrayOf(limit.coerceIn(1,300).toString())).use { c ->
             while(c.moveToNext())records.add(SavedSearchHit(
                 c.getString(0),c.getString(1),c.getString(2),c.getString(3),
-                c.getInt(4),c.getInt(5)==1,c.getLong(6)))
+                c.getInt(4),c.getInt(5)==1,c.getLong(6),c.getString(7)))
         }
         return records
     }
