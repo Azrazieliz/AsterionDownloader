@@ -133,8 +133,8 @@ object AsterionUnifiedFollowing {
                         .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,source.handle))
                 }
             })
-            toggle(a,c,"Live sync",source.enabled){
-                XPhotoQueue(a).use{it.setEnabled(source.url,it)}
+            toggle(a,c,"Live sync",source.enabled){enabled->
+                XPhotoQueue(a).use{db->db.setEnabled(source.url,enabled)}
                 XPhotoScheduler.ensure(a)
             }
             pair(a,c,"BACKFILL","REMOVE",{
@@ -172,10 +172,9 @@ object AsterionUnifiedFollowing {
             val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5)}
             val c=ui.card(a)
             val first=gallery.firstOrNull()
-            val local=first?.firstUri
-            cardTitle(a,c,entity.displayName,entity.source.wireName,local,false)
-            if(local==null && first?.firstUrl!=null)CreatorPreviews.sourceThumbnail(a,
-                ImageView(a),entity.canonicalUrl)
+            val thumbnail=first?.firstUri?:first?.firstUrl
+            cardTitle(a,c,entity.displayName,entity.source.wireName,thumbnail,
+                thumbnail!=null && !thumbnail.startsWith("content:"))
             images(a,c,gallery.mapNotNull{item->
                 (item.firstUri?:item.firstUrl)?.let{url->
                     url to {
@@ -189,11 +188,11 @@ object AsterionUnifiedFollowing {
             },true)
             if(!entity.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,entity.lastError.take(130),12f,ui.danger),5)
-            toggle(a,c,"Include in sync",entity.selected){
-                GalleryDb(a).use{it.setSelected(entity.source,entity.entityId,it)}
+            toggle(a,c,"Include in sync",entity.selected){enabled->
+                GalleryDb(a).use{db->db.setSelected(entity.source,entity.entityId,enabled)}
             }
-            toggle(a,c,"Live updates",entity.liveEnabled){
-                GalleryDb(a).use{it.setLiveEnabled(entity.source,entity.entityId,it)}
+            toggle(a,c,"Live updates",entity.liveEnabled){enabled->
+                GalleryDb(a).use{db->db.setLiveEnabled(entity.source,entity.entityId,enabled)}
             }
             pair(a,c,"BACKFILL",if(SiteSession.bound(a,entity.canonicalUrl))"ACCOUNT" else "SIGN IN",{
                 val service=Intent(a,GalleryService::class.java).apply{
@@ -256,8 +255,8 @@ object AsterionUnifiedFollowing {
             }
             if(!creator.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,creator.lastError.take(130),12f,ui.danger),5)
-            toggle(a,c,"Live discovery",creator.enabled){
-                NameWatchDb(a).use{it.setEnabled(creator.id,it)}
+            toggle(a,c,"Live discovery",creator.enabled){enabled->
+                NameWatchDb(a).use{db->db.setEnabled(creator.id,enabled)}
             }
             pair(a,c,"BACKFILL / CHECK","REMOVE",{
                 NameWatchDb(a).use{it.setEnabled(creator.id,true)}
