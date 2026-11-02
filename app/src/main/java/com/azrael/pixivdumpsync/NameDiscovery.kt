@@ -65,14 +65,16 @@ object NameCrawler {
                             found.addAll(archived.map{(title,url)->
                                 RankedHit(title,url,"Internet Archive")
                             })
-                            val indexed=runCatching{
-                                KeywordSources.searchDetailed(context,watch.name)
-                            }.getOrElse{
-                                errors.add("Search configuration: ${it.message}")
-                                SearchOutcome(emptyList(),0,emptyList())
+                            for(area in listOf(VideoSearchArea.PORN,VideoSearchArea.HENTAI)){
+                                val indexed=runCatching{
+                                    KeywordSources.searchDetailed(context,watch.name,area)
+                                }.getOrElse{
+                                    errors.add(area.name+": "+it.message)
+                                    SearchOutcome(emptyList(),0,emptyList())
+                                }
+                                found.addAll(indexed.hits)
+                                errors.addAll(indexed.failures)
                             }
-                            found.addAll(indexed.hits)
-                            errors.addAll(indexed.failures)
                         }else {
                             val custom=KeywordSources.searchCustom(context,watch.name,watch.source)
                             found.addAll(custom.hits)
