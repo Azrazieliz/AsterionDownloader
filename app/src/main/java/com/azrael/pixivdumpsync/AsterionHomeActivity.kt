@@ -278,7 +278,7 @@ class AsterionHomeActivity:Activity(){
         if(bookMode=="EPUB"){
             CatalogSearchUi.render(this,body,false)
             TorrentSearchUi.render(this,body,TorrentArea.BOOKS)
-        }else renderToonily()
+        }else AsterionComicFollowing.render(this,body){render()}
     }
     private fun renderTorrents(){
         section("Torrents & Games","Search actual releases, inspect files, then transfer.")
