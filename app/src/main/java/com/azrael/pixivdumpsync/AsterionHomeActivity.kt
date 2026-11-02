@@ -170,7 +170,7 @@ class AsterionHomeActivity:Activity(){
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
             "Site"->AsterionUnifiedFollowing.kyora(this,body){render()}
-            "Porn"->AsterionUnifiedFollowing.adult(this,body){render()}
+            "Porn"->{AsterionVideoAccounts.render(this,body);AsterionUnifiedFollowing.adult(this,body){render()}}
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
