@@ -216,6 +216,35 @@ object AsterionUnifiedFollowing {
         put(a,p,ui.text(a,"Porn & Hentai",22f,ui.white,true),8)
         put(a,p,ui.text(a,creators.size.toString()+" followed names · "+
             providers.count{it.enabled}+" active providers",12f,ui.secondary),3)
+        val latest=SearchResultsDb(a).use{it.list(150)}
+            .filter{hit->hit.thumbnail!=null &&
+                creators.any{creator->hit.query.equals(creator.name,true)}}
+            .distinctBy{it.url}.take(12)
+        if(latest.isNotEmpty()){
+            val gallery=ui.card(a)
+            put(a,gallery,ui.text(a,"Latest from followed creators",16f,ui.white,true),0)
+            val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+            for(hit in latest){
+                val thumbnail=ImageView(a).apply{
+                    scaleType=ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(ui.raised)
+                    contentDescription="Queue "+hit.title
+                    setOnClickListener{
+                        if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
+                            VideoEngine.launch(a,false)
+                        notice(a,"Video queued or already saved")
+                    }
+                }
+                strip.addView(thumbnail,LinearLayout.LayoutParams(ui.px(a,112),ui.px(a,112))
+                    .apply{rightMargin=ui.px(a,7)})
+                VideoSearchPreviews.display(a,thumbnail,hit.thumbnail)
+            }
+            put(a,gallery,HorizontalScrollView(a).apply{
+                isHorizontalScrollBarEnabled=false
+                addView(strip)
+            },9)
+            put(a,p,gallery,9)
+        }
         val follow=ui.card(a)
         val field=input(a,"Artist or model name")
         put(a,follow,field,0)
