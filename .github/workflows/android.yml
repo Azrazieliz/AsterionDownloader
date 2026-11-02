@@ -35,6 +35,6 @@ jobs:
       - name: Upload independently installable Nocturne preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: Asterion-Downloader-v1.3.24-Preview-APK
+          name: Asterion-Downloader-v1.3.25-Preview-APK
           path: app/build/outputs/apk/preview/app-preview.apk
           if-no-files-found: error
