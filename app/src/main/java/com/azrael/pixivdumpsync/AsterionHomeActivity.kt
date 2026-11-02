@@ -161,9 +161,9 @@ class AsterionHomeActivity:Activity(){
                 render()
             }
         }
-        put(body,power,4)
+        if(page=="Settings")put(body,power,4)
         if(!AppPower.enabled(this)){
-            put(body,text("OFF preserves all artists, credentials, archives and queued work. Re-enable to continue.",12f,theme.secondary),5)
+            put(body,text("Sync paused · enable in Settings to resume",12f,theme.danger),5)
         }
         when(page){
             "Home"->renderHome()
