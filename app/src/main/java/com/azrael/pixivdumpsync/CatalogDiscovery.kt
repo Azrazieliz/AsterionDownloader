@@ -227,7 +227,7 @@ object CatalogDiscovery {
         }finally{pool.shutdownNow()}
         val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else
             it.kind==CatalogKind.EPUB}
-            .filter{relevance(title,it.title+" "+(if(games)"" else it.details))>0}
+            .filter{SearchExactness.matches(title,it.title+" "+(if(games)"" else it.details))}
             .filter{!games || !GameTorrentPolicy.clearlyNonGameTitle(it.title)}
             .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
