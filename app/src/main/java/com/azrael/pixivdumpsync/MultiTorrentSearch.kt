@@ -183,7 +183,7 @@ object MultiTorrentSearch {
                 CatalogDiscovery.torrentRss(data,url,"Nyaa")
             }
         }
-        return hits.distinctBy{
+        return hits.filter{area!=TorrentArea.GAMES || !GameTorrentPolicy.clearlyNonGameTitle(it.title)}.distinctBy{
             if(it.url.startsWith("magnet:"))it.url.substringAfter("urn:btih:").substringBefore("&").lowercase()
             else it.url
         } to errors
