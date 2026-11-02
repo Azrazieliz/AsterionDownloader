@@ -51,7 +51,7 @@ class AsterionHomeActivity:Activity(){
         }else if(id>=0) toast("Browser connection was not saved; ZIP retry remains paused.")
         if(::body.isInitialized)render()
     }
-    private val pages=listOf("Home","Videos","Books","Games","Assets")
+    private val pages=listOf("Home","Add","Search","Queue","Recommend")
     private val navButtons=linkedMapOf<String,TextView>()
     private fun dp(v:Int)=theme.px(this,v)
     private fun text(v:String,size:Float=14f,tint:Int=theme.white,bold:Boolean=false)=
@@ -107,8 +107,8 @@ class AsterionHomeActivity:Activity(){
         root.addView(scroller,LinearLayout.LayoutParams(-1,0,1f))
         val tabs=theme.row(this).apply{setPadding(dp(5),dp(7),dp(5),dp(7));setBackgroundColor(theme.surface)}
         pages.forEach{tab->
-            val title=when(tab){"Home"->"SOURCES";"Videos"->"VIDEOS";"Books"->"BOOKS";"Games"->"GAMES";else->"ASSETS"}
-            val t=text(title,14f,if(tab==page)theme.primary else theme.secondary,tab==page).apply{
+            val title=when(tab){"Home"->"HOME";"Add"->"ADD SITE";"Search"->"SEARCH";"Queue"->"DOWNLOADS";else->"FOR YOU"}
+            val t=text(title,12f,if(tab==page)theme.primary else theme.secondary,tab==page).apply{
                 gravity=Gravity.CENTER;minHeight=dp(50)
                 isClickable=true;isFocusable=true
                 setOnClickListener{open(tab)}
@@ -167,18 +167,17 @@ class AsterionHomeActivity:Activity(){
         }
         when(page){
             "Home"->renderHome()
-            "Pixiv"->{AsterionAccountPanels.pixiv(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.ARTWORK)
-                AlohaSources.render(this,body,listOf(AlohaArea.ARTWORK),"ARTWORK & IMAGE TOOLS")}
-            "Toonily"->{renderToonily();AlohaSources.render(this,body,listOf(AlohaArea.COMICS),"COMIC & MANGA SOURCES")}
-            "X"->AsterionAccountPanels.x(this,body){render()}
-            "Site"->{AsterionAccountPanels.cosplay(this,body){render()};CreatorArchiveUi.render(this,body,ArchiveSection.COSPLAY)
-                AlohaSources.render(this,body,listOf(AlohaArea.COSPLAY),"KYORA & COSPLAY SITES")}
-            "Videos"->{renderAdd();AlohaSources.render(this,body,listOf(AlohaArea.VIDEOS),"GENERAL VIDEO SOURCES")}
-            "Porn"->{renderPorn();AlohaSources.render(this,body,
-                listOf(AlohaArea.ADULT,AlohaArea.HENTAI),"ADULT & HENTAI VIDEO SOURCES")}
+            "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
+            "X"->AsterionUnifiedFollowing.x(this,body){render()}
+            "Site"->AsterionUnifiedFollowing.kyora(this,body){render()}
+            "Porn"->AsterionUnifiedFollowing.adult(this,body){render()}
+            "Books"->renderBooks()
+            "Toonily"->renderToonily()
+            "Torrents"->renderTorrents()
             "Assets"->AssetsPanel.render(this,body)
-            "Books"->ResourceDownloads.render(this,body,false)
-            "Games"->ResourceDownloads.render(this,body,true)
+            "Add"->AsterionSmartAdd.render(this,body){render()}
+            "Search"->AsterionSearchHub.render(this,body){render()}
+            "Recommend"->AsterionRecommendations.render(this,body){render()}
             "Queue"->renderQueue()
             "Library"->renderLibrary()
             "Sources"->renderSources()
@@ -192,15 +191,15 @@ class AsterionHomeActivity:Activity(){
                            target:String):LinearLayout=LinearLayout(this).apply{
         orientation=LinearLayout.VERTICAL
         gravity=Gravity.CENTER_HORIZONTAL
-        minimumHeight=dp(180)
-        setPadding(dp(13),dp(19),dp(13),dp(17))
+        minimumHeight=dp(138)
+        setPadding(dp(11),dp(15),dp(11),dp(12))
         background=theme.touch(this@AsterionHomeActivity,theme.surface,19)
         isClickable=true
         isFocusable=true
         contentDescription="$label. $subtitle"
         setOnClickListener{
             when(target){
-                "Pixiv"->open("Pixiv")
+                "Pixiv"->startActivity(Intent(this@AsterionHomeActivity,MainActivity::class.java))
                 "Kyora"->open("Site")
                 "Koikatsu"->startActivity(Intent(this@AsterionHomeActivity,KoikatsuCardActivity::class.java))
                 "Site"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java)
@@ -216,7 +215,7 @@ class AsterionHomeActivity:Activity(){
             background=theme.shape(this@AsterionHomeActivity,theme.raised,18)
             contentDescription="$label icon"
         }
-        addView(symbol,LinearLayout.LayoutParams(dp(68),dp(68)))
+        addView(symbol,LinearLayout.LayoutParams(dp(52),dp(52)))
         addView(text(label,16f,theme.white,true).apply{
             gravity=Gravity.CENTER
             setPadding(0,dp(10),0,0)
@@ -235,65 +234,64 @@ class AsterionHomeActivity:Activity(){
         row.addView(right,LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(11)})
         put(body,row,12)
     }
+    private var bookMode="EPUB"
+    private var torrentMode=TorrentArea.GAMES
     private fun renderHome(){
-        section("Choose a source","Connect accounts and websites, synchronize new posts or backfill older content.")
+        section("Your library","Choose what to follow or download.")
         tileRow(
-            sourceTile("Pixiv","Artists · Account sync · Backfill",
-                R.drawable.ic_source_pixiv,android.graphics.Color.rgb(65,161,255),"Pixiv"),
-            sourceTile("Toonily","Manhwa series · Complete ZIP",
-                R.drawable.ic_source_toonily,theme.violet,"Toonily")
+            sourceTile("Porn & Hentai","Performers · Videos · Sync",
+                R.drawable.ic_source_video,theme.violet,"Porn"),
+            sourceTile("Pixiv","Artists · Original Kuroha interface",
+                R.drawable.ic_source_pixiv,android.graphics.Color.rgb(65,161,255),"Pixiv")
         )
         tileRow(
-            sourceTile("X","Follow accounts · Photo sync · Backfill",
+            sourceTile("X","Following · Photos · Backfill",
                 R.drawable.ic_source_x,theme.white,"X"),
-            sourceTile("Kyora","Cosplay creators · Sync · Backfill",
+            sourceTile("Cosplay","Kyora · Galleries · Videos",
                 R.drawable.ic_source_kyora,theme.violet,"Kyora")
         )
         tileRow(
-            sourceTile("Add Site","Bind a new website · Sign in · Backfill",
-                R.drawable.ic_source_site,theme.primary,"Site"),
-            sourceTile("Video Downloads","URL · Keyword search · Transfers",
-                R.drawable.ic_source_video,theme.primary,"Videos")
+            sourceTile("Books & Comics","EPUB · Toonily · MangaRead · Sushi",
+                R.drawable.ic_source_toonily,theme.violet,"Books"),
+            sourceTile("Torrents / Games","Game releases · Magnet · Progress",
+                R.drawable.ic_source_video,theme.primary,"Torrents")
         )
-        tileRow(
-            sourceTile("Porn & Hentai","Artist archives · Providers · Torrents",
-                R.drawable.ic_source_video,theme.primary,"Porn"),
-            sourceTile("Assets · 3D","Gumroad · Blender · Koikatsu cards",
-                R.drawable.ic_source_koikatsu,theme.violet,"Assets")
-        )
-        val all=card()
-        put(all,text("ALL ARTIST SYNC CONTROLS",13f,theme.secondary,true),0)
-        put(all,text("Enable or disable Pixiv, X and Kyora together. Site catalog entries start disabled until you choose them.",12f,theme.secondary))
-        val toggles=theme.row(this)
-        toggles.addView(button("ENABLE ALL"){
-            AppDb(this).use{it.setAllSelected(true);it.setAllLiveEnabled(true)}
-            XPhotoQueue(this).use{it.setAllEnabled(true)}
-            GalleryDb(this).use{it.setAllSelected(true);it.setAllLiveEnabled(true)}
-            toast("All saved artists and sources enabled");render()
-        },LinearLayout.LayoutParams(0,-2,1f))
-        toggles.addView(button("DISABLE ALL"){
-            AppDb(this).use{it.setAllSelected(false);it.setAllLiveEnabled(false)}
-            XPhotoQueue(this).use{it.setAllEnabled(false)}
-            GalleryDb(this).use{it.setAllSelected(false);it.setAllLiveEnabled(false)}
-            toast("All saved artists and sources disabled");render()
-        },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(8)})
-        put(all,toggles)
-        put(body,all,12)
-        val counts=card()
-        val pixivCount=AppDb(this).use{it.listArtists().size}
-        val siteCount=GalleryDb(this).use{it.listEntities().size}
+        put(body,sourceTile("3D Assets","Koikatsu cards · Gumroad · Models",
+            R.drawable.ic_source_koikatsu,theme.primary,"Assets"),10)
+        val summary=card()
         val xCount=XPhotoQueue(this).use{it.allSources().size}
-        put(counts,text("YOUR ARCHIVE",12f,theme.secondary,true),0)
-        put(counts,text("$pixivCount Pixiv artists  ·  $siteCount sites  ·  $xCount X accounts",
-            14f,theme.white,true),5)
-        put(body,counts,18)
-        put(body,button("TRANSFER STATUS AND RETRIES"){open("Queue")},8)
-        val tools=card()
-        put(tools,text("Other download tools",15f,theme.white,true),0)
-        put(tools,text("Video links, keyword searches and optional external sources.",
-            12f,theme.secondary))
-        put(tools,button("VIDEO URL DOWNLOADS & SEARCH"){open("Videos")})
-        put(body,tools,16)
+        val kyoraCount=GalleryDb(this).use{it.listEntities().size}
+        val artistCount=AppDb(this).use{it.listArtists().size}
+        put(summary,text("$artistCount Pixiv artists · $xCount X accounts · $kyoraCount cosplay sources",
+            12f,theme.secondary),0)
+        put(summary,button("OPEN DOWNLOADED FILES"){open("Library")},7)
+        put(body,summary,12)
+    }
+    private fun renderBooks(){
+        section("Books & Comics","EPUB for books · ZIP for comic chapters.")
+        val switches=theme.row(this)
+        switches.addView(theme.chip(this,"EPUB",bookMode=="EPUB"){bookMode="EPUB";render()},
+            LinearLayout.LayoutParams(0,-2,1f))
+        switches.addView(theme.chip(this,"COMICS · ZIP",bookMode=="COMICS"){bookMode="COMICS";render()},
+            LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(9)})
+        put(body,switches,10)
+        if(bookMode=="EPUB"){
+            CatalogSearchUi.render(this,body,false)
+            TorrentSearchUi.render(this,body,TorrentArea.BOOKS)
+        }else renderToonily()
+    }
+    private fun renderTorrents(){
+        section("Torrents & Games","Search actual releases, inspect files, then transfer.")
+        val choices=listOf("GAMES" to TorrentArea.GAMES,
+            "ADULT VIDEO" to TorrentArea.ADULT,"EPUB" to TorrentArea.BOOKS)
+        val line=theme.row(this)
+        for((label,area) in choices){
+            line.addView(theme.chip(this,label,torrentMode==area){
+                torrentMode=area;render()
+            },LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(6)})
+        }
+        put(body,line,9)
+        TorrentSearchUi.render(this,body,torrentMode)
     }
     private fun renderToonily(){
         section("Comics · Toonily / MangaRead",
