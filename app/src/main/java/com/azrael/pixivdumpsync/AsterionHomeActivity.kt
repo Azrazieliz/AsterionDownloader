@@ -175,7 +175,7 @@ class AsterionHomeActivity:Activity(){
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
             "Assets"->AssetsPanel.render(this,body)
-            "Add"->AsterionSmartAdd.render(this,body){render()}
+            "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
             "Search"->AsterionSearchHub.render(this,body){render()}
             "Recommend"->AsterionRecommendations.render(this,body){render()}
             "Queue"->renderQueue()
