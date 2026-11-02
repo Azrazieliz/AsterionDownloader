@@ -25,6 +25,27 @@ object TorrentSearchUi {
         }
         card.addView(field,ui.lp(a,7))
         val status=ui.text(a,"Native torrent transfer · original files go to Downloads",12f,ui.secondary)
+        val magnet=EditText(a).apply{
+            hint="Paste magnet or .torrent link"
+            setSingleLine(true);setTextColor(ui.white);setHintTextColor(ui.secondary)
+            textSize=14f
+        }
+        card.addView(magnet,ui.lp(a,8))
+        card.addView(ui.action(a,"ADD MAGNET / TORRENT",false){
+            val value=magnet.text.toString().trim()
+            if(!value.startsWith("magnet:?xt=urn:",true) &&
+                !(SearchRanking.validUrl(value) &&
+                    value.substringBefore('?').endsWith(".torrent",true))){
+                status.text="Paste a magnet link or direct .torrent URL"
+                return@action
+            }
+            ResourceDownloads.route(a,value,when(area){
+                TorrentArea.GAMES->"Games"
+                TorrentArea.BOOKS->"Books"
+                TorrentArea.ADULT->"Videos"
+            })
+            status.text="Retrieving torrent metadata for file selection"
+        },ui.lp(a,7))
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         val records=ArrayList<CatalogHit>()
         fun draw(){
