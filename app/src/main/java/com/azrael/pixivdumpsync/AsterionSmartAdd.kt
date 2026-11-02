@@ -144,10 +144,19 @@ object AsterionSmartAdd {
             }
             Kind.TORRENTS->{
                 if(address.startsWith("magnet:") || address.endsWith(".torrent",true)){
-                    ResourceDownloads.route(a,address,"Games")
-                    status.text="Torrent metadata requested"
-                }else status.text="Torrent index saved. Use Games search for releases; custom-index adapter pending"
-                record(a,kind,address,status.text.toString());done()
+                    val categories=arrayOf("Games","Videos","Books")
+                    AlertDialog.Builder(a).setTitle("Torrent content type")
+                        .setItems(arrayOf("Game files","Adult / other videos","EPUB books")){_,which->
+                            ResourceDownloads.route(a,address,categories[which])
+                            record(a,kind,address,"Torrent metadata requested · "+categories[which])
+                            status.text="Torrent file selection requested"
+                            done()
+                        }.setNegativeButton("Cancel",null).show()
+                }else{
+                    status.text="Index saved · dedicated search adapter pending"
+                    record(a,kind,address,status.text.toString())
+                    done()
+                }
             }
             Kind.ASSETS->{
                 record(a,kind,address,"Saved under 3D assets · native provider adapter required")
