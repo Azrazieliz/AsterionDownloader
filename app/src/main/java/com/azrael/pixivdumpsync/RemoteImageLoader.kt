@@ -52,7 +52,15 @@ object RemoteImageLoader {
                         conn.connectTimeout = 12_000
                         conn.readTimeout = 25_000
                         conn.setRequestProperty("User-Agent", PixivApi.USER_AGENT)
-                        conn.setRequestProperty("Referer", referer)
+                        val mediaHost=runCatching{URL(url).host.lowercase()}.getOrDefault("")
+                        val resolvedReferer=when{
+                            mediaHost=="pbs.twimg.com" || mediaHost.endsWith(".twimg.com") ->
+                                "https://x.com/"
+                            mediaHost=="i.pximg.net" || mediaHost.endsWith(".pximg.net") ->
+                                "https://www.pixiv.net/"
+                            else->referer
+                        }
+                        conn.setRequestProperty("Referer", resolvedReferer)
                         conn.setRequestProperty(
                             "Accept",
                             "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
