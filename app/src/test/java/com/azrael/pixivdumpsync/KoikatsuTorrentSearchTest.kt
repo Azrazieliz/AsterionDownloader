@@ -26,6 +26,16 @@ class KoikatsuTorrentSearchTest {
         assertTrue(GameTorrentPolicy.hasGamePayload(listOf("Game Release.7z")))
         assertFalse(GameTorrentPolicy.hasGamePayload(listOf("Game video.mp4")))
     }
+    @Test fun clearlyWrongMediaNeverQualifiesAsGame() {
+        assertTrue(GameTorrentPolicy.clearlyNonGameTitle("Video collection 1080p WEB-DL x264"))
+        assertTrue(GameTorrentPolicy.clearlyNonGameTitle("Example concert.mkv"))
+        assertTrue(GameTorrentPolicy.clearlyNonGameTitle("Music FLAC discography"))
+        assertFalse(GameTorrentPolicy.clearlyNonGameTitle("Mature Visual Novel Game"))
+        assertFalse(GameTorrentPolicy.hasGamePayload(listOf(
+            "Video compilation 2025.zip", "Movie 1080p.mkv")))
+        assertTrue(GameTorrentPolicy.hasGamePayload(listOf(
+            "Game Release.7z", "Game/Cutscene.mp4")))
+    }
     @Test fun chineseGameIndexerSearchReturnsRealGameDetailsOnly(){
         val html="""<html><body>
           <a href="/view.so?id=12345" title="[RPG] Example Adventure Windows">Open</a>
