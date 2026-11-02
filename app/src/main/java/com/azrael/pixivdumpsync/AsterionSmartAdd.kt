@@ -36,8 +36,10 @@ object AsterionSmartAdd {
             return Kind.TORRENTS
         if(host in listOf("freewebnovel.com","novelbuddy.com","readnovelfull.com","mp4directs.com"))
             return Kind.BOOKS
+        // Multi-format creator platforms need a user-selected content module.
+        // A creator's profile is not automatically a video source.
         if(host in listOf("patreon.com","fanbox.cc","fantia.jp","onlyfans.com",
-                "fansly.com","pawchive.pw","kemono.cr","coomer.st"))return Kind.VIDEO
+                "fansly.com","pawchive.pw","kemono.cr","coomer.st"))return null
         val site=AlohaSources.all.firstOrNull{it.host==host.removePrefix("m.").removePrefix("fr.")}
         return when(site?.area){
             AlohaArea.COSPLAY,AlohaArea.ARTWORK->Kind.COSPLAY
