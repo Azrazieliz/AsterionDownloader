@@ -78,7 +78,8 @@ object AsterionSearchHub {
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
         val all=if(mode==0)ranked+peertube(term) else ranked
-        val unique=all.distinctBy{SearchRanking.canonicalKey(it.url)}
+        val unique=all.filter{SearchExactness.matches(term,it.title)}
+            .distinctBy{SearchRanking.canonicalKey(it.url)}
         SearchResultsDb(ctx).use{db->
             db.save("SEARCH:"+mode+":"+term,items)
         }
