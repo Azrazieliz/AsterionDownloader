@@ -44,6 +44,26 @@ class NovelEpubQueue(context:Context):
             else null
         }
     }
+    data class Snapshot(val pending:Int,val active:Int,val complete:Int,
+                        val lastError:String?)
+    fun snapshot():Snapshot{
+        val counts=HashMap<String,Int>()
+        readableDatabase.rawQuery("SELECT state,COUNT(*) FROM novels GROUP BY state",
+            null).use{c->
+            while(c.moveToNext())counts[c.getString(0)]=c.getInt(1)
+        }
+        val error=readableDatabase.rawQuery(
+            "SELECT last_error FROM novels WHERE last_error IS NOT NULL "+
+                "ORDER BY last_update DESC LIMIT 1",null).use{c->
+            if(c.moveToFirst())c.getString(0)else null
+        }
+        return Snapshot(counts.getOrDefault("PENDING",0)+
+            counts.getOrDefault("RETRY",0),counts.getOrDefault("WORKING",0),
+            counts.getOrDefault("DONE",0),error)
+    }
+    fun hasDue():Boolean=readableDatabase.rawQuery(
+        "SELECT 1 FROM novels WHERE state IN ('PENDING','RETRY') AND retry_after<=? LIMIT 1",
+        arrayOf(System.currentTimeMillis().toString())).use{it.moveToFirst()}
     fun started(url:String){
         writableDatabase.update("novels",ContentValues().apply{
             put("state","WORKING");put("last_update",System.currentTimeMillis())
@@ -60,7 +80,9 @@ class NovelEpubQueue(context:Context):
         val n=(item.attempts+1).coerceAtMost(30)
         val delay=(60_000L shl n.coerceAtMost(7)).coerceAtMost(6*60*60_000L)
         writableDatabase.update("novels",ContentValues().apply{
-            put("state",if(n<12)"RETRY" else "ERROR")
+            // Transient source outages must never permanently exhaust an
+            // autonomous archive queue. Backoff is capped, not the attempt count.
+            put("state","RETRY")
             put("attempts",n)
             put("retry_after",System.currentTimeMillis()+delay)
             put("last_error",error.take(200))
