@@ -255,7 +255,12 @@ class AsterionHomeActivity:Activity(){
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
             "Site"->{AsterionUnifiedFollowing.kyora(this,body){render()};SourceIndexPanel.render(this,body,"COSPLAY")}
-            "Porn"->{AsterionUnifiedFollowing.adult(this,body){render()};SourceIndexPanel.render(this,body,"ADULT");SourceIndexPanel.render(this,body,"HENTAI");SourceIndexPanel.render(this,body,"CREATORS");AsterionVideoAccounts.render(this,body)}
+            "Porn"->{
+                AsterionUnifiedFollowing.adult(this,body){render()}
+                SourceIndexPanel.render(this,body,
+                    listOf("ADULT","HENTAI","CREATORS"),"Porn & Hentai")
+                AsterionVideoAccounts.render(this,body)
+            }
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
