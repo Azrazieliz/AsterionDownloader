@@ -283,7 +283,7 @@ class AsterionHomeActivity:Activity(){
             "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
             "Search"->AsterionSearchHub.render(this,body){render()}
             "Recommend"->AsterionRecommendations.render(this,body){render()}
-            "Queue"->renderQueue()
+            "Queue"->UnifiedDownloadsUi.render(this,body){render()}
             "Library"->renderLibrary()
             "Sources"->renderSources()
             else->renderSettings()
