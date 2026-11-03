@@ -108,6 +108,10 @@ class AsterionHomeActivity:Activity(){
         GalleryDb(this).use{it.seedCatalogOnce(this)}
         AlohaDefaults.ensure(this)
         SourceIndex.ensure(this)
+        KoikatsuFollowing.ensure(this)
+        kotlin.concurrent.thread(name="asterion-seed-name-vocabulary"){
+            runCatching{CreatorNames.seed(applicationContext)}
+        }
         ChapterRecovery.ensure(this)
         CreatorArchiveScheduler.ensure(this)
         XPhotoScheduler.ensure(this)
@@ -279,7 +283,7 @@ class AsterionHomeActivity:Activity(){
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
-            "Assets"->{AssetsPanel.render(this,body);SourceIndexPanel.render(this,body,"ASSETS")}
+            "Assets"->{AssetsPanel.render(this,body){render()};SourceIndexPanel.render(this,body,"ASSETS")}
             "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
             "Search"->AsterionSearchHub.render(this,body){render()}
             "Recommend"->AsterionRecommendations.render(this,body){render()}
