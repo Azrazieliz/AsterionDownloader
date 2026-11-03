@@ -34,7 +34,8 @@ object AuthorizedOriginalResolver {
         val type=hint.lowercase(Locale.ROOT)
         return when(type){
             "books","epub"->kind=="epub"
-            "video","adult","hentai","videos"->kind=="video"
+            "video","videos"->kind=="video"
+            "adult","hentai"->kind in setOf("video","image","archive")
             "cosplay","artwork","images"->kind=="image"
             "assets","model"->kind in setOf("model","archive")
             "games","torrent"->kind in setOf("game","archive")
@@ -96,6 +97,10 @@ object AuthorizedOriginalResolver {
             val name=URI(pageOrFile).path.substringAfterLast('/').take(100)
             return AccessibleOriginal(pageOrFile,name,kind,pageOrFile)
         }
+        // Session-authorized downloads may be signed URLs without an extension.
+        // Inspect only response headers before treating them as HTML listings.
+        runCatching{AuthorizedEndpointInspector.inspect(pageOrFile,hint)}
+            .getOrNull()?.let{return it}
         val request=Jsoup.connect(pageOrFile).timeout(17000).maxBodySize(3_000_000)
             .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
             .header("Accept","text/html,application/xhtml+xml")
