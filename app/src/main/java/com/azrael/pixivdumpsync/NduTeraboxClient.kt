@@ -6,6 +6,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -235,23 +237,34 @@ class NduTeraboxClient(private val ndus: String,
         var uploaded=0L
         resolver.openInputStream(uri)?.use { stream ->
             var part=0
+            val buffer=ByteArray(128*1024)
             while(uploaded<size) {
-                if (cancelled()) throw InterruptedException("Cloud upload cancelled")
+                if(cancelled())throw InterruptedException("Cloud upload cancelled")
                 val length=min(chunkSize.toLong(),size-uploaded).toInt()
-                val bytes=ByteArray(length)
-                var n=0
-                while(n<length) {
-                    val v=stream.read(bytes,n,length-n)
-                    if (v<0) throw java.io.EOFException("Local file truncated")
-                    n+=v
-                }
-                val md5=partHashes(bytes)
-                whole.update(bytes)
-                uploadChunk(host,path,uploadId,part,name,bytes,md5)
-                md5List.put(md5)
-                uploaded+=length
-                progress(uploaded,size)
-                part++
+                val cache=File.createTempFile("asterion-cloud-part-", ".tmp",context.cacheDir)
+                try {
+                    val chunkMd5=MessageDigest.getInstance("MD5")
+                    var left=length
+                    FileOutputStream(cache).buffered().use { output ->
+                        while(left>0){
+                            if(cancelled())throw InterruptedException("Cloud upload cancelled")
+                            val n=stream.read(buffer,0,min(left,buffer.size))
+                            if(n<0)throw java.io.EOFException("Local file truncated")
+                            if(n==0)continue
+                            output.write(buffer,0,n)
+                            whole.update(buffer,0,n)
+                            chunkMd5.update(buffer,0,n)
+                            left-=n
+                        }
+                    }
+                    val md5=chunkMd5.digest()
+                        .joinToString(""){"%02x".format(it.toInt() and 255)}
+                    uploadChunk(host,path,uploadId,part,name,cache,md5)
+                    md5List.put(md5)
+                    uploaded+=length
+                    progress(uploaded,size)
+                    part++
+                }finally{cache.delete()}
             }
         } ?: throw java.io.IOException("Cannot read local download")
         val finalized=request("/api/create","POST",
@@ -266,7 +279,7 @@ class NduTeraboxClient(private val ndus: String,
     }
 
     private fun uploadChunk(host:String, path:String, uploadId:String, part:Int,
-                            name:String, data:ByteArray, md5:String) {
+                            name:String, data:File, md5:String) {
         val uri="https://$host/rest/2.0/pcs/superfile2?"+formEncode(
             linkedMapOf("method" to "upload","path" to path,
                 "uploadid" to uploadId,"partseq" to part.toString(),
@@ -282,8 +295,15 @@ class NduTeraboxClient(private val ndus: String,
                 val conn=connection(uri,"POST",true)
                 conn.doOutput=true
                 conn.setRequestProperty("Content-Type","multipart/form-data; boundary=$boundary")
-                conn.setFixedLengthStreamingMode(prefix.size+data.size+suffix.size)
-                conn.outputStream.use { it.write(prefix);it.write(data);it.write(suffix) }
+                conn.setFixedLengthStreamingMode(prefix.size.toLong()+data.length()+
+                    suffix.size.toLong())
+                conn.outputStream.use { output ->
+                    output.write(prefix)
+                    data.inputStream().buffered().use { input ->
+                        input.copyTo(output,128*1024)
+                    }
+                    output.write(suffix)
+                }
                 val result=JSONObject(read(conn))
                 val remoteHash=result.optString("md5")
                 if(!remoteHash.equals(md5,true))
