@@ -92,6 +92,14 @@ object DirectDownloadRetry {
         if(id<=0||!SearchRanking.validUrl(url))return
         DirectRetryVault.remember(ctx,DirectRetryVault.Request(id,url,folder,name,referer,0,0))
     }
+    fun retryNow(ctx:Context,id:Long):Boolean{
+        val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}?:return false
+        DirectRetryVault.remember(ctx,record.copy(attempts=0,after=0))
+        thread(name="asterion-manual-direct-retry"){
+            retry(ctx.applicationContext)
+        }
+        return true
+    }
     fun retry(ctx:Context):Int{
         if(!AppPower.enabled(ctx))return 0
         val manager=ctx.getSystemService(DownloadManager::class.java)
