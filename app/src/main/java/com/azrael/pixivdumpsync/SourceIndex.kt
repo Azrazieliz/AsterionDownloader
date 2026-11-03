@@ -109,10 +109,9 @@ internal object SourceIndexParser {
     private val media=Regex("(?i)\\.(?:mp4|m4v|webm|mkv|mov|epub|zip|7z|rar|blend|fbx|obj|glb|gltf|stl|apk|torrent|png|jpg|jpeg|webp)(?:[?#]|$)")
     internal fun safe(url:String):Boolean=runCatching{
         val uri=URI(url)
-        uri.scheme=="https" && !uri.host.isNullOrBlank() &&
-            !uri.host.equals("localhost",true) && !uri.host.endsWith(".local",true) &&
-            !uri.host.matches(Regex("(?:\\d{1,3}\\.){3}\\d{1,3}")) &&
-            uri.userInfo==null
+        uri.scheme=="https" && SearchRanking.validUrl(url) &&
+            !uri.host.isNullOrBlank() && !uri.host.contains(":") &&
+            !uri.host.endsWith(".internal",true) && uri.userInfo==null
     }.getOrDefault(false)
     private fun sameSite(a:String,b:String):Boolean{
         val x=runCatching{URI(a).host.lowercase().removePrefix("www.")}.getOrDefault("")
