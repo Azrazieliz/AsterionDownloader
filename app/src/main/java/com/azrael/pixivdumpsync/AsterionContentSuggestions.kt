@@ -76,6 +76,27 @@ object AsterionContentSuggestions {
                 }.toList()
             else emptyList()
         val native=ArrayList<Pick>()
+        // Reuse Kuroha's already downloaded artist previews. Do not scrape
+        // Pixiv again or substitute lower-quality image variants.
+        if(mode in setOf("ALL","ARTWORK")){
+            AppDb(a).use{db->
+                for(artist in db.listSelectedArtists().take(150)){
+                    val alias=artist.label?.takeIf{it.isNotBlank()}
+                        ?:artist.userId
+                    for(work in ArtworkPreviewCodec.decode(artist.previewJson).take(12)){
+                        val preview=work.thumbnailUrl?.takeIf{
+                            SearchRanking.validUrl(it)
+                        } ?:continue
+                        val (score,reason)=relevance(terms,alias+" "+work.title)
+                        if(score==0)continue
+                        native+=Pick(work.title.ifBlank{"Pixiv work "+work.id},
+                            "https://www.pixiv.net/artworks/"+work.id,preview,
+                            "ARTWORK","pixiv","https://www.pixiv.net/users/"+
+                            artist.userId,reason,score+14)
+                    }
+                }
+            }
+        }
         if(mode in setOf("ALL","X")){
             val photos=XPhotoQueue(a).use{it.recent(260)}
             val handles=XPhotoQueue(a).use{it.allSources().map{v->
@@ -196,6 +217,24 @@ object AsterionContentSuggestions {
                         val handle=Uri.parse(item.source).pathSegments.firstOrNull()
                         a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
                             .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,handle))
+                    }
+                    "pixiv"->{
+                        if(!SessionStore.isLoggedIn(a)){
+                            Toast.makeText(a,"Connect Pixiv in Kuroha first",
+                                Toast.LENGTH_LONG).show()
+                        }else{
+                            val userId=item.source.substringAfterLast('/')
+                            val workId=item.url.substringAfterLast('/')
+                            a.startForegroundService(Intent(a,
+                                SyncForegroundService::class.java)
+                                .setAction(SyncForegroundService.ACTION_START)
+                                .putExtra(SyncForegroundService.EXTRA_MODE,
+                                    SyncMode.DIRECT.name)
+                                .putExtra(SyncForegroundService.EXTRA_TARGET_ARTIST_ID,
+                                    userId)
+                                .putExtra(SyncForegroundService.EXTRA_TARGET_ARTWORK_ID,
+                                    workId))
+                        }
                     }
                     "koikatsu"->{
                         a.startActivity(Intent(a,KoikatsuCardActivity::class.java))
