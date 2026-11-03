@@ -95,15 +95,13 @@ object AssetsPanel {
         KoikatsuFollowing.render(a,body,refresh)
         body.addView(ui.text(a,"GENERAL 3D MODELS",22f,ui.white,true),ui.lp(a,12))
         body.addView(ui.text(a,"Download original model files and their textures. Blender and Windows assets require compatible tools, not automatic Android conversion.",12f,ui.secondary),ui.lp(a,7))
-        val input=EditText(a).apply{
-            hint="Search model or material"
-            setTextColor(ui.white);setHintTextColor(ui.secondary);setSingleLine(true)
-        }
+        val input=CreatorNames.input(a,"Search model or material","ASSETS")
         body.addView(input,ui.lp(a,8))
         val status=ui.text(a,"Poly Haven · public CC0 model library",12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         body.addView(ui.action(a,"SEARCH MODELS",true){
             val q=input.text.toString().trim().lowercase()
+            CreatorNames.remember(a,q,"ASSETS",true)
             if(q.length<2){status.text="Enter a model name";return@action}
             results.removeAllViews();status.text="Searching Poly Haven"
             thread(name="asset-search"){
