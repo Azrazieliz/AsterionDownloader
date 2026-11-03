@@ -57,6 +57,34 @@ object AsterionRecommendations {
     fun render(a:Activity,p:LinearLayout,refresh:()->Unit){
         p.addView(ui.text(a,"For You",23f,ui.white,true),ui.lp(a,14))
         AsterionContentSuggestions.render(a,p,refresh)
+        val crossPlatform=CrossPlatformCreatorDb(a).use{it.candidates(45)}
+        if(crossPlatform.isNotEmpty()){
+            val linked=ui.card(a)
+            linked.addView(ui.text(a,"Linked creator profiles",17f,ui.white,true))
+            linked.addView(ui.text(a,
+                "Cross-site links found in creator profile headers and biographies. "+
+                "Separate sites and partial/full posts remain separate originals; "+
+                "profile relationships are suggestions, not proof of identical media.",
+                12f,ui.secondary),ui.lp(a,5))
+            for(candidate in crossPlatform.take(20)){
+                val c=ui.card(a)
+                c.addView(ui.text(a,candidate.platform+" · "+
+                    candidate.url.substringAfter("://"),14f,ui.white,true))
+                c.addView(ui.text(a,candidate.evidence.take(140),
+                    11f,ui.secondary),ui.lp(a,4))
+                c.addView(ui.action(a,"FOLLOW & BACKFILL PROFILE",true){
+                    AsterionSmartAdd.followLinkedProfile(a,candidate.url){result->
+                        CrossPlatformCreatorDb(a).use{
+                            it.followed(candidate.source,candidate.url)
+                        }
+                        Toast.makeText(a,result,Toast.LENGTH_LONG).show()
+                        refresh()
+                    }
+                },ui.lp(a,7))
+                linked.addView(c,ui.lp(a,8))
+            }
+            p.addView(linked,ui.lp(a,10))
+        }
         val followed=NameWatchDb(a).use{it.list().map{w->w.name}}
         val sourceNames=com.azrael.galleryflow.GalleryDb(a).use{
             it.listEntities().map{e->e.displayName}
