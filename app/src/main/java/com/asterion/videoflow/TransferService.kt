@@ -6,6 +6,7 @@ import android.os.*
 import android.provider.MediaStore
 import android.os.Environment
 import android.net.Uri
+import android.media.MediaMetadataRetriever
 import java.io.File
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -205,13 +206,20 @@ object VideoEngine {
             val json=JSONObject(text)
             val duration=json.optDouble("duration",0.0)
                 .takeIf{it.isFinite() && it>0.0}?.toLong()
-            val expected=FullSceneRuntimeDb(context).use{it.expected(item.title)}
+            val extracted=json.optString("title","")
+            val expected=FullSceneRuntimeDb(context).use{db->
+                listOfNotNull(db.expected(item.title),db.expected(extracted)).maxOrNull()
+            }
             val decision=FullLengthVideoPolicy.assess(item.title,
-                json.optString("title",""),link,duration,expected)
+                extracted,link,duration,expected)
             if(decision.verdict==FullLengthVideoPolicy.Verdict.ACCEPT &&
                 FullLengthVideoPolicy.knownFullReferenceHost(link) && duration!=null){
-                FullSceneRuntimeDb(context).use{it.remember(item.title,link,duration)}
+                FullSceneRuntimeDb(context).use{store->
+                    store.remember(item.title,link,duration)
+                    store.remember(extracted,link,duration)
+                }
                 db.requeueHeldByTitle(item.title)
+                if(extracted!=item.title)db.requeueHeldByTitle(extracted)
             }
             return (duration?:0L) to decision
         }
@@ -227,6 +235,7 @@ object VideoEngine {
         val variants=listOf(item.url)+SourceDiagnostics.alternateHosts(item.url)
         var last:Throwable?=null
         var downloaded=false
+        var expectedDuration:Long?=null
         var heldReason:String?=null
         try {
             for(candidate in variants.distinct()) {
@@ -239,6 +248,7 @@ object VideoEngine {
                     }
                     try {
                         execute(candidate)
+                        expectedDuration=checked.getOrThrow().first
                         downloaded=true
                         break
                     } catch(t:Exception){last=t}
@@ -255,6 +265,7 @@ object VideoEngine {
                         }
                         try {
                             execute(media,candidate)
+                            expectedDuration=checkedMedia.getOrThrow().first
                             downloaded=true
                             break
                         } catch(t:Exception){last=t}
@@ -273,6 +284,23 @@ object VideoEngine {
             it.extension.lowercase() in setOf("mp4","mkv","webm","mov","ts","m4a","mp3","flac","opus") }
             ?.maxByOrNull { it.length() } ?: error("No completed playable video found")
         val audioOnly=prefs.getString("quality","")=="bestaudio/best"
+        // Do not publish a truncated/incomplete local file even if the
+        // remote page advertised a longer runtime.
+        val actual=runCatching{
+            val retriever=MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()?.div(1000L)
+            }finally{retriever.release()}
+        }.getOrNull()
+        val promised=expectedDuration?:throw FullVersionUnavailable(
+            "Full-version runtime was lost before local verification")
+        if(actual==null || actual*100L<promised*95L){
+            file.delete()
+            throw FullVersionUnavailable(
+                "Incomplete downloaded runtime: ${actual?:0}s of ${promised}s")
+        }
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
         val values=ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
