@@ -91,7 +91,11 @@ object AssetsPanel {
         }
     }
     fun render(a:Activity,body:LinearLayout){
-        body.addView(ui.text(a,"ASSETS · 3D MODELS",22f,ui.white,true),ui.lp(a,12))
+        // Character cards are the primary Assets experience, like Pixiv following.
+        KoikatsuFollowing.render(a,body){
+            a.recreate()
+        }
+        body.addView(ui.text(a,"GENERAL 3D MODELS",22f,ui.white,true),ui.lp(a,12))
         body.addView(ui.text(a,"Download original model files and their textures. Blender and Windows assets require compatible tools, not automatic Android conversion.",12f,ui.secondary),ui.lp(a,7))
         val input=EditText(a).apply{
             hint="Search model or material"
@@ -165,7 +169,6 @@ object AssetsPanel {
             }
         },ui.lp(a,8))
         body.addView(status,ui.lp(a,6));body.addView(results,ui.lp(a,6))
-        KoikatsuInlineSearch.render(a,body)
         body.addView(ui.action(a,"GUMROAD · SEARCH & DOWNLOAD ORIGINAL ASSETS",true){
             val q=input.text.toString().trim()
             val address=if(q.startsWith("https://"))q
@@ -178,7 +181,7 @@ object AssetsPanel {
                 type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
             },5204)
         },ui.lp(a,7))
-        CreatorArchiveUi.render(a,body,ArchiveSection.ASSETS)
+        // General creator archives belong to the creator/media module, not Koikatsu.
         AlohaSources.render(a,body,listOf(AlohaArea.ASSETS),"ASSETS · MODELS & CONVERTERS")
     }
     fun localFile(a:Activity,uri:Uri?){
