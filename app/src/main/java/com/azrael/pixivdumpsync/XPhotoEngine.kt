@@ -214,7 +214,11 @@ object XPhotoEngine {
                         bytes==connection.contentLengthLong)){"X image truncated"}
                     context.contentResolver.update(dest,ContentValues().apply{
                         put(MediaStore.Downloads.IS_PENDING,0)},null,null)
-                    return dest.toString()
+                    val canonical=CrossSourceDedup(context).use{
+                        it.registerFile(context,dest)
+                    }
+                    RounderDispatch.saved(context,canonical,"$fileBase.$ext","X")
+                    return canonical.toString()
                 }catch(t:Exception){
                     context.contentResolver.delete(dest,null,null);throw t
                 }
