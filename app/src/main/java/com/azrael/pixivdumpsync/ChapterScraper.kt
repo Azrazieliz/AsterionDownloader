@@ -30,7 +30,8 @@ object ChapterScraper {
                 if(titleNumber!=Double.MAX_VALUE)titleNumber else naturalKey(it.url)
             }.thenBy{it.title.lowercase(Locale.ROOT)}.thenBy{it.url})
     fun isSingleChapter(url:String):Boolean =
-        pathChapter.containsMatchIn(URI(url).path.orEmpty())
+        pathChapter.containsMatchIn(URI(url).path.orEmpty()) ||
+            SushiScanChapters.isReader(url)
     private fun read(url:String,context:Context?=null):Document{
         val agent=context?.let{runCatching{WebSettings.getDefaultUserAgent(it)}
             .getOrNull()}?.takeIf{it.isNotBlank()}
@@ -87,6 +88,14 @@ object ChapterScraper {
                 "NHentai gallery has no complete page listing; no ZIP will be written"
             }
             return full
+        }
+        if(SushiScanChapters.isSeries(seriesUrl)){
+            val page=read(seriesUrl,context)
+            val chapters=SushiScanChapters.chapters(page,seriesUrl)
+            require(chapters.isNotEmpty()){
+                "SushiScan series index did not expose its chapter/volume links; no partial ZIP"
+            }
+            return chapters
         }
         if(isSingleChapter(seriesUrl))
             return listOf(ChapterLink(seriesUrl,"Chapter "+
