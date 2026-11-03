@@ -662,10 +662,10 @@ class MainActivity : Activity() {
     companion object {
         const val EXTRA_SITE_ID = "extra_site_id"
         const val EXTRA_ADD_SITE = "extra_add_site"
-        private val BG = Color.rgb(17, 18, 22)
-        private val SURFACE = Color.rgb(31, 33, 40)
-        private val MUTED = Color.rgb(166, 171, 184)
-        private val ACCENT = Color.rgb(116, 196, 255)
-        private val ERROR = Color.rgb(255, 125, 125)
+        private val BG = com.azrael.pixivdumpsync.NocturneDesign.background
+        private val SURFACE = com.azrael.pixivdumpsync.NocturneDesign.surface
+        private val MUTED = com.azrael.pixivdumpsync.NocturneDesign.secondary
+        private val ACCENT = com.azrael.pixivdumpsync.NocturneDesign.primary
+        private val ERROR = com.azrael.pixivdumpsync.NocturneDesign.danger
     }
 }
