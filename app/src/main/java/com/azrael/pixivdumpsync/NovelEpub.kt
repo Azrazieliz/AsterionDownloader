@@ -16,6 +16,31 @@ data class NovelText(val title:String,val paragraphs:List<String>)
 /** Extract only actual numbered chapters from the same novel, never sidebar links. */
 object NovelEpubParser {
     private val number=Regex("""(?i)(?:^|[/\s_-])(?:chapter|chapitre|ch|episode)[/_\s.-]*(\d+(?:[._]\d+)?)""")
+    private val readerHosts=setOf(
+        "freewebnovel.com","novelbuddy.com","readnovelfull.com")
+    fun supportedSeries(url:String):Boolean = runCatching{
+        val uri=URI(url)
+        val host=uri.host.lowercase().removePrefix("www.")
+        val path=uri.path.trimEnd('/')
+        uri.scheme=="https" && host in readerHosts &&
+            (path.contains("/novel/") || path.contains("/book/")) &&
+            !Regex("""(?i)/(?:chapter|chapitre)[-_]?\d+""").containsMatchIn(path) &&
+            uri.userInfo==null
+    }.getOrDefault(false)
+    /** Never silently package only the visible page of a paginated chapter list. */
+    fun chapterCountHint(doc:Document):Int {
+        val chapterRegion=doc.selectFirst(
+            "#chapter-list,.chapter-list,.chapter-list-container,"+
+            ".novel-chapters,#chapters,.chapters-list")
+        val text=(chapterRegion?.parent()?.text().orEmpty()+" "+
+            doc.select(".pagination,.chapter-pagination,.chapter-page-list")
+                .text()).take(50000)
+        val ranges=Regex("""(?i)\bC\.\s*\d+\s*[-–]\s*C\.\s*(\d+)\b""")
+            .findAll(text).mapNotNull{it.groupValues[1].toIntOrNull()}
+        val total=Regex("""(?i)(\d{1,6})\s+(?:total\s+)?chapters\b""")
+            .findAll(text).mapNotNull{it.groupValues[1].toIntOrNull()}
+        return (ranges+total).maxOrNull()?:0
+    }
     internal fun parseChapterNumber(input:String):Double? =
         number.find(input)?.groupValues?.get(1)?.replace('_','.')?.toDoubleOrNull()
     fun chapters(doc:Document,source:String):List<NovelChapter>{
