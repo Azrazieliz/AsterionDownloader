@@ -26,12 +26,20 @@ object GamePortPlanner {
         NDS("Nintendo DS","Use an Android-compatible Nintendo DS emulator"),
         WINDOWS("Windows executable","Compatible Windows runtime, or rebuild from original game source"),
         APK("Android application","Already an Android package: install through Android"),
+        GODOT("Godot project","Export Android with Godot editor and installed export templates"),
+        UNITY_PROJECT("Unity source project","Build Android using Unity editor and Android Build Support"),
+        UNREAL_PROJECT("Unreal source project","Build Android through Unreal Automation Tool with installed SDK/NDK"),
         UNITY("Unity game","Rebuild from Unity source project for native Android"),
         UNREAL("Unreal Engine","Rebuild from Unreal project for native Android"),
         UNKNOWN("Unknown engine","Inspect original files and select a suitable Android runtime")
     }
     internal fun detect(paths:Collection<String>):Engine{
         val names=paths.map{it.lowercase().replace('\\','/')}
+        if(names.any{it.endsWith("project.godot")})return Engine.GODOT
+        if(names.any{it.endsWith(".uproject")})return Engine.UNREAL_PROJECT
+        if(names.any{it.endsWith("projectsettings/projectversion.txt")} &&
+            names.any{it.contains("/assets/") || it.startsWith("assets/")})
+            return Engine.UNITY_PROJECT
         if(names.any{it.endsWith(".3ds")||it.endsWith(".cia")||it.endsWith(".cci")})
             return Engine.THREE_DS
         if(names.any{it.endsWith(".nds")})return Engine.NDS
@@ -86,6 +94,9 @@ object GamePortPlanner {
             Engine.RENPY->arrayOf("PREPARE REN'PY APK PORT",
                 "EXPORT GAME FILES","OPEN WITH JOIPLAY")
             Engine.APK->arrayOf("INSTALL ANDROID APK")
+            Engine.GODOT,Engine.UNITY_PROJECT,Engine.UNREAL_PROJECT->
+                arrayOf("PREPARE ENGINE-SPECIFIC ANDROID BUILD",
+                    "EXPORT ORIGINAL SOURCE","OPEN WITH COMPATIBLE APP")
             else->arrayOf("OPEN WITH INSTALLED RUNTIME","EXPORT GAME FILES",
                 "SAVE ENGINE REPORT")
         }
@@ -107,6 +118,11 @@ object GamePortPlanner {
                         else->external(a,source)
                     }
                     Engine.APK->external(a,source,"application/vnd.android.package-archive")
+                    Engine.GODOT,Engine.UNITY_PROJECT,Engine.UNREAL_PROJECT->when(i){
+                        0->saveRequest(a,name,engine)
+                        1->PortableGameExporter.export(a,source,name)
+                        else->external(a,source)
+                    }
                     else->when(i){
                         0->external(a,source)
                         1->{
@@ -135,6 +151,12 @@ object GamePortPlanner {
                 "python tools/package_game_android.py --input game.zip --out port --package com.asterion.portable.game"
             Engine.RENPY->
                 "python tools/package_game_android.py --input game.zip --out port --renpy-sdk PATH_TO_RENPY_SDK"
+            Engine.GODOT->
+                "python tools/package_game_android.py --input game.zip --out port --godot-editor PATH_TO_GODOT"
+            Engine.UNITY_PROJECT->
+                "python tools/package_game_android.py --input game.zip --out port --unity-editor PATH_TO_UNITY"
+            Engine.UNREAL_PROJECT->
+                "python tools/package_game_android.py --input game.zip --out port --unreal-engine PATH_TO_UNREAL"
             else->"Open this game in the compatible Android runtime; no generic binary-to-APK conversion exists"
         }
         val json=JSONObject().apply{
