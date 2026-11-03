@@ -22,18 +22,21 @@ object PortableGameExporter {
         if(parts.isEmpty()||parts.any{it=="."||it==".."})return null
         return parts.map(::sanitize)
     }
-    internal fun classify(paths:Set<String>):String=when {
-        paths.any{it.endsWith(".rpa")||it.endsWith(".rpy")||it.endsWith(".rpyc")} ->
-            "Ren'Py game: use JoiPlay with the Ren'Py plugin, or package its sources with RAPT"
-        paths.any{it.endsWith(".xp3")} ->
-            "Kirikiri: a compatible external Android runtime is needed"
-        paths.any{it.endsWith(".nsa")||it.endsWith(".ns2")} ->
-            "NScripter: a compatible external Android runtime is needed"
-        paths.any{it.endsWith("index.html")} ->
-            "HTML5 game: load the exported folder into JoiPlay or a compatible HTML game player"
-        paths.any{it.endsWith(".exe")} ->
-            "Windows executable: not automatically convertible; needs a compatible runtime or port"
-        else -> "Unknown game engine: exported files are available to other Android applications"
+    internal fun classify(paths:Set<String>):String=when(GamePortPlanner.detect(paths)){
+        GamePortPlanner.Engine.RENPY->"Ren'Py: JoiPlay with its matching Ren'Py plugin; the complete game files are preserved"
+        GamePortPlanner.Engine.RPG_MAKER_LEGACY->
+            "RPG Maker XP/VX/VX Ace: import the complete game with the JoiPlay RPG Maker plugin"
+        GamePortPlanner.Engine.KIRIKIRI->"Kirikiri: a compatible Android script interpreter is required"
+        GamePortPlanner.Engine.NSCRIPTER->"NScripter: a compatible Android script interpreter is required"
+        GamePortPlanner.Engine.RPG_MAKER,GamePortPlanner.Engine.HTML5->
+            "HTML5: open the extracted index.html with a compatible Android web game runtime"
+        GamePortPlanner.Engine.WINDOWS,GamePortPlanner.Engine.UNITY_WINDOWS,
+        GamePortPlanner.Engine.UNREAL_WINDOWS,GamePortPlanner.Engine.UNITY,
+        GamePortPlanner.Engine.UNREAL->
+            "Windows executable and resources: run in Winlator. The files are not an Android-native port"
+        GamePortPlanner.Engine.GODOT_EXPORT->
+            "Exported Godot data: import with a matching Godot runtime; it is not an editable source project"
+        else->"Unknown or console runtime: original files preserved; a compatible interpreter may be required"
     }
     private fun mime(name:String)=when(name.substringAfterLast('.',"").lowercase()){
         "html","htm"->"text/html"
@@ -114,13 +117,29 @@ object PortableGameExporter {
                     AlertDialog.Builder(a).setTitle("Game export failed")
                         .setMessage(failure?.message).setPositiveButton("Close",null).show()
                 }else{
-                    AlertDialog.Builder(a).setTitle("Game exported")
+                    val engine=GamePortPlanner.detect(files)
+                    val runtime=when(engine){
+                        GamePortPlanner.Engine.WINDOWS,
+                        GamePortPlanner.Engine.UNITY_WINDOWS,
+                        GamePortPlanner.Engine.UNREAL_WINDOWS,
+                        GamePortPlanner.Engine.UNITY,
+                        GamePortPlanner.Engine.UNREAL->
+                            "Winlator" to "https://winlator.org/index.php"
+                        GamePortPlanner.Engine.RENPY,
+                        GamePortPlanner.Engine.RPG_MAKER_LEGACY,
+                        GamePortPlanner.Engine.GODOT_EXPORT,
+                        GamePortPlanner.Engine.HTML5,
+                        GamePortPlanner.Engine.RPG_MAKER->
+                            "JoiPlay" to "https://www.joiplay.net/"
+                        else->null
+                    }
+                    val notice=AlertDialog.Builder(a).setTitle("Game exported")
                         .setMessage("Files: "+files.size+"\n"+folder+"\n\n"+
-                            classify(files)+"\n\nYou can open this folder from another Android application.")
-                        .setPositiveButton("Get JoiPlay"){_,_->
-                            a.startActivity(Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://www.joiplay.net/")))
-                        }.setNegativeButton("Done",null).show()
+                            classify(files)+"\n\nNo claim of a native APK conversion.")
+                    if(runtime!=null)notice.setPositiveButton("GET "+runtime.first.uppercase()){_,_->
+                        a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(runtime.second)))
+                    }
+                    notice.setNegativeButton("Done",null).show()
                 }
             }
         }
