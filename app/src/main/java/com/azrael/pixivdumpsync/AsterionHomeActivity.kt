@@ -222,6 +222,21 @@ class AsterionHomeActivity:Activity(){
         }
     }
     private fun render(){
+        val pending=runCatching{
+            val video=VideoDb(this).use{
+                it.count("queued")+it.count("running")+it.count("retry_wait")
+            }
+            val chapters=ChapterQueue(this).use{queue->
+                queue.list().count{it.state=="working"||it.state=="queued"}
+            }
+            val direct=DirectDownloadTracker.states(this,60).count{
+                it.status in setOf(android.app.DownloadManager.STATUS_PENDING,
+                    android.app.DownloadManager.STATUS_RUNNING,
+                    android.app.DownloadManager.STATUS_PAUSED)
+            }
+            video+chapters+direct
+        }.getOrDefault(0)
+        navButtons["Queue"]?.text=if(pending>0)"Downloads ($pending)" else "Downloads"
         val selectedTab=if(page in pages)page else "Home"
         navButtons.forEach{(tab,view)->
             val selected=tab==selectedTab
