@@ -14,7 +14,7 @@ import com.azrael.galleryflow.GalleryDb
  * upload API responses mark a file uploaded.
  */
 class NduCloudQueue(context: Context) :
-    SQLiteOpenHelper(context,"nocturne_ndus_queue.db",null,1) {
+    SQLiteOpenHelper(context,"nocturne_ndus_queue.db",null,2) {
     data class Job(val category:String,val name:String,val uri:String,val attempts:Int)
     data class Status(val pending:Int,val completed:Int,val lastError:String?)
     override fun onCreate(db:SQLiteDatabase) {
@@ -26,13 +26,24 @@ class NduCloudQueue(context: Context) :
             attempts INTEGER NOT NULL DEFAULT 0,
             retry_after INTEGER NOT NULL DEFAULT 0,
             last_error TEXT,
-            PRIMARY KEY(category,name)
+            PRIMARY KEY(category,content_uri)
         )""")
     }
-    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) = Unit
+    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int) {
+        if(oldVersion<2) {
+            db.execSQL("ALTER TABLE jobs RENAME TO jobs_legacy")
+            onCreate(db)
+            db.execSQL("""INSERT OR IGNORE INTO jobs
+                (category,name,content_uri,state,attempts,retry_after,last_error)
+                SELECT category,name,content_uri,state,attempts,retry_after,last_error
+                FROM jobs_legacy""")
+            db.execSQL("DROP TABLE jobs_legacy")
+        }
+    }
 
     @Synchronized fun enqueue(category:String,name:String,uri:Uri) {
-        require(category in setOf("kuroha","kyora","x","comics","videos"))
+        require(category in setOf("kuroha","kyora","x","comics","videos",
+            "books","games","assets","koikatsu","images","torrents","originals"))
         NduTeraboxClient.safeFileName(name)
         require(uri.scheme=="content") { "Only locally owned files may be queued" }
         val row=ContentValues().apply {
@@ -57,7 +68,7 @@ class NduCloudQueue(context: Context) :
     @Synchronized fun completed(job:Job) {
         writableDatabase.update("jobs", ContentValues().apply {
             put("state","UPLOADED");putNull("last_error")
-        },"category=? AND name=?",arrayOf(job.category,job.name))
+        },"category=? AND content_uri=?",arrayOf(job.category,job.uri))
     }
     @Synchronized fun failed(job:Job, reason:String) {
         val backoff=minOf(6*60*60_000L,60_000L*(1L shl minOf(job.attempts,7)))
@@ -66,8 +77,16 @@ class NduCloudQueue(context: Context) :
             put("attempts",job.attempts+1)
             put("retry_after",System.currentTimeMillis()+backoff)
             put("last_error",reason.take(180))
-        },"category=? AND name=?",arrayOf(job.category,job.name))
+        },"category=? AND content_uri=?",arrayOf(job.category,job.uri))
     }
+    /** Local metadata only; UPLOADED is written exclusively after a successful remote API result. */
+    fun stateFor(category:String,uri:String):String?=readableDatabase.rawQuery(
+        "SELECT state FROM jobs WHERE category=? AND content_uri=? LIMIT 1",
+        arrayOf(category,uri)).use{c->if(c.moveToFirst())c.getString(0)else null}
+    fun uploadedFor(uri:String):Boolean=readableDatabase.rawQuery(
+        "SELECT 1 FROM jobs WHERE content_uri=? AND state='UPLOADED' LIMIT 1",
+        arrayOf(uri)).use{it.moveToFirst()}
+
     fun status():Status {
         var pending=0;var complete=0
         readableDatabase.rawQuery("SELECT state,COUNT(*) FROM jobs GROUP BY state",null).use { c ->
