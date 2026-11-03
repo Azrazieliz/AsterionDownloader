@@ -24,7 +24,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Test and package current unified Android preview (backfill retries, EPUB, ZIP, creators)
+      - name: Test and package unified Android preview (corrected detail SQL, native video fallback, EPUB and ZIP)
         run: gradle testDebugUnitTest testPreviewUnitTest assemblePreview --stacktrace
       - name: Validate package, ZIP and checksum
         shell: bash
