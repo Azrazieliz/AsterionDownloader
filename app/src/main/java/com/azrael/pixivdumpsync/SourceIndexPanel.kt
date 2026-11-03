@@ -159,6 +159,14 @@ object SourceIndexPanel {
             }
             body.addView(row,ui.lp(a,8))
         }
+        body.addView(ui.action(a,"CONNECT AN ACCOUNT",false){
+            val accounts=list.filter{SourceIndexParser.safe(it.url)}
+            AlertDialog.Builder(a).setTitle("Select a provider")
+                .setItems(accounts.map{it.name}.toTypedArray()){_,index->
+                    a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                        .putExtra(SiteLoginActivity.EXTRA_URL,accounts[index].url))
+                }.setNegativeButton("Cancel",null).show()
+        },ui.lp(a,14))
         AlertDialog.Builder(a).setTitle(area+" · Source health")
             .setView(ScrollView(a).apply{addView(body)})
             .setPositiveButton("Close",null).show()
