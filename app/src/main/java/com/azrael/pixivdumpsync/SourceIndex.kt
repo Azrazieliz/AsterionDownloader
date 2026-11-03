@@ -238,6 +238,23 @@ object SourceIndex {
         if(!AppPower.enabled(context))return
         thread(name="asterion-source-index"){scan(context,area)}
     }
+    fun enroll(context:Context,address:String,area:String,sourceName:String,
+               native:Boolean=false){
+        if(!SourceIndexParser.safe(address))return
+        SourceIndexDb(context).use{it.add(address,sourceName,area,
+            if(native)"native" else "generic")}
+        if(native||!AppPower.enabled(context))return
+        thread(name="asterion-new-source-index"){
+            val source=SourceIndexDb(context).use{db->
+                db.sources().firstOrNull{it.url==address}
+            }?:return@thread
+            runCatching{scanOne(context,source)}.onFailure{
+                SourceIndexDb(context).use{db->
+                    db.update(address,source.cursor,it.message,source.discovered)
+                }
+            }
+        }
+    }
     fun scan(context:Context,area:String?=null,stop:()->Boolean={false}) {
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
         try {
