@@ -14,23 +14,25 @@ import android.widget.TextView
 
 /** Shared visual language for Asterion Downloader's source hub, galleries and transfers. */
 object NocturneDesign {
-    val background = Color.rgb(12, 12, 17)
-    val surface = Color.rgb(23, 23, 31)
-    val raised = Color.rgb(31, 31, 42)
-    val soft = Color.rgb(37, 32, 47)
-    val border = Color.rgb(61, 55, 74)
-    val primary = Color.rgb(190, 167, 238)
-    val violet = Color.rgb(190, 167, 238)
-    val white = Color.rgb(245, 248, 251)
-    val secondary = Color.rgb(175, 193, 207)
-    val subdued = Color.rgb(128, 153, 170)
-    val danger = Color.rgb(255, 139, 150)
-    val pixivBlue = Color.rgb(100, 176, 249)
-    val xCyan = Color.rgb(165, 206, 225)
-    val cosplayRose = Color.rgb(238, 159, 198)
-    val gamesTeal = Color.rgb(121, 213, 196)
-    val booksGold = Color.rgb(234, 196, 137)
-    val assetsLilac = Color.rgb(187, 159, 245)
+    // One neutral charcoal-to-graphite system across every module; media stays vivid.
+    // Status-only red is reserved for errors, never for navigation or decoration.
+    val background = Color.rgb(8, 9, 11)
+    val surface = Color.rgb(17, 18, 20)
+    val raised = Color.rgb(28, 29, 32)
+    val soft = Color.rgb(34, 35, 39)
+    val border = Color.rgb(55, 57, 62)
+    val primary = Color.rgb(221, 223, 226)
+    val violet = primary
+    val white = Color.rgb(247, 248, 250)
+    val secondary = Color.rgb(178, 182, 189)
+    val subdued = Color.rgb(137, 142, 151)
+    val danger = Color.rgb(248, 133, 145)
+    val pixivBlue = primary
+    val xCyan = primary
+    val cosplayRose = primary
+    val gamesTeal = primary
+    val booksGold = primary
+    val assetsLilac = primary
     fun compact(context: Context): Boolean = context
         .getSharedPreferences("asterion_display",0).getBoolean("compact",true)
     fun largeCovers(context: Context): Boolean = context
@@ -52,7 +54,7 @@ object NocturneDesign {
 
     fun touch(context: Context, color: Int = surface, corner: Int = 22,
               outline: Int = border): RippleDrawable =
-        RippleDrawable(ColorStateList.valueOf(Color.argb(46, 190, 255, 247)),
+        RippleDrawable(ColorStateList.valueOf(Color.argb(48, 223, 224, 227)),
             shape(context, color, corner, outline), null)
 
     fun text(context: Context, label: String, sp: Float, color: Int = white,
