@@ -97,4 +97,18 @@ class SourceIndexTest {
         assertEquals("https://example.org/media/card-342.webp",hits[0].preview)
     }
 
+    @Test fun originalVideoSourceCanBeDiscoveredWithoutAnchor(){
+        val doc=Jsoup.parse("""<main><article><h2>Creator clip</h2>
+          <video poster="/media/clip-cover.webp">
+            <source src="https://cdn.example.org/video/clip.mp4" type="video/mp4">
+          </video></article></main>""","https://example.org/")
+        val hits=SourceIndexParser.entries(doc,"https://example.org/","VIDEOS",100L)
+        assertEquals(1,hits.size)
+        assertEquals("Creator clip",hits[0].title)
+        assertEquals("video",hits[0].kind)
+        assertEquals("https://cdn.example.org/video/clip.mp4",hits[0].url)
+        assertEquals("https://example.org/media/clip-cover.webp",hits[0].preview)
+        assertTrue(SourceIndexParser.entries(doc,"https://example.org/","BOOKS",100L).isEmpty())
+    }
+
 }
