@@ -14,7 +14,8 @@ class CrossSourceDedup(context:Context):
     SQLiteOpenHelper(context,"asterion_cross_source_dedup.sqlite",null,1){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE claims(
-            key TEXT PRIMARY KEY,state TEXT NOT NULL,created INTEGER NOT NULL)""")
+            key TEXT PRIMARY KEY,state TEXT NOT NULL,created INTEGER NOT NULL,
+            manager_id INTEGER)""")
         db.execSQL("""CREATE TABLE blobs(
             sha256 TEXT PRIMARY KEY,bytes INTEGER NOT NULL,content_uri TEXT NOT NULL,
             stored INTEGER NOT NULL)""")
@@ -48,6 +49,18 @@ class CrossSourceDedup(context:Context):
             return true
         }finally{db.endTransaction()}
     }
+    @Synchronized fun attach(url:String,id:Long){
+        writableDatabase.update("claims",ContentValues().apply{put("manager_id",id)},
+            "key=?",arrayOf(safeKey(url)))
+    }
+    @Synchronized fun completeById(id:Long){
+        writableDatabase.update("claims",ContentValues().apply{put("state","complete")},
+            "manager_id=?",arrayOf(id.toString()))
+    }
+    @Synchronized fun releaseById(id:Long){
+        writableDatabase.delete("claims","manager_id=? AND state='active'",
+            arrayOf(id.toString()))
+    }
     @Synchronized fun markComplete(url:String){
         writableDatabase.update("claims",ContentValues().apply{put("state","complete")},
             "key=?",arrayOf(safeKey(url)))
@@ -79,8 +92,9 @@ class CrossSourceDedup(context:Context):
         }
         if(existing!=null && existing.second==size){
             val original=Uri.parse(existing.first)
-            if(original!=created && c.contentResolver.openInputStream(original)
-                    ?.use{it.read()}!=null){
+            val reachable=runCatching{c.contentResolver.openInputStream(original)
+                    ?.use{it.read()}!=null}.getOrDefault(false)
+            if(original!=created && reachable){
                 // Caller only registers files it just created under its own MediaStore collection.
                 if(c.contentResolver.delete(created,null,null)>0)return original
             }
