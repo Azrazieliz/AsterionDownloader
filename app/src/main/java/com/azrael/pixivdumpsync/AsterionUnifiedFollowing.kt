@@ -106,7 +106,7 @@ object AsterionUnifiedFollowing {
         action(a,controls,"SYNC NEW PHOTOS",true){XPhotoScheduler.ensure(a);XPhotoEngine.start(a)}
         put(a,p,controls,8)
         val follow=ui.card(a)
-        val field=input(a,"@handle or X profile link")
+        val field=CreatorNames.input(a,"@handle or X profile link","X")
         put(a,follow,field,0)
         action(a,follow,"FOLLOW & BACKFILL",true){
             val v=field.text.toString().trim()
@@ -116,6 +116,7 @@ object AsterionUnifiedFollowing {
                 else->v
             }
             if(XPhotoQueue(a).use{it.addSource(url)}){
+                CreatorNames.remember(a,"@"+url.substringAfterLast("/"),"X",true)
                 XPhotoScheduler.ensure(a);XPhotoEngine.start(a);refresh()
             }else notice(a,"Invalid or already followed X account")
         }
@@ -306,12 +307,13 @@ object AsterionUnifiedFollowing {
             put(a,p,gallery,9)
         }
         val follow=ui.card(a)
-        val field=input(a,"Artist or model name")
+        val field=CreatorNames.input(a,"Artist or model name","PERFORMERS")
         put(a,follow,field,0)
         action(a,follow,"FOLLOW & SEARCH ALL PROVIDERS",true){
             val name=field.text.toString().trim()
             if(name.length<2){notice(a,"Enter a name");return@action}
             NameWatchDb(a).use{it.add(name)}
+            CreatorNames.remember(a,name,"PERFORMERS",true)
             thread(name="asterion-follow-scan"){NameCrawler.scan(a.applicationContext)}
             refresh()
         }
