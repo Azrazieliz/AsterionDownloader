@@ -24,7 +24,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Test and build installable preview (video backfill and comic ZIPs included)
+      - name: Test and build current unified preview (original downloads, comics, EPUB and creators)
         run: gradle testDebugUnitTest testPreviewUnitTest assemblePreview --stacktrace
       - name: Validate package, ZIP and checksum
         shell: bash
@@ -58,7 +58,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Asterion Downloader v1.3.31 — Android preview" \
-            --notes "Co-installable test APK built from this exact GitHub source commit. Uses the separate com.azrael.pixivdumpsync.nocturne package, so it does NOT install over or migrate data from the original signed Kuroha/Downloader installation. Live account-specific services remain subject to on-device acceptance and server availability. This is NOT a preserve-data production-signature update." \
+            --notes "Built from the exact GitHub source SHA, including full-video gating, provider-detail retries, EPUB/ZIP engines, cross-platform creator previews, and Android game-port manifests. Uses a co-installable com.azrael.pixivdumpsync.nocturne package and does not replace or migrate the originally signed app. Authentication and live provider coverage still require device testing. This is NOT a preserve-data production-signature update." \
             --prerelease; then
             echo "::warning::Release publication denied by GitHub token. Verified APK and sha256 remain available in the successfully uploaded Actions artifact."
           fi
