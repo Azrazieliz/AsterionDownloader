@@ -857,7 +857,39 @@ class AsterionHomeActivity:Activity(){
         }
     }
     private fun renderSettings(){
-        section("Settings","Search sources, Tor connection and download quality.")
+        section("Settings","Appearance, downloads, privacy and source controls.")
+        val appearance=getSharedPreferences("asterion_display",MODE_PRIVATE)
+        val visual=card()
+        put(visual,text("DISPLAY & NAVIGATION",16f,theme.white,true),0)
+        fun appearanceSwitch(label:String,key:String,default:Boolean){
+            val switch=Switch(this).apply{
+                text=label
+                textSize=13f
+                setTextColor(theme.white)
+                isChecked=appearance.getBoolean(key,default)
+                setOnCheckedChangeListener{_,value->
+                    appearance.edit().putBoolean(key,value).apply()
+                    render()
+                }
+            }
+            put(visual,switch,8)
+        }
+        appearanceSwitch("Compact cards (less scrolling)","compact",true)
+        appearanceSwitch("Show image and video previews","previews",true)
+        appearanceSwitch("Larger preview covers","large_covers",false)
+        val start=appearance.getString("start_page","Home").orEmpty()
+        put(visual,button("START TAB: "+when(start){
+            "Queue"->"Downloads";"Recommend"->"For You";else->"Home"
+        }){
+            val choices=arrayOf("Home","Downloads","For You")
+            val keys=arrayOf("Home","Queue","Recommend")
+            AlertDialog.Builder(this).setTitle("Open Asterion on")
+                .setSingleChoiceItems(choices,keys.indexOf(start).coerceAtLeast(0)){dialog,index->
+                    appearance.edit().putString("start_page",keys[index]).apply()
+                    dialog.dismiss();render()
+                }.setNegativeButton("Cancel",null).show()
+        },9)
+        put(body,visual,10)
         val netPrefs=getSharedPreferences("video_options",MODE_PRIVATE)
         val tor=Switch(this).apply{
             text="Use Orbot / Tor for hidden (.onion) sites"
@@ -888,18 +920,29 @@ class AsterionHomeActivity:Activity(){
             toast("Quality saved")
         })
         put(body,quality)
-        val settings=card()
-        put(settings,text("ADVANCED SOURCE SETTINGS",14f,theme.white,true),0)
-        put(settings,button("Pixiv login, following feed and filters"){
-            startActivity(Intent(this,MainActivity::class.java))
-        })
-        put(settings,button("Gallery sites, tag filters and backfill"){
-            startActivity(Intent(this,com.azrael.galleryflow.MainActivity::class.java))
-        })
-        put(settings,button("Video cookies, schedule and Round Sync"){
-            startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
-        })
-        put(body,settings,12)
+        val advanced=appearance.getBoolean("advanced_open",false)
+        put(body,button(if(advanced)"HIDE LEGACY ENGINE TOOLS"
+            else "SHOW LEGACY ENGINE TOOLS"){
+            appearance.edit().putBoolean("advanced_open",!advanced).apply()
+            render()
+        },12)
+        if(advanced){
+            val settings=card()
+            put(settings,text("ADVANCED COMPATIBILITY",14f,theme.white,true),0)
+            put(settings,text("These are existing original-engine utilities within the "+
+                "same APK. Normal use stays in Asterion's unified modules.",
+                12f,theme.secondary),6)
+            put(settings,button("Pixiv filters and account tools"){
+                startActivity(Intent(this,MainActivity::class.java))
+            },9)
+            put(settings,button("Kyora gallery configuration"){
+                startActivity(Intent(this,com.azrael.galleryflow.MainActivity::class.java))
+            },6)
+            put(settings,button("VideoFlow compatibility settings"){
+                startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
+            },6)
+            put(body,settings,10)
+        }
         AlohaSources.render(this,body,listOf(AlohaArea.STUDY),"RELATED SAVED REFERENCE")
         put(body,text("Cloud uploads are not marked verified without confirmation from the destination. Originals are retained.",12f,theme.secondary))
     }
