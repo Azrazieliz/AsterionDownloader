@@ -33,6 +33,18 @@ class CrossPlatformCreatorProfilesTest {
         assertNull(CrossPlatformProfileParser.normalized("http://127.0.0.1/admin"))
         assertNull(CrossPlatformProfileParser.normalized("https://bad.org/creator"))
     }
+    @Test fun fanboxCreatorSubdomainsAndInternationalProfilesAreRealLinks(){
+        val fanbox=CrossPlatformProfileParser.normalized(
+            "https://studio-name.fanbox.cc/")
+        assertEquals("FANBOX",fanbox?.second)
+        assertEquals("https://studio-name.fanbox.cc/",fanbox?.first)
+        assertNull(CrossPlatformProfileParser.normalized("https://www.fanbox.cc/"))
+        assertEquals("CREATORS",CrossPlatformProfileParser.normalized(
+            "https://ko-fi.com/exampleartist")?.second)
+        assertEquals("CREATORS",CrossPlatformProfileParser.normalized(
+            "https://boosty.to/exampleartist")?.second)
+        assertNull(CrossPlatformProfileParser.normalized("https://x.com/intent"))
+    }
     @Test fun previewsOnOtherSitesDoNotBecomeSameFile(){
         val x=CrossPlatformProfileParser.normalized("https://twitter.com/artist_one")
         assertEquals("https://x.com/artist_one",x?.first)
