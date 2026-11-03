@@ -111,6 +111,7 @@ class AsterionHomeActivity:Activity(){
         KoikatsuFollowing.ensure(this)
         RounderDispatch.ensure(this)
         DirectDownloadRetry.ensure(this)
+        AsterionDownloadWorker.ensure(this)
         RounderDispatch.scanAsync(applicationContext)
         kotlin.concurrent.thread(name="asterion-seed-name-vocabulary"){
             runCatching{CreatorNames.seed(applicationContext)}
