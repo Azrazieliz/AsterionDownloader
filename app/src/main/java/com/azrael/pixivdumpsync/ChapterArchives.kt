@@ -42,6 +42,7 @@ object ChapterArchives {
         try{
             ChapterQueue(context).use{db->
                 db.recover()
+                db.retryDueFailures()
                 while(AppPower.enabled(context)){
                     val job=db.next()?:break
                     db.attempt(job.id)
