@@ -62,14 +62,42 @@ object VideoEngine {
                             continue
                         }
                         val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
-                        val hits=if(artistArchive)
+                        val hits=if(artistArchive){
                             WebDiscovery.findWatchPornArtist(watch.address,watch.lastCheck==0L)
-                            else WebDiscovery.findOnPage(watch.address,30)
-                        if(hits.isEmpty()) error("No video links found on this page; use a specific feed, profile, or search watch")
+                        }else{
+                            val collected=linkedMapOf<String,VideoHit>()
+                            val latest=WebDiscovery.page(watch.address,watch.address)
+                            for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
+                            // Every scan checks latest posts. A durable cursor then resumes
+                            // older pages, instead of always resetting at the homepage.
+                            val backfill=!watch.backfillComplete
+                            var cursor=if(backfill)watch.cursor?:latest.next else latest.next
+                            val visited=HashSet<String>()
+                            var pages=0
+                            while(cursor!=null && pages<(if(backfill)8 else 1) &&
+                                collected.size<650 && visited.add(cursor)){
+                                val page=WebDiscovery.page(cursor,watch.address)
+                                for(hit in page.hits)collected.putIfAbsent(hit.url,hit)
+                                cursor=page.next
+                                pages++
+                            }
+                            if(backfill)db.setBackfill(watch.id,cursor,cursor==null)
+                            collected.values.toList()
+                        }
+                        if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
                         var added=0
                         for(hit in hits) {
                             if(db.addVideo(hit.url,hit.title,watch.id)) added++
-                            if(!artistArchive && added>=max) break
+                            if(!artistArchive && watch.backfillComplete && added>=max)break
+                        }
+                        if(hits.any{!it.preview.isNullOrBlank()}){
+                            com.azrael.pixivdumpsync.SearchResultsDb(context).use{results->
+                                results.save("WATCH:"+watch.label,hits.map{hit->
+                                    com.azrael.pixivdumpsync.RankedHit(
+                                        hit.title,hit.url,watch.label,
+                                        thumbnail=hit.preview)
+                                })
+                            }
                         }
                         db.checked(watch.id,null)
                     } catch(t:Exception) {
