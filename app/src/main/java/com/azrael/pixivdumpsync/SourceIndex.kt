@@ -526,9 +526,7 @@ object SourceIndex {
             if(queued)VideoEngine.launch(context,false)
             // Existing downloads, including strict full-length holds, are owned by
             // VideoFlow and must not be enqueued repeatedly by the source scanner.
-            return queued || VideoDb(context).use{db->
-                db.listVideos(1000).any{it.url==item.url}
-            }
+            return queued || VideoDb(context).use{it.hasVideo(item.url)}
         }
         val suffix=if(item.kind=="epub")".epub" else ".bin"
         val filename=URI(item.url).path.substringAfterLast('/')
