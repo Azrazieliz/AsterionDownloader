@@ -246,7 +246,7 @@ class AsterionHomeActivity:Activity(){
             addView(row,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(9)})
         }
     }
-    private fun homePreviews(target:String):List<Pair<String,String>>=when(target){
+    private fun homePreviews(target:String):List<Pair<String,String>> = when(target){
         "X"->XPhotoQueue(this).use{db->
             db.recent(80).filter{it.photo.startsWith("https://")}
                 .distinctBy{it.photo}.take(3).map{it.photo to "https://x.com/"}
