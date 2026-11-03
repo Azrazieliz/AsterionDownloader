@@ -225,6 +225,7 @@ object ResourceDownloads {
                     privacyReferer(url,referer)?.let{addRequestHeader("Referer",it)}
             }
             val id=d.enqueue(request)
+            CrossSourceDedup(a).use{it.attach(url,id)}
             DirectDownloadTracker.record(a,id,file,folder,url)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
         }catch(t:Exception){
