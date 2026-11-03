@@ -131,6 +131,28 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         if(it.moveToFirst())it.getInt(0)else 0
     }
     fun retry(id:Long){change(id,"queued")}
+
+    fun retryDueFailures():Int{
+        val now=System.currentTimeMillis()
+        var queued=0
+        readableDatabase.rawQuery(
+            "SELECT id,attempts,updated,error FROM photos WHERE status='error' AND attempts<6",
+            null).use{c->
+            while(c.moveToNext()){
+                val id=c.getLong(0)
+                val attempts=c.getInt(1)
+                val age=now-c.getLong(2)
+                val error=c.getString(3).orEmpty()
+                if(Regex("(?i)\\b(?:401|402|403|404|410)\\b|unauthorized|not found")
+                    .containsMatchIn(error))continue
+                if(age>=((30_000L shl attempts.coerceIn(0,6))
+                        .coerceAtMost(6L*60*60_000L))){
+                    retry(id);queued++
+                }
+            }
+        }
+        return queued
+    }
     fun counts():Map<String,Int>{
         val map=mutableMapOf<String,Int>()
         readableDatabase.rawQuery("SELECT status,COUNT(*) FROM photos GROUP BY status",null).use{c->
