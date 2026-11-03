@@ -26,7 +26,7 @@ object FullLengthVideoPolicy {
         val normalized=Normalizer.normalize(value,Normalizer.Form.NFKC)
         // Release identifiers survive translated titles, aliases, watermarks and
         // varying file names. A code must include a letter prefix and digits.
-        val release=Regex("""(?i)(?:^|[^\p{L}\p{N}])([a-z]{2,10})[-_ ]?(\d{2,6})(?:$|[^\p{L}\p{N}])""")
+        val release=Regex("""(?i)(?:^|[^\p{L}\p{N}])([a-z]{2,10})[-_](\d{2,6})(?:$|[^\p{L}\p{N}])""")
             .find(normalized)
         if(release!=null)return "release:"+
             release.groupValues[1].lowercase(Locale.ROOT)+
