@@ -110,12 +110,48 @@ def prepare(source,output,engine,package_id,label,godot_editor=None,
     if engine=="GODOT_PROJECT":
         project=project_root(source,engine)
         preset=project/"export_presets.cfg"
-        if not preset.is_file(): raise ValueError(
-            "Godot Android export preset is missing. Configure Android export "+
-            "and install export templates in the Godot editor first.")
-        cfg=preset.read_text(encoding="utf-8-sig",errors="replace")
+        # This file is created only inside the staged Android copy, never in
+        # the user's original project or archive.
+        cfg=preset.read_text(encoding="utf-8-sig",errors="replace") if preset.is_file() else ""
         if 'name="Android"' not in cfg and 'name="Android (Runnable)"' not in cfg:
-            raise ValueError("A Godot Android export preset must be configured")
+            import re
+            indices=[int(i) for i in re.findall(r"\\[preset\\.(\\d+)\\]",cfg)]
+            index=max(indices,default=-1)+1
+            cfg+=f'''
+[preset.{index}]
+
+name="Android"
+platform="Android"
+runnable=true
+advanced_options=false
+dedicated_server=false
+custom_features=""
+export_filter="all_resources"
+include_filter=""
+exclude_filter=""
+export_path=""
+patches=PackedStringArray()
+encryption_include_filters=""
+encryption_exclude_filters=""
+seed=0
+encrypt_pck=false
+encrypt_directory=false
+script_export_mode=2
+
+[preset.{index}.options]
+
+custom_template/debug=""
+custom_template/release=""
+gradle_build/use_gradle_build=false
+architectures/armeabi-v7a=false
+architectures/arm64-v8a=true
+architectures/x86=false
+architectures/x86_64=false
+package/unique_name="{package_id}"
+package/name="{label.replace(chr(34),chr(39))[:65]}"
+package/signed=true
+'''
+            preset.write_text(cfg,encoding="utf-8")
         name="Android" if 'name="Android"' in cfg else "Android (Runnable)"
         editor=Path(godot_editor).resolve() if godot_editor else None
         if editor and not editor.is_file():raise FileNotFoundError(editor)
