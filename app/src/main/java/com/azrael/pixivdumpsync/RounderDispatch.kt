@@ -19,7 +19,7 @@ import android.widget.LinearLayout
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
-data class RounderState(val queued:Int,val requested:Int,val lastError:String?)
+data class RounderState(val queued:Int,val requested:Int,val lastError:String?,val uploaded:Int=0)
 class RounderOutbox(context:Context):
     SQLiteOpenHelper(context,"asterion_rounder_outbox.sqlite",null,1){
     override fun onCreate(db:SQLiteDatabase){
@@ -45,13 +45,55 @@ class RounderOutbox(context:Context):
     fun state():RounderState{
         val db=readableDatabase
         val queued=pending()
-        val requested=db.rawQuery("SELECT COUNT(*) FROM files WHERE state='REQUESTED'",null)
+        val requested=db.rawQuery(
+            "SELECT COUNT(*) FROM files WHERE state IN ('REQUESTED','DIRECT_PENDING')",null)
             .use{if(it.moveToFirst())it.getInt(0)else 0}
         val error=db.rawQuery("SELECT error FROM files WHERE error IS NOT NULL "+
             "ORDER BY last_request DESC LIMIT 1",null).use{
             if(it.moveToFirst())it.getString(0)else null
         }
-        return RounderState(queued,requested,error)
+        val uploaded=db.rawQuery("SELECT COUNT(*) FROM files WHERE state='UPLOADED'",null)
+            .use{if(it.moveToFirst())it.getInt(0)else 0}
+        return RounderState(queued,requested,error,uploaded)
+    }
+    fun pendingFiles(limit:Int=150):List<Triple<Uri,String,String>>{
+        val out=ArrayList<Triple<Uri,String,String>>()
+        readableDatabase.rawQuery(
+            "SELECT content_uri,name,category FROM files WHERE state='PENDING' "+
+                "ORDER BY observed ASC LIMIT ?",arrayOf(limit.coerceIn(1,500).toString())
+        ).use{c->
+            while(c.moveToNext()){
+                out+=Triple(Uri.parse(c.getString(0)),c.getString(1),c.getString(2))
+            }
+        }
+        return out
+    }
+    fun markDirect(uri:Uri){
+        val v=ContentValues().apply{
+            put("state","DIRECT_PENDING")
+            put("last_request",System.currentTimeMillis())
+            putNull("error")
+        }
+        writableDatabase.update("files",v,"content_uri=? AND state='PENDING'",
+            arrayOf(uri.toString()))
+    }
+    fun ack(uri:Uri){
+        val v=ContentValues().apply{
+            put("state","UPLOADED")
+            put("last_request",System.currentTimeMillis())
+            putNull("error")
+        }
+        writableDatabase.update("files",v,"content_uri=? AND state='DIRECT_PENDING'",
+            arrayOf(uri.toString()))
+    }
+    fun awaitingDirect(limit:Int=500):List<Uri>{
+        val list=ArrayList<Uri>()
+        readableDatabase.rawQuery(
+            "SELECT content_uri FROM files WHERE state='DIRECT_PENDING' LIMIT ?",
+            arrayOf(limit.coerceIn(1,1000).toString())).use{c->
+            while(c.moveToNext())list+=Uri.parse(c.getString(0))
+        }
+        return list
     }
     fun markRequested(){
         val cv=ContentValues().apply{
@@ -141,7 +183,36 @@ object RounderDispatch {
                         dedup.releaseById(item.job.id)
                 }
             }
-            if(RoundSyncBridge.enabled(context)){
+            // Rounder orchestrates one cloud lane at a time. Direct NDUS is preferred
+            // when configured because the API returns explicit upload completion;
+            // Round Sync task triggering cannot confirm that an upload finished.
+            if(NduSettings.configured(context)){
+                var accepted=0
+                RounderOutbox(context).use{outbox->
+                    NduCloudQueue(context).use{cloud->
+                        for((uri,name,category) in outbox.pendingFiles(150)){
+                            val kind=when(category.lowercase()){
+                                "pixiv","kuroha"->"kuroha"
+                                "kyora","cosplay"->"kyora"
+                                "x"->"x";"comics"->"comics"
+                                "videos"->"videos";"books"->"books"
+                                "games"->"games";"assets"->"assets"
+                                "koikatsu"->"koikatsu";"torrents"->"torrents"
+                                "images","artwork"->"images"
+                                else->"originals"
+                            }
+                            runCatching{
+                                cloud.enqueue(kind,name,uri)
+                                outbox.markDirect(uri)
+                                accepted++
+                            }.onFailure{outbox.markError(it.message?:"Cloud queue failed")}
+                        }
+                        for(uri in outbox.awaitingDirect())
+                            if(cloud.uploadedFor(uri.toString()))outbox.ack(uri)
+                    }
+                }
+                if(accepted>0)runCatching{NduUploadService.launch(context)}
+            }else if(RoundSyncBridge.enabled(context)){
                 RounderOutbox(context).use{outbox->
                     if(outbox.pending()>0){
                         val result=RoundSyncBridge.trigger(context)
@@ -175,10 +246,15 @@ object RounderDispatch {
         val card=ui.card(a,12)
         card.addView(ui.text(a,"TeraBox · Rounder handoff",17f,ui.white,true))
         val configured=RoundSyncBridge.enabled(a) && RoundSyncBridge.taskId(a)>=0
-        card.addView(ui.text(a,status.queued.toString()+" awaiting handoff · "+
-            status.requested+" sent to Round Sync (unconfirmed) · "+
-            if(configured)"Round Sync task configured" else "Round Sync needs configuration",
-            12f,ui.secondary),ui.lp(a,6))
+        val direct=NduSettings.configured(a)
+        card.addView(ui.text(a,status.queued.toString()+" awaiting dispatch · "+
+            status.requested+" awaiting cloud confirmation · "+
+            status.uploaded+" verified direct uploads · "+
+            when{
+                direct->"Authenticated direct TeraBox upload enabled"
+                configured->"Round Sync task configured (completion unconfirmed)"
+                else->"Configure TeraBox to start cloud transfers"
+            },12f,ui.secondary),ui.lp(a,6))
         if(!status.lastError.isNullOrBlank())
             card.addView(ui.text(a,status.lastError,12f,ui.danger),ui.lp(a,5))
         card.addView(ui.weighted(a,ui.action(a,"SCAN FILES",false){
