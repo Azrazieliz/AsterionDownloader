@@ -90,11 +90,9 @@ object AssetsPanel {
             }
         }
     }
-    fun render(a:Activity,body:LinearLayout){
+    fun render(a:Activity,body:LinearLayout,refresh:()->Unit={}){
         // Character cards are the primary Assets experience, like Pixiv following.
-        KoikatsuFollowing.render(a,body){
-            a.recreate()
-        }
+        KoikatsuFollowing.render(a,body,refresh)
         body.addView(ui.text(a,"GENERAL 3D MODELS",22f,ui.white,true),ui.lp(a,12))
         body.addView(ui.text(a,"Download original model files and their textures. Blender and Windows assets require compatible tools, not automatic Android conversion.",12f,ui.secondary),ui.lp(a,7))
         val input=EditText(a).apply{
