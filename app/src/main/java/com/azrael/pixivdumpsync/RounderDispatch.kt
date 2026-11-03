@@ -154,6 +154,16 @@ object RounderDispatch {
             return total
         }finally{busy.set(false)}
     }
+    fun saved(context:Context,uri:Uri,name:String,category:String){
+        RounderOutbox(context).use{it.enqueue(uri,name,category)}
+        val pref=context.getSharedPreferences(PREF,0)
+        val now=System.currentTimeMillis()
+        if(RoundSyncBridge.enabled(context) &&
+            now-pref.getLong("last_signal",0)>90_000L){
+            pref.edit().putLong("last_signal",now).apply()
+            scanAsync(context)
+        }
+    }
     fun scanAsync(context:Context){
         thread(name="asterion-rounder-dispatch"){
             runCatching{scan(context.applicationContext)}
