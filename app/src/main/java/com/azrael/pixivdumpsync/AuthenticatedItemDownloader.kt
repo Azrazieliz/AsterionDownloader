@@ -17,6 +17,13 @@ object AuthenticatedItemDownloader {
     private const val PENDING="pending_item"
     private fun preferences(a:Activity)=a.getSharedPreferences(PREF,Activity.MODE_PRIVATE)
     fun download(a:Activity,item:IndexedItem){
+        if(item.area=="COMICS" && NhentaiChapters.isGallery(item.url)){
+            ChapterQueue(a).use{it.enqueue(item.url,item.title)}
+            ChapterArchives.start(a)
+            Toast.makeText(a,"Full gallery queued as chapter-order ZIP",
+                Toast.LENGTH_SHORT).show()
+            return
+        }
         Toast.makeText(a,"Resolving accessible original…",Toast.LENGTH_SHORT).show()
         thread(name="asterion-authenticated-original"){
             val found=runCatching{AuthorizedOriginalResolver.resolve(item.url,item.area)}
