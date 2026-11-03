@@ -34,14 +34,19 @@ object NduSettings {
     private val allowedDomains = setOf("www.terabox.com","nephobox.com")
 
     fun destination(ctx: Context, category: String): String {
-        require(category in setOf("kuroha","kyora","x","comics","videos"))
+        require(category in setOf("kuroha","kyora","x","comics","videos",
+            "books","games","assets","koikatsu","images","torrents","originals"))
         val key = when(category) {
             "kuroha"->KUROHA_DIR;"kyora"->KYORA_DIR
             else->category+"_dir"
         }
         val folder = when(category) {
             "kuroha"->"Kuroha";"kyora"->"Kyora"
-            "x"->"X";"comics"->"Comics";else->"Videos"
+            "x"->"X";"comics"->"Comics"
+            "videos"->"Videos";"books"->"Books";"games"->"Games"
+            "assets"->"Assets";"koikatsu"->"Koikatsu"
+            "images"->"Images";"torrents"->"Torrents"
+            else->"Originals"
         }
         val fallback="/Nocturne/$folder"
         return ctx.getSharedPreferences(PREF,0).getString(key,fallback) ?: fallback
