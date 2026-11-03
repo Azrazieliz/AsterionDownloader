@@ -25,6 +25,19 @@ object NocturneDesign {
     val secondary = Color.rgb(175, 193, 207)
     val subdued = Color.rgb(128, 153, 170)
     val danger = Color.rgb(255, 139, 150)
+    val pixivBlue = Color.rgb(100, 176, 249)
+    val xCyan = Color.rgb(165, 206, 225)
+    val cosplayRose = Color.rgb(238, 159, 198)
+    val gamesTeal = Color.rgb(121, 213, 196)
+    val booksGold = Color.rgb(234, 196, 137)
+    val assetsLilac = Color.rgb(187, 159, 245)
+    fun compact(context: Context): Boolean = context
+        .getSharedPreferences("asterion_display",0).getBoolean("compact",true)
+    fun largeCovers(context: Context): Boolean = context
+        .getSharedPreferences("asterion_display",0).getBoolean("large_covers",false)
+    fun showPreviews(context: Context): Boolean = context
+        .getSharedPreferences("asterion_display",0).getBoolean("previews",true)
+
 
     fun px(context: Context, dp: Int): Int =
         (dp * context.resources.displayMetrics.density).toInt()
@@ -59,9 +72,10 @@ object NocturneDesign {
     fun card(context: Context, padding: Int = 18): LinearLayout =
         LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(context, padding), px(context, padding),
-                px(context, padding), px(context, padding))
-            background = shape(context)
+            val inset=if(padding==18 && compact(context))14 else padding
+            setPadding(px(context,inset),px(context,inset),
+                px(context,inset),px(context,inset))
+            background = shape(context,surface,if(compact(context))17 else 22)
         }
 
     fun space(context: Context, dp: Int) = View(context).apply {
@@ -72,7 +86,7 @@ object NocturneDesign {
                onTap: () -> Unit): TextView = text(context, label, 14f,
         if (primaryAction) background else white, true).apply {
         gravity = Gravity.CENTER
-        minHeight = px(context, 51)
+        minHeight = px(context, 48)
         setPadding(px(context, 14), px(context, 10), px(context, 14), px(context, 10))
         background = touch(context, if (primaryAction) primary else raised, 15,
             if (primaryAction) primary else border)
