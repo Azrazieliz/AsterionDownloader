@@ -203,7 +203,7 @@ class AsterionHomeActivity:Activity(){
         contentDescription="$label. $subtitle"
         setOnClickListener{
             when(target){
-                "Pixiv"->startActivity(Intent(this@AsterionHomeActivity,MainActivity::class.java))
+                "Pixiv"->open("Pixiv")
                 "Kyora"->open("Site")
                 "Koikatsu"->startActivity(Intent(this@AsterionHomeActivity,KoikatsuCardActivity::class.java))
                 "Site"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java)
