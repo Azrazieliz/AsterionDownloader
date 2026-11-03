@@ -2,9 +2,11 @@ package com.asterion.videoflow
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import com.azrael.galleryflow.SiteSession
 import java.net.URI
 
-data class VideoHit(val title:String, val url:String)
+data class VideoHit(val title:String, val url:String, val preview:String?=null)
+data class VideoPage(val hits:List<VideoHit>,val next:String?)
 
 /** Exact-page discovery only. No keyword search, indexing, Tor, or source expansion. */
 object WebDiscovery {
@@ -39,8 +41,9 @@ object WebDiscovery {
     fun isVideoPage(address:String):Boolean =
         mediaFiles.containsMatchIn(address) || videoPaths.any { it.containsMatchIn(address) }
     private fun open(url:String):Document=Jsoup.connect(url)
-        .userAgent("Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
-        .timeout(18000).followRedirects(true).maxBodySize(2500000).get()
+        .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+        .timeout(18000).followRedirects(true).maxBodySize(2500000)
+        .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}.get()
     fun findOnPage(address:String,limit:Int=15):List<VideoHit> {
         require(isUrl(address)){"Invalid public HTTP(S) page"}
         val root=open(address)
@@ -59,6 +62,47 @@ object WebDiscovery {
             add(a.attr("abs:href"),a.attr("title").ifBlank{a.text()})
         }
         return found.values.take(limit.coerceIn(1,350))
+    }
+
+    /** One bounded source-page traversal. Caller saves 'next' before marking the page done. */
+    fun page(address:String,root:String):VideoPage {
+        require(isUrl(address)&&isUrl(root)){"Invalid source URL"}
+        val host=URI(root).host.lowercase().removePrefix("www.")
+        val target=URI(address).host.lowercase().removePrefix("www.")
+        require(target==host || target.endsWith(".$host")){"Source pagination crossed providers"}
+        val doc=open(address)
+        val actual=URI(doc.location())
+        val actualHost=actual.host.orEmpty().lowercase().removePrefix("www.")
+        require(actualHost==host || actualHost.endsWith(".$host")){"Unexpected source redirect"}
+        val found=linkedMapOf<String,VideoHit>()
+        for(a in doc.select("a[href]").take(1500)){
+            val url=normalize(a.absUrl("href"))?:continue
+            val uri=URI(url)
+            val linkHost=uri.host.lowercase().removePrefix("www.")
+            if(linkHost!=host && !linkHost.endsWith(".$host"))continue
+            if(!isVideoPage(url))continue
+            val title=a.attr("title").ifBlank{a.text()}
+                .ifBlank{a.selectFirst("img[alt]")?.attr("alt").orEmpty()}
+                .ifBlank{"Video"}.take(180)
+            val thumbnail=a.selectFirst("img")?.let{img->
+                listOf("data-src","data-original","src")
+                    .map{img.absUrl(it)}.firstOrNull{isUrl(it)}
+            }
+            found.putIfAbsent(url,VideoHit(title,url,thumbnail))
+            if(found.size>=350)break
+        }
+        val rootPath=URI(root).path.trimEnd('/')
+        val next=doc.selectFirst("a[rel=next][href],.pagination a.next[href],"+
+            "a.next[href],link[rel=next][href]")?.absUrl("href")
+            ?.let(::normalize)?.takeIf{candidate->
+                val u=URI(candidate)
+                val h=u.host.lowercase().removePrefix("www.")
+                (h==host || h.endsWith(".$host")) &&
+                    (rootPath.isEmpty() || u.path.startsWith(rootPath) ||
+                        u.query.orEmpty().contains("page=")) &&
+                    candidate!=address && candidate!=root
+            }
+        return VideoPage(found.values.toList(),next)
     }
 
     /** Extracts only original public-site MP4 links from the source page, not trailers. */
