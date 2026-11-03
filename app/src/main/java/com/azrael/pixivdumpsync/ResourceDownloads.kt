@@ -31,6 +31,15 @@ object ResourceDownloads {
     private fun note(c:Context,message:String)=
         Toast.makeText(c,message,Toast.LENGTH_LONG).show()
 
+    internal fun privacyReferer(download:String,origin:String):String?=runCatching{
+        if(!SearchRanking.validUrl(download)||!SearchRanking.validUrl(origin))return null
+        val d=URI(download)
+        val s=URI(origin)
+        if(d.scheme!="https"||s.scheme!="https")return null
+        val path=if(d.host.equals(s.host,true))s.path.orEmpty().ifBlank{"/"} else "/"
+        URI(s.scheme,null,s.host,s.port,path,null,null).toString()
+    }.getOrNull()
+
     private fun action(a:Activity,title:String,doIt:()->Unit):TextView=
         NocturneDesign.action(a,title,false,doIt)
 
@@ -208,8 +217,8 @@ object ResourceDownloads {
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
                     "AsterionDownloader/$folder/$file")
                 SiteSession.cookie(url)?.let{addRequestHeader("Cookie",it)}
-                if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer))
-                    addRequestHeader("Referer",referer)
+                if(!referer.isNullOrBlank())
+                    privacyReferer(url,referer)?.let{addRequestHeader("Referer",it)}
             }
             d.enqueue(request)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
