@@ -125,8 +125,8 @@ class SourceIndexDb(context:Context):
         val rows=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
-                FROM entries WHERE queued=0 AND kind IN ('video','epub','model')
-                    AND retry_after<=?
+                FROM entries WHERE queued=0 AND
+                    kind IN ('video','epub','model','archive','apk') AND retry_after<=?
                 ORDER BY discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,120).toString())).use{c->
@@ -201,6 +201,19 @@ internal object SourceIndexParser {
             listOf(".zip",".7z",".rar").any{path.endsWith(it)}->"archive"
             else->area.lowercase(Locale.ROOT)
         }
+    }
+    /** Exact original formats for auto-acquisition. Never pass page metadata or
+     * thumbnails to a generic download: native provider adapters resolve those.
+     * Books remain EPUB-only; comics remain ZIP-only; videos use VideoFlow.
+     */
+    internal fun autoOriginal(item:IndexedItem):Boolean=when(item.area){
+        "BOOKS"->item.kind=="epub"
+        "COMICS"->item.kind=="archive" &&
+            runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)
+        "GAMES"->item.kind in setOf("apk","archive")
+        "ASSETS"->item.kind in setOf("model","archive")
+        "VIDEOS","ADULT","HENTAI","CREATORS"->item.kind=="video"
+        else->false
     }
     private fun preview(link:Element):String?{
         val image=link.selectFirst("img")?:link.parent()?.selectFirst("img")?:return null
@@ -429,6 +442,7 @@ object SourceIndex {
             SourceIndexDb(context).use{db->
                 for(item in db.pendingDirect(30)){
                     if(stop() || !AppPower.enabled(context))break
+                    if(!SourceIndexParser.autoOriginal(item))continue
                     if(queueDirect(context,item))db.markQueued(item.url)
                     else db.defer(item.url)
                 }
@@ -496,8 +510,7 @@ object SourceIndex {
                 for(item in records){
                     if(db.upsert(item)){
                         fresh++
-                        if(item.kind in setOf("video","epub","model") &&
-                            (item.area!="BOOKS" || item.kind=="epub")){
+                        if(SourceIndexParser.autoOriginal(item)){
                             if(queueDirect(context,item))db.markQueued(item.url)
                             else db.defer(item.url)
                         }
@@ -528,11 +541,17 @@ object SourceIndex {
             // VideoFlow and must not be enqueued repeatedly by the source scanner.
             return queued || VideoDb(context).use{it.hasVideo(item.url)}
         }
-        val suffix=if(item.kind=="epub")".epub" else ".bin"
+        if(!SourceIndexParser.autoOriginal(item))return false
+        val suffix=when(item.kind){
+            "epub"->".epub";"apk"->".apk";"archive"->".zip";else->".bin"
+        }
         val filename=URI(item.url).path.substringAfterLast('/')
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
-            .ifBlank{"asset_"+System.currentTimeMillis()+suffix}
-        val folder=if(item.kind=="epub")"Books" else "Assets"
+            .ifBlank{"original_"+System.currentTimeMillis()+suffix}
+        val folder=when(item.area){
+            "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
+            else->"Assets"
+        }
         if(!CrossSourceDedup(context).use{it.reserve(item.url)})return false
         try{
             val manager=context.getSystemService(DownloadManager::class.java)
