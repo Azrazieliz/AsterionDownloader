@@ -85,10 +85,11 @@ object CreatorArchiveScheduler {
                     while(pages<PAGE_BUDGET && !completed && errors.isEmpty() &&
                         !shouldStop() && AppPower.enabled(context)){
                         val history=runCatching{CreatorArchives.posts(creator,cursor)}
-                        val page=history.getOrElse{
-                            errors+="Backfill: "+(it.message?:"source unavailable")
+                        if(history.isFailure){
+                            errors+="Backfill: "+(history.exceptionOrNull()?.message?:"source unavailable")
                             break
                         }
+                        val page=history.getOrThrow()
                         val outcome=CreatorArchiveDownloads.enqueue(context,page,40)
                         newlyQueued+=outcome.queued
                         deferred+=outcome.deferred
