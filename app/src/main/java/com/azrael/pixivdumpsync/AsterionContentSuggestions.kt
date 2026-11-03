@@ -10,11 +10,12 @@ import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import java.text.Normalizer
 import java.util.Locale
+import kotlin.concurrent.thread
 
 /** Local, explainable recommendations across every indexed module and saved video query. */
 object AsterionContentSuggestions {
     private val ui=NocturneDesign
-    private val areas=listOf("ALL","VIDEOS","BOOKS","COMICS","GAMES","ASSETS")
+    private val areas=listOf("ALL","VIDEOS","X","COSPLAY","KOIKATSU","BOOKS","COMICS","GAMES","ASSETS")
     data class Pick(val title:String,val url:String,val preview:String?,val area:String,
         val kind:String,val source:String,val reason:String,val relevance:Int)
     private val noise=setOf("the","and","for","with","from","video","videos",
@@ -38,8 +39,14 @@ object AsterionContentSuggestions {
         val creators=NameWatchDb(a).use{it.list().map{x->x.name}}
         val gallery=GalleryDb(a).use{it.listEntities().map{x->x.displayName}}
         val pixiv=AppDb(a).use{it.listArtists().mapNotNull{x->x.label}}
-        return (user+creators+gallery+pixiv).map{it.trim()}.filter{it.length>=3}
-            .distinct().take(80)
+        val chosen=CreatorNameDb(a).use{it.chosen(null,150)}
+        val x=XPhotoQueue(a).use{it.allSources().filter{source->source.enabled}
+            .map{source->source.handle}}
+        val koi=KoikatsuFollowDb(a).use{it.follows().filter{follow->follow.enabled}
+            .map{follow->follow.name}}
+        return (user+chosen+creators+gallery+pixiv+x+koi)
+            .map{it.trim().removePrefix("@")}.filter{it.length>=3}
+            .distinct().take(240)
     }
     fun picks(a:Activity,mode:String="ALL"):List<Pick>{
         val terms=following(a)
@@ -65,16 +72,62 @@ object AsterionContentSuggestions {
                         score+x.score.coerceIn(0,20))
                 }.toList()
             else emptyList()
-        val dedup=(sources+saved).distinctBy{SearchRanking.canonicalKey(it.url)}
+        val native=ArrayList<Pick>()
+        if(mode in setOf("ALL","X")){
+            val photos=XPhotoQueue(a).use{it.recent(260)}
+            val handles=XPhotoQueue(a).use{it.allSources().map{v->
+                v.handle.lowercase() to v
+            }.toMap()}
+            for(photo in photos.take(180)){
+                val handle=runCatching{Uri.parse(photo.source).pathSegments
+                    .firstOrNull().orEmpty().lowercase()}.getOrDefault("")
+                if(handle !in handles)continue
+                val (score,reason)=relevance(terms,handle)
+                if(score==0)continue
+                native+=Pick("@"+handle+" · latest X photo",photo.photo,photo.photo,
+                    "X","xphoto",photo.source,reason,score+12)
+            }
+        }
+        if(mode in setOf("ALL","COSPLAY")){
+            val entityMap=GalleryDb(a).use{it.listEntities()
+                .associateBy{entity->entity.displayName}}
+            val gallery=GalleryDb(a).use{it.latestSelectedGalleries(90)}
+            for((creator,item) in gallery){
+                val origin=entityMap[creator]?.canonicalUrl?:continue
+                val image=item.firstUrl?.takeIf{SearchRanking.validUrl(it)}?:continue
+                val (score,reason)=relevance(terms,creator+" "+item.title)
+                if(score==0)continue
+                native+=Pick(creator+" · "+item.title,origin,image,"COSPLAY",
+                    "gallery",origin,reason,score+8)
+            }
+        }
+        if(mode in setOf("ALL","KOIKATSU")){
+            KoikatsuFollowDb(a).use{db->
+                for(follow in db.follows().filter{it.enabled}.take(60)){
+                    for(card in db.cards(follow.name,12)){
+                        val (score,reason)=relevance(terms,follow.name+" "+card.name+
+                            " "+card.author)
+                        if(score==0)continue
+                        val preview=card.preview?:card.download
+                            .takeIf{card.source=="BepisDB"}
+                        native+=Pick(card.name,card.page,preview,"KOIKATSU",
+                            "koikatsu",card.source,reason,score+10)
+                    }
+                }
+            }
+        }
+        val dedup=(sources+saved+native).distinctBy{SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<Pick>{it.relevance}
                 .thenByDescending{it.preview!=null}.thenBy{it.title})
         // Diversify sources: no single source may overwhelm the recommendations.
         val seen=HashMap<String,Int>()
         return dedup.filter{item->
-            val key=item.source.substringBefore('/')
+            val host=runCatching{Uri.parse(item.source).host.orEmpty()}
+                .getOrDefault("").ifBlank{item.source}
+            val key=host+"|"+item.area
             val n=seen.getOrDefault(key,0)
-            if(n>=6)false else {seen[key]=n+1;true}
-        }.take(35)
+            if(n>=8)false else {seen[key]=n+1;true}
+        }.take(60)
     }
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
         val pref=a.getSharedPreferences("asterion_recommendations",0)
@@ -131,8 +184,25 @@ object AsterionContentSuggestions {
             .setMessage(item.reason+"\n"+item.area+" · "+item.kind)
             .setItems(arrayOf("Download accessible original","Open item page")){_,which->
                 if(which==1){
-                    a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(item.url)))
+                    a.startActivity(Intent(a,
+                        com.azrael.galleryflow.ProviderWebActivity::class.java)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                            if(item.kind=="xphoto")item.source else item.url))
                 }else when(item.kind){
+                    "xphoto"->{
+                        val handle=Uri.parse(item.source).pathSegments.firstOrNull()
+                        a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                            .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,handle))
+                    }
+                    "koikatsu"->{
+                        a.startActivity(Intent(a,KoikatsuCardActivity::class.java))
+                    }
+                    "gallery"->{
+                        a.startActivity(Intent(a,
+                            com.azrael.galleryflow.ProviderWebActivity::class.java)
+                            .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                                item.url))
+                    }
                     "video"->{
                         val added=VideoDb(a).use{it.addVideo(item.url,item.title)}
                         if(added)VideoEngine.launch(a,false)
