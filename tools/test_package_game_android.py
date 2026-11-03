@@ -45,6 +45,9 @@ def run():
         assert report["engine"]=="GODOT_PROJECT"
         assert "--export-debug" in report["build_command"]
         assert report["standalone_apk"] is False
+        assert Path(report["project"]).is_relative_to(root/"godot-out")
+        assert Path(report["project"]) != godot
+        assert (godot/"project.godot").read_text().startswith("[application]")
         unity=root/"unity-source"
         (unity/"Assets").mkdir(parents=True)
         (unity/"ProjectSettings").mkdir()
@@ -63,6 +66,9 @@ def run():
             "com.asterion.portable.unreal","Unreal",build=False)
         assert report["engine"]=="UNREAL_PROJECT"
         assert "BuildCookRun" in report["build_command"]
+        assert Path(report["project"]).is_relative_to(root/"unreal-out")
+        assert Path(report["project"]) != unreal
+        assert (unreal/"Game.uproject").read_text()=='{"FileVersion":3}'
         with ZipFile(root/"traversal.zip","w") as z:
             z.writestr("../bad.txt","unsafe")
             z.writestr("index.html","safe")
