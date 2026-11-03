@@ -42,7 +42,7 @@ class CreatorNameDb(context:Context):
         val restrict=if(category.isNullOrBlank()||category=="ALL")"" else
             "AND (category=? OR category='ALL')"
         val args=if(restrict.isEmpty()) arrayOf(needle+"%",limit.coerceIn(1,50).toString())
-            else arrayOf(needle+"%",category.uppercase(),limit.coerceIn(1,50).toString())
+            else arrayOf(needle+"%",category.orEmpty().uppercase(),limit.coerceIn(1,50).toString())
         readableDatabase.rawQuery(
             "SELECT label FROM names WHERE lower(label) LIKE ? $restrict "+
                 "ORDER BY chosen DESC,seen_at DESC LIMIT ?",args).use{c->
