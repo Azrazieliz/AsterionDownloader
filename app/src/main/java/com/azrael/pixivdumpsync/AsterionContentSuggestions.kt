@@ -76,7 +76,7 @@ object AsterionContentSuggestions {
             if(n>=6)false else {seen[key]=n+1;true}
         }.take(35)
     }
-    fun render(a:Activity,parent:LinearLayout){
+    fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
         val pref=a.getSharedPreferences("asterion_recommendations",0)
         val selected=pref.getString("content_filter","ALL").orEmpty().takeIf{it in areas}?:"ALL"
         val section=ui.card(a)
@@ -88,7 +88,7 @@ object AsterionContentSuggestions {
         for(area in areas){
             row.addView(ui.chip(a,area,area==selected){
                 pref.edit().putString("content_filter",area).apply()
-                a.recreate()
+                refresh()
             },LinearLayout.LayoutParams(-2,-2).apply{rightMargin=ui.px(a,7)})
         }
         section.addView(HorizontalScrollView(a).apply{
