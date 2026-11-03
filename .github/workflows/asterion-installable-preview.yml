@@ -24,7 +24,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Test and build installable preview
+      - name: Test and build installable preview (video backfill and comic ZIPs included)
         run: gradle testDebugUnitTest testPreviewUnitTest assemblePreview --stacktrace
       - name: Validate package, ZIP and checksum
         shell: bash
