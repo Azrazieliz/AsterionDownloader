@@ -57,6 +57,37 @@ object AsterionRecommendations {
     fun render(a:Activity,p:LinearLayout,refresh:()->Unit){
         p.addView(ui.text(a,"For You",23f,ui.white,true),ui.lp(a,14))
         AsterionContentSuggestions.render(a,p,refresh)
+        val discovery=ui.card(a)
+        discovery.addView(ui.text(a,"Cross-platform creator discovery",17f,ui.white,true))
+        discovery.addView(ui.text(a,
+            "Checks actual followed Pixiv, X, cosplay and creator-archive profiles. "+
+            "Follows official social links and one-hop link hubs across Japanese, "+
+            "Chinese, Korean and international platforms. Similar names alone "+
+            "are never treated as one identity.",
+            12f,ui.secondary),ui.lp(a,6))
+        val discoveryState=ui.text(a,"",12f,ui.secondary)
+        discovery.addView(ui.action(a,"CHECK FOLLOWED CREATORS & LINK HUBS",true){
+            if(!AppPower.enabled(a)){
+                discoveryState.text="Downloader is switched off"
+                return@action
+            }
+            discoveryState.text="Checking linked creator profiles…"
+            thread(name="asterion-cross-platform-discovery"){
+                val result=runCatching{
+                    CreatorLinkDiscovery.scan(a.applicationContext,
+                        profilesPerRun=12,hubsPerRun=6)
+                }
+                a.runOnUiThread {
+                    if(a.isDestroyed||a.isFinishing)return@runOnUiThread
+                    discoveryState.text=result.fold(
+                        {"Current discovery pass finished; unavailable profiles are retried."},
+                        {"Discovery could not run: "+(it.message?:"unknown error")})
+                    if(result.isSuccess)refresh()
+                }
+            }
+        },ui.lp(a,7))
+        discovery.addView(discoveryState,ui.lp(a,5))
+        p.addView(discovery,ui.lp(a,10))
         val crossPlatform=CrossPlatformCreatorDb(a).use{it.candidates(45)}
         if(crossPlatform.isNotEmpty()){
             val linked=ui.card(a)
