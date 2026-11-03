@@ -1,0 +1,88 @@
+package com.azrael.pixivdumpsync
+
+import com.azrael.galleryflow.SiteSession
+import org.jsoup.Jsoup
+import java.net.URI
+import java.util.Locale
+
+/** Extracts only ordinary download links exposed to the current authenticated session.
+ * Never fabricates subscriber access, unwraps DRM, or impersonates authorization.
+ */
+data class AccessibleOriginal(val url:String,val filename:String,val kind:String,
+    val referer:String)
+
+object AuthorizedOriginalResolver {
+    private val extensions=mapOf(
+        "epub" to setOf("epub"),
+        "video" to setOf("mp4","webm","m4v","mov"),
+        "image" to setOf("jpg","jpeg","png","webp","gif","avif"),
+        "model" to setOf("blend","fbx","obj","glb","gltf","stl","unitypackage"),
+        "archive" to setOf("zip","7z","rar"),
+        "game" to setOf("apk","torrent","zip","7z","rar")
+    )
+    internal fun mediaType(url:String):String {
+        val path=runCatching{URI(url).path.orEmpty().lowercase(Locale.ROOT)}.getOrDefault("")
+        val ext=path.substringAfterLast('.',missingDelimiterValue="")
+        return extensions.entries.firstOrNull{ext in it.value}?.key.orEmpty()
+    }
+    private fun kindAccepts(hint:String,kind:String):Boolean{
+        val type=hint.lowercase(Locale.ROOT)
+        return when(type){
+            "books","epub"->kind=="epub"
+            "video","adult","hentai","videos"->kind=="video"
+            "cosplay","artwork","images"->kind=="image"
+            "assets","model"->kind in setOf("model","archive")
+            "games","torrent"->kind in setOf("game","archive")
+            "comics"->kind=="archive"
+            else->kind.isNotBlank()
+        }
+    }
+    internal fun parse(html:String,page:String,hint:String):AccessibleOriginal?{
+        val doc=Jsoup.parse(html,page)
+        val candidates=LinkedHashMap<String,Pair<Int,String>>()
+        fun add(raw:String,weight:Int){
+            val normalized=runCatching{URI(page).resolve(raw.trim()).toString()}.getOrNull()
+                ?:return
+            if(!SearchRanking.validUrl(normalized))return
+            val type=mediaType(normalized)
+            if(!kindAccepts(hint,type))return
+            val path=URI(normalized).path.lowercase(Locale.ROOT)
+            if(listOf("trailer","sample","preview","thumbnail","sprite","avatar","poster")
+                    .any{it in path})return
+            candidates[normalized]=maxOf(candidates[normalized]?.first?:0,weight) to type
+        }
+        for(tag in doc.select("a[download][href],.download a[href],.attachment a[href],"+
+            "a[href*=download],a[href$=.epub],a[href$=.zip],a[href$=.apk],"+
+            "a[href$=.blend],a[href$=.fbx],a[href$=.mp4],a[href$=.webm]"))
+            add(tag.attr("href"),if(tag.hasAttr("download"))100 else 75)
+        for(tag in doc.select("video[src],video source[src],source[type^=video][src]"))
+            add(tag.attr("src"),90)
+        for(tag in doc.select("meta[property=og:video],meta[property=og:video:url],"+
+            "meta[itemprop=contentUrl]"))add(tag.attr("content"),70)
+        for(tag in doc.select("a[href]")){
+            val link=tag.attr("href")
+            if(mediaType(link).isNotBlank())add(link,40)
+        }
+        val best=candidates.maxByOrNull{it.value.first}?:return null
+        val path=URI(best.key).path.substringAfterLast('/')
+        val name=path.replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
+            .ifBlank{"original.bin"}
+        return AccessibleOriginal(best.key,name,best.value.second,page)
+    }
+    fun resolve(pageOrFile:String,hint:String):AccessibleOriginal {
+        require(SearchRanking.validUrl(pageOrFile)){"Invalid download source URL"}
+        val kind=mediaType(pageOrFile)
+        if(kindAccepts(hint,kind)){
+            val name=URI(pageOrFile).path.substringAfterLast('/').take(100)
+            return AccessibleOriginal(pageOrFile,name,kind,pageOrFile)
+        }
+        val request=Jsoup.connect(pageOrFile).timeout(17000).maxBodySize(3_000_000)
+            .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
+            .header("Accept","text/html,application/xhtml+xml")
+        SiteSession.cookie(pageOrFile)?.let{request.header("Cookie",it)}
+        val doc=request.get()
+        check(doc.location().startsWith("https://")){"Untrusted source redirect"}
+        return parse(doc.outerHtml(),doc.location(),hint)
+            ?:error("No downloadable original was exposed to this session")
+    }
+}
