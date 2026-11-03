@@ -657,6 +657,14 @@ object SourceIndex {
                 SourceIndexParser.sameSite(source.url,landing)){
                 "Source redirected outside its approved provider"
             }
+            // Only explicit social links in a real creator profile are candidates;
+            // never infer same identity from unrelated names or site listing cards.
+            if(source.area in setOf("CREATORS","ARTWORK","COSPLAY","ASSETS")){
+                val links=CrossPlatformProfileParser.linkedProfiles(doc,source.url)
+                if(links.isNotEmpty())CrossPlatformCreatorDb(context).use{
+                    it.observe(links)
+                }
+            }
             val records=SourceIndexParser.entries(doc,source.url,source.area,System.currentTimeMillis())
             SourceIndexDb(context).use{db->
                 for(item in records){
