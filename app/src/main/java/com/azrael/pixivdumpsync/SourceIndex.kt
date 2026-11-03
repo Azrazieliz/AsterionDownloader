@@ -238,7 +238,7 @@ object SourceIndex {
         if(!AppPower.enabled(context))return
         thread(name="asterion-source-index"){scan(context,area)}
     }
-    fun scan(context:Context,area:String?=null,stop:()->Boolean={}) {
+    fun scan(context:Context,area:String?=null,stop:()->Boolean={false}) {
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
         try {
             val pref=context.getSharedPreferences(STATE,0)
