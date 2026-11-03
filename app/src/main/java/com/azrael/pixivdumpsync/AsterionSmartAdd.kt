@@ -75,7 +75,8 @@ object AsterionSmartAdd {
                 address.substringBefore('?').endsWith(".torrent",true)
             Kind.ASSETS->{
                 val host=runCatching{URI(address).host.orEmpty().removePrefix("www.")}.getOrDefault("")
-                host=="db.bepis.moe" || host=="koikatsucards.com"
+                host=="db.bepis.moe" || host=="koikatsucards.com" ||
+                    CreatorArchives.parseCreatorUrl(address)!=null
             }
         }
         SourceIndex.enroll(a.applicationContext,address,area,
