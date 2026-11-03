@@ -340,15 +340,28 @@ object SourceIndex {
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
             .ifBlank{"asset_"+System.currentTimeMillis()+suffix}
         val folder=if(item.kind=="epub")"Books" else "Assets"
-        val manager=context.getSystemService(DownloadManager::class.java)
-        val req=DownloadManager.Request(Uri.parse(item.url)).apply{
-            setTitle(filename)
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
-                "AsterionDownloader/$folder/$filename")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            SiteSession.cookie(item.url)?.let{addRequestHeader("Cookie",it)}
+        if(!CrossSourceDedup(context).use{it.reserve(item.url)})return false
+        try{
+            val manager=context.getSystemService(DownloadManager::class.java)
+            val req=DownloadManager.Request(Uri.parse(item.url)).apply{
+                setTitle(filename)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                    "AsterionDownloader/$folder/$filename")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                SiteSession.cookie(item.url)?.let{addRequestHeader("Cookie",it)}
+                ResourceDownloads.privacyReferer(item.url,item.source)?.let{
+                    addRequestHeader("Referer",it)
+                }
+            }
+            val id=manager.enqueue(req)
+            CrossSourceDedup(context).use{it.attach(item.url,id)}
+            DirectDownloadTracker.record(context,id,filename,folder,item.url)
+            DirectDownloadRetry.remember(context,id,item.url,folder,filename,item.source)
+            id>0L
+        }catch(e:Exception){
+            CrossSourceDedup(context).use{it.release(item.url)}
+            throw e
         }
-        manager.enqueue(req)>0L
     }.getOrDefault(false)
     fun status(context:Context,area:String):List<IndexedSource> =
         SourceIndexDb(context).use{it.sources().filter{src->src.area==area}}
