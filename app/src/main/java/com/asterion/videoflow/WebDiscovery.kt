@@ -91,6 +91,21 @@ object WebDiscovery {
             found.putIfAbsent(url,VideoHit(title,url,thumbnail))
             if(found.size>=350)break
         }
+        // Some sites put the accessible video original only in a native HTML
+        // <video> element. Preserve the distinct page/source and thumbnail.
+        for(node in doc.select("main video[src],main video source[src],"+
+            "article video[src],article video source[src],"+
+            ".post video[src],.post video source[src]")){
+            val candidate=normalize(node.absUrl("src"))?:continue
+            if(!mediaFiles.containsMatchIn(candidate))continue
+            val video=node.closest("video")?:node
+            val title=node.closest("article")?.selectFirst("h1,h2,h3")?.text()
+                ?.takeIf{it.length>=3} ?: doc.title().takeIf{it.length>=3}
+                ?: "Video"
+            val poster=video.absUrl("poster").takeIf{isUrl(it)}
+            found.putIfAbsent(candidate,VideoHit(title.take(180),candidate,poster))
+            if(found.size>=350)break
+        }
         val rootPath=URI(root).path.trimEnd('/')
         val explicit=doc.selectFirst("a[rel=next][href],.pagination a.next[href],"+
             "a.next[href],link[rel=next][href]")?.absUrl("href")
