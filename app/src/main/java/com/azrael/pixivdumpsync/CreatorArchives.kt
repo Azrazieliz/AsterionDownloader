@@ -260,6 +260,20 @@ object CreatorArchiveDownloads {
                 if(active){skipped++;continue}
             }
             val kind=ArchiveContent.category(file,post)
+            if(kind==ArchiveSection.VIDEOS){
+                // Creator attachments must obey the same mandatory full-runtime
+                // policy as VideoFlow. DownloadManager alone cannot detect cuts.
+                val accepted=runCatching{
+                    com.asterion.videoflow.VideoDb(context).use { videoDb ->
+                        val added=videoDb.addVideo(file.url,
+                            post.title+" · "+file.title,0L)
+                        if(added)com.asterion.videoflow.VideoEngine.launch(context,false)
+                        added || videoDb.hasVideo(file.url)
+                    }
+                }.getOrDefault(false)
+                if(accepted){queued++} else failed++
+                continue
+            }
             val folder="AsterionDownloader/"+kind.folder+"/"+post.creator.host.name.lowercase(Locale.ROOT)+"/"+post.creator.service+"/"+post.creator.id
             val name="${post.id}_${index+1}_${filename(file.title)}"
             try{
