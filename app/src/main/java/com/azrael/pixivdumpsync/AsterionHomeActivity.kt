@@ -141,7 +141,13 @@ class AsterionHomeActivity:Activity(){
         }
         render()
     }
-    override fun onResume(){super.onResume();if(::body.isInitialized)render()}
+    override fun onResume(){
+        super.onResume()
+        if(::body.isInitialized){
+            render()
+            AuthenticatedItemDownloader.resumeIfConnected(this)
+        }
+    }
     @Suppress("DEPRECATION")
     override fun onBackPressed(){
         if(page!="Home")open("Home") else super.onBackPressed()
