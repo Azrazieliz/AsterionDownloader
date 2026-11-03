@@ -14,7 +14,7 @@ object ChapterScraper {
     // Avoid repeating a guaranteed-to-fail non-browser request for every chapter.
     private val browserOnlyUntil=java.util.concurrent.ConcurrentHashMap<String,Long>()
     private val chapterNumber=Regex(
-        "(?i)(?:chapter|chapitre|episode|ch[.-]?|ep[.-]?)[\\s_/-]*(\\d+(?:[._]\\d+)?)"
+        "(?i)(?:chapter|chapitre|episode|volume|vol[.-]?|ch[.-]?|ep[.-]?)[\\s_/-]*(\\d+(?:[._]\\d+)?)"
     )
     private val pathChapter=Regex("(?i)/(?:chapter|chapitre|chap|ch|episode)[-_]?(\\d+(?:[._]\\d+)?)")
     private fun numberFrom(text:String):Double? =
