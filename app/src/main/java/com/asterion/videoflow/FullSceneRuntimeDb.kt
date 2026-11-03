@@ -40,7 +40,7 @@ class FullSceneRuntimeDb(context:Context):
     }
     fun expected(title:String):Long? {
         val key=FullLengthVideoPolicy.sceneKey(title)
-        if(key.length<12 || key.split(' ').size<3)return null
+        if(key.length<12 || (!key.startsWith("release:") && key.split(' ').size<3))return null
         val official=readableDatabase.rawQuery(
             "SELECT seconds FROM reference_runtime WHERE scene_key=? AND verified=1",
             arrayOf(key)).use{c->if(c.moveToFirst())c.getLong(0) else null}
@@ -60,7 +60,7 @@ class FullSceneRuntimeDb(context:Context):
         // full-release hosts can serve as comparison references.
         if(duration<=0L)return false
         val key=FullLengthVideoPolicy.sceneKey(title)
-        if(key.length<12 || key.split(' ').size<3)return false
+        if(key.length<12 || (!key.startsWith("release:") && key.split(' ').size<3))return false
         val source=url.take(500)
         val prior=readableDatabase.rawQuery(
             "SELECT seconds FROM observed_runtime WHERE scene_key=? AND source=?",
