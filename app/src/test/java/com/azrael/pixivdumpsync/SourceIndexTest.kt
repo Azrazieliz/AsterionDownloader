@@ -111,6 +111,26 @@ class SourceIndexTest {
         assertTrue(SourceIndexParser.entries(doc,"https://example.org/","BOOKS",100L).isEmpty())
     }
 
+    @Test fun postDetailResolvesOnlyAccessibleOriginalFormats(){
+        val doc=Jsoup.parse("""<html><main><article>
+            <a href="https://cdn.example.org/files/story.epub">Download EPUB</a>
+            <a href="/media/sample.mp4">Teaser</a>
+            <a href="/files/chapter.zip">Chapter ZIP</a>
+            <a href="/files/chapter.cbz">CBZ</a>
+            <img src="/media/thumb.jpg">
+        </article></main></html>""","https://example.org/post/100")
+        fun source(area:String)=IndexedItem("https://example.org/post/100",
+            "Series 100",null,"https://example.org/",area,area.lowercase(),10L,false)
+        val book=SourceIndexParser.detailOriginals(doc,source("BOOKS"),100L)
+        assertEquals(listOf("https://cdn.example.org/files/story.epub"),
+            book.map{it.url})
+        val comic=SourceIndexParser.detailOriginals(doc,source("COMICS"),100L)
+        assertEquals(listOf("https://example.org/files/chapter.zip"),
+            comic.map{it.url})
+        val video=SourceIndexParser.detailOriginals(doc,source("VIDEOS"),100L)
+        assertTrue(video.isEmpty())
+    }
+
     @Test fun autoAcquisitionKeepsEpubOnlyAndComicZipsOnly(){
         fun eligible(area:String,kind:String,filename:String):Boolean =
             SourceIndexParser.autoOriginal(IndexedItem(
