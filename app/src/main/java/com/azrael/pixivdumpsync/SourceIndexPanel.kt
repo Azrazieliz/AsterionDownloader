@@ -67,24 +67,42 @@ object SourceIndexPanel {
     }
     private fun details(a:Activity,item:IndexedItem){
         val host=runCatching{Uri.parse(item.source).host.orEmpty()}.getOrDefault("")
-        val canDownload=item.kind in setOf("video","epub","model","apk","archive","image")
-        val options=if(canDownload)
-            arrayOf("Download original","Open this item explicitly","Sign in to provider")
-        else arrayOf("Open this item explicitly","Sign in to provider")
         AlertDialog.Builder(a).setTitle(item.title)
             .setMessage(host+" · "+item.kind+
                 if(item.queued)"\nOriginal queued" else "\nIndexed metadata; not downloaded")
-            .setItems(options){_,i->
-                when(if(canDownload)i else i+1){
-                    0->when(item.kind){
-                        "video"->{
-                            val added=VideoDb(a).use{it.addVideo(item.url,item.title)}
-                            if(added)VideoEngine.launch(a,false)
+            .setItems(arrayOf("DOWNLOAD ACCESSIBLE ORIGINAL",
+                "OPEN ITEM PAGE","SIGN IN TO PROVIDER")){_,i->
+                when(i){
+                    0->{
+                        Toast.makeText(a,"Checking original access…",Toast.LENGTH_SHORT).show()
+                        thread(name="asterion-original-resolver"){
+                            val result=runCatching{
+                                AuthorizedOriginalResolver.resolve(item.url,item.area)
+                            }
+                            a.runOnUiThread{
+                                if(a.isFinishing||a.isDestroyed)return@runOnUiThread
+                                result.onSuccess{file->
+                                    val folder=when(file.kind){
+                                        "video"->"Videos";"epub"->"Books"
+                                        "model"->"Assets";"archive"->if(item.area=="COMICS")
+                                            "Comics" else "Assets"
+                                        "game"->"Games";else->"Images"
+                                    }
+                                    if(file.kind=="video"){
+                                        val added=VideoDb(a).use{
+                                            it.addVideo(file.url,item.title)
+                                        }
+                                        if(added)VideoEngine.launch(a,false)
+                                    }else if(file.kind=="game"){
+                                        ResourceDownloads.route(a,file.url,folder)
+                                    }else ResourceDownloads.downloadFile(a,file.url,folder,
+                                        file.filename,file.referer)
+                                }.onFailure{
+                                    Toast.makeText(a,"Original unavailable: "+it.message,
+                                        Toast.LENGTH_LONG).show()
+                                }
+                            }
                         }
-                        "epub"->ResourceDownloads.downloadFile(a,item.url,"Books",
-                            item.url.substringBefore('?').substringAfterLast('/'))
-                        "model","archive","apk","image"->ResourceDownloads.route(a,item.url,
-                            if(item.kind=="image")"Images" else "Assets")
                     }
                     1->a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(item.url)))
                     2->a.startActivity(Intent(a,SiteLoginActivity::class.java)
