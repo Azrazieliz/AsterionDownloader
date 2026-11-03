@@ -132,6 +132,9 @@ class SourceIndexDb(context:Context):
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
                         url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
                     OR (kind='model' AND area='ASSETS')
+                    OR (kind='comics' AND area='COMICS' AND
+                        (url LIKE 'https://nhentai.net/g/%' OR
+                         url LIKE 'https://nhentai.xxx/g/%'))
                     OR (kind='archive' AND area IN ('COMICS','GAMES','ASSETS'))
                     OR (kind='apk' AND area='GAMES')
                 )
@@ -217,8 +220,9 @@ internal object SourceIndexParser {
     internal fun autoOriginal(item:IndexedItem):Boolean=when(item.area){
         "BOOKS"->item.kind=="epub" ||
             (item.kind=="books" && NovelEpubParser.supportedSeries(item.url))
-        "COMICS"->item.kind=="archive" &&
-            runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)
+        "COMICS"->(item.kind=="archive" &&
+            runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)) ||
+            (item.kind=="comics" && NhentaiChapters.isGallery(item.url))
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
         "VIDEOS","ADULT","HENTAI","CREATORS"->item.kind=="video"
@@ -551,6 +555,11 @@ object SourceIndex {
             return queued || VideoDb(context).use{it.hasVideo(item.url)}
         }
         if(!SourceIndexParser.autoOriginal(item))return false
+        if(item.area=="COMICS" && NhentaiChapters.isGallery(item.url)){
+            ChapterQueue(context).use{it.enqueue(item.url,item.title)}
+            ChapterArchives.start(context)
+            return true
+        }
         if(item.area=="BOOKS" && item.kind=="books"){
             NovelEpubService.enqueue(context,item.url,item.title)
             return true
