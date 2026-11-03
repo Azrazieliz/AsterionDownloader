@@ -121,10 +121,20 @@ internal object SourceIndexParser {
             !uri.host.isNullOrBlank() && !uri.host.contains(":") &&
             !uri.host.endsWith(".internal",true) && uri.userInfo==null
     }.getOrDefault(false)
-    private fun sameSite(a:String,b:String):Boolean{
-        val x=runCatching{URI(a).host.lowercase().removePrefix("www.")}.getOrDefault("")
-        val y=runCatching{URI(b).host.lowercase().removePrefix("www.")}.getOrDefault("")
-        return x.isNotEmpty() && (x==y || x.endsWith("."+y) || y.endsWith("."+x))
+    /** Allow common www/mobile/locale redirects without sending cookies to a foreign site. */
+    private fun host(url:String):String=runCatching{
+        var name=URI(url).host.lowercase(Locale.ROOT)
+        while(listOf("www.","m.","fr.","en.").any{name.startsWith(it)}){
+            name=listOf("www.","m.","fr.","en.").firstOrNull{name.startsWith(it)}
+                ?.let{name.removePrefix(it)}?:name
+        }
+        name
+    }.getOrDefault("")
+    internal fun sameSite(a:String,b:String):Boolean{
+        val x=host(a)
+        val y=host(b)
+        return x.isNotBlank() && y.isNotBlank() &&
+            (x==y || x.endsWith("."+y) || y.endsWith("."+x))
     }
     internal fun kind(url:String,area:String):String {
         val path=runCatching{URI(url).path.lowercase()}.getOrDefault("")
@@ -327,6 +337,41 @@ object SourceIndex {
             }
         }finally{busy.set(false)}
     }
+    /** Follow only validated same-site redirects, re-evaluating the cookie vault for
+     * each destination instead of forwarding a manually supplied Cookie off-site.
+     */
+    private fun fetchPage(source:IndexedSource,address:String):Document{
+        var current=address
+        repeat(4){
+            require(SourceIndexParser.safe(current) &&
+                SourceIndexParser.sameSite(source.url,current)){
+                "Source redirected outside its approved provider domain"
+            }
+            val response=Jsoup.connect(current).timeout(16000).maxBodySize(3_000_000)
+                .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
+                .header("Accept","text/html,application/xhtml+xml")
+                .followRedirects(false).ignoreHttpErrors(true)
+                .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                .execute()
+            if(response.statusCode() in 300..399){
+                val location=response.header("Location")
+                    ?.takeIf{it.isNotBlank()}
+                    ?:error("Redirect omitted its destination")
+                val next=URI(current).resolve(location).toString()
+                require(SourceIndexParser.safe(next) &&
+                    SourceIndexParser.sameSite(source.url,next)){
+                    "Provider redirected to an untrusted host"
+                }
+                current=next
+            }else{
+                require(response.statusCode() in 200..299){
+                    "Provider HTTP "+response.statusCode()+"; account or source unavailable"
+                }
+                return response.parse()
+            }
+        }
+        error("Provider exceeded safe redirect limit")
+    }
     private fun scanOne(context:Context,source:IndexedSource){
         var cursor=source.cursor
         var fresh=0
@@ -334,7 +379,7 @@ object SourceIndex {
         pages+=source.url
         val saved=source.cursor?.takeIf{
             it!=source.url && SourceIndexParser.safe(it) &&
-                URI(it).host.equals(URI(source.url).host,true)
+                SourceIndexParser.sameSite(source.url,it)
         }
         if(saved!=null)pages+=saved
         var index=0
@@ -342,15 +387,11 @@ object SourceIndex {
         while(index<pages.size && index<4){
             val address=pages[index++]
             if(!visited.add(address))continue
-            val doc=Jsoup.connect(address).timeout(16000).maxBodySize(3_000_000)
-                .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
-                .header("Accept","text/html,application/xhtml+xml")
-                .apply{SiteSession.cookie(address)?.let{header("Cookie",it)}}
-                .get()
+            val doc=fetchPage(source,address)
             val landing=doc.location()
             require(SourceIndexParser.safe(landing) &&
-                URI(landing).host.equals(URI(source.url).host,true)){
-                "Source redirected to another host; sign in through its account panel"
+                SourceIndexParser.sameSite(source.url,landing)){
+                "Source redirected outside its approved provider"
             }
             val records=SourceIndexParser.entries(doc,source.url,source.area,System.currentTimeMillis())
             SourceIndexDb(context).use{db->
