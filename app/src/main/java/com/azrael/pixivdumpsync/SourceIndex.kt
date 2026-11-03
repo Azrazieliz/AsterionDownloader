@@ -65,6 +65,14 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
     }
+    /** A failed page must never roll back the last successful backfill cursor/count. */
+    fun failure(url:String,reason:String){
+        val v=ContentValues().apply{
+            put("error",reason.take(280))
+            put("last_check",System.currentTimeMillis())
+        }
+        writableDatabase.update("sources",v,"url=?",arrayOf(url))
+    }
     fun sources():List<IndexedSource>{
         val out=ArrayList<IndexedSource>()
         readableDatabase.rawQuery("""SELECT url,name,area,enabled,cursor,last_check,error,
@@ -163,10 +171,39 @@ internal object SourceIndexParser {
         }
         return out.values.toList()
     }
-    internal fun next(doc:Document,base:String):String? {
-        val value=doc.selectFirst("a[rel=next][href],link[rel=next][href],"+
-            "a.next[href],.pagination a.next[href]")?.absUrl("href")
-        return value?.takeIf{safe(it)&&sameSite(it,base)&&it!=base}
+    /** Pagination is recognized only inside navigation controls. Numeric post IDs are
+     * never treated as pages, even when their anchor text happens to be a number.
+     */
+    private fun pageNumber(url:String):Int? {
+        val uri=runCatching{URI(url)}.getOrNull()?:return null
+        for(pair in uri.rawQuery.orEmpty().split('&')){
+            val key=pair.substringBefore('=').lowercase(Locale.ROOT)
+            if(key in setOf("page","paged","pagenum","page_num")){
+                val value=pair.substringAfter('=',"").toIntOrNull()
+                if(value!=null && value>0)return value
+            }
+        }
+        val path=uri.path.orEmpty()
+        return Regex("(?i)(?:^|/)(?:page|paged)/([0-9]+)(?:/|$)")
+            .find(path)?.groupValues?.get(1)?.toIntOrNull()
+    }
+    internal fun next(doc:Document,base:String,current:String=doc.location()):String? {
+        val explicit=doc.select("a[rel=next][href],link[rel=next][href],"+
+            "a.next[href],.pagination a.next[href],"+
+            "a[aria-label=Next][href],a[aria-label='Next page'][href]")
+        for(anchor in explicit){
+            val link=anchor.absUrl("href").substringBefore('#')
+            if(safe(link)&&sameSite(link,base)&&link!=current)return link
+        }
+        val expected=(pageNumber(current)?:1)+1
+        val controls=doc.select(".pagination a[href],.pager a[href],"+
+            "nav[aria-label*=Pagination] a[href],a.page-numbers[href]")
+        for(anchor in controls){
+            val link=anchor.absUrl("href").substringBefore('#')
+            if(safe(link) && sameSite(link,base) && link!=current &&
+                pageNumber(link)==expected)return link
+        }
+        return null
     }
 }
 
@@ -249,7 +286,7 @@ object SourceIndex {
             }?:return@thread
             runCatching{scanOne(context,source)}.onFailure{
                 SourceIndexDb(context).use{db->
-                    db.update(address,source.cursor,it.message,source.discovered)
+                    db.failure(address,it.message?:"Source unavailable")
                 }
             }
         }
@@ -270,7 +307,7 @@ object SourceIndex {
                 if(stop()||!AppPower.enabled(context))break
                 runCatching{scanOne(context,source)}.onFailure{
                     SourceIndexDb(context).use{db->
-                        db.update(source.url,source.cursor,it.message?:"Source unavailable",source.discovered)
+                        db.failure(source.url,it.message?:"Source unavailable")
                     }
                 }
             }
@@ -287,7 +324,10 @@ object SourceIndex {
         var fresh=0
         val pages=ArrayList<String>()
         pages+=source.url
-        val saved=source.cursor?.takeIf{it!=source.url && SourceIndexParser.safe(it)}
+        val saved=source.cursor?.takeIf{
+            it!=source.url && SourceIndexParser.safe(it) &&
+                URI(it).host.equals(URI(source.url).host,true)
+        }
         if(saved!=null)pages+=saved
         var index=0
         val visited=HashSet<String>()
@@ -315,17 +355,19 @@ object SourceIndex {
                     }
                 }
             }
-            val next=SourceIndexParser.next(doc,source.url)
+            val next=SourceIndexParser.next(doc,source.url,address)
             if(index==1 && saved==null && next!=null && next !in visited)
                 pages+=next
             else if(index>1 && next!=null && next !in visited)
                 pages+=next
-            cursor=next
-            if(records.isEmpty() && fresh==0 && index==1)
+            if(records.isEmpty() && fresh==0 && index==1 && saved==null)
                 throw IllegalStateException("No supported originals found; dedicated adapter or login required")
-        }
-        SourceIndexDb(context).use{db->
-            db.update(source.url,cursor,null,source.discovered+fresh)
+            // Persist each successful page before the next request. A network failure
+            // on the following page must resume here instead of restarting history.
+            cursor=if(index==1 && saved!=null)saved else next
+            SourceIndexDb(context).use{db->
+                db.update(source.url,cursor,null,source.discovered+fresh)
+            }
         }
     }
     private fun queueDirect(context:Context,item:IndexedItem):Boolean=runCatching{
