@@ -1,0 +1,101 @@
+name: Build independent Android game port (GitHub only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_archive:
+        description: "Repository path to a complete game ZIP under game-ports/inbox/"
+        required: true
+        type: string
+      package_id:
+        description: "Unique Android application ID, e.g. com.asterion.portable.mygame"
+        required: true
+        type: string
+      game_title:
+        description: "Android game display title"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Validate input archive scope
+        shell: bash
+        env:
+          INPUT_PATH: ${{ inputs.source_archive }}
+          ANDROID_PACKAGE: ${{ inputs.package_id }}
+          GAME_TITLE: ${{ inputs.game_title }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, re, zipfile
+          root=pathlib.Path.cwd().resolve()
+          raw=os.environ["INPUT_PATH"]
+          archive=(root/raw).resolve()
+          allowed=(root/"game-ports"/"inbox").resolve()
+          if not archive.is_relative_to(allowed) or archive.suffix.lower()!=".zip":
+              raise SystemExit("Game source must be a repository ZIP in game-ports/inbox/")
+          if not archive.is_file():
+              raise SystemExit("Game source archive does not exist in this GitHub checkout")
+          if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+",os.environ["ANDROID_PACKAGE"]):
+              raise SystemExit("Invalid Android package identifier")
+          if not 1<=len(os.environ["GAME_TITLE"])<=65:
+              raise SystemExit("Game title must have 1-65 characters")
+          if archive.stat().st_size>2_000_000_000:
+              raise SystemExit("Game source archive exceeds the supported size")
+          with zipfile.ZipFile(archive) as z:
+              bad=z.testzip()
+              if bad:raise SystemExit("Corrupt archive member: "+bad)
+          with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as env:
+              env.write("ASTERION_GAME_SOURCE="+str(archive)+"\n")
+          PY
+      - name: Export game as standalone Android APK
+        env:
+          ANDROID_PACKAGE: ${{ inputs.package_id }}
+          GAME_TITLE: ${{ inputs.game_title }}
+        run: |
+          set -euo pipefail
+          python tools/package_game_android.py \
+            --input "$ASTERION_GAME_SOURCE" \
+            --out "$RUNNER_TEMP/asterion-game-port" \
+            --package "$ANDROID_PACKAGE" \
+            --label "$GAME_TITLE" \
+            --gradle gradle
+          python - <<'PY'
+          import json,os,pathlib
+          report=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"asterion-game-port"/"port-report.json").read_text())
+          if not report.get("standalone_apk"):
+              raise SystemExit("No standalone Android APK produced: "+str(report.get("runtime")))
+          apk=pathlib.Path(report["apk"])
+          if not apk.is_file() or apk.stat().st_size<1000:
+              raise SystemExit("Android APK missing or empty")
+          with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as env:
+              env.write("ASTERION_GAME_APK="+str(apk)+"\n")
+          PY
+      - name: Verify APK package and integrity
+        env:
+          ANDROID_PACKAGE: ${{ inputs.package_id }}
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$ASTERION_GAME_APK" | grep -F "package: name='$ANDROID_PACKAGE'"
+          unzip -t "$ASTERION_GAME_APK" >/dev/null
+          sha256sum "$ASTERION_GAME_APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Independent-Android-Game-Port
+          path: ${{ runner.temp }}/asterion-game-port/*-standalone.apk
+          if-no-files-found: error
+          retention-days: 14
