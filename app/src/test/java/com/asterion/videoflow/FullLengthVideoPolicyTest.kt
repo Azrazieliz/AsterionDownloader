@@ -77,4 +77,9 @@ class FullLengthVideoPolicyTest {
         assertNotEquals(FullLengthVideoPolicy.sceneKey("ABP-123"),FullLengthVideoPolicy.sceneKey("ABP-124"))
     }
 
+    @Test fun genericEpisodeNumbersAreNotMistakenForUniqueReleaseIds(){
+        assertNotEquals(FullLengthVideoPolicy.sceneKey("Series Alpha episode 50"),
+            FullLengthVideoPolicy.sceneKey("Series Beta episode 50"))
+    }
+
 }
