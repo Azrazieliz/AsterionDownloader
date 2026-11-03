@@ -229,7 +229,13 @@ class NovelEpubJob:JobService(){
         stopped.set(false)
         thread(name="asterion-novel-epub"){
             try{NovelEpubService.run(applicationContext){stopped.get()}}
-            finally{jobFinished(params,false)}
+            finally{
+                jobFinished(params,false)
+                if(!stopped.get() && AppPower.enabled(applicationContext)){
+                    val more=NovelEpubQueue(applicationContext).use{it.hasDue()}
+                    if(more)NovelEpubService.schedule(applicationContext)
+                }
+            }
         }
         return true
     }
