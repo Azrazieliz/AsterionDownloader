@@ -72,10 +72,23 @@ object SourceIndexPanel {
             .setMessage(host+" · "+item.kind+
                 if(item.queued)"\nOriginal queued" else "\nIndexed metadata; not downloaded")
             .setItems(arrayOf("DOWNLOAD ACCESSIBLE ORIGINAL",
-                "OPEN ITEM PAGE","SIGN IN TO PROVIDER")){_,i->
+                "VIEW IN APP (SESSION)","SIGN IN TO PROVIDER")){_,i->
                 when(i){
                     0->AuthenticatedItemDownloader.download(a,item)
-                    1->a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(item.url)))
+                    1->a.startActivity(Intent(a,
+                        com.azrael.galleryflow.ProviderWebActivity::class.java)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,
+                            when(item.area){
+                                "ADULT","HENTAI","VIDEOS","CREATORS"->"Videos"
+                                "ARTWORK"->"Artwork"
+                                "COSPLAY"->"Cosplay"
+                                "BOOKS"->"Books"
+                                "COMICS"->"Comics"
+                                "GAMES"->"Games"
+                                "ASSETS"->"Assets"
+                                else->"References"
+                            }))
                     2->a.startActivity(Intent(a,SiteLoginActivity::class.java)
                         .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
                 }
