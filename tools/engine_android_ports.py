@@ -71,7 +71,20 @@ def prepare(source,output,engine,package_id,label,godot_editor=None,
     out=Path(output).resolve()
     out.mkdir(parents=True,exist_ok=True)
     source=Path(source).resolve()
-    # Never modify an existing Unity source tree. Other editors only read project files.
+    # Engine editors write imports/caches during builds. Never point Godot or UAT
+    # at the original project: stage a separate project first, just like Unity.
+    if engine in ("GODOT_PROJECT","UNREAL_PROJECT"):
+        root=project_root(source,engine)
+        if not root.is_relative_to(out):
+            stage=out/("godot-android-copy" if engine=="GODOT_PROJECT"
+                       else "unreal-android-copy")
+            if stage.exists():raise ValueError("Native staging exists; no overwrite")
+            ignored=("Library","Temp","Logs","obj",".git",".gradle",".godot",
+                     "DerivedDataCache","Intermediate","Saved","Binaries")
+            shutil.copytree(root,stage,ignore=shutil.ignore_patterns(*ignored))
+            source=stage
+        else:
+            source=root
     if engine=="UNITY_PROJECT":
         project_dir=out/"unity-android-copy"
         if project_dir.exists():raise ValueError("Unity staging already exists; no overwrite")
