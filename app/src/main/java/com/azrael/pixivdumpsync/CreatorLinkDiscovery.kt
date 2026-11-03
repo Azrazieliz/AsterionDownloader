@@ -142,6 +142,38 @@ internal object CreatorLinkDiscovery {
                 }
                 pref.edit().putInt("cursor",(start+checked)%profiles.size).apply()
             }
+            // One further public-profile hop: check the destination's own
+            // declared social links and identify reciprocal references.
+            // This extends coverage without using display-name similarity
+            // as identity evidence or crawling unrelated recommendations.
+            val linked=CrossPlatformCreatorDb(context).use{
+                it.discoverableProfiles(1200)
+            }
+            var expanded=0
+            for(candidate in linked){
+                if(expanded>=3||stop()||!AppPower.enabled(context))break
+                val key="linked_"+candidate.url.hashCode()
+                if(now-pref.getLong(key,0)<DAY)continue
+                expanded++
+                runCatching{
+                    val outgoing=CrossPlatformProfileParser.linkedProfiles(
+                        publicPage(candidate.url),candidate.url)
+                    val reciprocal=outgoing.any{it.url==candidate.source}
+                    val records=if(reciprocal)outgoing+candidate.copy(
+                        evidence="Reciprocal creator profile links: "+
+                            candidate.source+" and "+candidate.url)
+                        else outgoing
+                    if(records.isNotEmpty())CrossPlatformCreatorDb(context).use{
+                        it.observe(records)
+                    }
+                }.onSuccess{
+                    pref.edit().putLong(key,now).remove("error_"+key).apply()
+                }.onFailure{e->
+                    pref.edit().putLong(key,now-(DAY-2L*60L*60_000L))
+                        .putString("error_"+key,(e.message?:"Unavailable").take(180))
+                        .apply()
+                }
+            }
             val hubs=CrossPlatformCreatorDb(context).use{it.hubs(2000)}
             var inspectedHubs=0
             for(hub in hubs){
