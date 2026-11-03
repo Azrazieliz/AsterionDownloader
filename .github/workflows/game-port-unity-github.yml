@@ -70,6 +70,7 @@ jobs:
           test -s "$ROOT/$SOURCE_ASSET"
           echo "ASTERION_UNITY_SOURCE=$ROOT/$SOURCE_ASSET" >> "$GITHUB_ENV"
       - name: Stage complete Unity project without mutating original
+        id: stage
         env:
           SOURCE_ARCHIVE: ${{ inputs.source_archive }}
           PACKAGE_ID: ${{ inputs.package_id }}
@@ -114,6 +115,9 @@ jobs:
           if not (root/"Assets/Editor/AsterionAndroidBuild.cs").exists():
               raise SystemExit("Staged Unity native Android build method is missing")
           (pathlib.Path("unity-port-output")).mkdir(exist_ok=True)
+          import os
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as fp:
+              fp.write("project_path="+str(root.resolve().relative_to(pathlib.Path.cwd()))+"\\n")
           PY
       - uses: game-ci/unity-builder@v4
         name: Compile Unity Android APK with licensed editor
@@ -126,7 +130,7 @@ jobs:
           ASTERION_ANDROID_LABEL: ${{ inputs.game_title }}
           ASTERION_ANDROID_OUTPUT: ${{ github.workspace }}/unity-port-output/unity-standalone.apk
         with:
-          projectPath: .asterion-unity-port/unity-android-copy
+          projectPath: ${{ steps.stage.outputs.project_path }}
           targetPlatform: Android
           buildMethod: Asterion.AndroidBuild.Build
       - name: Verify real APK package and checksum
