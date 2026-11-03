@@ -55,6 +55,23 @@ object SourceIndexPanel {
             showStatus(a,areas,label)
         },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
         card.addView(toolbar,ui.lp(a,9))
+        if("BOOKS" in areas){
+            val epub=NovelEpubQueue(a).use{it.snapshot()}
+            card.addView(ui.text(a,"EPUB collections · "+epub.complete+
+                " completed · "+epub.active+" active · "+epub.pending+
+                " scheduled",12f,ui.secondary),ui.lp(a,7))
+            if(epub.pending>0){
+                card.addView(ui.action(a,"RESUME EPUB COLLECTIONS",false){
+                    NovelEpubService.schedule(a)
+                    Toast.makeText(a,"EPUB queue scheduled",
+                        Toast.LENGTH_SHORT).show()
+                },ui.lp(a,6))
+            }
+            epub.lastError?.let{message->
+                card.addView(ui.text(a,"Last EPUB error: "+message.take(160),
+                    11f,ui.secondary),ui.lp(a,5))
+            }
+        }
         if(items.isNotEmpty()){
             UnifiedMediaGrid.render(a,card,items,areas,label){item->
                 details(a,item)
