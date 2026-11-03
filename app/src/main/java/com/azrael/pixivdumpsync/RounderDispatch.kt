@@ -102,6 +102,16 @@ class RounderOutbox(context:Context):
         }
         writableDatabase.update("files",cv,"state='PENDING'",null)
     }
+    /** A Round Sync trigger is not confirmation of cloud storage. Once direct
+     * NDUS is configured, requeue those unconfirmed requests for actual upload.
+     */
+    fun restoreUnconfirmedRequests():Int {
+        val v=ContentValues().apply{
+            put("state","PENDING")
+            putNull("error")
+        }
+        return writableDatabase.update("files",v,"state='REQUESTED'",null)
+    }
     fun markError(message:String){
         val cv=ContentValues().apply{put("error",message.take(180))}
         writableDatabase.update("files",cv,"state='PENDING'",null)
@@ -189,6 +199,7 @@ object RounderDispatch {
             if(NduSettings.configured(context)){
                 var accepted=0
                 RounderOutbox(context).use{outbox->
+                    outbox.restoreUnconfirmedRequests()
                     NduCloudQueue(context).use{cloud->
                         for((uri,name,category) in outbox.pendingFiles(150)){
                             val kind=when(category.lowercase()){
@@ -229,7 +240,7 @@ object RounderDispatch {
         RounderOutbox(context).use{it.enqueue(uri,name,category)}
         val pref=context.getSharedPreferences(PREF,0)
         val now=System.currentTimeMillis()
-        if(RoundSyncBridge.enabled(context) &&
+        if((NduSettings.configured(context) || RoundSyncBridge.enabled(context)) &&
             now-pref.getLong("last_signal",0)>90_000L){
             pref.edit().putLong("last_signal",now).apply()
             scanAsync(context)
