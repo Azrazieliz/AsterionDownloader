@@ -77,4 +77,15 @@ class SourceIndexTest {
                 "https://example.org/gallery"))
     }
 
+    @Test fun canonicalProviderHostsAllowSafeMobileLocaleAndWww(){
+        assertTrue(SourceIndexParser.sameSite("https://fr.xvideos.com/",
+            "https://www.xvideos.com/album?page=2"))
+        assertTrue(SourceIndexParser.sameSite("https://www.example.org/",
+            "https://m.example.org/post/8"))
+        assertFalse(SourceIndexParser.sameSite("https://example.org",
+            "https://example.org.attacker.invalid/post/8"))
+        assertFalse(SourceIndexParser.sameSite("https://example.org",
+            "https://evil.example.net/post/8"))
+    }
+
 }
