@@ -67,7 +67,23 @@ object VideoEngine {
                         }
                         val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
                         val hits=if(artistArchive){
-                            WebDiscovery.findWatchPornArtist(watch.address,watch.lastCheck==0L)
+                            val latest=WebDiscovery.watchPornArtistPage(
+                                watch.address,watch.address)
+                            val collected=linkedMapOf<String,VideoHit>()
+                            for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
+                            val backfill=!watch.backfillComplete
+                            var cursor=if(backfill)watch.cursor?:latest.next else null
+                            val visited=hashSetOf(watch.address)
+                            var pages=0
+                            while(cursor!=null && pages<8 && visited.add(cursor)){
+                                val history=WebDiscovery.watchPornArtistPage(
+                                    watch.address,cursor)
+                                for(hit in history.hits)collected.putIfAbsent(hit.url,hit)
+                                cursor=history.next
+                                pages++
+                            }
+                            if(backfill)db.setBackfill(watch.id,cursor,cursor==null)
+                            collected.values.toList()
                         }else{
                             val collected=linkedMapOf<String,VideoHit>()
                             val latest=WebDiscovery.page(watch.address,watch.address)
