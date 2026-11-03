@@ -30,7 +30,7 @@ data class IndexedItem(val url:String,val title:String,val preview:String?,val s
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,3) {
+    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,4) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
@@ -48,6 +48,8 @@ class SourceIndexDb(context:Context):
             detail_error TEXT)""")
         db.execSQL("CREATE INDEX entries_source ON entries(source,discovered_at)")
         db.execSQL("CREATE INDEX entries_area ON entries(area,discovered_at)")
+        db.execSQL("CREATE INDEX entries_detail_queue ON entries(detail_checked,detail_retry_after,discovered_at)")
+        db.execSQL("CREATE INDEX entries_original_queue ON entries(queued,retry_after,discovered_at)")
     }
     override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
         if(a<2){
@@ -59,6 +61,10 @@ class SourceIndexDb(context:Context):
             db.execSQL("ALTER TABLE entries ADD COLUMN detail_attempts INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE entries ADD COLUMN detail_retry_after INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE entries ADD COLUMN detail_error TEXT")
+        }
+        if(a<4){
+            db.execSQL("CREATE INDEX IF NOT EXISTS entries_detail_queue ON entries(detail_checked,detail_retry_after,discovered_at)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS entries_original_queue ON entries(queued,retry_after,discovered_at)")
         }
     }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
@@ -136,13 +142,14 @@ class SourceIndexDb(context:Context):
         val out=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
-               FROM entries
-               WHERE detail_checked=0 AND detail_retry_after<=?
-                 AND area IN ('BOOKS','COMICS','GAMES','ASSETS',
+               FROM entries e JOIN sources s ON e.source=s.url
+               WHERE e.detail_checked=0 AND e.detail_retry_after<=?
+                 AND s.enabled=1 AND s.adapter='generic'
+                 AND e.area IN ('BOOKS','COMICS','GAMES','ASSETS',
                      'VIDEOS','ADULT','HENTAI','CREATORS')
-                 AND kind NOT IN ('epub','archive','apk','model','video',
+                 AND e.kind NOT IN ('epub','archive','apk','model','video',
                      'image','torrent')
-               ORDER BY discovered_at ASC LIMIT ?""",
+               ORDER BY e.discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,40).toString())).use{c->
             while(c.moveToNext())out+=IndexedItem(c.getString(0),c.getString(1),
