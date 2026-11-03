@@ -182,6 +182,12 @@ def run_plan(plan):
         raise RuntimeError("Missing installed engine editor/Android SDK/export template")
     env=os.environ.copy()
     env.update(plan["build_env"])
+    if "--export-debug" in plan["build_command"]:
+        # A newly staged Godot project has no .godot import cache. Initialize
+        # the imports before generating a standalone Android APK.
+        subprocess.run([plan["build_command"][0],"--headless",
+            "--path",plan["project"],"--import","--quit"],
+            env=env,check=True,cwd=plan["project"])
     subprocess.run(plan["build_command"],env=env,check=True,cwd=plan["project"])
     target=Path(plan["apk"]) if plan.get("apk") else None
     if target and not target.is_file():
