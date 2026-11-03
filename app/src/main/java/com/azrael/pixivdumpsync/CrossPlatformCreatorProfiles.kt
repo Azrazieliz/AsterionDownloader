@@ -125,8 +125,17 @@ class CrossPlatformCreatorDb(context:Context):
                 put("platform",record.platform);put("evidence",record.evidence)
                 put("seen",System.currentTimeMillis())
             }
-            writableDatabase.insertWithOnConflict("profile_links",null,values,
-                SQLiteDatabase.CONFLICT_IGNORE)
+            // Refresh evidence recency without resetting the user's saved
+            // follow decision or fabricating a new cross-platform identity.
+            val database=writableDatabase
+            if(database.insertWithOnConflict("profile_links",null,values,
+                    SQLiteDatabase.CONFLICT_IGNORE)==-1L){
+                database.update("profile_links",ContentValues().apply{
+                    put("seen",System.currentTimeMillis())
+                    put("platform",record.platform)
+                    put("evidence",record.evidence)
+                },"source=? AND profile=?",arrayOf(record.source,record.url))
+            }
         }
     }
     fun candidates(limit:Int=80):List<CrossPlatformProfile>{
