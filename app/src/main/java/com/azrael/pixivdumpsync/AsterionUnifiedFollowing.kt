@@ -202,9 +202,12 @@ object AsterionUnifiedFollowing {
             val c=ui.card(a)
             val first=gallery.firstOrNull()
             val thumbnail=first?.firstUri?:first?.firstUrl
-            cardTitle(a,c,entity.displayName,entity.source.wireName,thumbnail,
-                thumbnail!=null && !thumbnail.startsWith("content:"))
-            images(a,c,gallery.mapNotNull{item->
+            val cached=KyoraCreatorPreviews.cached(a,entity.canonicalUrl)
+            val cover=thumbnail?:cached?.entries?.firstOrNull()?.cover
+            val avatar=cardTitle(a,c,entity.displayName,entity.source.wireName,cover,
+                cover!=null && !cover.startsWith("content:"))
+            val holder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            val nativePreviews=gallery.mapNotNull{item->
                 (item.firstUri?:item.firstUrl)?.let{url->
                     url to {
                         a.startActivity(Intent(a,GalleryDetailActivity::class.java).apply{
@@ -214,7 +217,35 @@ object AsterionUnifiedFollowing {
                         })
                     }
                 }
-            },true)
+            }
+            fun drawSite(site:KyoraCreatorPreviews.Snapshot?){
+                if(nativePreviews.isNotEmpty())return
+                holder.removeAllViews()
+                val previews=site?.entries.orEmpty().map{item->
+                    item.cover to {
+                        a.startActivity(Intent(a,
+                            com.azrael.galleryflow.ProviderWebActivity::class.java)
+                            .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url))
+                    }
+                }
+                if(previews.isNotEmpty())images(a,holder,previews)
+                else put(a,holder,ui.text(a,
+                    site?.error?.let{"Gallery preview unavailable · "+it.take(95)}
+                        ?: "Latest galleries not indexed yet · BACKFILL to populate",
+                    12f,ui.secondary),8)
+            }
+            if(nativePreviews.isNotEmpty())images(a,holder,nativePreviews,true)
+            else{
+                drawSite(cached)
+                if(followed.indexOf(entity)<12)
+                    KyoraCreatorPreviews.load(a,entity.canonicalUrl){snapshot->
+                        snapshot.entries.firstOrNull()?.cover?.let{src->
+                            RemoteImageLoader.load(a,avatar,src,entity.canonicalUrl)
+                        }
+                        drawSite(snapshot)
+                    }
+            }
+            c.addView(holder)
             if(!entity.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,entity.lastError.take(130),12f,ui.danger),5)
             toggle(a,c,"Include in sync",entity.selected){enabled->
