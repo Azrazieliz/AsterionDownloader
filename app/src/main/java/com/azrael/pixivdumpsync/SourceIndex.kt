@@ -207,6 +207,26 @@ internal object SourceIndexParser {
             out.putIfAbsent(url,IndexedItem(url,title,image,base,area,type,clock,false))
             if(out.size>=110)break
         }
+        // Some providers expose legitimate direct MP4/WebM originals in <video>
+        // rather than <a>. Do not harvest arbitrary image thumbnails or trackers.
+        if(area in setOf("ADULT","HENTAI","VIDEOS","CREATORS")){
+            for(node in doc.select("article video[src],article video source[src],"+
+                "main video[src],main video source[src],"+
+                ".post video[src],.post video source[src]")){
+                val url=node.absUrl("src").substringBefore('#')
+                if(!safe(url) || kind(url,area)!="video" || url in out)continue
+                val container=node.closest("article")?:node.closest(".post")
+                val heading=container?.selectFirst("h1,h2,h3")?.text()
+                val title=heading?.takeIf{it.length>=3}?:doc.title().takeIf{it.length>=3}
+                    ?:URI(url).path.substringAfterLast('/')
+                if(title.length<3)continue
+                val cover=(node.closest("video")?:node).absUrl("poster")
+                    .takeIf{safe(it)}
+                out[url]=IndexedItem(url,title.take(180),cover,base,area,"video",
+                    clock,false)
+                if(out.size>=110)break
+            }
+        }
         return out.values.toList()
     }
     /** Pagination is recognized only inside navigation controls. Numeric post IDs are
