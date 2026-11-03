@@ -70,6 +70,12 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return writableDatabase.insertWithOnConflict("videos", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
     }
+    fun hasVideo(url:String):Boolean {
+        val normalized=WebDiscovery.normalize(url)?:return false
+        return readableDatabase.rawQuery(
+            "SELECT 1 FROM videos WHERE url=? LIMIT 1",
+            arrayOf(normalized)).use{it.moveToFirst()}
+    }
     fun next(): Video? {
         val now=System.currentTimeMillis().toString()
         readableDatabase.rawQuery("""SELECT id,url,title,state,progress,saved_uri,error,watch_id
