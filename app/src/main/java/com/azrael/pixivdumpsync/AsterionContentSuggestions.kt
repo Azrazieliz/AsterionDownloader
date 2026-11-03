@@ -21,6 +21,10 @@ object AsterionContentSuggestions {
         val kind:String,val source:String,val reason:String,val relevance:Int)
     private val noise=setOf("the","and","for","with","from","video","videos",
         "games","game","artist","model","comics","book","books","adult","all","pixiv")
+    internal fun suggestionArea(sourceArea:String):String=when(sourceArea){
+        "ADULT","HENTAI","VIDEOS"->"VIDEOS"
+        else->sourceArea
+    }
     private fun words(raw:String):Set<String> =
         Normalizer.normalize(raw,Normalizer.Form.NFKC).lowercase(Locale.ROOT)
             .split(Regex("[^\\p{L}\\p{N}]+"))
@@ -54,10 +58,7 @@ object AsterionContentSuggestions {
         if(terms.isEmpty())return emptyList()
         val stored=SourceIndex.items(a,null,250)
         val sources=stored.mapNotNull{x->
-            val area=when(x.area){
-                "ADULT","HENTAI","VIDEOS"->"VIDEOS"
-                else->x.area
-            }
+            val area=suggestionArea(x.area)
             if(mode!="ALL"&&area!=mode)return@mapNotNull null
             val (score,reason)=relevance(terms,x.title)
             if(score<=0)return@mapNotNull null
