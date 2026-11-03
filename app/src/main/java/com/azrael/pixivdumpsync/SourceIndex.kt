@@ -17,6 +17,7 @@ import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Locale
@@ -90,8 +91,19 @@ class SourceIndexDb(context:Context):
             if(item.preview!=null)put("preview",item.preview)
             put("discovered_at",item.discoveredAt)
         }
-        return writableDatabase.insertWithOnConflict("entries",null,v,
+        val db=writableDatabase
+        val inserted=db.insertWithOnConflict("entries",null,v,
             SQLiteDatabase.CONFLICT_IGNORE)!=-1L
+        if(!inserted){
+            // Existing cards can gain a real preview on later scans; retain original
+            // queue state and discovery order instead of incorrectly resetting them.
+            val refreshed=ContentValues().apply{
+                put("title",item.title.take(220))
+                if(!item.preview.isNullOrBlank())put("preview",item.preview)
+            }
+            db.update("entries",refreshed,"url=?",arrayOf(item.url))
+        }
+        return inserted
     }
     fun markQueued(url:String){
         val v=ContentValues().apply{put("queued",1)}
@@ -149,6 +161,25 @@ internal object SourceIndexParser {
             else->area.lowercase(Locale.ROOT)
         }
     }
+    private fun preview(link:Element):String?{
+        val image=link.selectFirst("img")?:link.parent()?.selectFirst("img")?:return null
+        for(attr in listOf("data-original","data-src","data-lazy-src","src")){
+            val url=image.absUrl(attr)
+            if(safe(url))return url
+        }
+        // Responsive sites frequently publish the real thumbnail only in srcset.
+        for(attr in listOf("data-srcset","srcset")){
+            val raw=image.attr(attr)
+            if(raw.isBlank())continue
+            for(candidate in raw.split(',')){
+                val value=candidate.trim().substringBefore(' ').trim()
+                val url=runCatching{URI(image.baseUri()).resolve(value).toString()}
+                    .getOrDefault("")
+                if(safe(url))return url
+            }
+        }
+        return null
+    }
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
         val out=LinkedHashMap<String,IndexedItem>()
         val scoped=doc.select("article a[href],main a[href],.post a[href],.posts a[href],"+
@@ -172,10 +203,7 @@ internal object SourceIndexParser {
                 link.selectFirst("img")?.attr("alt").orEmpty()
             }.trim().take(180)
             if(title.length<3 || title.equals("next",true) || title.equals("previous",true))continue
-            val image=link.selectFirst("img")?.let { img->
-                sequenceOf("data-original","data-src","data-lazy-src","src")
-                    .map{img.absUrl(it)}.firstOrNull{safe(it)}
-            } ?: link.parent()?.selectFirst("img")?.absUrl("src")?.takeIf{safe(it)}
+            val image=preview(link)
             out.putIfAbsent(url,IndexedItem(url,title,image,base,area,type,clock,false))
             if(out.size>=110)break
         }
