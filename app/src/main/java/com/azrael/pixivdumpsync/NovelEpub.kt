@@ -35,8 +35,8 @@ object NovelEpubParser {
         val text=(chapterRegion?.parent()?.text().orEmpty()+" "+
             doc.select(".pagination,.chapter-pagination,.chapter-page-list")
                 .text()).take(50000)
-        val ranges=Regex("""(?i)\bC\.\s*\d+\s*[-–]\s*C\.\s*(\d+)\b""")
-            .findAll(text).mapNotNull{it.groupValues[1].toIntOrNull()}
+        val ranges=Regex("""(?i)C\s*\.\s*\d+\s*[-–—]\s*C\s*\.\s*(\d+)""")
+            .findAll(doc.text()).mapNotNull{it.groupValues[1].toIntOrNull()}
         val total=Regex("""(?i)(\d{1,6})\s+(?:total\s+)?chapters\b""")
             .findAll(text).mapNotNull{it.groupValues[1].toIntOrNull()}
         return (ranges+total).maxOrNull()?:0
