@@ -194,7 +194,8 @@ class SourceIndexDb(context:Context):
                     OR (kind='model' AND area='ASSETS')
                     OR (kind='comics' AND area='COMICS' AND
                         (url LIKE 'https://nhentai.net/g/%' OR
-                         url LIKE 'https://nhentai.xxx/g/%'))
+                         url LIKE 'https://nhentai.xxx/g/%' OR
+                         url LIKE 'https://sushiscan.net/catalogue/%'))
                     OR (kind='archive' AND area IN ('COMICS','GAMES','ASSETS'))
                     OR (kind='apk' AND area='GAMES')
                 )
@@ -282,7 +283,8 @@ internal object SourceIndexParser {
             (item.kind=="books" && NovelEpubParser.supportedSeries(item.url))
         "COMICS"->(item.kind=="archive" &&
             runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)) ||
-            (item.kind=="comics" && NhentaiChapters.isGallery(item.url))
+            (item.kind=="comics" && (NhentaiChapters.isGallery(item.url) ||
+                SushiScanChapters.isSeries(item.url)))
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
         "VIDEOS","ADULT","HENTAI","CREATORS"->item.kind=="video"
@@ -702,7 +704,8 @@ object SourceIndex {
             return queued || VideoDb(context).use{it.hasVideo(item.url)}
         }
         if(!SourceIndexParser.autoOriginal(item))return false
-        if(item.area=="COMICS" && NhentaiChapters.isGallery(item.url)){
+        if(item.area=="COMICS" && (NhentaiChapters.isGallery(item.url) ||
+            SushiScanChapters.isSeries(item.url))){
             ChapterQueue(context).use{it.enqueue(item.url,item.title)}
             ChapterArchives.start(context)
             return true
