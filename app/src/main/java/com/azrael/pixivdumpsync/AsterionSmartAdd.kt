@@ -208,6 +208,35 @@ object AsterionSmartAdd {
             }
         }
     }
+    /** Follow an explicit cross-platform creator profile using the same native
+     * enrollment paths as Add Site. No new, parallel downloader is introduced.
+     */
+    fun followLinkedProfile(a:Activity,url:String,onDone:(String)->Unit){
+        val parsed=CrossPlatformProfileParser.normalized(url)
+        if(parsed==null){
+            onDone("Not a supported creator-profile URL");return
+        }
+        val kind=guess(parsed.first)
+        if(kind!=null){
+            val status=TextView(a)
+            register(a,parsed.first,kind,status){onDone(status.text.toString())}
+            return
+        }
+        val archive=CreatorArchives.parseCreatorUrl(parsed.first)
+        if(archive!=null){
+            CreatorArchiveStore.set(a,archive,true)
+            CreatorArchiveScheduler.ensure(a)
+            CreatorArchiveScheduler.scanNow(a)
+            onDone("Creator archive enrolled for backfill")
+            return
+        }
+        // Creator platforms without a native API use the existing scoped
+        // SourceIndex fallback and the account's already authorized session.
+        SourceIndex.enroll(a.applicationContext,parsed.first,"CREATORS",
+            Uri.parse(parsed.first).host.orEmpty(),false)
+        CreatorNames.remember(a,parsed.first.substringAfterLast('/'),"CREATORS",true)
+        onDone("Creator profile enrolled; originals and access checked by SourceIndex")
+    }
     fun render(a:Activity,p:LinearLayout,done:()->Unit){
         p.addView(ui.text(a,"Add a site",23f,ui.white,true),ui.lp(a,14))
         p.addView(ui.text(a,"Paste a creator, collection or source URL. Known sites are categorized automatically.",
