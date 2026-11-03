@@ -141,7 +141,7 @@ class SourceIndexDb(context:Context):
     fun pendingDetails(limit:Int=12):List<IndexedItem>{
         val out=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
-            """SELECT url,title,preview,source,area,kind,discovered_at,queued
+            """SELECT e.url,e.title,e.preview,e.source,e.area,e.kind,e.discovered_at,e.queued
                FROM entries e JOIN sources s ON e.source=s.url
                WHERE e.detail_checked=0 AND e.detail_retry_after<=?
                  AND s.enabled=1 AND s.adapter='generic'
@@ -598,6 +598,20 @@ object SourceIndex {
                     val doc=fetchPage(source,item.url)
                     val files=SourceIndexParser.detailOriginals(
                         doc,item,System.currentTimeMillis())
+                    val videoPage=item.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS") &&
+                        com.asterion.videoflow.WebDiscovery.isVideoPage(item.url)
+                    // Native VideoFlow resolves compatible HTML video pages,
+                    // including embedded streams that have no direct MP4 anchor.
+                    // A request accepted by VideoFlow is NOT counted as a
+                    // confirmed complete original file.
+                    val routed=if(files.isEmpty() && videoPage){
+                        val added=VideoDb(context).use{it.addVideo(item.url,item.title)}
+                        if(added)VideoEngine.launch(context,false)
+                        added || VideoDb(context).use{it.hasVideo(item.url)}
+                    }else false
+                    require(files.isNotEmpty() || routed){
+                        "No accessible original found in this post; provider-specific adapter needed"
+                    }
                     SourceIndexDb(context).use{db->
                         for(file in files){
                             db.upsert(file)
