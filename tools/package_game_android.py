@@ -156,7 +156,40 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
                 if len(children)==1 and (children[0]/"game").is_dir():
                     project=children[0]
             if not (project/"game").is_dir():raise ValueError("Ren'Py game/ directory missing")
+            # RAPT requires an android.json and project keys. Configure the
+            # STAGED copy only: never rewrite the original Ren'Py game ZIP.
+            conf=project/"android.json"
+            old=project/".android.json"
+            settings={}
+            if conf.is_file() or old.is_file():
+                settings=json.loads((conf if conf.is_file() else old).read_text(
+                    encoding="utf-8-sig"))
+            if not isinstance(settings,dict):
+                raise ValueError("Ren'Py android.json must contain a JSON object")
+            settings.update({"package":package_id,"name":label,
+                "icon_name":label[:40]})
+            settings.setdefault("version","1.0")
+            settings.setdefault("numeric_version",1)
+            settings.setdefault("orientation","sensorLandscape")
+            settings.setdefault("store","none")
+            settings.setdefault("permissions",["INTERNET","VIBRATE"])
+            conf.write_text(json.dumps(settings,indent=2,ensure_ascii=False),
+                encoding="utf-8")
             result["project"]=str(project)
+            if build:
+                key=project/"android.keystore"
+                bundle=project/"bundle.keystore"
+                if not key.is_file():
+                    # One-run, preview-only signing. Users who want update-stable
+                    # game APKs must supply their own original project key.
+                    subprocess.run(["keytool","-genkeypair","-noprompt",
+                        "-keystore",str(key),"-alias","android",
+                        "-keyalg","RSA","-keysize","2048","-validity","3650",
+                        "-storepass","android","-keypass","android",
+                        "-dname","CN=Asterion Android Game Test"],
+                        check=True)
+                    result["signing"]="ephemeral_preview_key_not_update_compatible"
+                if not bundle.is_file():shutil.copy2(key,bundle)
             command=sdk_command(renpy_sdk)+[
                 "launcher","android_build",str(project),"--destination",str(out/"apk"),"--package","android"]
             result["build_command"]=command
