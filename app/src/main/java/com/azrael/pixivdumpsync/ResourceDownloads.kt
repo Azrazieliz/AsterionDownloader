@@ -184,6 +184,12 @@ object ResourceDownloads {
             note(a,"Enter a valid HTTPS URL or magnet link")
             return
         }
+        if(folder=="Books" && NovelEpubParser.supportedSeries(raw)){
+            NovelEpubService.enqueue(a,raw,URI(raw).path.substringAfterLast('/')
+                .replace('-',' ').ifBlank{"Novel"})
+            note(a,"Full chapter collection queued as EPUB; no PDF will be generated")
+            return
+        }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
         when{
             path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
