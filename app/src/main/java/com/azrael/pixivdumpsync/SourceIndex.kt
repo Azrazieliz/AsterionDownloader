@@ -226,7 +226,7 @@ object SourceIndex {
         if(context.getSharedPreferences(STATE,0).getBoolean("initial",false).not())
             scheduleCatchup(context)
     }
-    private fun scheduleCatchup(context:Context){
+    fun scheduleCatchup(context:Context){
         val jobs=context.getSystemService(JobScheduler::class.java)
         if(jobs.allPendingJobs.any{it.id==CATCHUP_ID})return
         jobs.schedule(JobInfo.Builder(CATCHUP_ID,ComponentName(context,SourceIndexJob::class.java))
@@ -263,8 +263,9 @@ object SourceIndex {
                     (area==null||area==source.area)
             }}
             if(all.isEmpty())return
-            val offset=if(area==null)pref.getInt("offset",0)%all.size else 0
-            val batch=if(area==null)all.drop(offset).take(5) else all.take(20)
+            val offsetKey=if(area==null)"offset" else "offset_"+area
+            val offset=pref.getInt(offsetKey,0).coerceAtLeast(0)%all.size
+            val batch=all.drop(offset).take(if(area==null)5 else 20)
             for(source in batch){
                 if(stop()||!AppPower.enabled(context))break
                 runCatching{scanOne(context,source)}.onFailure{
@@ -273,19 +274,26 @@ object SourceIndex {
                     }
                 }
             }
-            if(area==null && !stop()){
+            if(!stop()){
                 val advanced=(offset+batch.size)%all.size
-                pref.edit().putInt("offset",advanced)
-                    .putBoolean("initial",advanced==0).apply()
-                if(advanced!=0)scheduleCatchup(context)
+                val edit=pref.edit().putInt(offsetKey,advanced)
+                if(area==null)edit.putBoolean("initial",advanced==0)
+                edit.apply()
             }
         }finally{busy.set(false)}
     }
     private fun scanOne(context:Context,source:IndexedSource){
         var cursor=source.cursor
         var fresh=0
-        val pages=listOfNotNull(source.url,cursor?.takeIf{it!=source.url}).distinct()
-        for(address in pages.take(2)){
+        val pages=ArrayList<String>()
+        pages+=source.url
+        val saved=source.cursor?.takeIf{it!=source.url && SourceIndexParser.safe(it)}
+        if(saved!=null)pages+=saved
+        var index=0
+        val visited=HashSet<String>()
+        while(index<pages.size && index<4){
+            val address=pages[index++]
+            if(!visited.add(address))continue
             val doc=Jsoup.connect(address).timeout(16000).maxBodySize(3_000_000)
                 .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
                 .header("Accept","text/html,application/xhtml+xml")
@@ -307,8 +315,13 @@ object SourceIndex {
                     }
                 }
             }
-            cursor=SourceIndexParser.next(doc,source.url)
-            if(records.isEmpty() && fresh==0)
+            val next=SourceIndexParser.next(doc,source.url)
+            if(index==1 && saved==null && next!=null && next !in visited)
+                pages+=next
+            else if(index>1 && next!=null && next !in visited)
+                pages+=next
+            cursor=next
+            if(records.isEmpty() && fresh==0 && index==1)
                 throw IllegalStateException("No supported originals found; dedicated adapter or login required")
         }
         SourceIndexDb(context).use{db->
@@ -349,7 +362,13 @@ class SourceIndexJob:JobService() {
         stopped.set(false)
         thread(name="asterion-source-index-job"){
             try{SourceIndex.scan(applicationContext){stopped.get()}}
-            finally{jobFinished(params,false)}
+            finally{
+                jobFinished(params,false)
+                if(!stopped.get() && params.jobId==48532 &&
+                    !applicationContext.getSharedPreferences("asterion_source_index_cursor",0)
+                        .getBoolean("initial",false))
+                    SourceIndex.scheduleCatchup(applicationContext)
+            }
         }
         return true
     }
