@@ -170,9 +170,10 @@ object GamePortPlanner {
                 put("source_archive","game-ports/inbox/<game-source>.zip")
                 put("package_id","com.asterion.portable.game")
                 put("game_title",name.substringBeforeLast('.'))
+                put("engine_mode",if(engine==Engine.GODOT)"godot" else "automatic")
             })
             put("requires_original_game_zip",true)
-            put("github_action_currently_supports",listOf("HTML5","RPG_MAKER"))
+            put("github_action_currently_supports",listOf("HTML5","RPG_MAKER","GODOT"))
         }.toString(2)
         val safe=name.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9_-]"),"_")
             .take(48).ifBlank{"game"}
