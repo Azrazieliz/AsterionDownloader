@@ -42,6 +42,13 @@ def run():
         fake_sdk=root/"renpy-sdk"
         fake_sdk.mkdir()
         (fake_sdk/"renpy.sh").write_text("#!/bin/sh\\nexit 0\\n")
+        # Windows Ren'Py SDK uses its bundled python.exe instead of renpy.sh.
+        # The packaging-only fixture never invokes this placeholder binary.
+        import sys
+        if sys.platform=="win32":
+            embedded=fake_sdk/"lib/py3-windows-x86_64/python.exe"
+            embedded.parent.mkdir(parents=True)
+            embedded.write_bytes(b"fixture-only")
         prepared=package(root/"renpy.zip",root/"renpy-android-out",
             "com.asterion.portable.renpytest","Ren'Py Test",
             renpy_sdk=fake_sdk,build=False)
