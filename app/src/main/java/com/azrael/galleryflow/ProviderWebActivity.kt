@@ -37,12 +37,22 @@ class ProviderWebActivity : Activity() {
             }
 
         if (shouldUseExternalBrowser(url)) {
-            runCatching {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            }.onFailure {
-                Toast.makeText(this, it.message ?: "No browser available", Toast.LENGTH_LONG).show()
-            }
-            finish()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("External browser required")
+                .setMessage("This account provider requires a separate browser. "+
+                    "Open it explicitly, or remain in Asterion.")
+                .setPositiveButton("OPEN EXTERNAL BROWSER"){_,_->
+                    runCatching{
+                        startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
+                    }.onFailure{
+                        Toast.makeText(this,it.message?:"Browser unavailable",
+                            Toast.LENGTH_LONG).show()
+                    }
+                    finish()
+                }
+                .setNegativeButton("CANCEL"){_,_->finish()}
+                .setOnCancelListener{finish()}
+                .show()
             return
         }
 
@@ -151,6 +161,16 @@ class ProviderWebActivity : Activity() {
                 "An accessible HTTPS original file URL is required"
             }
             val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val route = intent.getStringExtra(EXTRA_FOLDER)
+                ?.takeIf { it in setOf("Artwork","Cosplay","Videos","Comics",
+                    "Books","Games","Assets","References") }
+            if(route=="Books" && !filename.endsWith(".epub",true))
+                throw IllegalArgumentException("Books only accepts EPUB originals")
+            if(route=="Comics" && !filename.endsWith(".zip",true))
+                throw IllegalArgumentException("Comics only accepts ZIP archives")
+            if(route=="Games" && Regex("(?i)\\.(?:mp4|mkv|webm|mov)$")
+                    .containsMatchIn(filename))
+                throw IllegalArgumentException("Games must contain game files, not videos")
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
                 setMimeType(mimeType)
@@ -159,9 +179,9 @@ class ProviderWebActivity : Activity() {
                 CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }?.let {
                     addRequestHeader("Cookie", it)
                 }
-                val route = intent.getStringExtra(EXTRA_FOLDER)
-                    ?.takeIf { it in setOf("Artwork","Cosplay","Videos","Comics",
-                        "Books","Games","Assets","References") }
+                ResourceDownloads.privacyReferer(url,webView.url.orEmpty())?.let {
+                    addRequestHeader("Referer", it)
+                }
                 val destination = if (route != null) {
                     val host = uri.host.orEmpty()
                         .replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
@@ -170,7 +190,9 @@ class ProviderWebActivity : Activity() {
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,destination)
             }
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            manager.enqueue(request)
+            val id=manager.enqueue(request)
+            com.azrael.pixivdumpsync.DirectDownloadTracker.record(
+                this,id,safeFileName(filename),route?:"Cosplay",url)
         }.onSuccess {
             Toast.makeText(
                 this,
