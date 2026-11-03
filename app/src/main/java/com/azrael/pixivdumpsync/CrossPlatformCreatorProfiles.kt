@@ -5,6 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.jsoup.nodes.Document
+import org.json.JSONObject
+import org.json.JSONArray
 import java.net.URI
 import java.util.Locale
 
@@ -32,7 +34,18 @@ internal object CrossPlatformProfileParser {
         "subscribestar.adult" to "CREATORS",
         "skeb.jp" to "CREATORS", "booth.pm" to "ASSETS",
         "tumblr.com" to "ARTWORK", "cara.app" to "ARTWORK",
-        "linktr.ee" to "LINK_HUB", "beacons.ai" to "LINK_HUB"
+        "linktr.ee" to "LINK_HUB", "beacons.ai" to "LINK_HUB",
+        "lit.link" to "LINK_HUB", "potofu.me" to "LINK_HUB",
+        "allmylinks.com" to "LINK_HUB", "bio.site" to "LINK_HUB",
+        "carrd.co" to "LINK_HUB",
+        "weibo.com" to "WEIBO", "weibo.cn" to "WEIBO",
+        "bilibili.com" to "BILIBILI", "space.bilibili.com" to "BILIBILI",
+        "xiaohongshu.com" to "XIAOHONGSHU",
+        "lofter.com" to "LOFTER", "blog.naver.com" to "NAVER",
+        "postype.com" to "POSTYPE", "ci-en.dlsite.com" to "CI_EN",
+        "fantrie.com" to "CREATORS", "vgen.co" to "ARTWORK",
+        "behance.net" to "ARTWORK", "poipiku.com" to "ARTWORK",
+        "nijie.info" to "ARTWORK", "sketch.pixiv.net" to "ARTWORK"
     )
     internal fun normalized(raw:String):Pair<String,String>?=runCatching{
         val uri=URI(raw.trim())
@@ -46,17 +59,29 @@ internal object CrossPlatformProfileParser {
             else->host
         }
         val fanboxSubdomain=canonical.endsWith(".fanbox.cc") &&
-            canonical!="www.fanbox.cc" &&
+            canonical!="fanbox.cc" &&
             canonical.substringBefore(".fanbox.cc")
                 .matches(Regex("[a-z0-9-]{2,60}"))
-        val provider=hosts[canonical] ?:if(fanboxSubdomain)"FANBOX" else null
-            ?:return@runCatching null
+        val lofterSubdomain=canonical.endsWith(".lofter.com") &&
+            canonical.substringBefore(".lofter.com")
+                .matches(Regex("[a-z0-9-]{2,60}"))
+        val carrdSubdomain=canonical.endsWith(".carrd.co") &&
+            canonical.substringBefore(".carrd.co")
+                .matches(Regex("[a-z0-9-]{2,60}"))
+        val provider=hosts[canonical] ?:
+            when{
+                fanboxSubdomain->"FANBOX"
+                lofterSubdomain->"LOFTER"
+                carrdSubdomain->"LINK_HUB"
+                else->null
+            } ?: return@runCatching null
         val path=uri.path.orEmpty().trimEnd('/')
         val sections=path.trim('/').split('/').filter{it.isNotBlank()}
         // FANBOX creators commonly use username.fanbox.cc/ without a profile
         // path. This subdomain itself is the provider-assigned creator ID.
         if(sections.isEmpty()){
-            if(fanboxSubdomain)return@runCatching ("https://"+canonical+"/") to provider
+            if(fanboxSubdomain||lofterSubdomain||carrdSubdomain)
+                return@runCatching ("https://"+canonical+"/") to provider
             return@runCatching null
         }
         val first=sections[0].lowercase(Locale.ROOT)
@@ -74,7 +99,19 @@ internal object CrossPlatformProfileParser {
             "ARCHIVE"->sections.size>=3 && sections[1]=="user"
             "BLUESKY"->sections.size==2 && first=="profile"
             "FEDIVERSE"->sections.size==1 && sections[0].startsWith("@")
-            "FANBOX"->if(fanboxSubdomain)sections.isEmpty() else sections.size in 1..2
+            "FANBOX"->if(fanboxSubdomain)false else sections.size in 1..2
+            "LOFTER"->!lofterSubdomain && sections.size==1
+            "LINK_HUB"->!carrdSubdomain && sections.size==1
+            "BILIBILI"->when(canonical){
+                "space.bilibili.com"->sections.size==1 && first.toLongOrNull()!=null
+                else->sections.size==2 && first=="space" && sections[1].toLongOrNull()!=null
+            }
+            "XIAOHONGSHU"->sections.size==3 && first=="user" &&
+                sections[1]=="profile"
+            "CI_EN"->sections.size==2 && first=="creator" &&
+                sections[1].toLongOrNull()!=null
+            "WEIBO"->(sections.size==1 && first.length>=2) ||
+                (sections.size==2 && first=="u" && sections[1].toLongOrNull()!=null)
             else->sections.size in 1..2
         }
         if(!profile)return@runCatching null
@@ -94,16 +131,45 @@ internal object CrossPlatformProfileParser {
             ".profile-bio a[href],.user-bio a[href],"+
             ".creator-bio a[href],.profile__links a[href]")
         val out=LinkedHashMap<String,CrossPlatformProfile>()
-        for(anchor in selected.take(120)){
-            val value=anchor.absUrl("href")
-            val candidate=normalized(value)?:continue
+        fun add(value:String,evidence:String){
+            val candidate=normalized(value)?:return
             if(candidate.first==original.first ||
-                candidate.second==original.second)continue
+                candidate.second==original.second)return
             out.putIfAbsent(candidate.first,CrossPlatformProfile(
-                original.first,candidate.first,candidate.second,
-                "Linked from "+original.first))
+                original.first,candidate.first,candidate.second,evidence))
         }
-        return out.values.take(24)
+        for(anchor in selected.take(120)){
+            add(anchor.absUrl("href"),"Linked from "+original.first)
+        }
+        // Official profile metadata often declares accounts in JSON-LD even
+        // when the page has no visible anchor. This is creator-published
+        // evidence, not an identity guessed from a similar display name.
+        for(script in doc.select("script[type=application/ld+json]").take(8)){
+            val raw=script.data().take(65_536)
+            runCatching{
+                fun inspect(value:Any?,depth:Int){
+                    if(depth>3)return
+                    when(value){
+                        is JSONObject->{
+                            val kind=value.optString("@type").lowercase(Locale.ROOT)
+                            if(kind.contains("person")||kind.contains("profile")){
+                                when(val same=value.opt("sameAs")){
+                                    is String->add(same,"Creator-declared sameAs on "+original.first)
+                                    is JSONArray->for(i in 0 until minOf(same.length(),40))
+                                        add(same.optString(i),"Creator-declared sameAs on "+original.first)
+                                }
+                            }
+                            val graph=value.opt("@graph")
+                            if(graph is JSONArray)inspect(graph,depth+1)
+                        }
+                        is JSONArray->for(i in 0 until minOf(value.length(),25))
+                            inspect(value.opt(i),depth+1)
+                    }
+                }
+                inspect(org.json.JSONTokener(raw).nextValue(),0)
+            }
+        }
+        return out.values.take(50)
     }
 }
 
