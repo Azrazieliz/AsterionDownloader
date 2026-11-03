@@ -129,7 +129,9 @@ object KoikatsuCards {
                     put(MediaStore.Downloads.IS_PENDING,0)
                 },null,null)
             }catch(e:Throwable){a.contentResolver.delete(uri,null,null);throw e}
-            return uri.toString()
+            val saved=CrossSourceDedup(a).use{it.registerFile(a,uri)}
+            RounderDispatch.saved(a,saved,name,"Koikatsu")
+            return saved.toString()
         }finally{conn.disconnect()}
     }
 }
