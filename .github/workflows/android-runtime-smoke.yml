@@ -46,7 +46,7 @@ jobs:
             # not an application regression.
             adb shell uiautomator dump /sdcard/asterion-ui.xml >/dev/null
             adb shell cat /sdcard/asterion-ui.xml | grep -q 'Porn &amp; Hentai'
-            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.30-preview' 
+            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.31-preview' 
             adb shell pidof -s com.azrael.pixivdumpsync.nocturne | grep -Eq '[0-9]+'
             adb logcat -b crash -d
 
