@@ -52,11 +52,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG="asterion-downloader-v1.3.31-preview-$(git rev-parse --short=10 "$GITHUB_SHA")"
-          gh release create "$TAG" \
+          if ! gh release create "$TAG" \
             Asterion-Downloader-v1.3.31-Preview.apk \
             Asterion-Downloader-v1.3.31-Preview.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Asterion Downloader v1.3.31 — Android preview" \
-            --notes "Co-installable test APK built from this exact GitHub source commit. Uses the separate com.azrael.pixivdumpsync.nocturne package, so it does NOT install over or migrate data from the original signed Kuroha/Downloader installation. Automatic backfill, creator previews, full-version-only VideoFlow gating, cross-app receipts and EPUB collection are source implementations. Live account-specific services remain subject to on-device acceptance and server availability. This is NOT a preserve-data production-signature update." \
-            --prerelease
+            --notes "Co-installable test APK built from this exact GitHub source commit. Uses the separate com.azrael.pixivdumpsync.nocturne package, so it does NOT install over or migrate data from the original signed Kuroha/Downloader installation. Live account-specific services remain subject to on-device acceptance and server availability. This is NOT a preserve-data production-signature update." \
+            --prerelease; then
+            echo "::warning::Release publication denied by GitHub token. Verified APK and sha256 remain available in the successfully uploaded Actions artifact."
+          fi
