@@ -204,6 +204,10 @@ object ResourceDownloads {
     private fun http(a:Activity,url:String,folder:String,filename:String?=null,
                      referer:String?=null){
         if(!url.startsWith("https://")){note(a,"Use an HTTPS download URL");return}
+        if(!CrossSourceDedup(a).use{it.reserve(url)}){
+            note(a,"This exact original is already queued or recorded · Downloads")
+            return
+        }
         try{
             val uri=URI(url)
             val file=(filename?:uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"})
@@ -223,7 +227,10 @@ object ResourceDownloads {
             val id=d.enqueue(request)
             DirectDownloadTracker.record(a,id,file,folder,url)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
-        }catch(t:Exception){note(a,"Download rejected: "+t.message)}
+        }catch(t:Exception){
+            runCatching{CrossSourceDedup(a).use{it.release(url)}}
+            note(a,"Download rejected: "+t.message)
+        }
     }
 
     fun openTorrentSource(a:Activity,url:String,folder:String="Games"){
