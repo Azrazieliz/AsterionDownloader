@@ -227,7 +227,7 @@ class MainActivity:Activity() {
     private fun downloads(){
         add(content,title("Downloads","Active transfers, saved videos and failures"))
         val tabs=row()
-        listOf("All","Active","Saved","Failed").forEach{label->
+        listOf("All","Active","Saved","Held","Failed").forEach{label->
             tabs.addView(pill(label,label==filter){filter=label;draw()},
                 LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(5)})
         }
@@ -236,6 +236,7 @@ class MainActivity:Activity() {
             when(filter){
                 "Active"->it.status in setOf("queued","running")
                 "Saved"->it.status=="done"
+                "Held"->it.status=="full_only_hold"
                 "Failed"->it.status=="error"
                 else->true
             }
@@ -251,7 +252,11 @@ class MainActivity:Activity() {
     }
     private fun videoCard(v:Video,compact:Boolean):View{
         val box=card()
-        val label=when(v.status){"done"->"SAVED";"error"->"FAILED";"running"->"DOWNLOADING";else->"QUEUED"}
+        val label=when(v.status){
+            "done"->"SAVED";"error"->"FAILED";"running"->"DOWNLOADING"
+            "full_only_hold"->"AWAITING VERIFIED FULL VERSION"
+            else->"QUEUED"
+        }
         val color=when(v.status){"done"->mint;"error"->bad;"running"->primary;else->amber}
         box.addView(text(label,11f,color,true))
         add(box,text(v.title,14f,white,true),7)
@@ -268,13 +273,23 @@ class MainActivity:Activity() {
             add(box,text(SourceDiagnostics.summary(v.error),12f,bad),9)
             add(box,text(SourceDiagnostics.retryAdvice(v.error),11f,grey),5)
         }
+        if(v.status=="full_only_hold")
+            add(box,text(v.error.orEmpty().ifBlank{
+                "No verified full-runtime comparison; automatic download skipped."
+            },12f,amber),9)
         if(!compact){
             val actions=row()
-            val labelAction=when(v.status){"done"->"OPEN";"error"->"RETRY";else->"START"}
+            val labelAction=when(v.status){
+                "done"->"OPEN";"error"->"RETRY"
+                "full_only_hold"->"RECHECK FULL VERSION"
+                else->"START"
+            }
             actions.addView(button(labelAction,false){
                 when(v.status){
                     "done"->openSaved(v)
-                    "error"->{db.retry(v.id);requestTransfer(false);draw()}
+                    "error","full_only_hold"->{
+                        db.retry(v.id);requestTransfer(false);draw()
+                    }
                     else->requestTransfer(false)
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
