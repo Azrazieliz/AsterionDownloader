@@ -251,6 +251,7 @@ object AsterionDownloadWorker {
                     }else{
                         if(!CrossSourceDedup(context).use{it.reserve(original.url)}){
                             db.status(item.id,"QUEUED","Original already in download history")
+                            report(context,item,"QUEUED")
                             continue
                         }
                         val filename=original.filename.take(95)
