@@ -40,21 +40,34 @@ object AuthorizedOriginalResolver {
     internal fun parse(html:String,page:String,hint:String):AccessibleOriginal?{
         val doc=Jsoup.parse(html,page)
         val candidates=LinkedHashMap<String,Pair<Int,String>>()
-        fun add(raw:String,weight:Int){
+        val filenames=HashMap<String,String>()
+        fun add(raw:String,weight:Int,nameHint:String=""){
             val normalized=runCatching{URI(page).resolve(raw.trim()).toString()}.getOrNull()
                 ?:return
             if(!SearchRanking.validUrl(normalized))return
-            val type=mediaType(normalized)
+            val type=mediaType(normalized).ifBlank{
+                // A signed download URL may omit the extension; trust only a
+                // download filename explicitly supplied by the page.
+                mediaType(nameHint)
+            }
             if(!kindAccepts(hint,type))return
             val path=URI(normalized).path.lowercase(Locale.ROOT)
             if(listOf("trailer","sample","preview","thumbnail","sprite","avatar","poster")
                     .any{it in path})return
             candidates[normalized]=maxOf(candidates[normalized]?.first?:0,weight) to type
+            if(nameHint.isNotBlank())filenames[normalized]=nameHint
         }
         for(tag in doc.select("a[download][href],.download a[href],.attachment a[href],"+
             "a[href*=download],a[href$=.epub],a[href$=.zip],a[href$=.apk],"+
             "a[href$=.blend],a[href$=.fbx],a[href$=.mp4],a[href$=.webm]"))
-            add(tag.attr("href"),if(tag.hasAttr("download"))100 else 75)
+            add(tag.attr("href"),if(tag.hasAttr("download"))100 else 75,
+                tag.attr("download").ifBlank{tag.attr("data-filename")})
+        for(tag in doc.select("a[data-download-url],button[data-download-url],"+
+            "a[data-file-url],button[data-file-url]")){
+            val url=tag.attr("data-download-url").ifBlank{tag.attr("data-file-url")}
+            val name=tag.attr("download").ifBlank{tag.attr("data-filename")}
+            add(url,85,name)
+        }
         for(tag in doc.select("video[src],video source[src],source[type^=video][src]"))
             add(tag.attr("src"),90)
         for(tag in doc.select("meta[property=og:video],meta[property=og:video:url],"+
@@ -64,7 +77,9 @@ object AuthorizedOriginalResolver {
             if(mediaType(link).isNotBlank())add(link,40)
         }
         val best=candidates.maxByOrNull{it.value.first}?:return null
-        val path=URI(best.key).path.substringAfterLast('/')
+        val path=filenames[best.key].orEmpty().ifBlank{
+            URI(best.key).path.substringAfterLast('/')
+        }
         val name=path.replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
             .ifBlank{"original.bin"}
         return AccessibleOriginal(best.key,name,best.value.second,page)
