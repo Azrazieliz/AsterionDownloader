@@ -5,6 +5,8 @@ on:
     branches: ["feature/asterion-unified-downloads-20261030"]
     paths:
       - "tools/package_html5_android.py"
+      - "tools/package_game_android.py"
+      - "tools/test_package_game_android.py"
       - ".github/workflows/standalone-html5-smoke.yml"
 jobs:
   standalone-game-apk:
@@ -28,7 +30,11 @@ jobs:
           PY
       - name: Package HTML5 game as independent Android APK
         run: |
-          python tools/package_html5_android.py --zip /tmp/html5-example.zip --out artifact-standalone --package com.asterion.portable.smoke --label "Standalone Test Game"
+          python tools/test_package_html5_android.py
+          python tools/test_package_game_android.py
+          python tools/package_game_android.py --input /tmp/html5-example.zip --out artifact-game --package com.asterion.portable.smoke --label "Standalone Test Game" --prepare-only
+          test -f artifact-game/android-project/app/src/main/assets/game/index.html
+          cp -r artifact-game/android-project artifact-standalone
           gradle -p artifact-standalone assembleDebug --stacktrace
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging artifact-standalone/app/build/outputs/apk/debug/app-debug.apk | grep "com.asterion.portable.smoke"
