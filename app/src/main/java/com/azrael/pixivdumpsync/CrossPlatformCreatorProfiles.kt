@@ -26,7 +26,13 @@ internal object CrossPlatformProfileParser {
         "coomer.st" to "ARCHIVE", "deviantart.com" to "ARTWORK",
         "artstation.com" to "ARTWORK", "instagram.com" to "COSPLAY",
         "bsky.app" to "BLUESKY", "misskey.io" to "FEDIVERSE",
-        "mastodon.social" to "FEDIVERSE", "youtube.com" to "VIDEO"
+        "mastodon.social" to "FEDIVERSE", "youtube.com" to "VIDEO",
+        "ko-fi.com" to "CREATORS", "boosty.to" to "CREATORS",
+        "subscribestar.com" to "CREATORS",
+        "subscribestar.adult" to "CREATORS",
+        "skeb.jp" to "CREATORS", "booth.pm" to "ASSETS",
+        "tumblr.com" to "ARTWORK", "cara.app" to "ARTWORK",
+        "linktr.ee" to "LINK_HUB", "beacons.ai" to "LINK_HUB"
     )
     internal fun normalized(raw:String):Pair<String,String>?=runCatching{
         val uri=URI(raw.trim())
@@ -39,16 +45,25 @@ internal object CrossPlatformProfileParser {
             "www.fanbox.cc"->"fanbox.cc"
             else->host
         }
-        val provider=hosts[canonical] ?:hosts.entries.firstOrNull{
-            canonical.endsWith("."+it.key) && it.key=="fanbox.cc"
-        }?.value?:return@runCatching null
+        val fanboxSubdomain=canonical.endsWith(".fanbox.cc") &&
+            canonical!="www.fanbox.cc" &&
+            canonical.substringBefore(".fanbox.cc")
+                .matches(Regex("[a-z0-9-]{2,60}"))
+        val provider=hosts[canonical] ?:if(fanboxSubdomain)"FANBOX" else null
+            ?:return@runCatching null
         val path=uri.path.orEmpty().trimEnd('/')
         val sections=path.trim('/').split('/').filter{it.isNotBlank()}
-        if(sections.isEmpty())return@runCatching null
+        // FANBOX creators commonly use username.fanbox.cc/ without a profile
+        // path. This subdomain itself is the provider-assigned creator ID.
+        if(sections.isEmpty()){
+            if(fanboxSubdomain)return@runCatching ("https://"+canonical+"/") to provider
+            return@runCatching null
+        }
         val first=sections[0].lowercase(Locale.ROOT)
         if(first in setOf("explore","search","feed","login","signup","register",
                 "terms","privacy","watch","post","posts","category","categories",
-                "tag","tags","about","home","settings"))return@runCatching null
+                "tag","tags","about","home","settings","intent","share","hashtag",
+                "notifications","compose","messages","discover"))return@runCatching null
         val profile=when(provider){
             "PIXIV"->sections.size==2 && first=="users" &&
                 sections[1].toLongOrNull()!=null
@@ -59,6 +74,7 @@ internal object CrossPlatformProfileParser {
             "ARCHIVE"->sections.size>=3 && sections[1]=="user"
             "BLUESKY"->sections.size==2 && first=="profile"
             "FEDIVERSE"->sections.size==1 && sections[0].startsWith("@")
+            "FANBOX"->if(fanboxSubdomain)sections.isEmpty() else sections.size in 1..2
             else->sections.size in 1..2
         }
         if(!profile)return@runCatching null
