@@ -158,6 +158,31 @@ class NduTeraboxClient(private val ndus: String,
         }
     }
 
+    /** Do not mark an upload complete just because /api/create accepted the request.
+     * Check that the remote object exists at the expected path with exact file size.
+     * When a remote whole-file hash is available, require it to match as well.
+     */
+    private fun confirmRemote(path:String,size:Long,localMd5:String):Boolean {
+        repeat(4){attempt->
+            val response=request("/api/filemetas","GET",mapOf(
+                "target" to JSONArray(listOf(path)).toString(),"dlink" to "0"))
+            ok(response,"Remote file verification")
+            val files=response.optJSONArray("info")?:JSONArray()
+            for(i in 0 until files.length()){
+                val item=files.optJSONObject(i)?:continue
+                if(item.optString("path")!=path ||
+                    item.optLong("size",-1L)!=size ||
+                    item.optLong("fs_id",0L)<=0L)continue
+                val remoteMd5=item.optString("md5").trim()
+                if(remoteMd5.isNotBlank() &&
+                    !remoteMd5.equals(localMd5,true))
+                    throw java.io.IOException("TeraBox whole-file integrity mismatch")
+                return true
+            }
+            if(attempt<3)Thread.sleep(1200L*(attempt+1))
+        }
+        return false
+    }
     fun upload(context: Context, uri: Uri, fileName: String, categoryPath: String,
                cancelled: () -> Boolean = { false },
                progress: (Long,Long) -> Unit = { _,_ -> }) {
@@ -177,8 +202,25 @@ class NduTeraboxClient(private val ndus: String,
             "block_list" to blocks.toString(),"local_mtime" to (System.currentTimeMillis()/1000).toString(),
             "file_limit_switch_v34" to "true"))
         ok(pre,"Precreate")
-        // Instant/rapid file transfer may be confirmed without chunk uploads.
-        if (pre.optInt("return_type")==2) return
+        // Rapid upload is not proof that this file's bytes are present remotely.
+        // Compute the actual content hash before accepting that response.
+        if(pre.optInt("return_type")==2){
+            val whole=MessageDigest.getInstance("MD5")
+            resolver.openInputStream(uri)?.use { stream ->
+                val buffer=ByteArray(128*1024)
+                while(true){
+                    if(cancelled())throw InterruptedException("Cloud upload cancelled")
+                    val read=stream.read(buffer)
+                    if(read<0)break
+                    whole.update(buffer,0,read)
+                }
+            }?:throw java.io.IOException("Cannot read rapid-upload source")
+            val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+            if(!confirmRemote(path,size,md5))
+                throw java.io.IOException("Rapid-upload response did not confirm remote file")
+            progress(size,size)
+            return
+        }
         val uploadId=pre.optString("uploadid").takeIf { it.isNotBlank() }
             ?: throw java.io.IOException("TeraBox did not return upload ID")
         val locate=JSONObject(read(connection(
@@ -186,6 +228,7 @@ class NduTeraboxClient(private val ndus: String,
             "GET",false)))
         val host=checkedUploadHost(locate.optString("host"))
         val md5List=JSONArray()
+        val whole=MessageDigest.getInstance("MD5")
         val chunkSize=chunkSizeFor(size)
         var uploaded=0L
         resolver.openInputStream(uri)?.use { stream ->
@@ -201,6 +244,7 @@ class NduTeraboxClient(private val ndus: String,
                     n+=v
                 }
                 val md5=partHashes(bytes)
+                whole.update(bytes)
                 uploadChunk(host,path,uploadId,part,name,bytes,md5)
                 md5List.put(md5)
                 uploaded+=length
@@ -214,6 +258,9 @@ class NduTeraboxClient(private val ndus: String,
                 "target_path" to folder,"block_list" to md5List.toString(),
                 "local_mtime" to (System.currentTimeMillis()/1000).toString()))
         ok(finalized,"Finalize upload")
+        val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+        if(!confirmRemote(path,size,md5))
+            throw java.io.IOException("TeraBox has not confirmed the uploaded file")
     }
 
     private fun uploadChunk(host:String, path:String, uploadId:String, part:Int,
