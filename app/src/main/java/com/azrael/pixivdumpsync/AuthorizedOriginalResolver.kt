@@ -13,7 +13,7 @@ data class AccessibleOriginal(val url:String,val filename:String,val kind:String
 
 enum class OriginalAccessCause { SIGN_IN, ENTITLEMENT, RATE_LIMIT, NOT_FOUND, NO_ORIGINAL }
 
-class OriginalAccessException(val cause:OriginalAccessCause,message:String):
+class OriginalAccessException(val reason:OriginalAccessCause,message:String):
     IllegalStateException(message)
 
 object AuthorizedOriginalResolver {
