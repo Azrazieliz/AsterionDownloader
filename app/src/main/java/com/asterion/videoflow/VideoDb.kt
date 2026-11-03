@@ -106,6 +106,24 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         update(id,"queued")
         writableDatabase.execSQL("UPDATE videos SET attempts=0,retry_after=0 WHERE id=?",arrayOf(id))
     }
+    /** A new verified full-version reference may unblock previous shortened/unknown
+     * candidates. Only matching scene titles are reconsidered, not all downloads.
+     */
+    fun requeueHeldByTitle(referenceTitle:String):Int {
+        val key=FullLengthVideoPolicy.sceneKey(referenceTitle)
+        if(key.length<12)return 0
+        val matching=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id,title FROM videos WHERE state='full_only_hold' LIMIT 5000",
+            null).use{cursor->
+            while(cursor.moveToNext()){
+                if(FullLengthVideoPolicy.sceneKey(cursor.getString(1))==key)
+                    matching+=cursor.getLong(0)
+            }
+        }
+        for(id in matching)retry(id)
+        return matching.size
+    }
     fun scheduleRetry(id:Long,reason:String) {
         val db=writableDatabase
         val count=db.rawQuery("SELECT attempts FROM videos WHERE id=?",arrayOf(id.toString())).use{
