@@ -19,6 +19,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 from package_html5_android import build as build_html5
 from engine_android_ports import identify as identify_native, prepare as prepare_native, run_plan as run_native
+from game_runtime_compat import ROUTES as COMPAT_ROUTES, prepare as prepare_compat
 
 def safe_members(z:ZipFile):
     members=[e for e in z.infolist() if not e.is_dir() and not e.filename.startswith("__MACOSX/")]
@@ -43,14 +44,27 @@ def detect(paths:list[str])->str:
     if native:return native
     if any(p.endswith((".3ds",".cia",".cci")) for p in lower):return "NINTENDO_3DS"
     if any(p.endswith(".nds") for p in lower):return "NINTENDO_DS"
-    if any(p.endswith(".rpy") or p.endswith(".rpa") for p in lower):return "RENPY"
+    if any(p.endswith((".rpy", ".rpa", ".rpyc")) for p in lower):return "RENPY"
+    if any(p.endswith((".rgssad", ".rgss2a", ".rgss3a",
+                       ".rvdata", ".rvdata2", ".rxdata")) for p in lower):
+        return "RPG_MAKER_LEGACY"
     if any(p.endswith(".xp3") for p in lower):return "KIRIKIRI"
     if any(p.endswith((".nsa",".ns2")) for p in lower):return "NSCRIPTER"
     if any("www/index.html" in p for p in lower) and any(
         p.endswith("rpg_core.js") or p.endswith("rmmz_core.js") for p in lower):
         return "RPG_MAKER_HTML"
     if any(p.endswith("index.html") for p in lower):return "HTML5"
-    if any(p.endswith((".exe",".msi")) for p in lower):return "WINDOWS"
+    # Packaged Windows games are runtime candidates, not editable Unity/Unreal
+    # projects. Cooked files cannot be re-exported into Android-native binaries.
+    if any(p.endswith((".exe", ".msi")) for p in lower):
+        if any(p.endswith("unityplayer.dll") or
+               ("_data/" in p and p.endswith("globalgamemanagers"))
+               for p in lower):return "UNITY_WINDOWS"
+        if any(p.endswith(".pak") for p in lower) and any(
+            "/engine/" in ("/"+p) or "/content/paks/" in ("/"+p)
+            for p in lower):return "UNREAL_WINDOWS"
+        return "WINDOWS"
+    if any(p.endswith(".pck") for p in lower):return "GODOT_EXPORT"
     if any(p.endswith((".apk",".aab")) for p in lower):return "ANDROID"
     if any(p.endswith((".unity3d",".assets")) for p in lower):return "UNITY"
     if any(p.endswith(".pak") for p in lower):return "UNREAL_OR_OTHER"
@@ -142,7 +156,9 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
             result["runtime"]="Source project prepared; run with the installed engine editor"
     elif engine=="RENPY":
         if not renpy_sdk:
-            result["runtime"]="JoiPlay with Ren'Py plugin; supply --renpy-sdk for a standalone APK"
+            result.update(prepare_compat(source,out,engine,paths,
+                members if source.suffix.lower()==".zip" else None,
+                export_selected))
         elif source.suffix.lower()!=".zip":
             raise ValueError("Ren'Py must be supplied as a complete project ZIP")
         else:
@@ -200,18 +216,14 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
                 result["standalone_apk"]=True
                 result["apk"]=str(apks[0])
                 result["sha256"]=hashlib.sha256(apks[0].read_bytes()).hexdigest()
+    elif engine in COMPAT_ROUTES:
+        # One-click imports are honest runtime payloads, not relabeled APKs.
+        # Full source/game assets are kept, including Windows dependencies.
+        result.update(prepare_compat(source,out,engine,paths,
+            members if source.suffix.lower()==".zip" else None,
+            export_selected))
     else:
-        result["runtime"]={
-            "NINTENDO_3DS":"Azahar Android emulator; 3DS binaries cannot be transformed into an Android-native APK",
-            "NINTENDO_DS":"Nintendo DS compatible Android emulator",
-            "WINDOWS":"Winlator or an Android-compatible Windows runtime; Windows EXEs are not native Android APKs",
-            "KIRIKIRI":"Compatible Kirikiri Android interpreter",
-            "NSCRIPTER":"Compatible NScripter Android interpreter",
-            "UNITY":"Requires a Unity Android rebuild with its project/source assets",
-            "UNREAL_OR_OTHER":"Requires an engine-specific Android build from editable project/source",
-            "ANDROID":"This is already an Android package; inspect and install it rather than converting",
-            "UNKNOWN":"Source/game engine could not be identified safely"
-        }.get(engine,"No safe native converter available")
+        result["runtime"]="No safe Android runtime or native converter identified"
     (out/"port-report.json").write_text(json.dumps(result,indent=2,ensure_ascii=False),encoding="utf-8")
     return result
 
