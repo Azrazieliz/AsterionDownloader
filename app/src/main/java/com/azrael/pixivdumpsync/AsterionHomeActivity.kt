@@ -109,6 +109,8 @@ class AsterionHomeActivity:Activity(){
         AlohaDefaults.ensure(this)
         SourceIndex.ensure(this)
         KoikatsuFollowing.ensure(this)
+        RounderDispatch.ensure(this)
+        RounderDispatch.scanAsync(applicationContext)
         kotlin.concurrent.thread(name="asterion-seed-name-vocabulary"){
             runCatching{CreatorNames.seed(applicationContext)}
         }
