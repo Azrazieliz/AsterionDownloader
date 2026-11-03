@@ -32,9 +32,11 @@ object AsterionSmartAdd {
         if(host in listOf("toonily.com","mangaread.org","sushiscan.net","nhentai.net","nhentai.xxx"))
             return Kind.COMICS
         if(host in listOf("koikatsucards.com","db.bepis.moe","gumroad.com"))return Kind.ASSETS
-        if(host in listOf("sukebei.nyaa.si","nyaa.si","ggbases.com","www.ggbases.com"))
+        if(host in listOf("sukebei.nyaa.si","nyaa.si","ggbases.com",
+                "onejav.com","f95zone.to"))
             return Kind.TORRENTS
-        if(host in listOf("freewebnovel.com","novelbuddy.com","readnovelfull.com","mp4directs.com"))
+        if(host in listOf("freewebnovel.com","novelbuddy.com","readnovelfull.com",
+                "mp4directs.com","shionlib.com","annas-archive.org"))
             return Kind.BOOKS
         // Multi-format creator platforms need a user-selected content module.
         // A creator's profile is not automatically a video source.
