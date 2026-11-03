@@ -4,8 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       source_archive:
-        description: "Repository path to a complete game ZIP under game-ports/inbox/"
-        required: true
+        description: "Optional repository path to complete game ZIP under game-ports/inbox/"
+        required: false
+        type: string
+      source_release_tag:
+        description: "Or GitHub Release tag holding a complete game ZIP uploaded from phone"
+        required: false
+        type: string
+      source_asset_name:
+        description: "Exact game ZIP asset name in that GitHub Release"
+        required: false
         type: string
       package_id:
         description: "Unique Android application ID, e.g. com.asterion.portable.mygame"
@@ -41,6 +49,26 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
+      - name: Retrieve optional game ZIP from same-repository GitHub Release
+        if: inputs.source_release_tag != '' && inputs.source_asset_name != ''
+        shell: bash
+        env:
+          SOURCE_TAG: ${{ inputs.source_release_tag }}
+          SOURCE_ASSET: ${{ inputs.source_asset_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_TAG" =~ ^[A-Za-z0-9._-]{1,120}$ ||
+                ! "$SOURCE_ASSET" =~ ^[A-Za-z0-9._-]+\.zip$ ]]; then
+            echo "::error::Invalid release tag or ZIP asset name"
+            exit 1
+          fi
+          ROOT="$RUNNER_TEMP/asterion-game-input"
+          mkdir -p "$ROOT"
+          gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$SOURCE_ASSET" --dir "$ROOT"
+          test -s "$ROOT/$SOURCE_ASSET"
+          echo "ASTERION_GAME_SOURCE=$ROOT/$SOURCE_ASSET" >> "$GITHUB_ENV"
       - name: Validate input archive scope
         shell: bash
         env:
@@ -52,10 +80,17 @@ jobs:
           import os, pathlib, re, zipfile
           root=pathlib.Path.cwd().resolve()
           raw=os.environ["INPUT_PATH"]
-          archive=(root/raw).resolve()
-          allowed=(root/"game-ports"/"inbox").resolve()
+          release_file=os.environ.get("ASTERION_GAME_SOURCE","")
+          if release_file:
+              archive=pathlib.Path(release_file).resolve()
+              allowed=(pathlib.Path(os.environ["RUNNER_TEMP"])/"asterion-game-input").resolve()
+          else:
+              archive=(root/raw).resolve()
+              allowed=(root/"game-ports"/"inbox").resolve()
           if not archive.is_relative_to(allowed) or archive.suffix.lower()!=".zip":
-              raise SystemExit("Game source must be a repository ZIP in game-ports/inbox/")
+              raise SystemExit("Game source must be a trusted repository ZIP or same-repo Release asset")
+          if bool(raw)==bool(release_file):
+              raise SystemExit("Choose exactly one source: repository path OR Release ZIP")
           if not archive.is_file():
               raise SystemExit("Game source archive does not exist in this GitHub checkout")
           if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+",os.environ["ANDROID_PACKAGE"]):
