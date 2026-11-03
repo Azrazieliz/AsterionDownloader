@@ -28,20 +28,34 @@ class FullLengthVideoPolicyTest {
             "Studio Actress Scene",url,800L,null)
         assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,preview.verdict)
     }
-    @Test fun noSourceCanSelfCertifyFullLength(){
-        for(source in listOf(
+    @Test fun onlyExplicitFullReleaseProvidersCanSeedRuntimes(){
+        val designated=listOf(
             "https://watchporn.to/video/12/example",
-            "https://www.freepornvideos.xxx/video/example",
-            "https://www.porngo.com/video/example",
-            "https://www.pornhub.com/view_video.php?viewkey=ab"
-        )){
-            for(seconds in listOf(8*60L,20*60L,50*60L,90*60L)){
-                val result=FullLengthVideoPolicy.assess(
-                    "Studio Actress Scene","Studio Actress Scene",source,seconds,null)
-                assertEquals("Unverified source must hold: "+source+" "+seconds,
-                    FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,result.verdict)
-            }
+            "https://www.freepornvideos.xxx/video/example"
+        )
+        for(source in designated) {
+            val result=FullLengthVideoPolicy.assess(
+                "Studio Actress Scene","Studio Actress Scene",source,50*60L,null)
+            assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,result.verdict)
         }
+        for(source in listOf(
+            "https://www.porngo.com/video/example",
+            "https://www.pornhub.com/view_video.php?viewkey=ab",
+            "https://www.eporner.com/video/example"
+        ))for(seconds in listOf(8*60L,20*60L,50*60L,90*60L)){
+            val result=FullLengthVideoPolicy.assess(
+                "Studio Actress Scene","Studio Actress Scene",source,seconds,null)
+            assertEquals("Unverified source must hold: "+source+" "+seconds,
+                FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,result.verdict)
+        }
+    }
+    @Test fun designatedSourceCannotGrantTrailerOrMissingRuntime(){
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.assess("Studio Actress teaser",
+                "Studio Actress","https://watchporn.to/video/12/a",3000,null).verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
+            FullLengthVideoPolicy.assess("Studio Actress",
+                "Studio Actress","https://watchporn.to/video/12/a",null,null).verdict)
     }
     @Test fun tinyCutIsRejectedAgainstVerifiedOriginal(){
         val result=FullLengthVideoPolicy.assess("Studio Actress Scene",
