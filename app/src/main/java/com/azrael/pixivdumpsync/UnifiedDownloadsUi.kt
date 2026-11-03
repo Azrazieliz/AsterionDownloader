@@ -157,6 +157,7 @@ object UnifiedDownloadsUi {
         },8)
         summary.addView(actions,ui.lp(a,8))
         parent.addView(summary,ui.lp(a,9))
+        RounderDispatch.render(a,parent)
         val pref=a.getSharedPreferences("asterion_downloads_ui",0)
         val filter=runCatching{
             Filter.valueOf(pref.getString("filter","ALL").orEmpty())
