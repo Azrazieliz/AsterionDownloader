@@ -39,7 +39,7 @@ object GamePortPlanner {
             return Engine.RENPY
         if(names.any{it.endsWith(".xp3")})return Engine.KIRIKIRI
         if(names.any{it.endsWith(".nsa")||it.endsWith(".ns2")})return Engine.NSCRIPTER
-        if(names.any{it.contains("/www/")&&it.endsWith("index.html")} &&
+        if(names.any{(it.startsWith("www/")||it.contains("/www/"))&&it.endsWith("index.html")} &&
             names.any{it.endsWith("rpg_core.js")||it.endsWith("rmmz_core.js")})
             return Engine.RPG_MAKER
         if(names.any{it.endsWith("index.html")})return Engine.HTML5
