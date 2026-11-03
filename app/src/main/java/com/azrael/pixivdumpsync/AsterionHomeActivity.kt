@@ -846,6 +846,7 @@ class AsterionHomeActivity:Activity(){
     }
     private fun renderSettings(){
         section("Settings","Appearance, downloads, privacy and source controls.")
+        AsterionPeerTrust.render(this,body)
         val appearance=getSharedPreferences("asterion_display",MODE_PRIVATE)
         val visual=card()
         put(visual,text("DISPLAY & NAVIGATION",16f,theme.white,true),0)
