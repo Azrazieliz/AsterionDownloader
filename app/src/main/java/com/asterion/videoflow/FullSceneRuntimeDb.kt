@@ -41,21 +41,38 @@ class FullSceneRuntimeDb(context:Context):
     fun expected(title:String):Long? {
         val key=FullLengthVideoPolicy.sceneKey(title)
         if(key.length<12 || key.split(' ').size<3)return null
-        return readableDatabase.rawQuery(
+        val official=readableDatabase.rawQuery(
             "SELECT seconds FROM reference_runtime WHERE scene_key=? AND verified=1",
             arrayOf(key)).use{c->if(c.moveToFirst())c.getLong(0) else null}
+        val designated=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT seconds,source FROM observed_runtime WHERE scene_key=?",
+            arrayOf(key)).use{c->
+            while(c.moveToNext()){
+                if(FullLengthVideoPolicy.knownFullReferenceHost(c.getString(1)))
+                    designated+=c.getLong(0)
+            }
+        }
+        return (designated+listOfNotNull(official)).maxOrNull()
     }
-    fun remember(title:String,url:String,duration:Long){
-        // Source metadata remains an unverified observation, even from a site
-        // usually carrying full scenes. Never promote it to original reference.
-        if(duration<=0L)return
+    fun remember(title:String,url:String,duration:Long):Boolean{
+        // Metadata stays a source observation; only explicitly designated
+        // full-release hosts can serve as comparison references.
+        if(duration<=0L)return false
         val key=FullLengthVideoPolicy.sceneKey(title)
-        if(key.length<12 || key.split(' ').size<3)return
+        if(key.length<12 || key.split(' ').size<3)return false
+        val source=url.take(500)
+        val prior=readableDatabase.rawQuery(
+            "SELECT seconds FROM observed_runtime WHERE scene_key=? AND source=?",
+            arrayOf(key,source)).use{c->if(c.moveToFirst())c.getLong(0) else null}
+        if(prior==duration)return false
         val v=ContentValues().apply{
             put("scene_key",key);put("seconds",duration)
-            put("source",url.take(500));put("checked",System.currentTimeMillis())
+            put("source",source);put("checked",System.currentTimeMillis())
         }
         writableDatabase.insertWithOnConflict("observed_runtime",null,v,
             SQLiteDatabase.CONFLICT_REPLACE)
+        return FullLengthVideoPolicy.knownFullReferenceHost(url) &&
+            (prior==null || duration>prior)
     }
 }
