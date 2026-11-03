@@ -242,8 +242,29 @@ object CreatorArchiveDownloads {
         val manager=context.getSystemService(DownloadManager::class.java)
         var queued=0;var skipped=0;var failed=0;var deferred=0
         for(post in posts)for((index,file) in post.files.withIndex()){
-            if(queued>=maxFiles){deferred++;continue}
             if(CreatorArchives.fileUrl(post.creator.host,file.url)!=file.url){failed++;continue}
+            val kind=ArchiveContent.category(file,post)
+            // VideoFlow owns and deduplicates its own persistent queue. A cached
+            // video (including full-only holds) must not consume the per-page 40
+            // new-download budget, or dense creator pages never finish backfill.
+            if(kind==ArchiveSection.VIDEOS){
+                val already=com.asterion.videoflow.VideoDb(context).use{
+                    it.hasVideo(file.url)
+                }
+                if(already){skipped++;continue}
+                if(queued>=maxFiles){deferred++;continue}
+                val accepted=runCatching{
+                    com.asterion.videoflow.VideoDb(context).use{
+                        it.addVideo(file.url,post.title+" · "+file.title,0L)
+                    }
+                }.getOrDefault(false)
+                if(accepted){
+                    queued++
+                    com.asterion.videoflow.VideoEngine.launch(context,false)
+                }else failed++
+                continue
+            }
+            if(queued>=maxFiles){deferred++;continue}
             val token=key(file.url)
             val saved=pref.getLong(token,-1L)
             if(saved>0) {
@@ -258,21 +279,6 @@ object CreatorArchiveDownloads {
                     }else false
                 }?:false
                 if(active){skipped++;continue}
-            }
-            val kind=ArchiveContent.category(file,post)
-            if(kind==ArchiveSection.VIDEOS){
-                // Creator attachments must obey the same mandatory full-runtime
-                // policy as VideoFlow. DownloadManager alone cannot detect cuts.
-                val accepted=runCatching{
-                    com.asterion.videoflow.VideoDb(context).use { videoDb ->
-                        val added=videoDb.addVideo(file.url,
-                            post.title+" · "+file.title,0L)
-                        if(added)com.asterion.videoflow.VideoEngine.launch(context,false)
-                        added || videoDb.hasVideo(file.url)
-                    }
-                }.getOrDefault(false)
-                if(accepted){queued++} else failed++
-                continue
             }
             val folder="AsterionDownloader/"+kind.folder+"/"+post.creator.host.name.lowercase(Locale.ROOT)+"/"+post.creator.service+"/"+post.creator.id
             val name="${post.id}_${index+1}_${filename(file.title)}"
