@@ -125,13 +125,20 @@ object SourceIndexPanel {
             val row=ui.row(a)
             val view=ui.text(a,label,12f,ui.secondary)
             row.addView(view,LinearLayout.LayoutParams(0,-2,1f))
-            val toggle=Switch(a).apply{
-                isChecked=source.enabled
-                setOnCheckedChangeListener{_,checked->
-                    SourceIndexDb(a).use{it.enable(source.url,checked)}
+            if(source.adapter=="native"){
+                // Native engines already have persistent per-artist and per-source toggles.
+                // A second switch here would not control their real scheduler.
+                row.addView(ui.text(a,"Managed in Following",11f,ui.secondary))
+            }else{
+                val toggle=Switch(a).apply{
+                    isChecked=source.enabled
+                    contentDescription="Sync "+source.name
+                    setOnCheckedChangeListener{_,checked->
+                        SourceIndexDb(a).use{it.enable(source.url,checked)}
+                    }
                 }
+                row.addView(toggle)
             }
-            row.addView(toggle)
             body.addView(row,ui.lp(a,8))
         }
         AlertDialog.Builder(a).setTitle(area+" · Source health")
