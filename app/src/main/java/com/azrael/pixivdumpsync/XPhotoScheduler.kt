@@ -26,8 +26,8 @@ class XPhotoJob:JobService(){
         if(!AppPower.enabled(this))return false
         if(!XPhotoQueue(this).use{it.sources().isNotEmpty()})return false
         // Android can block background foreground-service launches.
-        if(runCatching{XPhotoEngine.start(this)}.isSuccess)return false
-        val task=XPhotoEngine.submit(applicationContext)
+        if(runCatching{XPhotoEngine.start(this,true)}.isSuccess)return false
+        val task=XPhotoEngine.submit(applicationContext,true)
         Thread{runCatching{task.get()};jobFinished(params,false)}.start()
         return true
     }
