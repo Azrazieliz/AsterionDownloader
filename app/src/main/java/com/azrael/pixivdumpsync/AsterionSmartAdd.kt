@@ -219,6 +219,16 @@ object AsterionSmartAdd {
         val status=ui.text(a,"",12f,ui.secondary)
         box.addView(ui.action(a,"ADD & BACKFILL",true){
             val url=field.text.toString().trim()
+            if(url.startsWith("magnet:?xt=urn:btih:",true)){
+                AlertDialog.Builder(a).setTitle("Select torrent content type")
+                    .setItems(arrayOf("Game / visual novel","Video","EPUB book")){_,type->
+                        val folder=arrayOf("Games","Videos","Books")[type]
+                        ResourceDownloads.route(a,url,folder)
+                        status.text="Torrent queued under "+folder+" · file selection"
+                        done()
+                    }.setNegativeButton("Cancel",null).show()
+                return@action
+            }
             val proposed=guess(url)
             if(proposed!=null)register(a,url,proposed,status,done)
             else if(SearchRanking.validUrl(url)){
