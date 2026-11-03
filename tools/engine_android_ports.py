@@ -16,7 +16,7 @@ def identify(paths):
     if any(x.endswith("project.godot") for x in names): return "GODOT_PROJECT"
     if any(x.endswith(".uproject") for x in names): return "UNREAL_PROJECT"
     if any(x.endswith("projectsettings/projectversion.txt") for x in names) and any(
-        x.startswith("assets/") or "/assets/" in x for x in names
+        x=="assets" or x.startswith("assets/") or "/assets/" in x for x in names
     ): return "UNITY_PROJECT"
     return None
 
