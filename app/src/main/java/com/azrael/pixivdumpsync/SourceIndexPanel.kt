@@ -56,37 +56,12 @@ object SourceIndexPanel {
         },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
         card.addView(toolbar,ui.lp(a,9))
         if(items.isNotEmpty()){
-            val scroll=HorizontalScrollView(a).apply{isHorizontalScrollBarEnabled=false}
-            val horizontal=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-            val covers=ui.showPreviews(a)
-            val wide=ui.largeCovers(a)
-            for(item in items.take(25)){
-                val tile=LinearLayout(a).apply{
-                    orientation=LinearLayout.VERTICAL
-                    background=ui.shape(a,ui.raised,12)
-                    setPadding(ui.px(a,6),ui.px(a,6),ui.px(a,6),ui.px(a,6))
-                    setOnClickListener{details(a,item)}
-                }
-                val image=ImageView(a).apply{
-                    scaleType=ImageView.ScaleType.CENTER_CROP
-                    setBackgroundColor(ui.surface)
-                    contentDescription=item.title+" · "+item.kind
-                }
-                if(covers){
-                    tile.addView(image,LinearLayout.LayoutParams(-1,
-                        ui.px(a,if(wide)165 else 126)))
-                    if(item.preview!=null)RemoteImageLoader.load(a,image,item.preview,item.source)
-                }
-                tile.addView(ui.text(a,item.title.take(54),12f,ui.white,true),ui.lp(a,5))
-                tile.addView(ui.text(a,item.kind.uppercase(),10f,ui.secondary),ui.lp(a,3))
-                horizontal.addView(tile,LinearLayout.LayoutParams(ui.px(a,
-                    if(wide&&covers)202 else 150),-2)
-                    .apply{rightMargin=ui.px(a,8)})
+            UnifiedMediaGrid.render(a,card,items,areas,label){item->
+                details(a,item)
             }
-            scroll.addView(horizontal)
-            card.addView(scroll,ui.lp(a,10))
         }else{
-            card.addView(ui.text(a,"No indexed previews yet. The native module remains usable.",
+            card.addView(ui.text(a,
+                "No indexed previews yet. Native creator galleries remain accessible above.",
                 12f,ui.secondary),ui.lp(a,8))
         }
         parent.addView(card,ui.lp(a,10))
