@@ -171,77 +171,16 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
         }
     }
 
+    /** All approved provider entries feed one preview-first native surface.
+     * No site spinner, provider-by-provider list UI, or browser redirection.
+     * Source/login maintenance remains available through its dedicated dialog.
+     * Original native Kuroha/Kyora/VideoFlow paths stay unchanged.
+     */
     fun render(a:Activity,parent:LinearLayout,areas:List<AlohaArea>,heading:String){
-        val matches=additions.filter{it.area in areas}.distinctBy{it.url}
-        if(matches.isEmpty())return
-        val ui=NocturneDesign
-        val frame=ui.card(a)
-        frame.addView(ui.text(a,heading+" · ALOHA SOURCES ("+matches.size+")",
-            17f,ui.white,true),ui.lp(a,5))
-        frame.addView(ui.text(a,
-            "Only approved Aloha additions are listed here; sources already integrated "+
-            "into the app remain in their existing native modules. "+
-            "Native sync/download is offered where supported; other sources open with a "+
-            "browser download listener for files already accessible to you.",
-            12f,ui.secondary),ui.lp(a,8))
-        val picker=Spinner(a)
-        picker.adapter=ArrayAdapter(a,android.R.layout.simple_spinner_dropdown_item,
-            matches.map{it.name+" · "+it.host})
-        frame.addView(picker,ui.lp(a,7))
-        val selection=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-        val status=ui.text(a,"Select a bookmarked source",12f,ui.secondary)
-        fun display(site:AlohaSite){
-            selection.removeAllViews()
-            val thumbnail=ImageView(a).apply{
-                scaleType=ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(ui.raised)
-            }
-            selection.addView(thumbnail,LinearLayout.LayoutParams(-1,ui.px(a,128)))
-            CreatorPreviews.sourceThumbnail(a,thumbnail,site.url)
-            selection.addView(ui.text(a,site.name,15f,ui.white,true),ui.lp(a,5))
-            selection.addView(ui.text(a,site.url,11f,ui.secondary),ui.lp(a,4))
-            val nativeSync=site.area in listOf(AlohaArea.COSPLAY,AlohaArea.ADULT,AlohaArea.HENTAI) &&
-                site.host!="onejav.com"
-            val info=when {
-                nativeSync && AlohaDefaults.seeded(a,site)->
-                    "Enabled in existing sync/backfill queue. Download coverage varies by source."
-                nativeSync -> AlohaDefaults.error(a,site)?.let{
-                    "Source enrollment failed; retry on next app start: "+it.take(150)
-                } ?: "Enrollment into existing sync engine is pending."
-                site.host=="onejav.com" ->
-                    "Torrent index: magnet or .torrent links use native file selection."
-                site.area==AlohaArea.BOOKS ->
-                    "EPUB-only source. A dedicated chapter-to-EPUB adapter is not yet verified."
-                site.area==AlohaArea.COMICS ->
-                    "Dedicated chapter ZIP adapter not yet verified for this site."
-                else -> "Original-file downloads and individual source capabilities vary."
-            }
-            selection.addView(ui.text(a,info,11f,ui.secondary),ui.lp(a,7))
-            val isReference=site.area in listOf(AlohaArea.REFERENCE,AlohaArea.STUDY)
-            val action=when(site.area){
-                AlohaArea.COSPLAY,AlohaArea.ARTWORK->"FOLLOW / BACKFILL WITH EXISTING IMAGE ENGINE"
-                AlohaArea.VIDEOS,AlohaArea.ADULT,AlohaArea.HENTAI->
-                    "MONITOR SITE IN VIDEOFLOW"
-                AlohaArea.ASSETS->"OPEN ASSETS / ORIGINALS"
-                AlohaArea.COMICS->"BROWSE COMICS"
-                AlohaArea.BOOKS,AlohaArea.GAMES->"OPEN SOURCE / DOWNLOAD FILES"
-                else->"OPEN REFERENCE"
-            }
-            if(!isReference)
-                selection.addView(ui.action(a,action,true){monitor(a,site,status)},ui.lp(a,9))
-            selection.addView(ui.action(a,if(isReference)"OPEN REFERENCE"
-                else "BROWSE SOURCE / DOWNLOAD EXPOSED FILE",false){
-                browse(a,site)
-                status.text="Opened "+site.name
-            },ui.lp(a,7))
-        }
-        picker.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener{
-            override fun onNothingSelected(parent:android.widget.AdapterView<*>?){}
-            override fun onItemSelected(parent:android.widget.AdapterView<*>?,
-                view:android.view.View?,position:Int,id:Long){display(matches[position])}
-        }
-        frame.addView(selection,ui.lp(a,8))
-        frame.addView(status,ui.lp(a,8))
-        parent.addView(frame,ui.lp(a,13))
+        val scope=areas.filter{it !in setOf(AlohaArea.REFERENCE,AlohaArea.STUDY)}
+            .map{it.name}.distinct()
+        if(scope.isEmpty())return
+        SourceIndexPanel.render(a,parent,scope,heading)
     }
+
 }
