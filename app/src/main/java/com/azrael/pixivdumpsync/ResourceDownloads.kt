@@ -204,6 +204,18 @@ object ResourceDownloads {
     private fun http(a:Activity,url:String,folder:String,filename:String?=null,
                      referer:String?=null){
         if(!url.startsWith("https://")){note(a,"Use an HTTPS download URL");return}
+        // VideoFlow owns the mandatory full-runtime gate. Direct DownloadManager
+        // requests would bypass the no-teasers/no-shortened-releases rule.
+        if(folder=="Videos"){
+            val accepted=com.asterion.videoflow.VideoDb(a).use{
+                it.addVideo(url,filename?:url)
+            }
+            if(accepted){
+                com.asterion.videoflow.VideoEngine.launch(a,false)
+                note(a,"Queued for full-version verification in VideoFlow")
+            }else note(a,"Video already queued, held or saved in VideoFlow")
+            return
+        }
         if(!CrossSourceDedup(a).use{it.reserve(url)}){
             note(a,"This exact original is already queued or recorded · Downloads")
             return
