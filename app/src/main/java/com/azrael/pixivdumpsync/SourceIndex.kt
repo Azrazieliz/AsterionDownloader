@@ -125,8 +125,16 @@ class SourceIndexDb(context:Context):
         val rows=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
-                FROM entries WHERE queued=0 AND
-                    kind IN ('video','epub','model','archive','apk','books') AND retry_after<=?
+                FROM entries WHERE queued=0 AND retry_after<=? AND (
+                    (kind='video' AND area IN ('VIDEOS','ADULT','HENTAI','CREATORS'))
+                    OR (kind='epub' AND area='BOOKS')
+                    OR (kind='books' AND area='BOOKS' AND
+                        (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
+                        url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
+                    OR (kind='model' AND area='ASSETS')
+                    OR (kind='archive' AND area IN ('COMICS','GAMES','ASSETS'))
+                    OR (kind='apk' AND area='GAMES')
+                )
                 ORDER BY discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,120).toString())).use{c->
