@@ -159,21 +159,44 @@ object GamePortPlanner {
                 "python tools/package_game_android.py --input game.zip --out port --unreal-engine PATH_TO_UNREAL"
             else->"Open this game in the compatible Android runtime; no generic binary-to-APK conversion exists"
         }
+        val workflow=when(engine){
+            Engine.HTML5,Engine.RPG_MAKER,Engine.GODOT,Engine.RENPY->
+                ".github/workflows/game-port-github-only.yml"
+            Engine.UNITY_PROJECT->".github/workflows/game-port-unity-github.yml"
+            else->null
+        }
         val json=JSONObject().apply{
             put("game",name);put("engine",engine.name)
             put("android_method",engine.method)
-            // Retain the historical CLI field for compatibility with saved manifests.
+            // Keep the legacy field compatible with previously saved manifests.
             put("pc_build_command",cmd)
-            put("github_build_workflow",".github/workflows/game-port-github-only.yml")
+            put("github_build_workflow",workflow?:JSONObject.NULL)
             put("github_source_directory","game-ports/inbox/")
+            put("github_source_release_supported",workflow!=null)
             put("github_inputs",JSONObject().apply{
                 put("source_archive","game-ports/inbox/<game-source>.zip")
+                put("source_release_tag","<GitHub-Release-tag-if-uploaded-from-phone>")
+                put("source_asset_name","<game-source>.zip")
                 put("package_id","com.asterion.portable.game")
                 put("game_title",name.substringBeforeLast('.'))
-                put("engine_mode",if(engine==Engine.GODOT)"godot" else "automatic")
+                if(engine!=Engine.UNITY_PROJECT){
+                    put("engine_mode",when(engine){
+                        Engine.GODOT->"godot";Engine.RENPY->"renpy";else->"automatic"
+                    })
+                }
             })
             put("requires_original_game_zip",true)
-            put("github_action_currently_supports",listOf("HTML5","RPG_MAKER","GODOT"))
+            put("requires_unity_activation",engine==Engine.UNITY_PROJECT)
+            put("unreal_source_requires_installed_engine",
+                engine==Engine.UNREAL_PROJECT)
+            put("github_action_currently_supports",
+                listOf("HTML5","RPG_MAKER","GODOT","RENPY","UNITY_PROJECT"))
+            put("android_build_status",when{
+                workflow!=null->"GitHub workflow configured; submit complete editable source"
+                engine==Engine.UNREAL_PROJECT->
+                    "Needs authorized Unreal Android toolchain; not available on standard free GitHub runners"
+                else->"Requires the compatible Android runtime or original source"
+            })
         }.toString(2)
         val safe=name.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9_-]"),"_")
             .take(48).ifBlank{"game"}
