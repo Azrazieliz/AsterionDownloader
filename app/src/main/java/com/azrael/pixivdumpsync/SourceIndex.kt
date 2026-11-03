@@ -260,8 +260,16 @@ object SourceIndex {
                 ComponentName(context,SourceIndexJob::class.java))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true).setPeriodic(6L*60L*60L*1000L).build())
-        if(context.getSharedPreferences(STATE,0).getBoolean("initial",false).not())
-            scheduleCatchup(context)
+        if(needsCatchup(context))scheduleCatchup(context)
+    }
+    /** A complete provider round is not the same as its historical backfill ending. */
+    fun needsCatchup(context:Context):Boolean {
+        if(!context.getSharedPreferences(STATE,0).getBoolean("initial",false))
+            return true
+        return SourceIndexDb(context).use{db->
+            db.sources().any{it.enabled && it.adapter=="generic" &&
+                !it.cursor.isNullOrBlank() && it.error.isNullOrBlank()}
+        }
     }
     fun scheduleCatchup(context:Context,force:Boolean=false){
         val jobs=context.getSystemService(JobScheduler::class.java)
@@ -420,8 +428,7 @@ class SourceIndexJob:JobService() {
             finally{
                 jobFinished(params,false)
                 if(!stopped.get() && params.jobId==48532 &&
-                    !applicationContext.getSharedPreferences("asterion_source_index_cursor",0)
-                        .getBoolean("initial",false))
+                    SourceIndex.needsCatchup(applicationContext))
                     SourceIndex.scheduleCatchup(applicationContext,true)
             }
         }
