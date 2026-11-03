@@ -137,6 +137,7 @@ object XPhotoEngine {
         try{
             XPhotoQueue(context).use{db->
                 db.recover()
+                db.retryDueFailures()
                 for((source,handle,cursor) in db.sources()) {
                     if(!AppPower.enabled(context))break
                     if(automatic && !context.getSharedPreferences("asterion_x_live",0)
