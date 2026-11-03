@@ -172,9 +172,17 @@ object AsterionSmartAdd {
                     ResourceDownloads.route(a,address,"Books")
                     record(a,kind,address,"EPUB download requested")
                     status.text="EPUB download queued";done()
+                }else if(NovelEpubParser.supportedSeries(address)){
+                    val series=Uri.parse(address).path.orEmpty().trim('/')
+                        .substringAfterLast('/').replace('-', ' ').ifBlank{"Novel"}
+                    NovelEpubService.enqueue(a,address,series)
+                    record(a,kind,address,"Complete novel EPUB extraction queued")
+                    status.text="Entire novel queued for EPUB assembly · historical chapters included"
+                    done()
                 }else{
-                    record(a,kind,address,"Catalogued · provider-specific EPUB sync pending")
-                    status.text="Saved under EPUB. Automatic novel extraction is not yet supported for this provider";done()
+                    record(a,kind,address,"Provider indexed · EPUB original required")
+                    status.text="Source indexed; only verified EPUB files or supported complete novel series are acquired"
+                    done()
                 }
             }
             Kind.TORRENTS->{
