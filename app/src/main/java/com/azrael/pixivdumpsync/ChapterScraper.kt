@@ -80,6 +80,14 @@ object ChapterScraper {
     }
     fun chapters(seriesUrl:String,context:Context?=null):List<ChapterLink>{
         require(allowed(seriesUrl)){"Provide an HTTP(S) chapter or series URL"}
+        if(NhentaiChapters.isGallery(seriesUrl)){
+            val gallery=read(seriesUrl,context)
+            val full=NhentaiChapters.pages(gallery,seriesUrl)
+            require(full.isNotEmpty()){
+                "NHentai gallery has no complete page listing; no ZIP will be written"
+            }
+            return full
+        }
         if(isSingleChapter(seriesUrl))
             return listOf(ChapterLink(seriesUrl,"Chapter "+
                 (pathChapter.find(URI(seriesUrl).path.orEmpty())
@@ -149,7 +157,10 @@ object ChapterScraper {
         return urls.toList()
     }
     fun pageImages(chapterUrl:String,context:Context?=null):List<String>{
-        val images=parsePageImages(read(chapterUrl,context))
+        val doc=read(chapterUrl,context)
+        val images=if(NhentaiChapters.isPage(chapterUrl))
+            NhentaiChapters.pageImage(doc)
+        else parsePageImages(doc)
         require(images.isNotEmpty()){"No readable chapter images at $chapterUrl"}
         return images
     }
