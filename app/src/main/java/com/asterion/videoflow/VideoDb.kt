@@ -76,6 +76,12 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "SELECT 1 FROM videos WHERE url=? LIMIT 1",
             arrayOf(normalized)).use{it.moveToFirst()}
     }
+    fun stateForUrl(url:String):String? {
+        val normalized=WebDiscovery.normalize(url)?:return null
+        return readableDatabase.rawQuery(
+            "SELECT state FROM videos WHERE url=? LIMIT 1",
+            arrayOf(normalized)).use{c->if(c.moveToFirst())c.getString(0)else null}
+    }
     fun next(): Video? {
         val now=System.currentTimeMillis().toString()
         readableDatabase.rawQuery("""SELECT id,url,title,state,progress,saved_uri,error,watch_id
