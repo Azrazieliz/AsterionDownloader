@@ -725,6 +725,7 @@ class AsterionHomeActivity:Activity(){
             xphotos.count{it.state=="running"||it.state=="queued"}} pending   •   "+
             "${videos.count{it.status=="error"}+comics.count{it.state=="error"}+xphotos.count{it.state=="error"}} failed",
             14f,theme.primary,true))
+        DirectDownloadTracker.render(this,body)
         val actions=theme.row(this)
         actions.addView(button("RETRY VIDEOS"){VideoEngine.launch(this,false)},
             LinearLayout.LayoutParams(0,-2,1f))
