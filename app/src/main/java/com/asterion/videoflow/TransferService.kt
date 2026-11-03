@@ -212,14 +212,13 @@ object VideoEngine {
             }
             val decision=FullLengthVideoPolicy.assess(item.title,
                 extracted,link,duration,expected)
-            if(decision.verdict==FullLengthVideoPolicy.Verdict.ACCEPT &&
-                FullLengthVideoPolicy.knownFullReferenceHost(link) && duration!=null){
+            // Collect comparison evidence even for held videos, without granting
+            // full-length status to an uncorroborated provider's own metadata.
+            if(duration!=null){
                 FullSceneRuntimeDb(context).use{store->
                     store.remember(item.title,link,duration)
-                    store.remember(extracted,link,duration)
+                    if(extracted!=item.title)store.remember(extracted,link,duration)
                 }
-                db.requeueHeldByTitle(item.title)
-                if(extracted!=item.title)db.requeueHeldByTitle(extracted)
             }
             return (duration?:0L) to decision
         }
@@ -296,7 +295,7 @@ object VideoEngine {
         }.getOrNull()
         val promised=expectedDuration?:throw FullVersionUnavailable(
             "Full-version runtime was lost before local verification")
-        if(actual==null || actual*100L<promised*95L){
+        if(actual==null || actual+5L<promised){
             file.delete()
             throw FullVersionUnavailable(
                 "Incomplete downloaded runtime: ${actual?:0}s of ${promised}s")
