@@ -8,18 +8,36 @@ import kotlin.concurrent.thread
 /** Durable periodic creator updates with bounded history pagination. */
 object CreatorArchiveScheduler {
     private const val JOB=41082
+    private const val CATCHUP=41083
+    private const val PAGE_BUDGET=8
     private val scanning=AtomicBoolean(false)
+    private fun scheduleCatchup(context:Context,delayMs:Long=30_000L){
+        if(!AppPower.enabled(context))return
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        if(jobs.allPendingJobs.any{it.id==CATCHUP})return
+        jobs.schedule(JobInfo.Builder(CATCHUP,
+            ComponentName(context,CreatorArchiveJob::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setPersisted(true)
+            .setMinimumLatency(delayMs)
+            .setOverrideDeadline(delayMs+15L*60_000L)
+            .build())
+    }
     fun ensure(context:Context){
         val jobs=context.getSystemService(JobScheduler::class.java)
-        val enabled=CreatorArchiveStore.list(context).any{creator->enabled(context,creator)}
-        if(!enabled){jobs.cancel(JOB);return}
-        if(jobs.allPendingJobs.any{it.id==JOB})return
-        val request=JobInfo.Builder(JOB,ComponentName(context,CreatorArchiveJob::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setPeriodic(6L*60L*60L*1000L)
-            .setPersisted(true)
-            .build()
-        jobs.schedule(request)
+        val creators=CreatorArchiveStore.list(context).filter{enabled(context,it)}
+        if(creators.isEmpty()){jobs.cancel(JOB);jobs.cancel(CATCHUP);return}
+        if(jobs.allPendingJobs.none{it.id==JOB}){
+            val request=JobInfo.Builder(JOB,ComponentName(context,CreatorArchiveJob::class.java))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPeriodic(6L*60L*60L*1000L)
+                .setPersisted(true)
+                .build()
+            jobs.schedule(request)
+        }
+        val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
+        if(creators.any{!prefs.getBoolean("complete_cursor_"+it.url.hashCode(),false)})
+            scheduleCatchup(context)
     }
     fun scanNow(context:Context){
         if(!AppPower.enabled(context))return
@@ -34,6 +52,7 @@ object CreatorArchiveScheduler {
         if(!AppPower.enabled(context)||!scanning.compareAndSet(false,true))return
         try{
             val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
+            var pendingCatchup=false
             for(creator in CreatorArchiveStore.list(context)){
                 if(shouldStop()||!AppPower.enabled(context))break
                 if(!prefs.getBoolean("active_"+creator.url.hashCode(),true))continue
@@ -57,22 +76,36 @@ object CreatorArchiveScheduler {
                     }
                 }.onFailure{errors+="Latest posts: "+(it.message?:"source unavailable")}
 
-                // A saved historical cursor is the next *uncompleted* page, not the
-                // next page after an arbitrary batch. Resume it on subsequent runs.
+                // Resume up to PAGE_BUDGET historical pages per pass. Keep the existing
+                // per-page 40-download ceiling, retry deferred items before advancing,
+                // and checkpoint each completed page to survive process termination.
                 if(latest.isSuccess && !completed && cursor>0 &&
                     !shouldStop() && AppPower.enabled(context)){
-                    val history=runCatching{CreatorArchives.posts(creator,cursor)}
-                    history.onSuccess{page->
+                    var pages=0
+                    while(pages<PAGE_BUDGET && !completed && errors.isEmpty() &&
+                        !shouldStop() && AppPower.enabled(context)){
+                        val history=runCatching{CreatorArchives.posts(creator,cursor)}
+                        val page=history.getOrElse{
+                            errors+="Backfill: "+(it.message?:"source unavailable")
+                            break
+                        }
                         val outcome=CreatorArchiveDownloads.enqueue(context,page,40)
                         newlyQueued+=outcome.queued
                         deferred+=outcome.deferred
-                        if(outcome.failed>0)errors+=outcome.failed.toString()+" older attachments failed"
-                        if(outcome.deferred==0 && outcome.failed==0){
-                            if(page.size<50)completed=true
-                            else if(cursor<50000)cursor+=50
-                            else completed=true
+                        if(outcome.failed>0)
+                            errors+=outcome.failed.toString()+" older attachments failed"
+                        if(outcome.deferred>0 || outcome.failed>0)break
+                        if(page.size<50)completed=true
+                        else if(cursor<50000)cursor+=50
+                        else {
+                            errors+="History API reached maximum supported offset"
+                            break
                         }
-                    }.onFailure{errors+="Backfill: "+(it.message?:"source unavailable")}
+                        // Cursor points to the next unfinished page, never past it.
+                        prefs.edit().putInt(key,cursor)
+                            .putBoolean("complete_"+key,completed).apply()
+                        pages++
+                    }
                 }
 
                 // If the archive was completed, recheck the overlapping second page:
@@ -91,7 +124,9 @@ object CreatorArchiveScheduler {
                     .putLong("last_"+key,System.currentTimeMillis())
                     .putInt("queued_"+key,newlyQueued)
                     .putString("error_"+key,errors.joinToString(" | ").take(500)).apply()
+                if(!completed && errors.isEmpty() && !shouldStop())pendingCatchup=true
             }
+            if(pendingCatchup && !shouldStop())scheduleCatchup(context,2L*60_000L)
         }finally{scanning.set(false)}
     }
     fun enabled(context:Context,creator:ArchiveCreator):Boolean=
