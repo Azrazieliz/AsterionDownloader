@@ -59,6 +59,26 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
         writableDatabase.execSQL("UPDATE tasks SET attempts=attempts+1 WHERE id=$task")
     }
     fun retry(task:Long){update(task,"queued",0)}
+    fun retryDueFailures():Int{
+        val now=System.currentTimeMillis()
+        var queued=0
+        readableDatabase.rawQuery(
+            "SELECT id,attempts,updated,error FROM tasks WHERE state='error' AND attempts<6",
+            null).use{c->
+            while(c.moveToNext()){
+                val id=c.getLong(0)
+                val attempts=c.getInt(1)
+                val last=c.getLong(2)
+                val error=c.getString(3).orEmpty()
+                if(Regex("(?i)\\b(?:401|402|403|404|410)\\b|subscription|not authorized")
+                    .containsMatchIn(error))continue
+                val delay=(30_000L shl attempts.coerceIn(0,6))
+                    .coerceAtMost(6L*60L*60L*1000L)
+                if(now-last>=delay){retry(id);queued++}
+            }
+        }
+        return queued
+    }
     fun count(state:String):Int=readableDatabase.rawQuery(
         "SELECT COUNT(*) FROM tasks WHERE state=?",arrayOf(state)).use{c->
         if(c.moveToFirst())c.getInt(0) else 0}
