@@ -105,9 +105,26 @@ object AsterionSearchHub {
         box.addView(field,ui.lp(a,0))
         val status=ui.text(a,"",12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        val siteFilters=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
         fun draw(found:List<Found>){
             results.removeAllViews()
-            for(hit in found.take(75)){
+            siteFilters.removeAllViews()
+            val available=listOf("ALL")+found.map{it.source}.distinct().sorted()
+            val requested=prefs.getString("site_filter_"+selected,"ALL").orEmpty()
+            val chosen=if(requested in available)requested else "ALL"
+            if(available.size>2){
+                for(name in available){
+                    val chip=ui.chip(a,if(name=="ALL")"All sites" else name.take(22),
+                        chosen==name){
+                        prefs.edit().putString("site_filter_"+selected,name).apply()
+                        draw(found)
+                    }
+                    siteFilters.addView(chip,LinearLayout.LayoutParams(-2,-2).apply{
+                        rightMargin=ui.px(a,6)
+                    })
+                }
+            }
+            for(hit in found.filter{chosen=="ALL"||it.source==chosen}.take(75)){
                 val c=ui.card(a)
                 if(SearchRanking.validUrl(hit.thumbnail)){
                     val preview=ImageView(a).apply{scaleType=ImageView.ScaleType.CENTER_CROP}
@@ -169,6 +186,10 @@ object AsterionSearchHub {
         },ui.lp(a,8))
         box.addView(status,ui.lp(a,7))
         p.addView(box,ui.lp(a,9))
+        p.addView(HorizontalScrollView(a).apply{
+            isHorizontalScrollBarEnabled=false
+            addView(siteFilters)
+        },ui.lp(a,8))
         p.addView(results,ui.lp(a,9))
         draw(stored(a,selected))
     }
