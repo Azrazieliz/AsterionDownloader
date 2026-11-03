@@ -30,7 +30,7 @@ data class IndexedItem(val url:String,val title:String,val preview:String?,val s
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,1) {
+    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,2) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
@@ -39,11 +39,18 @@ class SourceIndexDb(context:Context):
         db.execSQL("""CREATE TABLE entries(
             url TEXT PRIMARY KEY,source TEXT NOT NULL,title TEXT NOT NULL,preview TEXT,
             area TEXT NOT NULL,kind TEXT NOT NULL,discovered_at INTEGER NOT NULL,
-            queued INTEGER NOT NULL DEFAULT 0)""")
+            queued INTEGER NOT NULL DEFAULT 0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            retry_after INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("CREATE INDEX entries_source ON entries(source,discovered_at)")
         db.execSQL("CREATE INDEX entries_area ON entries(area,discovered_at)")
     }
-    override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){}
+    override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
+        if(a<2){
+            db.execSQL("ALTER TABLE entries ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE entries ADD COLUMN retry_after INTEGER NOT NULL DEFAULT 0")
+        }
+    }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
         val v=ContentValues().apply{
             put("url",url);put("name",name);put("area",area);put("adapter",adapter)
@@ -106,8 +113,42 @@ class SourceIndexDb(context:Context):
         return inserted
     }
     fun markQueued(url:String){
-        val v=ContentValues().apply{put("queued",1)}
+        val v=ContentValues().apply{
+            put("queued",1);put("attempts",0);put("retry_after",0)
+        }
         writableDatabase.update("entries",v,"url=?",arrayOf(url))
+    }
+    /** Retry only direct originals not yet accepted by their native download
+     * engine. Historical pages do not have to be revisited just to retry a URL.
+     */
+    fun pendingDirect(limit:Int=30):List<IndexedItem>{
+        val rows=ArrayList<IndexedItem>()
+        readableDatabase.rawQuery(
+            """SELECT url,title,preview,source,area,kind,discovered_at,queued
+                FROM entries WHERE queued=0 AND kind IN ('video','epub','model')
+                    AND retry_after<=?
+                ORDER BY discovered_at ASC LIMIT ?""",
+            arrayOf(System.currentTimeMillis().toString(),
+                limit.coerceIn(1,120).toString())).use{c->
+            while(c.moveToNext())rows+=IndexedItem(c.getString(0),c.getString(1),
+                c.getString(2),c.getString(3),c.getString(4),c.getString(5),
+                c.getLong(6),c.getInt(7)==1)
+        }
+        return rows
+    }
+    fun defer(url:String){
+        readableDatabase.rawQuery("SELECT attempts FROM entries WHERE url=?",
+            arrayOf(url)).use{c->
+            if(!c.moveToFirst())return
+            val n=c.getInt(0).coerceIn(0,10)
+            val backoff=(60_000L shl n.coerceAtMost(7))
+                .coerceAtMost(6L*60*60_000L)
+            val cv=ContentValues().apply{
+                put("attempts",n+1)
+                put("retry_after",System.currentTimeMillis()+backoff)
+            }
+            writableDatabase.update("entries",cv,"url=?",arrayOf(url))
+        }
     }
     fun items(area:String?=null,limit:Int=60):List<IndexedItem>{
         val out=ArrayList<IndexedItem>()
@@ -383,6 +424,15 @@ object SourceIndex {
                 if(area==null)edit.putBoolean("initial",advanced==0)
                 edit.apply()
             }
+            // Repair transient enqueue failures even after the historical cursor
+            // advanced, without downloading duplicate originals.
+            SourceIndexDb(context).use{db->
+                for(item in db.pendingDirect(30)){
+                    if(stop() || !AppPower.enabled(context))break
+                    if(queueDirect(context,item))db.markQueued(item.url)
+                    else db.defer(item.url)
+                }
+            }
         }finally{busy.set(false)}
     }
     /** Follow only validated same-site redirects, re-evaluating the cookie vault for
@@ -447,8 +497,10 @@ object SourceIndex {
                     if(db.upsert(item)){
                         fresh++
                         if(item.kind in setOf("video","epub","model") &&
-                            (item.area!="BOOKS" || item.kind=="epub") &&
-                            queueDirect(context,item)) db.markQueued(item.url)
+                            (item.area!="BOOKS" || item.kind=="epub")){
+                            if(queueDirect(context,item))db.markQueued(item.url)
+                            else db.defer(item.url)
+                        }
                     }
                 }
             }
@@ -472,7 +524,11 @@ object SourceIndex {
         if(item.kind=="video"){
             val queued=VideoDb(context).use{it.addVideo(item.url,item.title)}
             if(queued)VideoEngine.launch(context,false)
-            return queued
+            // Existing downloads, including strict full-length holds, are owned by
+            // VideoFlow and must not be enqueued repeatedly by the source scanner.
+            return queued || VideoDb(context).use{db->
+                db.listVideos(1000).any{it.url==item.url}
+            }
         }
         val suffix=if(item.kind=="epub")".epub" else ".bin"
         val filename=URI(item.url).path.substringAfterLast('/')
