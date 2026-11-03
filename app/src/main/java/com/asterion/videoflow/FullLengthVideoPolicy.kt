@@ -46,12 +46,12 @@ object FullLengthVideoPolicy {
                     "Only ${duration}s of expected ${referenceSec}s")
             return Decision(Verdict.ACCEPT,"Verified against full-version runtime")
         }
-        // Per user, these are preferred full-scene discovery sources. A trusted
-        // provider is not absolute proof of completeness, but may supply the
-        // initial runtime reference. Short uploads cannot seed this reference.
-        if(knownFullReferenceHost(url)&&duration>=20L*60L)
-            return Decision(Verdict.ACCEPT,"Preferred full-scene provider; duration recorded")
+        // A site, popularity/reviews, a "full" label, and a 20/50/90-minute
+        // runtime are NOT proof that a release is complete. This includes
+        // preferred archives and short-cut-heavy providers such as Porngo.
+        // Without an independently established original runtime, fail closed:
+        // do not download an unverified cut, regardless of provider or length.
         return Decision(Verdict.HOLD_FOR_REFERENCE,
-            "No comparable full-scene runtime yet; skipping automatic transfer")
+            "Full original runtime not independently verified; automatic transfer held")
     }
 }
