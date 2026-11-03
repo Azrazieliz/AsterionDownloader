@@ -93,7 +93,7 @@ class AsterionHomeActivity:Activity(){
         head.addView(theme.brandMark(this,47),LinearLayout.LayoutParams(dp(47),dp(47)))
         val label=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(11),0,0,0)}
         label.addView(text("ASTERION DOWNLOADER",19f,theme.white,true))
-        label.addView(text("Creator archives · Sync · Backfill",11f,theme.secondary))
+        label.addView(text("Discover · Follow · Download",11f,theme.secondary))
         head.addView(label,LinearLayout.LayoutParams(0,-2,1f))
         root.addView(head)
         val settings=text("SETTINGS",12f,theme.secondary,true).apply{
@@ -228,8 +228,49 @@ class AsterionHomeActivity:Activity(){
         addView(text(subtitle,11f,theme.secondary).apply{
             gravity=Gravity.CENTER
             setPadding(0,dp(6),0,0)
-            maxLines=3
+            maxLines=2
         },LinearLayout.LayoutParams(-1,-2))
+        val previews=homePreviews(target)
+        if(previews.isNotEmpty()){
+            val row=theme.row(this@AsterionHomeActivity)
+            for((url,referer) in previews.take(3)){
+                val image=ImageView(this@AsterionHomeActivity).apply{
+                    scaleType=ImageView.ScaleType.CENTER_CROP
+                    background=theme.shape(this@AsterionHomeActivity,theme.raised,8)
+                }
+                row.addView(image,LinearLayout.LayoutParams(0,dp(58),1f).apply{
+                    leftMargin=dp(2);rightMargin=dp(2)
+                })
+                RemoteImageLoader.load(this@AsterionHomeActivity,image,url,referer)
+            }
+            addView(row,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(9)})
+        }
+    }
+    private fun homePreviews(target:String):List<Pair<String,String>>=when(target){
+        "X"->XPhotoQueue(this).use{db->
+            db.recent(80).filter{it.photo.startsWith("https://")}
+                .distinctBy{it.photo}.take(3).map{it.photo to "https://x.com/"}
+        }
+        "Kyora"->GalleryDb(this).use{db->
+            db.latestSelectedGalleries(15).mapNotNull{(_,gallery)->
+                gallery.firstUrl?.takeIf{it.startsWith("https://")}
+                    ?.let{it to it}
+            }.take(3)
+        }
+        "Porn"->(SourceIndex.items(this,"ADULT",5)+
+            SourceIndex.items(this,"HENTAI",5)).mapNotNull{item->
+                item.preview?.let{it to item.source}
+            }.take(3)
+        "Books"->SourceIndex.items(this,"BOOKS",12).mapNotNull{item->
+            item.preview?.let{it to item.source}
+        }.take(3)
+        "Torrents"->SourceIndex.items(this,"GAMES",12).mapNotNull{item->
+            item.preview?.let{it to item.source}
+        }.take(3)
+        "Assets"->SourceIndex.items(this,"ASSETS",12).mapNotNull{item->
+            item.preview?.let{it to item.source}
+        }.take(3)
+        else->emptyList()
     }
     private fun tileRow(left:View,right:View){
         val row=theme.row(this)
