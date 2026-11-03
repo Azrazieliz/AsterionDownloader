@@ -41,6 +41,16 @@ object DirectDownloadTracker {
         })
         prefs(c).edit().putString(KEY,arr.toString()).apply()
     }
+    fun forget(c:Context,id:Long){
+        val saved=read(c).filter{it.id!=id}
+        val arr=JSONArray()
+        for(job in saved)arr.put(JSONObject().apply{
+            put("id",job.id);put("filename",job.filename)
+            put("folder",job.folder);put("host",job.sourceHost)
+            put("created",job.created)
+        })
+        prefs(c).edit().putString(KEY,arr.toString()).apply()
+    }
     fun states(c:Context,limit:Int=50):List<State>{
         val saved=read(c).take(limit.coerceIn(1,200))
         if(saved.isEmpty())return emptyList()
