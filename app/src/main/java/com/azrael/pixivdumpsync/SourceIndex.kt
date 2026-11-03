@@ -193,10 +193,18 @@ class SourceIndexDb(context:Context):
         val rows=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
-                FROM entries WHERE queued=0 AND retry_after<=? AND (
+                FROM entries WHERE queued=0 AND retry_after<=? AND
+                    EXISTS (SELECT 1 FROM sources src WHERE src.url=entries.source
+                        AND src.enabled=1) AND (
                     (kind='video' AND area IN ('VIDEOS','ADULT','HENTAI','CREATORS'))
                     OR (kind='epub' AND area='BOOKS')
                     OR (kind='books' AND area='BOOKS' AND
+                        (url LIKE 'https://freewebnovel.com/%' OR
+                         url LIKE 'https://www.freewebnovel.com/%' OR
+                         url LIKE 'https://novelbuddy.com/%' OR
+                         url LIKE 'https://www.novelbuddy.com/%' OR
+                         url LIKE 'https://readnovelfull.com/%' OR
+                         url LIKE 'https://www.readnovelfull.com/%') AND
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
                         url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
                     OR (kind='model' AND area='ASSETS')
@@ -204,7 +212,9 @@ class SourceIndexDb(context:Context):
                         (url LIKE 'https://nhentai.net/g/%' OR
                          url LIKE 'https://nhentai.xxx/g/%' OR
                          url LIKE 'https://sushiscan.net/catalogue/%'))
-                    OR (kind='archive' AND area IN ('COMICS','GAMES','ASSETS'))
+                    OR (kind='archive' AND area='COMICS' AND
+                        (url LIKE '%.zip' OR url LIKE '%.zip?%'))
+                    OR (kind='archive' AND area IN ('GAMES','ASSETS'))
                     OR (kind='apk' AND area='GAMES')
                 )
                 ORDER BY discovered_at ASC LIMIT ?""",
