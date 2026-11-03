@@ -126,7 +126,7 @@ class SourceIndexDb(context:Context):
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
                 FROM entries WHERE queued=0 AND
-                    kind IN ('video','epub','model','archive','apk') AND retry_after<=?
+                    kind IN ('video','epub','model','archive','apk','books') AND retry_after<=?
                 ORDER BY discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,120).toString())).use{c->
@@ -207,7 +207,8 @@ internal object SourceIndexParser {
      * Books remain EPUB-only; comics remain ZIP-only; videos use VideoFlow.
      */
     internal fun autoOriginal(item:IndexedItem):Boolean=when(item.area){
-        "BOOKS"->item.kind=="epub"
+        "BOOKS"->item.kind=="epub" ||
+            (item.kind=="books" && NovelEpubParser.supportedSeries(item.url))
         "COMICS"->item.kind=="archive" &&
             runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)
         "GAMES"->item.kind in setOf("apk","archive")
@@ -542,6 +543,10 @@ object SourceIndex {
             return queued || VideoDb(context).use{it.hasVideo(item.url)}
         }
         if(!SourceIndexParser.autoOriginal(item))return false
+        if(item.area=="BOOKS" && item.kind=="books"){
+            NovelEpubService.enqueue(context,item.url,item.title)
+            return true
+        }
         val suffix=when(item.kind){
             "epub"->".epub";"apk"->".apk";"archive"->".zip";else->".bin"
         }
