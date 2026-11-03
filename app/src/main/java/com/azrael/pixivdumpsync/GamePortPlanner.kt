@@ -60,6 +60,7 @@ object GamePortPlanner {
             return Engine.RPG_MAKER
         if(names.any{it.endsWith("index.html")})return Engine.HTML5
         if(names.any{it.endsWith(".apk")})return Engine.APK
+        if(names.any{it.endsWith(".pck")})return Engine.GODOT_EXPORT
         if(names.any{it.endsWith(".exe")||it.endsWith(".msi")}){
             if(names.any{it.endsWith("unityplayer.dll")||
                 it.endsWith("_data/globalgamemanagers")})
@@ -69,7 +70,6 @@ object GamePortPlanner {
                 return Engine.UNREAL_WINDOWS
             return Engine.WINDOWS
         }
-        if(names.any{it.endsWith(".pck")})return Engine.GODOT_EXPORT
         if(names.any{it.endsWith(".unity3d")||it.endsWith(".assets")})return Engine.UNITY
         if(names.any{it.endsWith(".pak")})return Engine.UNREAL
         return Engine.UNKNOWN
