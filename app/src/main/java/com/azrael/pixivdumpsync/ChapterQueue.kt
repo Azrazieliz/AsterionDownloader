@@ -63,7 +63,7 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
         val now=System.currentTimeMillis()
         var queued=0
         readableDatabase.rawQuery(
-            "SELECT id,attempts,updated,error FROM tasks WHERE state='error' AND attempts<6",
+            "SELECT id,attempts,updated,error FROM tasks WHERE state='error'",
             null).use{c->
             while(c.moveToNext()){
                 val id=c.getLong(0)
