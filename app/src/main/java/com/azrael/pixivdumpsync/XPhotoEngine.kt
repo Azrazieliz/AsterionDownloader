@@ -124,13 +124,14 @@ object XPhotoEngine {
             .setContentText(description.take(100)).setContentIntent(open)
             .setOngoing(true).build()
     }
-    fun start(context:Context) {
+    fun start(context:Context,automatic:Boolean=false) {
         if(!AppPower.enabled(context))return
         val intent=Intent(context,XPhotoService::class.java)
+            .putExtra("asterion_auto_sync",automatic)
         if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
         else context.startService(intent)
     }
-    fun submit(context:Context,onStatus:(String)->Unit={})=executor.submit{
+    fun submit(context:Context,automatic:Boolean=false,onStatus:(String)->Unit={})=executor.submit{
         if(!AppPower.enabled(context))return@submit
         if(!working.compareAndSet(false,true))return@submit
         try{
@@ -138,6 +139,8 @@ object XPhotoEngine {
                 db.recover()
                 for((source,handle,cursor) in db.sources()) {
                     if(!AppPower.enabled(context))break
+                    if(automatic && !context.getSharedPreferences("asterion_x_live",0)
+                        .getBoolean(source,true))continue
                     onStatus("Scanning X images @${handle}")
                     runCatching{scan(db,source,handle,cursor)}
                         .onFailure{db.cursor(source,handle,cursor,it.message)}
@@ -225,7 +228,8 @@ class XPhotoService:Service(){
     override fun onBind(intent:Intent?):IBinder?=null
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
         startForeground(25823,XPhotoEngine.notice(this,"Checking images"))
-        val future=XPhotoEngine.submit(applicationContext){message->
+        val automatic=intent?.getBooleanExtra("asterion_auto_sync",false)==true
+        val future=XPhotoEngine.submit(applicationContext,automatic){message->
             getSystemService(NotificationManager::class.java)
                 .notify(25823,XPhotoEngine.notice(this,message))
         }
