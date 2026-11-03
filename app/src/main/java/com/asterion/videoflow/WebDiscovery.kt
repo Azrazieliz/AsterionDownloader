@@ -119,41 +119,74 @@ object WebDiscovery {
     }
 
 
-    /** Follow only numbered pages of the exact performer profile. */
-    fun findWatchPornArtist(address:String,full:Boolean):List<VideoHit>{
-        val first=URI(address)
+    /** One independently resumable WatchPorn performer page.
+     * Each next cursor is an exact subpath of the approved performer profile.
+     * Video pages and previews are never confused with pagination links.
+     */
+    fun watchPornArtistPage(profile:String,address:String):VideoPage {
+        val first=URI(profile)
         require(first.scheme=="https" && first.host=="watchporn.to" &&
-            Regex("^/models/[a-zA-Z0-9_-]+/?$").matches(first.path)) {
+            Regex("^/models/[a-zA-Z0-9_-]+/?$").matches(first.path)){
             "Expected a WatchPorn performer URL"
         }
         val base="https://watchporn.to"+first.path.trimEnd('/')+"/"
-        val visited=HashSet<String>()
-        val videos=linkedMapOf<String,VideoHit>()
-        var current=base
-        for(page in 0 until (if(full)80 else 3)){
-            if(!visited.add(current))break
-            val doc=open(current)
-            require(doc.location().startsWith(base)){"Performer page redirected"}
-            val root=URI(doc.location())
-            for(a in doc.select("a[href*=/video/]").take(700)){
-                val url=runCatching{root.resolve(a.attr("href")).toString()}.getOrNull()?:continue
-                val u=runCatching{URI(url)}.getOrNull()?:continue
-                if(u.scheme!="https" || u.host!="watchporn.to" ||
-                    !Regex("^/video/[0-9]+/[^?#]*$").matches(u.path))continue
-                val title=a.attr("title").ifBlank{
-                    a.selectFirst("img[alt]")?.attr("alt").orEmpty()
-                }.ifBlank{a.text()}.ifBlank{"WatchPorn video"}
-                videos.putIfAbsent(url,VideoHit(title.take(180),url))
-                if(videos.size>=3000)return videos.values.toList()
-            }
-            val next=doc.selectFirst(".wp-pag__next a[href]")?.absUrl("href").orEmpty()
-            val target=runCatching{URI(next)}.getOrNull()
-            if(target?.scheme!="https" || target.host!="watchporn.to" ||
-                !Regex("^"+Regex.escape(first.path.trimEnd('/'))+"/[0-9]+/?$")
-                    .matches(target.path) || next in visited)break
-            current=next
+        val target=URI(address)
+        require(target.scheme=="https" && target.host=="watchporn.to" &&
+            (target.path==first.path.trimEnd('/') ||
+             target.path==first.path.trimEnd('/')+"/" ||
+             Regex("^"+Regex.escape(first.path.trimEnd('/'))+"/[0-9]+/?$")
+                 .matches(target.path))) {
+            "Performer page crossed to a different source"
         }
-        return videos.values.toList()
+        val doc=open(address)
+        val location=URI(doc.location())
+        require(location.scheme=="https" && location.host=="watchporn.to" &&
+            location.path.startsWith(base.removePrefix("https://watchporn.to"))) {
+            "Performer page redirected"
+        }
+        val found=LinkedHashMap<String,VideoHit>()
+        for(a in doc.select("a[href*=/video/]").take(700)){
+            val url=runCatching{location.resolve(a.attr("href")).toString()}
+                .getOrNull()?:continue
+            val u=runCatching{URI(url)}.getOrNull()?:continue
+            if(u.scheme!="https" || u.host!="watchporn.to" ||
+                !Regex("^/video/[0-9]+/[^?#]*$").matches(u.path))continue
+            val title=a.attr("title").ifBlank{
+                a.selectFirst("img[alt]")?.attr("alt").orEmpty()
+            }.ifBlank{a.text()}.ifBlank{"WatchPorn video"}
+            val thumb=a.selectFirst("img")?.let{img->
+                listOf("data-original","data-src","src")
+                    .map{img.absUrl(it)}.firstOrNull{isUrl(it)}
+            }
+            found.putIfAbsent(url,VideoHit(title.take(180),url,thumb))
+        }
+        val next=doc.selectFirst(".wp-pag__next a[href],"+
+            ".pagination a.next[href],a[rel=next][href]")
+            ?.absUrl("href")
+        val nextUri=next?.let{runCatching{URI(it)}.getOrNull()}
+        val cursor=nextUri?.takeIf{
+            it.scheme=="https" && it.host=="watchporn.to" &&
+            Regex("^"+Regex.escape(first.path.trimEnd('/'))+"/[0-9]+/?$")
+                .matches(it.path) && it.toString()!=address
+        }?.toString()
+        return VideoPage(found.values.toList(),cursor)
+    }
+
+    /** Compatibility API for existing callers; backfill uses watchPornArtistPage
+     * with persisted cursor instead of silently stopping after 80 pages.
+     */
+    fun findWatchPornArtist(address:String,full:Boolean):List<VideoHit>{
+        val found=LinkedHashMap<String,VideoHit>()
+        val visited=HashSet<String>()
+        var cursor:String?=address
+        repeat(if(full)8 else 1){
+            val current=cursor?:return@repeat
+            if(!visited.add(current))return@repeat
+            val page=watchPornArtistPage(address,current)
+            for(item in page.hits)found.putIfAbsent(item.url,item)
+            cursor=page.next
+        }
+        return found.values.toList()
     }
 
     fun directMedia(address:String):String? {
