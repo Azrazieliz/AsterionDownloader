@@ -18,16 +18,16 @@ import java.util.Date
 
 /** URL-based archiver only: no keyword search, performer indexing, or Tor. */
 class MainActivity:Activity() {
-    private val bg=Color.rgb(10,14,24)
-    private val surface=Color.rgb(20,27,42)
-    private val elevated=Color.rgb(30,38,55)
-    private val outline=Color.rgb(48,59,79)
-    private val primary=Color.rgb(156,146,249)
-    private val mint=Color.rgb(105,220,180)
-    private val amber=Color.rgb(249,193,111)
-    private val bad=Color.rgb(252,126,144)
-    private val white=Color.rgb(242,245,254)
-    private val grey=Color.rgb(162,174,194)
+    private val bg=com.azrael.pixivdumpsync.NocturneDesign.background
+    private val surface=com.azrael.pixivdumpsync.NocturneDesign.surface
+    private val elevated=com.azrael.pixivdumpsync.NocturneDesign.raised
+    private val outline=com.azrael.pixivdumpsync.NocturneDesign.border
+    private val primary=com.azrael.pixivdumpsync.NocturneDesign.primary
+    private val mint=Color.rgb(179,195,184)
+    private val amber=Color.rgb(206,190,169)
+    private val bad=com.azrael.pixivdumpsync.NocturneDesign.danger
+    private val white=com.azrael.pixivdumpsync.NocturneDesign.white
+    private val grey=com.azrael.pixivdumpsync.NocturneDesign.secondary
     private lateinit var db:VideoDb
     private lateinit var root:LinearLayout
     private lateinit var content:LinearLayout
@@ -154,7 +154,7 @@ class MainActivity:Activity() {
     private fun home(){
         val hero=col().apply{
             background=GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(46,43,93),Color.rgb(23,51,72))).apply{
+                intArrayOf(Color.rgb(35,36,40),Color.rgb(18,19,22))).apply{
                 cornerRadius=dp(24).toFloat()
             };pad(this,21,24)
         }
