@@ -48,10 +48,10 @@ object AuthenticatedItemDownloader {
                 }.onFailure{error->
                     val message=error.message.orEmpty()
                     val failure=error as? OriginalAccessException
-                    val requiresLogin=failure?.cause==OriginalAccessCause.SIGN_IN ||
-                        (failure?.cause==OriginalAccessCause.NO_ORIGINAL &&
+                    val requiresLogin=failure?.reason==OriginalAccessCause.SIGN_IN ||
+                        (failure?.reason==OriginalAccessCause.NO_ORIGINAL &&
                             !SiteSession.bound(a,item.source))
-                    val restricted=failure?.cause==OriginalAccessCause.ENTITLEMENT
+                    val restricted=failure?.reason==OriginalAccessCause.ENTITLEMENT
                     if((requiresLogin || restricted) && SourceIndexParser.safe(item.source)){
                         val data=JSONObject().apply{
                             put("url",item.url);put("source",item.source)
@@ -75,7 +75,7 @@ object AuthenticatedItemDownloader {
                                 preferences(a).edit().remove(PENDING).apply()
                             }.show()
                     }else{
-                        val summary=when(failure?.cause){
+                        val summary=when(failure?.reason){
                             OriginalAccessCause.RATE_LIMIT->
                                 "Provider rate-limited this request. Try again later."
                             OriginalAccessCause.NOT_FOUND->
