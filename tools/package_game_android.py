@@ -87,7 +87,7 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
         with ZipFile(source) as z:
             members=safe_members(z);paths=[m.filename for m in members]
     elif source.is_dir():
-        paths=[str(p.relative_to(source)) for p in source.rglob("*") if p.is_file()]
+        paths=[str(p.relative_to(source)) for p in source.rglob("*")]
         if len(paths)>100000:raise ValueError("Project contains too many files")
     else:paths=[source.name]
     engine=detect(paths)
