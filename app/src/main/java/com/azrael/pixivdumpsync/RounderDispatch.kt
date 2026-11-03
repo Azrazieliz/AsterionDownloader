@@ -106,6 +106,7 @@ object RounderDispatch {
             val projection=arrayOf(BaseColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,
                 MediaStore.MediaColumns.RELATIVE_PATH,MediaStore.MediaColumns.DATE_ADDED)
             var total=0
+            var scanned=0
             val where="("+MediaStore.MediaColumns.DATE_ADDED+">? OR ("+
                 MediaStore.MediaColumns.DATE_ADDED+"=? AND "+BaseColumns._ID+">?))"
             val args=arrayOf(stamp.toString(),stamp.toString(),lastId.toString())
@@ -113,7 +114,8 @@ object RounderDispatch {
                 where,args,MediaStore.MediaColumns.DATE_ADDED+" ASC, "+
                     BaseColumns._ID+" ASC")?.use{cursor->
                 RounderOutbox(context).use{outbox->
-                    while(cursor.moveToNext() && total<2500){
+                    while(cursor.moveToNext() && scanned<2500){
+                        scanned++
                         val id=cursor.getLong(0)
                         val name=cursor.getString(1).orEmpty()
                         val folder=cursor.getString(2).orEmpty()
