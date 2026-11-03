@@ -41,7 +41,9 @@ object FullLengthVideoPolicy {
         if(duration<60L)
             return Decision(Verdict.REJECT_SHORT_VERSION,"Video shorter than one minute")
         if(referenceSec!=null && referenceSec>0){
-            if(duration*100L<referenceSec*97L)
+            // Allow only a few seconds of encoder/container timing variance.
+            // A 50-minute original cut down to 49 minutes is NOT acceptable.
+            if(duration+5L<referenceSec)
                 return Decision(Verdict.REJECT_SHORT_VERSION,
                     "Only ${duration}s of expected ${referenceSec}s")
             return Decision(Verdict.ACCEPT,"Verified against full-version runtime")
