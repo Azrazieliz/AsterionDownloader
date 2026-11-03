@@ -30,7 +30,7 @@ data class IndexedItem(val url:String,val title:String,val preview:String?,val s
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,2) {
+    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,3) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
@@ -41,7 +41,11 @@ class SourceIndexDb(context:Context):
             area TEXT NOT NULL,kind TEXT NOT NULL,discovered_at INTEGER NOT NULL,
             queued INTEGER NOT NULL DEFAULT 0,
             attempts INTEGER NOT NULL DEFAULT 0,
-            retry_after INTEGER NOT NULL DEFAULT 0)""")
+            retry_after INTEGER NOT NULL DEFAULT 0,
+            detail_checked INTEGER NOT NULL DEFAULT 0,
+            detail_attempts INTEGER NOT NULL DEFAULT 0,
+            detail_retry_after INTEGER NOT NULL DEFAULT 0,
+            detail_error TEXT)""")
         db.execSQL("CREATE INDEX entries_source ON entries(source,discovered_at)")
         db.execSQL("CREATE INDEX entries_area ON entries(area,discovered_at)")
     }
@@ -49,6 +53,12 @@ class SourceIndexDb(context:Context):
         if(a<2){
             db.execSQL("ALTER TABLE entries ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE entries ADD COLUMN retry_after INTEGER NOT NULL DEFAULT 0")
+        }
+        if(a<3){
+            db.execSQL("ALTER TABLE entries ADD COLUMN detail_checked INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE entries ADD COLUMN detail_attempts INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE entries ADD COLUMN detail_retry_after INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE entries ADD COLUMN detail_error TEXT")
         }
     }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
@@ -118,6 +128,56 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.update("entries",v,"url=?",arrayOf(url))
     }
+    /** Track detail pages separately from direct originals. Network or provider
+     * failures do not advance the detail cursor or silently discard attachments.
+     * Scans remain bounded even for collections with hundreds of thousands of posts.
+     */
+    fun pendingDetails(limit:Int=12):List<IndexedItem>{
+        val out=ArrayList<IndexedItem>()
+        readableDatabase.rawQuery(
+            """SELECT url,title,preview,source,area,kind,discovered_at,queued
+               FROM entries
+               WHERE detail_checked=0 AND detail_retry_after<=?
+                 AND area IN ('BOOKS','COMICS','GAMES','ASSETS',
+                     'VIDEOS','ADULT','HENTAI','CREATORS')
+                 AND kind NOT IN ('epub','archive','apk','model','video',
+                     'image','torrent')
+               ORDER BY discovered_at ASC LIMIT ?""",
+            arrayOf(System.currentTimeMillis().toString(),
+                limit.coerceIn(1,40).toString())).use{c->
+            while(c.moveToNext())out+=IndexedItem(c.getString(0),c.getString(1),
+                c.getString(2),c.getString(3),c.getString(4),c.getString(5),
+                c.getLong(6),c.getInt(7)==1)
+        }
+        return out
+    }
+    fun detailsFinished(url:String){
+        writableDatabase.update("entries",ContentValues().apply{
+            put("detail_checked",1);putNull("detail_error")
+            put("detail_retry_after",0)
+        },"url=?",arrayOf(url))
+    }
+    fun detailsFailed(url:String,reason:String){
+        readableDatabase.rawQuery("SELECT detail_attempts FROM entries WHERE url=?",
+            arrayOf(url)).use{c->
+            if(!c.moveToFirst())return
+            val n=c.getInt(0).coerceIn(0,12)
+            val wait=(60_000L shl n.coerceAtMost(8))
+                .coerceAtMost(12L*60L*60_000L)
+            writableDatabase.update("entries",ContentValues().apply{
+                put("detail_attempts",n+1)
+                put("detail_retry_after",System.currentTimeMillis()+wait)
+                put("detail_error",reason.take(280))
+            },"url=?",arrayOf(url))
+        }
+    }
+    fun hasPendingDetails():Boolean=
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM entries WHERE detail_checked=0 AND " +
+                "area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS') "+
+                "AND kind NOT IN ('epub','archive','apk','model','video','image','torrent') LIMIT 1",
+            null).use{it.moveToFirst()}
+
     /** Retry only direct originals not yet accepted by their native download
      * engine. Historical pages do not have to be revisited just to retry a URL.
      */
@@ -296,6 +356,54 @@ internal object SourceIndexParser {
         }
         return out.values.toList()
     }
+    /** Extract only files linked in the actual post content. A thumbnail, a meta
+     * preview, or an arbitrary sidebar image is not an original download.
+     * This is the conservative fallback for providers without a native API;
+     * the native Pixiv/Kyora/VideoFlow/EPUB/ZIP engines retain ownership.
+     */
+    internal fun detailOriginals(doc:Document,source:IndexedItem,clock:Long):
+            List<IndexedItem>{
+        val content=doc.select("main a[href],article a[href],.post a[href],"+
+            ".entry a[href],.attachments a[href],.download a[href],"+
+            "a[download][href]")
+        val results=LinkedHashMap<String,IndexedItem>()
+        for(link in content.take(1000)){
+            val url=link.absUrl("href").substringBefore('#')
+            if(!safe(url) || url==source.url)continue
+            val path=runCatching{URI(url).path.orEmpty().lowercase(Locale.ROOT)}
+                .getOrDefault("")
+            val basename=path.substringAfterLast('/')
+            if(Regex("(?i)(?:^|[-_.])(preview|sample|teaser|thumb|thumbnail)(?:[-_.]|$)")
+                .containsMatchIn(basename))continue
+            val type=kind(url,source.area)
+            val allowed=when(source.area){
+                "BOOKS"->type=="epub"
+                "COMICS"->type=="archive"&&path.endsWith(".zip")
+                "GAMES"->type in setOf("apk","archive")
+                "ASSETS"->type in setOf("model","archive")
+                "VIDEOS","ADULT","HENTAI","CREATORS"->type=="video"
+                else->false
+            }
+            if(!allowed)continue
+            val title=link.attr("download").ifBlank{link.attr("title")}
+                .ifBlank{link.text()}.ifBlank{source.title}
+            results.putIfAbsent(url,IndexedItem(url,title.take(180),
+                source.preview,source.source,source.area,type,clock,false))
+            if(results.size>=150)break
+        }
+        if(source.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS")){
+            for(video in doc.select("main video[src],main video source[src],"+
+                "article video[src],article video source[src],"+
+                ".post video[src],.post video source[src]")){
+                val url=video.absUrl("src").substringBefore('#')
+                if(!safe(url)||kind(url,source.area)!="video")continue
+                results.putIfAbsent(url,IndexedItem(url,source.title,source.preview,
+                    source.source,source.area,"video",clock,false))
+            }
+        }
+        return results.values.toList()
+    }
+
     /** Pagination is recognized only inside navigation controls. Numeric post IDs are
      * never treated as pages, even when their anchor text happens to be a number.
      */
@@ -393,7 +501,8 @@ object SourceIndex {
             return true
         return SourceIndexDb(context).use{db->
             db.sources().any{it.enabled && it.adapter=="generic" &&
-                !it.cursor.isNullOrBlank() && it.error.isNullOrBlank()}
+                !it.cursor.isNullOrBlank() && it.error.isNullOrBlank()} ||
+                db.hasPendingDetails()
         }
     }
     fun scheduleCatchup(context:Context,force:Boolean=false){
@@ -449,6 +558,36 @@ object SourceIndex {
                 val edit=pref.edit().putInt(offsetKey,advanced)
                 if(area==null)edit.putBoolean("initial",advanced==0)
                 edit.apply()
+            }
+            // Visit each discovered detail page independently of listing
+            // pagination; retries are persisted and bounded to protect the phone.
+            for(item in SourceIndexDb(context).use{it.pendingDetails(12)}){
+                if(stop() || !AppPower.enabled(context))break
+                runCatching{
+                    val source=SourceIndexDb(context).use{db->
+                        db.sources().firstOrNull{x->x.url==item.source}
+                    }?:error("Original provider is no longer enrolled")
+                    require(source.enabled &&
+                        SourceIndexParser.sameSite(source.url,item.url)){
+                        "Detail is outside its approved source"
+                    }
+                    val doc=fetchPage(source,item.url)
+                    val files=SourceIndexParser.detailOriginals(
+                        doc,item,System.currentTimeMillis())
+                    SourceIndexDb(context).use{db->
+                        for(file in files){
+                            db.upsert(file)
+                            if(SourceIndexParser.autoOriginal(file)){
+                                if(queueDirect(context,file))db.markQueued(file.url)
+                                else db.defer(file.url)
+                            }
+                        }
+                        db.detailsFinished(item.url)
+                    }
+                }.onFailure{failure->
+                    SourceIndexDb(context).use{db->db.detailsFailed(item.url,
+                        failure.message?:"Post detail unavailable")}
+                }
             }
             // Repair transient enqueue failures even after the historical cursor
             // advanced, without downloading duplicate originals.
