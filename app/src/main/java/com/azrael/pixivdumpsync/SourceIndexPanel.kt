@@ -74,7 +74,13 @@ object SourceIndexPanel {
             .setItems(arrayOf("DOWNLOAD ACCESSIBLE ORIGINAL",
                 "VIEW IN APP (SESSION)","SIGN IN TO PROVIDER")){_,i->
                 when(i){
-                    0->AuthenticatedItemDownloader.download(a,item)
+                    0->{
+                        if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
+                            NovelEpubService.enqueue(a,item.url,item.title)
+                            Toast.makeText(a,"Entire novel queued for EPUB assembly",
+                                Toast.LENGTH_LONG).show()
+                        }else AuthenticatedItemDownloader.download(a,item)
+                    }
                     1->a.startActivity(Intent(a,
                         com.azrael.galleryflow.ProviderWebActivity::class.java)
                         .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url)
