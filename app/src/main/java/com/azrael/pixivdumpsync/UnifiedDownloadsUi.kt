@@ -127,7 +127,9 @@ object UnifiedDownloadsUi {
                             }
                         }
                         State.FAILED->Toast.makeText(a,
-                            "Select the source card to retry; signed links are not retained.",
+                            if(DirectDownloadRetry.retryNow(a,item.job.id))
+                                "Retry requested with encrypted original URL"
+                            else "Original must be reopened; no verified retry URL is available",
                             Toast.LENGTH_LONG).show()
                         else->{}
                     }
@@ -147,10 +149,11 @@ object UnifiedDownloadsUi {
         summary.addView(ui.text(a,
             "$active active   ·   $failed failed   ·   $completed saved",
             13f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,0))
-        val actions=ui.weighted(a,ui.action(a,"SYNC & RESUME",false){
+        val actions=ui.weighted(a,ui.action(a,"RETRY & RESUME",false){
             VideoEngine.launch(a,false)
             ChapterArchives.start(a)
             XPhotoEngine.start(a)
+            kotlin.concurrent.thread(name="asterion-queue-retry"){DirectDownloadRetry.retry(a)}
             refresh()
         },ui.action(a,"TORRENTS",false){
             TorrentTransfers.showQueue(a)
