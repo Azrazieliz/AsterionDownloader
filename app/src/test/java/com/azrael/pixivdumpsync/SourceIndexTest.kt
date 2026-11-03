@@ -37,4 +37,44 @@ class SourceIndexTest {
         assertEquals(GamePortPlanner.Engine.HTML5,
             GamePortPlanner.detect(listOf("game/index.html")))
     }
+    @Test fun numericGalleryPaginationSkipsPostNumbers(){
+        val doc=Jsoup.parse("""<html><nav class="pagination">
+            <a href="/post/2">2</a><a href="/gallery?page=2">2</a>
+            <a href="https://outside.org/gallery?page=2">2</a>
+        </nav></html>""","https://example.org/gallery")
+        assertEquals("https://example.org/gallery?page=2",
+            SourceIndexParser.next(doc,"https://example.org/gallery",
+                "https://example.org/gallery"))
+    }
+    @Test fun numericPageCursorResumesSequentially(){
+        val doc=Jsoup.parse("""<div class="pager">
+            <a href="/gallery?page=2">2</a>
+            <a href="/gallery?page=3">3</a>
+            <a href="/gallery?page=7">7</a>
+        </div>""","https://example.org/gallery?page=2")
+        assertEquals("https://example.org/gallery?page=3",
+            SourceIndexParser.next(doc,"https://example.org/gallery",
+                "https://example.org/gallery?page=2"))
+    }
+    @Test fun pathPaginationIsSupportedAndUnrelatedLinksIgnored(){
+        val doc=Jsoup.parse("""<nav class="pagination">
+            <a href="/post/482">482</a>
+            <a href="/gallery/page/4/">4</a>
+        </nav>""","https://example.org/gallery/page/3/")
+        assertEquals("https://example.org/gallery/page/4/",
+            SourceIndexParser.next(doc,"https://example.org/gallery",
+                "https://example.org/gallery/page/3/"))
+        val empty=Jsoup.parse("<nav class='pagination'><a href='/post/4'>4</a></nav>",
+            "https://example.org/gallery")
+        assertNull(SourceIndexParser.next(empty,"https://example.org/gallery",
+            "https://example.org/gallery"))
+    }
+    @Test fun explicitNextRemainsCompatible(){
+        val doc=Jsoup.parse("""<link rel="next" href="/gallery?page=2">""",
+            "https://example.org/gallery")
+        assertEquals("https://example.org/gallery?page=2",
+            SourceIndexParser.next(doc,"https://example.org/gallery",
+                "https://example.org/gallery"))
+    }
+
 }
