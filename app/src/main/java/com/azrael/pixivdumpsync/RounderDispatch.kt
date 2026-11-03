@@ -119,8 +119,21 @@ class RounderOutbox(context:Context):
 }
 object RounderDispatch {
     private const val JOB=48763
+    private const val CATCHUP_JOB=48764
+    private const val SCAN_BATCH=2500
     private val busy=AtomicBoolean(false)
     private const val PREF="asterion_rounder_scanner"
+    private fun scheduleCatchup(context:Context){
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        if(jobs.allPendingJobs.any{it.id==CATCHUP_JOB})return
+        jobs.schedule(JobInfo.Builder(CATCHUP_JOB,
+            ComponentName(context,RounderJob::class.java))
+            .setPersisted(true)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(15_000L)
+            .setOverrideDeadline(2L*60_000L)
+            .build())
+    }
     fun ensure(context:Context){
         val jobs=context.getSystemService(JobScheduler::class.java)
         if(jobs.allPendingJobs.none{it.id==JOB})
@@ -166,7 +179,7 @@ object RounderDispatch {
                 where,args,MediaStore.MediaColumns.DATE_ADDED+" ASC, "+
                     BaseColumns._ID+" ASC")?.use{cursor->
                 RounderOutbox(context).use{outbox->
-                    while(cursor.moveToNext() && scanned<2500){
+                    while(scanned<SCAN_BATCH && cursor.moveToNext()){
                         scanned++
                         val id=cursor.getLong(0)
                         val name=cursor.getString(1).orEmpty()
@@ -183,6 +196,9 @@ object RounderDispatch {
                 }
             }
             prefs.edit().putLong("stamp",stamp).putLong("last_id",lastId).apply()
+            // A device with hundreds of thousands of files must not need one
+            // fifteen-minute interval per 2,500 rows. Save cursor and continue.
+            if(scanned>=SCAN_BATCH)scheduleCatchup(context)
             // Complete exact-URL dedup claims for DownloadManager transfers.
             val manager=context.getSystemService(DownloadManager::class.java)
             CrossSourceDedup(context).use{dedup->
