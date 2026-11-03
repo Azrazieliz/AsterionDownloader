@@ -122,7 +122,7 @@ object ResourceDownloads {
                 "JoiPlay supports many Ren'Py and HTML5 games with its plugins. "+
                 "Native Android APKs install separately. Ren'Py/RAPT builds actual standalone Android packages; Windows-only EXEs cannot all be converted.",
                 12f,ui.secondary),ui.lp(a,7))
-            files.addView(action(a,"EXPORT GAME ZIP FOR EXTERNAL ANDROID PLAYER"){
+            files.addView(action(a,"IDENTIFY GAME & PREPARE ANDROID RUNTIME"){
                 val intent=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     type="application/zip"
                     addCategory(Intent.CATEGORY_OPENABLE)
@@ -148,8 +148,12 @@ object ResourceDownloads {
             arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{
                 if(it.moveToFirst())it.getString(0) else null
             }}.getOrNull().orEmpty()
-        if(request==5203){
-            PortableGameExporter.export(a,uri,name.ifBlank{"game.zip"})
+        if(request==5202 || request==5203){
+            // The existing per-engine planner now handles both routes:
+            // native APK when possible, compatible Android runtime otherwise.
+            GamePortPlanner.inspect(a,uri,name.ifBlank{
+                uri.lastPathSegment.orEmpty()
+            })
             return
         }
         val lower=name.lowercase()
