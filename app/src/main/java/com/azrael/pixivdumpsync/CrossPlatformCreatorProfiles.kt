@@ -218,6 +218,20 @@ class CrossPlatformCreatorDb(context:Context):
     /** Indexed access to creator-declared link hubs. This is a one-hop
      * discovery queue, not a global crawler or an assertion of identity.
      */
+    /** Only profiles reached through explicit creator links may be expanded.
+     * A name match or search result never enters this verified-edge queue.
+     */
+    fun discoverableProfiles(limit:Int=1200):List<CrossPlatformProfile>{
+        val output=ArrayList<CrossPlatformProfile>()
+        readableDatabase.rawQuery(
+            """SELECT source,profile,platform,evidence FROM profile_links
+               WHERE platform<>'LINK_HUB' ORDER BY seen DESC LIMIT ?""",
+            arrayOf(limit.coerceIn(1,3000).toString())).use{c->
+            while(c.moveToNext())output+=CrossPlatformProfile(
+                c.getString(0),c.getString(1),c.getString(2),c.getString(3))
+        }
+        return output
+    }
     fun hubs(limit:Int=2000):List<CrossPlatformProfile>{
         val output=ArrayList<CrossPlatformProfile>()
         readableDatabase.rawQuery(
