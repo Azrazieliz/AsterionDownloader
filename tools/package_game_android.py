@@ -136,8 +136,8 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
         if build and plan["ready"]:
             result.update(run_native(plan))
         elif build:
-            result["runtime"]="Install the matching engine editor and Android export SDK; "+
-                "the build command is prepared but no native APK was fabricated"
+            result["runtime"]=("Install the matching engine editor and Android export SDK; "
+                "the build command is prepared but no native APK was fabricated")
         else:
             result["runtime"]="Source project prepared; run with the installed engine editor"
     elif engine=="RENPY":
