@@ -91,37 +91,7 @@ object SourceIndexPanel {
             .setItems(arrayOf("DOWNLOAD ACCESSIBLE ORIGINAL",
                 "OPEN ITEM PAGE","SIGN IN TO PROVIDER")){_,i->
                 when(i){
-                    0->{
-                        Toast.makeText(a,"Checking original access…",Toast.LENGTH_SHORT).show()
-                        thread(name="asterion-original-resolver"){
-                            val result=runCatching{
-                                AuthorizedOriginalResolver.resolve(item.url,item.area)
-                            }
-                            a.runOnUiThread{
-                                if(a.isFinishing||a.isDestroyed)return@runOnUiThread
-                                result.onSuccess{file->
-                                    val folder=when(file.kind){
-                                        "video"->"Videos";"epub"->"Books"
-                                        "model"->"Assets";"archive"->if(item.area=="COMICS")
-                                            "Comics" else "Assets"
-                                        "game"->"Games";else->"Images"
-                                    }
-                                    if(file.kind=="video"){
-                                        val added=VideoDb(a).use{
-                                            it.addVideo(file.url,item.title)
-                                        }
-                                        if(added)VideoEngine.launch(a,false)
-                                    }else if(file.kind=="game"){
-                                        ResourceDownloads.route(a,file.url,folder)
-                                    }else ResourceDownloads.downloadFile(a,file.url,folder,
-                                        file.filename,file.referer)
-                                }.onFailure{
-                                    Toast.makeText(a,"Original unavailable: "+it.message,
-                                        Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                    }
+                    0->AuthenticatedItemDownloader.download(a,item)
                     1->a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(item.url)))
                     2->a.startActivity(Intent(a,SiteLoginActivity::class.java)
                         .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
