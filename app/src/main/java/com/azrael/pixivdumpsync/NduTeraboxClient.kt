@@ -162,7 +162,8 @@ class NduTeraboxClient(private val ndus: String,
      * Check that the remote object exists at the expected path with exact file size.
      * When a remote whole-file hash is available, require it to match as well.
      */
-    private fun confirmRemote(path:String,size:Long,localMd5:String):Boolean {
+    private fun confirmRemote(path:String,size:Long,localMd5:String,
+                              requireRemoteHash:Boolean=false):Boolean {
         repeat(4){attempt->
             val response=request("/api/filemetas","GET",mapOf(
                 "target" to JSONArray(listOf(path)).toString(),"dlink" to "0"))
@@ -174,6 +175,7 @@ class NduTeraboxClient(private val ndus: String,
                     item.optLong("size",-1L)!=size ||
                     item.optLong("fs_id",0L)<=0L)continue
                 val remoteMd5=item.optString("md5").trim()
+                if(requireRemoteHash && remoteMd5.isBlank())continue
                 if(remoteMd5.isNotBlank() &&
                     !remoteMd5.equals(localMd5,true))
                     throw java.io.IOException("TeraBox whole-file integrity mismatch")
@@ -216,8 +218,8 @@ class NduTeraboxClient(private val ndus: String,
                 }
             }?:throw java.io.IOException("Cannot read rapid-upload source")
             val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
-            if(!confirmRemote(path,size,md5))
-                throw java.io.IOException("Rapid-upload response did not confirm remote file")
+            if(!confirmRemote(path,size,md5,requireRemoteHash=true))
+                throw java.io.IOException("Rapid-upload response did not prove identical remote content")
             progress(size,size)
             return
         }
