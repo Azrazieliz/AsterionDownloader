@@ -40,7 +40,7 @@ object AsterionUnifiedFollowing {
         },5)
     }
     private fun cardTitle(a:Activity,p:LinearLayout,title:String,subtitle:String,thumbnail:String?,
-                          remote:Boolean=false){
+                          remote:Boolean=false):ImageView{
         val line=ui.row(a)
         val image=ImageView(a).apply{
             setImageResource(R.drawable.ic_source_site)
@@ -57,6 +57,7 @@ object AsterionUnifiedFollowing {
         put(a,names,ui.text(a,subtitle,12f,ui.secondary),3)
         line.addView(names,LinearLayout.LayoutParams(0,-2,1f))
         put(a,p,line,0)
+        return image
     }
     private fun images(a:Activity,p:LinearLayout,items:List<Pair<String,()->Unit>>,
                        local:Boolean=false){
@@ -94,7 +95,7 @@ object AsterionUnifiedFollowing {
         val photos=XPhotoQueue(a).use{it.recent(700)}
         put(a,p,ui.text(a,"X · Following",22f,ui.white,true),8)
         put(a,p,ui.text(a,sources.size.toString()+" followed accounts",12f,ui.secondary),2)
-        CreatorPreviews.x(a,p)
+        // Each creator owns her previews inside her card, like Kuroha.
         val controls=ui.card(a)
         pair(a,controls,"SIGN IN","IMPORT FOLLOWS",{
             a.startActivity(Intent(a,SiteLoginActivity::class.java)
@@ -119,35 +120,63 @@ object AsterionUnifiedFollowing {
             }else notice(a,"Invalid or already followed X account")
         }
         put(a,p,follow,10)
+        val recentByHandle=photos.groupBy{photo->
+            runCatching{Uri.parse(photo.source).pathSegments.firstOrNull().orEmpty()
+                .lowercase()}.getOrDefault("")
+        }
         for(source in sources.take(currentLimit(a,"x"))){
-            val found=photos.filter{
-                Uri.parse(it.source).pathSegments.firstOrNull().equals(source.handle,true)
-            }.take(5)
+            val found=recentByHandle[source.handle.lowercase()].orEmpty().take(5)
+            val profile=XCreatorProfiles.cached(a,source.handle)
             val c=ui.card(a)
-            cardTitle(a,c,"@"+source.handle,if(source.error.isNullOrBlank())
-                (if(source.cursor.isNullOrBlank())"Backfill ready" else "History cursor saved")
-                else source.error.take(85),found.firstOrNull()?.photo,true)
-            images(a,c,found.map{item->
-                item.photo to {
-                    a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
-                        .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,source.handle))
+            val subtitle="@"+source.handle+" · "+(
+                if(!source.error.isNullOrBlank())source.error.take(65)
+                else if(source.cursor.isNullOrBlank())"Backfill ready"
+                else "History cursor saved")
+            val cover=profile?.avatar?:found.firstOrNull()?.photo
+            val avatar=cardTitle(a,c,profile?.name?:("@"+source.handle),
+                subtitle,cover,true)
+            val previewHolder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            fun drawPreviews(latest:List<String>){
+                previewHolder.removeAllViews()
+                val photosOnDisk=found.map{it.photo}
+                val pictures=(photosOnDisk+latest).distinct().take(5)
+                if(pictures.isNotEmpty())images(a,previewHolder,pictures.map{url->
+                    url to {
+                        a.startActivity(Intent(a,XMediaCaptureActivity::class.java)
+                            .putExtra(XMediaCaptureActivity.EXTRA_HANDLE,source.handle))
+                    }
+                }) else previewHolder.addView(ui.text(a,
+                    "No media cached for this creator yet · use CHECK NEW to populate",
+                    12f,ui.secondary),ui.lp(a,8))
+            }
+            drawPreviews(profile?.photos.orEmpty())
+            c.addView(previewHolder)
+            val profileLimit=currentLimit(a,"x")
+            if(sources.indexOf(source)<minOf(profileLimit,15))
+                XCreatorProfiles.load(a,source.handle){info->
+                    if(info.avatar!=null)RemoteImageLoader.load(a,avatar,info.avatar,
+                        "https://x.com/"+source.handle)
+                    drawPreviews(info.photos)
                 }
-            })
-            toggle(a,c,"Live sync",source.enabled){enabled->
+            if(!source.error.isNullOrBlank())
+                put(a,c,ui.text(a,source.error.take(160),12f,ui.danger),5)
+            toggle(a,c,"Include in sync",source.enabled){enabled->
                 XPhotoQueue(a).use{db->db.setEnabled(source.url,enabled)}
                 XPhotoScheduler.ensure(a)
             }
-            pair(a,c,"BACKFILL","REMOVE",{
+            val automatic=a.getSharedPreferences("asterion_x_live",0)
+                .getBoolean(source.url,true)
+            toggle(a,c,"Sync new media automatically",automatic){enabled->
+                a.getSharedPreferences("asterion_x_live",0).edit()
+                    .putBoolean(source.url,enabled).apply()
+            }
+            pair(a,c,"CHECK NEW","BACKFILL",{
+                XPhotoQueue(a).use{it.clearError(source.url)}
+                XPhotoEngine.start(a)
+                notice(a,"Creator sync requested")
+            },{
                 XPhotoQueue(a).use{it.backfill(source.url)}
                 XPhotoEngine.start(a);refresh()
-            },{
-                AlertDialog.Builder(a).setTitle("Unfollow @"+source.handle+"?")
-                    .setMessage("Saved photos are retained.")
-                    .setNegativeButton("Cancel",null)
-                    .setPositiveButton("Remove"){_,_->
-                        XPhotoQueue(a).use{it.removeSource(source.url)}
-                        refresh()
-                    }.show()
             })
             put(a,p,c,10)
         }
@@ -157,7 +186,7 @@ object AsterionUnifiedFollowing {
         val followed=GalleryDb(a).use{it.listEntities()}
         put(a,p,ui.text(a,"Cosplay · Following",22f,ui.white,true),8)
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
-        CreatorPreviews.kyora(a,p)
+        // Latest gallery thumbnails are embedded within each followed creator card.
         val summary=ui.card(a)
         action(a,summary,"SYNC & BACKFILL FOLLOWING",true){
             val service=Intent(a,GalleryService::class.java).apply{
