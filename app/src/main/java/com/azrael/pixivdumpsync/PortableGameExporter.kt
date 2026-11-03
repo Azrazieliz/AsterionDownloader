@@ -55,7 +55,7 @@ object PortableGameExporter {
         val title=sanitize(filename.substringBeforeLast('.',filename)).take(55)
         val folder="Download/AsterionDownloader/Games/"+title+"_"+System.currentTimeMillis()+"/"
         val dialog=AlertDialog.Builder(a).setTitle("Exporting game outside Asterion")
-            .setMessage("Extracting to the Android Downloads folder…")
+            .setMessage("Preparing game files in Android Downloads…")
             .setCancelable(false).create()
         dialog.show()
         thread(name="asterion-game-export"){
@@ -67,7 +67,36 @@ object PortableGameExporter {
                 val input=a.contentResolver.openInputStream(source)
                     ?:error("Cannot open selected game archive")
                 BufferedInputStream(input).use{stream->
-                    ZipInputStream(stream).use{zip->
+                    if(!filename.endsWith(".zip",true)){
+                        // A single EXE/RPA/XP3 is still a file, not a ZIP.
+                        // Copy it intact rather than feeding non-ZIP bytes to
+                        // ZipInputStream and returning an empty-export error.
+                        val leaf=sanitize(filename)
+                        require(files.add(leaf.lowercase())){"Duplicate game file"}
+                        val output=ContentValues().apply{
+                            put(MediaStore.Downloads.DISPLAY_NAME,leaf)
+                            put(MediaStore.Downloads.MIME_TYPE,mime(leaf))
+                            put(MediaStore.Downloads.RELATIVE_PATH,folder)
+                            put(MediaStore.Downloads.IS_PENDING,1)
+                        }
+                        val uri=a.contentResolver.insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,output)
+                            ?:error("Failed creating game file")
+                        created.add(uri)
+                        val buf=ByteArray(65536)
+                        a.contentResolver.openOutputStream(uri,"w")?.use{out->
+                            while(true){
+                                val n=stream.read(buf)
+                                if(n<0)break
+                                size+=n
+                                require(size<=8L*1024*1024*1024){"Game file exceeds 8 GB"}
+                                out.write(buf,0,n)
+                            }
+                        }?:error("Failed writing game file")
+                        a.contentResolver.update(uri,ContentValues().apply{
+                            put(MediaStore.Downloads.IS_PENDING,0)
+                        },null,null)
+                    }else ZipInputStream(stream).use{zip->
                         val buf=ByteArray(65536)
                         while(true){
                             val entry=zip.nextEntry?:break
@@ -135,7 +164,8 @@ object PortableGameExporter {
                     }
                     val notice=AlertDialog.Builder(a).setTitle("Game exported")
                         .setMessage("Files: "+files.size+"\n"+folder+"\n\n"+
-                            classify(files)+"\n\nNo claim of a native APK conversion.")
+                            classify(files)+"\n\nNo claim of a native APK conversion."+
+                            if(files.size==1)"\nA single game file may require additional original assets and DLLs." else "")
                     if(runtime!=null)notice.setPositiveButton("GET "+runtime.first.uppercase()){_,_->
                         a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(runtime.second)))
                     }
