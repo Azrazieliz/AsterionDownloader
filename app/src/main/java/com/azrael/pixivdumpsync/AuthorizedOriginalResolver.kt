@@ -21,7 +21,8 @@ object AuthorizedOriginalResolver {
         "epub" to setOf("epub"),
         "video" to setOf("mp4","webm","m4v","mov"),
         "image" to setOf("jpg","jpeg","png","webp","gif","avif"),
-        "model" to setOf("blend","fbx","obj","glb","gltf","stl","unitypackage"),
+        "model" to setOf("blend","fbx","obj","glb","gltf","stl","unitypackage",
+            "gguf","safetensors","onnx","qnn","tflite","pte","ckpt","pt","pth"),
         "archive" to setOf("zip","7z","rar"),
         "game" to setOf("apk","torrent","zip","7z","rar")
     )
