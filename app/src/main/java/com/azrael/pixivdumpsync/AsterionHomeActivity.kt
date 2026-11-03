@@ -32,6 +32,12 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==5210) {
+            if(resultCode==RESULT_OK && data?.data!=null)
+                GamePortPlanner.inspect(this,data.data!!,
+                    data.data?.lastPathSegment.orEmpty())
+            return
+        }
         if(requestCode==5204) {
             if(resultCode==RESULT_OK)AssetsPanel.localFile(this,data?.data)
             return
@@ -293,6 +299,13 @@ class AsterionHomeActivity:Activity(){
         }
         put(body,line,9)
         TorrentSearchUi.render(this,body,torrentMode)
+        if(torrentMode==TorrentArea.GAMES){
+            put(body,button("PLAY / PORT A GAME TO ANDROID"){
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+                    type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
+                },5210)
+            },11)
+        }
         SourceIndexPanel.render(this,body,"GAMES")
     }
     private fun renderToonily(){
