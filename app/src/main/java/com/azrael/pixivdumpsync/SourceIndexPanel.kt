@@ -13,9 +13,11 @@ import kotlin.concurrent.thread
 /** Kuroha-style thumbnails and one set of controls per content module, never per web site. */
 object SourceIndexPanel {
     private val ui=NocturneDesign
-    fun render(a:Activity,parent:LinearLayout,area:String){
-        val sources=SourceIndex.status(a,area)
-        val items=SourceIndex.items(a,area,35)
+    fun render(a:Activity,parent:LinearLayout,area:String)=render(a,parent,listOf(area),area)
+    fun render(a:Activity,parent:LinearLayout,areas:List<String>,label:String){
+        val sources=areas.flatMap{SourceIndex.status(a,it)}.distinctBy{it.url}
+        val items=areas.flatMap{SourceIndex.items(a,it,35)}
+            .distinctBy{it.url}.sortedByDescending{it.discoveredAt}.take(35)
         if(sources.isEmpty())return
         val card=ui.card(a)
         val healthy=sources.count{
@@ -23,7 +25,7 @@ object SourceIndexPanel {
                 (it.adapter=="native" || it.lastCheck>0)
         }
         val problems=sources.count{!it.error.isNullOrEmpty()}
-        card.addView(ui.text(a,"Latest · "+area.lowercase().replaceFirstChar{it.uppercase()},
+        card.addView(ui.text(a,"Latest · "+label.lowercase().replaceFirstChar{it.uppercase()},
             17f,ui.white,true))
         card.addView(ui.text(a,
             sources.size.toString()+" sources · "+healthy+" active / scanned · "+
@@ -31,31 +33,31 @@ object SourceIndexPanel {
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         val toolbar=ui.row(a)
         toolbar.addView(ui.action(a,"SYNC & BACKFILL",false){
-            SourceIndex.scanNow(a,area)
-            // Native source adapters remain the source of truth; trigger their
-            // existing schedulers rather than creating parallel download engines.
-            when(area){
-                "ADULT","HENTAI"->VideoEngine.launch(a,true)
-                "CREATORS","ASSETS"->CreatorArchiveScheduler.scanNow(a)
-                "COMICS"->ChapterArchives.start(a)
-                "COSPLAY"->runCatching{
-                    a.startForegroundService(Intent(a,
-                        com.azrael.galleryflow.SyncForegroundService::class.java)
-                        .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
-                        .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
-                            com.azrael.galleryflow.SyncMode.BACKFILL.name))
-                }
+            thread(name="asterion-module-backfill"){
+                for(area in areas)SourceIndex.scan(a,area)
+            }
+            if(areas.any{it=="ADULT"||it=="HENTAI"})VideoEngine.launch(a,true)
+            if(areas.any{it=="CREATORS"||it=="ASSETS"})CreatorArchiveScheduler.scanNow(a)
+            if("COMICS" in areas)ChapterArchives.start(a)
+            if("COSPLAY" in areas)runCatching{
+                a.startForegroundService(Intent(a,
+                    com.azrael.galleryflow.SyncForegroundService::class.java)
+                    .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
+                    .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
+                        com.azrael.galleryflow.SyncMode.BACKFILL.name))
             }
             Toast.makeText(a,"Source sync requested · new previews appear here",
                 Toast.LENGTH_SHORT).show()
         },LinearLayout.LayoutParams(0,-2,1f))
         toolbar.addView(ui.action(a,"SOURCE STATUS",false){
-            showStatus(a,area)
+            showStatus(a,areas,label)
         },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
         card.addView(toolbar,ui.lp(a,9))
         if(items.isNotEmpty()){
             val scroll=HorizontalScrollView(a).apply{isHorizontalScrollBarEnabled=false}
             val horizontal=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+            val covers=ui.showPreviews(a)
+            val wide=ui.largeCovers(a)
             for(item in items.take(25)){
                 val tile=LinearLayout(a).apply{
                     orientation=LinearLayout.VERTICAL
@@ -68,11 +70,15 @@ object SourceIndexPanel {
                     setBackgroundColor(ui.surface)
                     contentDescription=item.title+" · "+item.kind
                 }
-                tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,126)))
-                if(item.preview!=null)RemoteImageLoader.load(a,image,item.preview,item.source)
+                if(covers){
+                    tile.addView(image,LinearLayout.LayoutParams(-1,
+                        ui.px(a,if(wide)165 else 126)))
+                    if(item.preview!=null)RemoteImageLoader.load(a,image,item.preview,item.source)
+                }
                 tile.addView(ui.text(a,item.title.take(54),12f,ui.white,true),ui.lp(a,5))
                 tile.addView(ui.text(a,item.kind.uppercase(),10f,ui.secondary),ui.lp(a,3))
-                horizontal.addView(tile,LinearLayout.LayoutParams(ui.px(a,150),-2)
+                horizontal.addView(tile,LinearLayout.LayoutParams(ui.px(a,
+                    if(wide&&covers)202 else 150),-2)
                     .apply{rightMargin=ui.px(a,8)})
             }
             scroll.addView(horizontal)
@@ -98,8 +104,8 @@ object SourceIndexPanel {
                 }
             }.setNegativeButton("Close",null).show()
     }
-    private fun showStatus(a:Activity,area:String){
-        val list=SourceIndex.status(a,area)
+    private fun showStatus(a:Activity,areas:List<String>,label:String){
+        val list=areas.flatMap{SourceIndex.status(a,it)}.distinctBy{it.url}
         val body=LinearLayout(a).apply{
             orientation=LinearLayout.VERTICAL
             setPadding(ui.px(a,14),ui.px(a,8),ui.px(a,14),ui.px(a,14))
@@ -137,7 +143,7 @@ object SourceIndexPanel {
                         .putExtra(SiteLoginActivity.EXTRA_URL,accounts[index].url))
                 }.setNegativeButton("Cancel",null).show()
         },ui.lp(a,14))
-        AlertDialog.Builder(a).setTitle(area+" · Source health")
+        AlertDialog.Builder(a).setTitle(label+" · Source health")
             .setView(ScrollView(a).apply{addView(body)})
             .setPositiveButton("Close",null).show()
     }
