@@ -96,12 +96,8 @@ object AsterionSearchHub {
         picker.setSelection(selected)
         p.addView(picker,ui.lp(a,9))
         val box=ui.card(a)
-        val field=EditText(a).apply{
-            hint="Specific title, artist or keywords"
-            setSingleLine(true);textSize=16f
-            setTextColor(ui.white);setHintTextColor(ui.secondary)
-            setText(prefs.getString("query_"+selected,""))
-        }
+        val field=CreatorNames.input(a,"Specific title, artist or keywords","ALL")
+        field.setText(prefs.getString("query_"+selected,""))
         box.addView(field,ui.lp(a,0))
         val status=ui.text(a,"",12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
