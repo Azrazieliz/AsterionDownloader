@@ -196,11 +196,19 @@ class CrossPlatformCreatorDb(context:Context):
             val database=writableDatabase
             if(database.insertWithOnConflict("profile_links",null,values,
                     SQLiteDatabase.CONFLICT_IGNORE)==-1L){
+                val key=arrayOf(record.source,record.url)
+                val existing=database.rawQuery(
+                    "SELECT evidence FROM profile_links WHERE source=? AND profile=?",
+                    key).use{c->if(c.moveToFirst())c.getString(0).orEmpty() else ""}
                 database.update("profile_links",ContentValues().apply{
                     put("seen",System.currentTimeMillis())
                     put("platform",record.platform)
-                    put("evidence",record.evidence)
-                },"source=? AND profile=?",arrayOf(record.source,record.url))
+                    // Do not overwrite stronger reciprocal profile evidence
+                    // with a later single-direction link observation.
+                    if(!existing.startsWith("Reciprocal") ||
+                        record.evidence.startsWith("Reciprocal"))
+                        put("evidence",record.evidence)
+                },"source=? AND profile=?",key)
             }
         }
     }
