@@ -156,7 +156,8 @@ object AsterionDownloadWorker {
             for(item in db.pending()){
                 try{
                     val hint=when(item.category){
-                        "ASSETS","KOIKATSU"->"ASSETS"
+                        "ASSETS"->"ASSETS"
+                        "KOIKATSU"->"ARTWORK"
                         "ARTWORK"->"ARTWORK"
                         "VIDEOS"->"VIDEOS"
                         "BOOKS"->"BOOKS"
@@ -164,6 +165,9 @@ object AsterionDownloadWorker {
                         else->"GAMES"
                     }
                     val original=AuthorizedOriginalResolver.resolve(item.url,hint)
+                    if(item.category=="KOIKATSU" &&
+                        !original.filename.endsWith(".png",true))
+                        error("A Koikatsu character card must be an original PNG")
                     if(item.category=="BOOKS" && original.kind!="epub")
                         error("Books require an original EPUB")
                     if(item.category=="VIDEOS"){
@@ -211,7 +215,7 @@ object AsterionDownloadWorker {
                         },AsterionDownloadIPC.PERMISSION)
                     }
                 }catch(t:Exception){
-                    val auth=(t as? OriginalAccessException)?.causeCode in
+                    val auth=(t as? OriginalAccessException)?.reason in
                         setOf(OriginalAccessCause.ENTITLEMENT,OriginalAccessCause.SIGN_IN)
                     db.status(item.id,if(auth)"NEEDS_AUTH"
                         else if(item.attempts>=5)"ERROR" else "RETRY",
