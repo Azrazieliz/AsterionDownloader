@@ -26,6 +26,24 @@ def run():
             "com.asterion.portable.renpytest","RenPy",build=False)
         assert report["engine"]=="RENPY"
         assert "JoiPlay" in report["runtime"]
+        # With the official SDK installed, an isolated Android project is fully
+        # prepared for RAPT, without changing the source archive.
+        fake_sdk=root/"renpy-sdk"
+        fake_sdk.mkdir()
+        (fake_sdk/"renpy.sh").write_text("#!/bin/sh\\nexit 0\\n")
+        prepared=package(root/"renpy.zip",root/"renpy-android-out",
+            "com.asterion.portable.renpytest","Ren'Py Test",
+            renpy_sdk=fake_sdk,build=False)
+        import json
+        prepared_project=Path(prepared["project"])
+        config=json.loads((prepared_project/"android.json").read_text())
+        assert config["package"]=="com.asterion.portable.renpytest"
+        assert config["name"]=="Ren'Py Test"
+        assert not (prepared_project/"android.keystore").exists(), (
+            "Signing keys must not be created until a build is requested")
+        with ZipFile(root/"renpy.zip") as z:
+            assert "Novel/android.json" not in z.namelist()
+            assert "Novel/game/script.rpy" in z.namelist()
         with ZipFile(root/"rpg.zip","w") as z:
             z.writestr("Game.exe","not game code")
             z.writestr("www/index.html","<!doctype html>")
