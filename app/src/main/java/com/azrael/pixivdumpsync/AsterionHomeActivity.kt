@@ -78,6 +78,7 @@ class AsterionHomeActivity:Activity(){
         window.navigationBarColor=theme.background
         GalleryDb(this).use{it.seedCatalogOnce(this)}
         AlohaDefaults.ensure(this)
+        SourceIndex.ensure(this)
         ChapterRecovery.ensure(this)
         CreatorArchiveScheduler.ensure(this)
         XPhotoScheduler.ensure(this)
@@ -169,12 +170,12 @@ class AsterionHomeActivity:Activity(){
             "Home"->renderHome()
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
-            "Site"->AsterionUnifiedFollowing.kyora(this,body){render()}
-            "Porn"->{AsterionVideoAccounts.render(this,body);AsterionUnifiedFollowing.adult(this,body){render()}}
+            "Site"->{AsterionUnifiedFollowing.kyora(this,body){render()};SourceIndexPanel.render(this,body,"COSPLAY")}
+            "Porn"->{AsterionUnifiedFollowing.adult(this,body){render()};SourceIndexPanel.render(this,body,"ADULT");SourceIndexPanel.render(this,body,"HENTAI");AsterionVideoAccounts.render(this,body)}
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
-            "Assets"->AssetsPanel.render(this,body)
+            "Assets"->{AssetsPanel.render(this,body);SourceIndexPanel.render(this,body,"ASSETS")}
             "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
             "Search"->AsterionSearchHub.render(this,body){render()}
             "Recommend"->AsterionRecommendations.render(this,body){render()}
@@ -182,9 +183,6 @@ class AsterionHomeActivity:Activity(){
             "Library"->renderLibrary()
             "Sources"->renderSources()
             else->renderSettings()
-        }
-        if(page!="Home"){
-            put(body,button("BACK TO SOURCE HOME"){open("Home")},24)
         }
     }
     private fun sourceTile(label:String,subtitle:String,icon:Int,tint:Int,
@@ -276,9 +274,12 @@ class AsterionHomeActivity:Activity(){
             LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(9)})
         put(body,switches,10)
         if(bookMode=="EPUB"){
-            CatalogSearchUi.render(this,body,false)
-            TorrentSearchUi.render(this,body,TorrentArea.BOOKS)
-        }else AsterionComicFollowing.render(this,body){render()}
+            SourceIndexPanel.render(this,body,"BOOKS")
+            put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
+        }else {
+            AsterionComicFollowing.render(this,body){render()}
+            SourceIndexPanel.render(this,body,"COMICS")
+        }
     }
     private fun renderTorrents(){
         section("Torrents & Games","Search actual releases, inspect files, then transfer.")
@@ -292,6 +293,7 @@ class AsterionHomeActivity:Activity(){
         }
         put(body,line,9)
         TorrentSearchUi.render(this,body,torrentMode)
+        SourceIndexPanel.render(this,body,"GAMES")
     }
     private fun renderToonily(){
         section("Comics · Toonily / MangaRead",
