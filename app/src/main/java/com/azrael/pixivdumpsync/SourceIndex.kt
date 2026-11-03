@@ -323,7 +323,7 @@ object SourceIndex {
     }.getOrDefault(false)
     fun status(context:Context,area:String):List<IndexedSource> =
         SourceIndexDb(context).use{it.sources().filter{src->src.area==area}}
-    fun items(context:Context,area:String,limit:Int=40):List<IndexedItem> =
+    fun items(context:Context,area:String?=null,limit:Int=40):List<IndexedItem> =
         SourceIndexDb(context).use{it.items(area,limit)}
 }
 
