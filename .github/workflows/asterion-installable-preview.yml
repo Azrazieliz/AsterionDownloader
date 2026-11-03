@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - feature/asterion-unified-downloads-20261030
-    paths:
-      - '.github/workflows/asterion-installable-preview.yml'
   workflow_dispatch:
 
 permissions:
