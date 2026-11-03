@@ -227,6 +227,7 @@ object ResourceDownloads {
             val id=d.enqueue(request)
             CrossSourceDedup(a).use{it.attach(url,id)}
             DirectDownloadTracker.record(a,id,file,folder,url)
+            DirectDownloadRetry.remember(a,id,url,folder,file,referer)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
         }catch(t:Exception){
             runCatching{CrossSourceDedup(a).use{it.release(url)}}
