@@ -19,12 +19,16 @@ object GamePortPlanner {
     enum class Engine(val label:String,val method:String) {
         HTML5("HTML5 visual novel","Play offline now; build an independent APK with GitHub Actions"),
         RPG_MAKER("RPG Maker MV/MZ","Play compatible HTML5 files; package the www directory as an APK"),
-        RENPY("Ren'Py visual novel","Use Ren'Py SDK/RAPT for an independent universal Android APK"),
-        KIRIKIRI("Kirikiri","Compatible Android interpreter required"),
+        RENPY("Ren'Py visual novel","Use Ren'Py SDK/RAPT when possible or JoiPlay's Ren'Py plugin without editable source"),
+        RPG_MAKER_LEGACY("RPG Maker XP/VX/VX Ace","Import the complete distribution into JoiPlay with its RPG Maker plugin"),
+        KIRIKIRI("Kirikiri","Export the complete game for a compatible Kirikiri Android interpreter"),
         NSCRIPTER("NScripter","Compatible Android interpreter required"),
         THREE_DS("Nintendo 3DS","Use Azahar on Android; 3DS game binaries are not native Android applications"),
         NDS("Nintendo DS","Use an Android-compatible Nintendo DS emulator"),
-        WINDOWS("Windows executable","Compatible Windows runtime, or rebuild from original game source"),
+        WINDOWS("Windows executable","Run the complete Windows distribution in Winlator; not an Android-native port"),
+        UNITY_WINDOWS("Packaged Windows Unity game","Use Winlator with the complete Windows build; native APK needs editable Unity source"),
+        UNREAL_WINDOWS("Packaged Windows Unreal game","Use Winlator with the complete Windows build; native APK needs Unreal source"),
+        GODOT_EXPORT("Packaged Godot game","Use a matching Godot Android runtime; a PCK file is not an editable project"),
         APK("Android application","Already an Android package: install through Android"),
         GODOT("Godot project","Export Android with Godot editor and installed export templates"),
         UNITY_PROJECT("Unity source project","Build Android using Unity editor and Android Build Support"),
@@ -45,6 +49,10 @@ object GamePortPlanner {
         if(names.any{it.endsWith(".nds")})return Engine.NDS
         if(names.any{it.endsWith(".rpy")||it.endsWith(".rpa")||it.endsWith(".rpyc")})
             return Engine.RENPY
+        if(names.any{it.endsWith(".rgssad")||it.endsWith(".rgss2a")||
+            it.endsWith(".rgss3a")||it.endsWith(".rvdata")||
+            it.endsWith(".rvdata2")||it.endsWith(".rxdata")})
+            return Engine.RPG_MAKER_LEGACY
         if(names.any{it.endsWith(".xp3")})return Engine.KIRIKIRI
         if(names.any{it.endsWith(".nsa")||it.endsWith(".ns2")})return Engine.NSCRIPTER
         if(names.any{(it.startsWith("www/")||it.contains("/www/"))&&it.endsWith("index.html")} &&
@@ -52,7 +60,16 @@ object GamePortPlanner {
             return Engine.RPG_MAKER
         if(names.any{it.endsWith("index.html")})return Engine.HTML5
         if(names.any{it.endsWith(".apk")})return Engine.APK
-        if(names.any{it.endsWith(".exe")||it.endsWith(".msi")})return Engine.WINDOWS
+        if(names.any{it.endsWith(".exe")||it.endsWith(".msi")}){
+            if(names.any{it.endsWith("unityplayer.dll")||
+                it.endsWith("_data/globalgamemanagers")})
+                return Engine.UNITY_WINDOWS
+            if(names.any{it.endsWith(".pak") && 
+                (it.contains("/engine/")||it.contains("/content/paks/"))})
+                return Engine.UNREAL_WINDOWS
+            return Engine.WINDOWS
+        }
+        if(names.any{it.endsWith(".pck")})return Engine.GODOT_EXPORT
         if(names.any{it.endsWith(".unity3d")||it.endsWith(".assets")})return Engine.UNITY
         if(names.any{it.endsWith(".pak")})return Engine.UNREAL
         return Engine.UNKNOWN
@@ -70,10 +87,12 @@ object GamePortPlanner {
                 a.contentResolver.openInputStream(source)?.use{input->
                     ZipInputStream(BufferedInputStream(input)).use{zip->
                         // Bounded scan: identify early without extracting the full game.
-                        while(entries.size<120){
+                        // Engine markers can occur far beyond the first 120 ZIP
+                        // entries in real multi-GB Windows game distributions.
+                        while(entries.size<1600){
                             val e=zip.nextEntry?:break
-                            if(!e.isDirectory)entries+=e.name
-                            if(entries.size>=120)break
+                            if(!e.isDirectory)entries+=e.name.take(350)
+                            if(entries.size>=1600)break
                         }
                     }
                 }?:error("Unable to inspect selected game ZIP")
@@ -92,7 +111,17 @@ object GamePortPlanner {
             Engine.HTML5,Engine.RPG_MAKER->arrayOf("PLAY HTML5 ON PHONE",
                 "PREPARE INDEPENDENT APK PORT","EXPORT GAME FILES","OPEN WITH ANDROID APP")
             Engine.RENPY->arrayOf("PREPARE REN'PY APK PORT",
-                "EXPORT GAME FILES","OPEN WITH JOIPLAY")
+                "EXPORT COMPLETE GAME FOR JOIPLAY","GET JOIPLAY")
+            Engine.RPG_MAKER_LEGACY,Engine.GODOT_EXPORT->
+                arrayOf("EXPORT COMPLETE GAME FOR JOIPLAY",
+                    "GET JOIPLAY & MATCHING PLUGIN","SAVE COMPATIBILITY REPORT")
+            Engine.WINDOWS,Engine.UNITY_WINDOWS,Engine.UNREAL_WINDOWS,
+            Engine.UNITY,Engine.UNREAL->
+                arrayOf("EXPORT COMPLETE GAME FOR WINLATOR",
+                    "GET WINLATOR","SAVE COMPATIBILITY REPORT")
+            Engine.KIRIKIRI,Engine.NSCRIPTER->
+                arrayOf("EXPORT GAME FOR ENGINE INTERPRETER",
+                    "OPEN WITH INSTALLED INTERPRETER","SAVE COMPATIBILITY REPORT")
             Engine.APK->arrayOf("INSTALL ANDROID APK")
             Engine.GODOT,Engine.UNITY_PROJECT,Engine.UNREAL_PROJECT->
                 arrayOf("PREPARE ENGINE-SPECIFIC ANDROID BUILD",
@@ -117,6 +146,22 @@ object GamePortPlanner {
                         1->PortableGameExporter.export(a,source,name)
                         else->external(a,source)
                     }
+                    Engine.RPG_MAKER_LEGACY,Engine.GODOT_EXPORT->when(i){
+                        0->PortableGameExporter.export(a,source,name)
+                        1->runtimeWebsite(a,"https://www.joiplay.net/")
+                        else->saveRequest(a,name,engine)
+                    }
+                    Engine.WINDOWS,Engine.UNITY_WINDOWS,Engine.UNREAL_WINDOWS,
+                    Engine.UNITY,Engine.UNREAL->when(i){
+                        0->PortableGameExporter.export(a,source,name)
+                        1->runtimeWebsite(a,"https://winlator.org/index.php")
+                        else->saveRequest(a,name,engine)
+                    }
+                    Engine.KIRIKIRI,Engine.NSCRIPTER->when(i){
+                        0->PortableGameExporter.export(a,source,name)
+                        1->external(a,source)
+                        else->saveRequest(a,name,engine)
+                    }
                     Engine.APK->external(a,source,"application/vnd.android.package-archive")
                     Engine.GODOT,Engine.UNITY_PROJECT,Engine.UNREAL_PROJECT->when(i){
                         0->saveRequest(a,name,engine)
@@ -133,6 +178,9 @@ object GamePortPlanner {
                     }
                 }
             }.setNegativeButton("Cancel",null).show()
+    }
+    private fun runtimeWebsite(a:Activity,url:String){
+        a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
     }
     private fun external(a:Activity,source:Uri,mime:String="*/*"){
         val intent=Intent(Intent.ACTION_VIEW).apply{
@@ -157,6 +205,13 @@ object GamePortPlanner {
                 "python tools/package_game_android.py --input game.zip --out port --unity-editor PATH_TO_UNITY"
             Engine.UNREAL_PROJECT->
                 "python tools/package_game_android.py --input game.zip --out port --unreal-engine PATH_TO_UNREAL"
+            Engine.RPG_MAKER_LEGACY,Engine.GODOT_EXPORT->
+                "Prepare the complete game distribution for JoiPlay and its matching engine plugin"
+            Engine.WINDOWS,Engine.UNITY_WINDOWS,Engine.UNREAL_WINDOWS,
+            Engine.UNITY,Engine.UNREAL->
+                "Prepare the complete Windows game for Winlator; this is not an APK build"
+            Engine.KIRIKIRI,Engine.NSCRIPTER->
+                "Import the original game files using a compatible Android interpreter"
             else->"Open this game in the compatible Android runtime; no generic binary-to-APK conversion exists"
         }
         val workflow=when(engine){
@@ -185,6 +240,16 @@ object GamePortPlanner {
                     })
                 }
             })
+            put("compatibility_runtime",when(engine){
+                Engine.RPG_MAKER_LEGACY,Engine.RENPY,Engine.GODOT_EXPORT->"JoiPlay"
+                Engine.WINDOWS,Engine.UNITY_WINDOWS,Engine.UNREAL_WINDOWS,
+                Engine.UNITY,Engine.UNREAL->"Winlator"
+                Engine.KIRIKIRI->"Kirikiri-compatible interpreter"
+                Engine.NSCRIPTER->"ONScripter-compatible interpreter"
+                else->JSONObject.NULL
+            })
+            put("native_apk_without_editable_source",
+                engine in setOf(Engine.HTML5,Engine.RPG_MAKER))
             put("requires_original_game_zip",true)
             put("requires_unity_activation",engine==Engine.UNITY_PROJECT)
             put("unreal_source_requires_installed_engine",
