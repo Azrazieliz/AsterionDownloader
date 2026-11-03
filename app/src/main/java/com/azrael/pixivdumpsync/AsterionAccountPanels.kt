@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.Toast
@@ -100,9 +102,6 @@ object AsterionAccountPanels {
         pair(a,account,"ENABLE ALL ARTISTS","DISABLE ALL ARTISTS",
             {AppDb(a).use{it.setAllSelected(true);it.setAllLiveEnabled(true)};refresh()},
             {AppDb(a).use{it.setAllSelected(false);it.setAllLiveEnabled(false)};refresh()})
-        pair(a,account,"ENABLE ALL PIXIV","DISABLE ALL PIXIV",
-            {AppDb(a).use{it.setAllSelected(true);it.setAllLiveEnabled(true)};refresh()},
-            {AppDb(a).use{it.setAllSelected(false);it.setAllLiveEnabled(false)};refresh()})
         pair(a,account,"SYNC NEW ART","BACKFILL ARTISTS",
             {pixivSync(a,SyncMode.LIVE)},{pixivSync(a,SyncMode.BACKFILL)})
         action(a,account,"NEW ARTWORK FROM FOLLOWING",false){
@@ -130,8 +129,43 @@ object AsterionAccountPanels {
             13f,ui.secondary))
         for(artist in artists.take(20)){
             val c=card(a,p)
-            add(a,c,ui.text(a,artist.label?.takeIf{it.isNotBlank()}
-                ?: "Artist ${artist.userId}",16f,ui.white,true),0)
+            val head=ui.row(a)
+            val avatar=ImageView(a).apply{
+                scaleType=ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(ui.raised)
+                setImageResource(R.drawable.ic_kuroha)
+            }
+            head.addView(avatar,LinearLayout.LayoutParams(ui.px(a,52),ui.px(a,52)))
+            RemoteImageLoader.load(a,avatar,artist.avatarUrl,
+                "https://www.pixiv.net/users/${artist.userId}")
+            val profile=LinearLayout(a).apply{
+                orientation=LinearLayout.VERTICAL
+                setPadding(ui.px(a,11),0,0,0)
+            }
+            profile.addView(ui.text(a,artist.label?.takeIf{it.isNotBlank()}
+                ?: "Artist ${artist.userId}",16f,ui.white,true))
+            profile.addView(ui.text(a,"Pixiv ID ${artist.userId}",
+                12f,ui.secondary),ui.lp(a,4))
+            head.addView(profile,LinearLayout.LayoutParams(0,-2,1f))
+            c.addView(head)
+            val artworks=ArtworkPreviewCodec.decode(artist.previewJson)
+            if(artworks.isNotEmpty()){
+                val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                for(art in artworks.take(5)){
+                    val thumb=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(ui.raised)
+                        contentDescription=art.title
+                    }
+                    strip.addView(thumb,LinearLayout.LayoutParams(ui.px(a,85),ui.px(a,85))
+                        .apply{rightMargin=ui.px(a,7)})
+                    RemoteImageLoader.load(a,thumb,art.thumbnailUrl,
+                        "https://www.pixiv.net/artworks/${art.id}")
+                }
+                c.addView(HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false;addView(strip)
+                },ui.lp(a,9))
+            }
             add(a,c,ui.text(a,
                 "ID ${artist.userId} · ${artist.archiveStatus}"+
                 (if(artist.knownTotal>0)" · ${artist.knownTotal} artworks" else ""),
