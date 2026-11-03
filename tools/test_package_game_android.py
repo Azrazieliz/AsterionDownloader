@@ -48,6 +48,14 @@ def run():
         assert Path(report["project"]).is_relative_to(root/"godot-out")
         assert Path(report["project"]) != godot
         assert (godot/"project.godot").read_text().startswith("[application]")
+        # Export presets are often absent from archives; auto-generate in the
+        # staged copy, never alter the original Godot project.
+        (godot/"export_presets.cfg").unlink()
+        report2=package(godot,root/"godot-auto-out",
+            "com.asterion.portable.godotauto","Godot Auto",build=False)
+        assert (Path(report2["project"])/"export_presets.cfg").is_file()
+        assert 'name="Android"' in (Path(report2["project"])/"export_presets.cfg").read_text()
+        assert not (godot/"export_presets.cfg").exists()
         unity=root/"unity-source"
         (unity/"Assets").mkdir(parents=True)
         (unity/"ProjectSettings").mkdir()
