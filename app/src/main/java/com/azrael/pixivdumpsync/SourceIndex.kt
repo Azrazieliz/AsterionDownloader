@@ -638,6 +638,11 @@ object SourceIndex {
                     else db.defer(item.url)
                 }
             }
+            // Use the established six-hour source scheduler for followed
+            // creator profile and creator-designated hub discovery as well.
+            // This is separate from post/media download identities.
+            if(area==null && !stop() && AppPower.enabled(context))
+                CreatorLinkDiscovery.scan(context,stop)
         }finally{busy.set(false)}
     }
     /** Follow only validated same-site redirects, re-evaluating the cookie vault for
