@@ -88,4 +88,13 @@ class SourceIndexTest {
             "https://evil.example.net/post/8"))
     }
 
+    @Test fun responsivePreviewExtractedFromSrcset(){
+        val page=Jsoup.parse("""<article>
+          <a href="/post/342"><img srcset="/media/card-342.webp 2x, /media/card-low.jpg 1x">New creator post</a>
+        </article>""","https://example.org/")
+        val hits=SourceIndexParser.entries(page,"https://example.org/","COSPLAY",100L)
+        assertEquals(1,hits.size)
+        assertEquals("https://example.org/media/card-342.webp",hits[0].preview)
+    }
+
 }
