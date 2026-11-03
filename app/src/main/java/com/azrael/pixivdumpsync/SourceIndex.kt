@@ -226,9 +226,9 @@ object SourceIndex {
         if(context.getSharedPreferences(STATE,0).getBoolean("initial",false).not())
             scheduleCatchup(context)
     }
-    fun scheduleCatchup(context:Context){
+    fun scheduleCatchup(context:Context,force:Boolean=false){
         val jobs=context.getSystemService(JobScheduler::class.java)
-        if(jobs.allPendingJobs.any{it.id==CATCHUP_ID})return
+        if(!force && jobs.allPendingJobs.any{it.id==CATCHUP_ID})return
         jobs.schedule(JobInfo.Builder(CATCHUP_ID,ComponentName(context,SourceIndexJob::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(30_000L)
             .setOverrideDeadline(4L*60L*1000L).build())
@@ -367,7 +367,7 @@ class SourceIndexJob:JobService() {
                 if(!stopped.get() && params.jobId==48532 &&
                     !applicationContext.getSharedPreferences("asterion_source_index_cursor",0)
                         .getBoolean("initial",false))
-                    SourceIndex.scheduleCatchup(applicationContext)
+                    SourceIndex.scheduleCatchup(applicationContext,true)
             }
         }
         return true
