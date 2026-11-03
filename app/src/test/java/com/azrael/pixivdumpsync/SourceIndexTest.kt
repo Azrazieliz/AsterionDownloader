@@ -111,4 +111,21 @@ class SourceIndexTest {
         assertTrue(SourceIndexParser.entries(doc,"https://example.org/","BOOKS",100L).isEmpty())
     }
 
+    @Test fun autoAcquisitionKeepsEpubOnlyAndComicZipsOnly(){
+        fun eligible(area:String,kind:String,filename:String):Boolean =
+            SourceIndexParser.autoOriginal(IndexedItem(
+                "https://example.org/files/"+filename,"Test Original",null,
+                "https://example.org",area,kind,1L,false))
+        assertTrue(eligible("BOOKS","epub","volume.epub"))
+        assertFalse(eligible("BOOKS","archive","volume.zip"))
+        assertFalse(eligible("BOOKS","archive","volume.pdf"))
+        assertTrue(eligible("COMICS","archive","chapter-10.zip"))
+        assertFalse(eligible("COMICS","archive","chapter-10.cbz"))
+        assertFalse(eligible("COMICS","archive","chapter-10.rar"))
+        assertTrue(eligible("ASSETS","archive","models.zip"))
+        assertTrue(eligible("GAMES","apk","game.apk"))
+        assertTrue(eligible("VIDEOS","video","full.mp4"))
+        assertFalse(eligible("ARTWORK","image","preview.jpg"))
+    }
+
 }
