@@ -57,6 +57,29 @@ object AsterionSmartAdd {
         val current=p.getStringSet("sites",emptySet()).orEmpty().toMutableSet()
         current.add(key)
         p.edit().putStringSet("sites",current).putString("status_"+key,status).apply()
+        val area=when(kind){
+            Kind.PIXIV->"ARTWORK"
+            Kind.X->"ARTWORK"
+            Kind.COSPLAY->"COSPLAY"
+            Kind.VIDEO->"ADULT"
+            Kind.COMICS->"COMICS"
+            Kind.BOOKS->"BOOKS"
+            Kind.TORRENTS->"GAMES"
+            Kind.ASSETS->"ASSETS"
+        }
+        val native=when(kind){
+            Kind.PIXIV,Kind.X,Kind.COSPLAY,Kind.VIDEO->true
+            Kind.COMICS->status.contains("ZIP queued")
+            Kind.BOOKS->address.substringBefore('?').endsWith(".epub",true)
+            Kind.TORRENTS->address.startsWith("magnet:",true) ||
+                address.substringBefore('?').endsWith(".torrent",true)
+            Kind.ASSETS->{
+                val host=runCatching{URI(address).host.orEmpty().removePrefix("www.")}.getOrDefault("")
+                host=="db.bepis.moe" || host=="koikatsucards.com"
+            }
+        }
+        SourceIndex.enroll(a.applicationContext,address,area,
+            URI(address).host.orEmpty(),native)
     }
     private fun register(a:Activity,url:String,kind:Kind,status:TextView,done:()->Unit){
         val address=url.trim()
