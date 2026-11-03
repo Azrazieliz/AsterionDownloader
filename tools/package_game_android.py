@@ -18,6 +18,7 @@ import sys
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 from package_html5_android import build as build_html5
+from engine_android_ports import identify as identify_native, prepare as prepare_native, run_plan as run_native
 
 def safe_members(z:ZipFile):
     members=[e for e in z.infolist() if not e.is_dir() and not e.filename.startswith("__MACOSX/")]
@@ -38,6 +39,8 @@ def safe_members(z:ZipFile):
 def detect(paths:list[str])->str:
     lower=[p.lower().replace('\\','/') for p in paths]
     names=set(lower)
+    native=identify_native(lower)
+    if native:return native
     if any(p.endswith((".3ds",".cia",".cci")) for p in lower):return "NINTENDO_3DS"
     if any(p.endswith(".nds") for p in lower):return "NINTENDO_DS"
     if any(p.endswith(".rpy") or p.endswith(".rpa") for p in lower):return "RENPY"
@@ -72,14 +75,20 @@ def export_selected(z:ZipFile,members:list[ZipInfo],dest:Path):
             shutil.copyfileobj(stream,out,1024*128)
 
 def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=None,
-            gradle:str="gradle",build:bool=True)->dict:
-    if not source.is_file():raise FileNotFoundError(source)
+            gradle:str="gradle",build:bool=True,godot_editor:Path|None=None,
+            unity_editor:Path|None=None,unreal_engine:Path|None=None)->dict:
+    if not source.exists():raise FileNotFoundError(source)
+    if source.is_dir() and source.resolve() in out.resolve().parents:
+        raise ValueError("Output must not be placed inside the source project")
     if out.exists() and any(out.iterdir()):
         raise ValueError("Output directory must be empty; existing project is preserved")
     paths=[]
     if source.suffix.lower()==".zip":
         with ZipFile(source) as z:
             members=safe_members(z);paths=[m.filename for m in members]
+    elif source.is_dir():
+        paths=[str(p.relative_to(source)) for p in source.rglob("*") if p.is_file()]
+        if len(paths)>100000:raise ValueError("Project contains too many files")
     else:paths=[source.name]
     engine=detect(paths)
     out.mkdir(parents=True,exist_ok=True)
@@ -111,6 +120,26 @@ def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=No
             result["apk"]=str(dest)
             result["sha256"]=hashlib.sha256(dest.read_bytes()).hexdigest()
         else:result["build_command"]=f'{gradle} -p "{project}" assembleDebug'
+    elif engine in ("GODOT_PROJECT","UNITY_PROJECT","UNREAL_PROJECT"):
+        project=source
+        if source.is_file():
+            if source.suffix.lower()!=".zip":
+                raise ValueError("Editable source project must be a directory or ZIP")
+            project=out/"native-source"
+            with ZipFile(source) as z:
+                export_selected(z,safe_members(z),project)
+        plan=prepare_native(project,out,engine,package_id,label,
+            godot_editor,unity_editor,unreal_engine)
+        result["project"]=plan["project"]
+        result["build_command"]=plan["build_command"]
+        result["build_env"]=plan["build_env"]
+        if build and plan["ready"]:
+            result.update(run_native(plan))
+        elif build:
+            result["runtime"]="Install the matching engine editor and Android export SDK; "+
+                "the build command is prepared but no native APK was fabricated"
+        else:
+            result["runtime"]="Source project prepared; run with the installed engine editor"
     elif engine=="RENPY":
         if not renpy_sdk:
             result["runtime"]="JoiPlay with Ren'Py plugin; supply --renpy-sdk for a standalone APK"
@@ -160,9 +189,13 @@ def main():
     p.add_argument("--package",default="com.asterion.portable.visualnovel")
     p.add_argument("--label",default="Portable Visual Novel")
     p.add_argument("--renpy-sdk",type=Path)
+    p.add_argument("--godot-editor",type=Path)
+    p.add_argument("--unity-editor",type=Path)
+    p.add_argument("--unreal-engine",type=Path)
     p.add_argument("--gradle",default="gradle")
     p.add_argument("--prepare-only",action="store_true")
     a=p.parse_args()
-    result=package(a.input,a.out,a.package,a.label,a.renpy_sdk,a.gradle,not a.prepare_only)
+    result=package(a.input,a.out,a.package,a.label,a.renpy_sdk,a.gradle,
+        not a.prepare_only,a.godot_editor,a.unity_editor,a.unreal_engine)
     print(json.dumps(result,indent=2,ensure_ascii=False))
 if __name__=="__main__":main()
