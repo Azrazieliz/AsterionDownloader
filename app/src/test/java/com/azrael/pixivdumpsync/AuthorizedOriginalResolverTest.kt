@@ -4,6 +4,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AuthorizedOriginalResolverTest {
+    @Test fun signedOriginalHeadersRestoreOriginalFilename(){
+        val url="https://files.example.net/api/download?token=hidden"
+        val name=AuthorizedEndpointInspector.filename(
+            "attachment; filename*=UTF-8''My%20Book.epub",url)
+        assertEquals("My_Book.epub",name)
+        assertEquals("epub",AuthorizedEndpointInspector.mediaType(
+            "application/epub+zip",name))
+        assertEquals("model",AuthorizedEndpointInspector.mediaType(
+            "model/gltf-binary","file"))
+        assertEquals("video",AuthorizedEndpointInspector.mediaType(
+            "video/mp4","file"))
+    }
+
+    @Test fun authenticatedAdultGalleryImageIsSelectable(){
+        val page="<main><a download href='/file/full.jpg'>Photo original</a></main>"
+        val result=AuthorizedOriginalResolver.parse(page,
+            "https://creator.example.net/profile/test","ADULT")
+        assertEquals("image",result?.kind)
+        assertTrue(result?.url?.endsWith("/file/full.jpg")==true)
+    }
     @Test fun resolvesOnlyActuallyLinkedOriginals(){
         val html="""<main>
           <a href="/creator/posts/21">Post</a>
