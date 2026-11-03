@@ -173,9 +173,10 @@ class SourceIndexDb(context:Context):
     }
     fun hasPendingDetails():Boolean=
         readableDatabase.rawQuery(
-            "SELECT 1 FROM entries WHERE detail_checked=0 AND " +
-                "area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS') "+
-                "AND kind NOT IN ('epub','archive','apk','model','video','image','torrent') LIMIT 1",
+            "SELECT 1 FROM entries e JOIN sources s ON e.source=s.url "+
+                "WHERE e.detail_checked=0 AND s.enabled=1 AND s.adapter='generic' AND " +
+                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS') "+
+                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent') LIMIT 1",
             null).use{it.moveToFirst()}
 
     /** Retry only direct originals not yet accepted by their native download
@@ -543,10 +544,13 @@ object SourceIndex {
                 source.enabled && source.adapter=="generic" &&
                     (area==null||area==source.area)
             }}
-            if(all.isEmpty())return
+            // Pending post details and original enqueue retries must keep
+            // running even when no listing provider is currently active.
             val offsetKey=if(area==null)"offset" else "offset_"+area
-            val offset=pref.getInt(offsetKey,0).coerceAtLeast(0)%all.size
-            val batch=all.drop(offset).take(if(area==null)5 else 20)
+            val offset=if(all.isEmpty())0
+                else pref.getInt(offsetKey,0).coerceAtLeast(0)%all.size
+            val batch=if(all.isEmpty())emptyList()
+                else all.drop(offset).take(if(area==null)5 else 20)
             for(source in batch){
                 if(stop()||!AppPower.enabled(context))break
                 runCatching{scanOne(context,source)}.onFailure{
@@ -555,7 +559,7 @@ object SourceIndex {
                     }
                 }
             }
-            if(!stop()){
+            if(!stop() && all.isNotEmpty()){
                 val advanced=(offset+batch.size)%all.size
                 val edit=pref.edit().putInt(offsetKey,advanced)
                 if(area==null)edit.putBoolean("initial",advanced==0)
@@ -565,6 +569,7 @@ object SourceIndex {
             // pagination; retries are persisted and bounded to protect the phone.
             for(item in SourceIndexDb(context).use{it.pendingDetails(12)}){
                 if(stop() || !AppPower.enabled(context))break
+                if(area!=null && item.area!=area)continue
                 runCatching{
                     val source=SourceIndexDb(context).use{db->
                         db.sources().firstOrNull{x->x.url==item.source}
@@ -596,6 +601,7 @@ object SourceIndex {
             SourceIndexDb(context).use{db->
                 for(item in db.pendingDirect(30)){
                     if(stop() || !AppPower.enabled(context))break
+                    if(area!=null && item.area!=area)continue
                     if(!SourceIndexParser.autoOriginal(item))continue
                     if(queueDirect(context,item))db.markQueued(item.url)
                     else db.defer(item.url)
