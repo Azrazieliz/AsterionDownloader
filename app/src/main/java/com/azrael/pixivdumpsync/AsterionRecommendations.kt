@@ -56,6 +56,7 @@ object AsterionRecommendations {
     }
     fun render(a:Activity,p:LinearLayout,refresh:()->Unit){
         p.addView(ui.text(a,"For You",23f,ui.white,true),ui.lp(a,14))
+        AsterionContentSuggestions.render(a,p,refresh)
         val followed=NameWatchDb(a).use{it.list().map{w->w.name}}
         val sourceNames=com.azrael.galleryflow.GalleryDb(a).use{
             it.listEntities().map{e->e.displayName}
