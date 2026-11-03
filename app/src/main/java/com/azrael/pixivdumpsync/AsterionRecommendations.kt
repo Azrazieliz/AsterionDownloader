@@ -68,10 +68,30 @@ object AsterionRecommendations {
                 12f,ui.secondary),ui.lp(a,5))
             for(candidate in crossPlatform.take(20)){
                 val c=ui.card(a)
-                c.addView(ui.text(a,candidate.platform+" · "+
-                    candidate.url.substringAfter("://"),14f,ui.white,true))
-                c.addView(ui.text(a,candidate.evidence.take(140),
+                val row=ui.row(a)
+                val preview=ImageView(a).apply{
+                    scaleType=ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(ui.raised)
+                    contentDescription=candidate.platform+" linked creator preview"
+                }
+                row.addView(preview,LinearLayout.LayoutParams(ui.px(a,72),ui.px(a,72)))
+                CreatorPreviews.sourceThumbnail(a,preview,candidate.url)
+                val names=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                    setPadding(ui.px(a,10),0,0,0)
+                }
+                names.addView(ui.text(a,candidate.platform+" · "+
+                    candidate.url.substringAfter("://").take(75),14f,ui.white,true))
+                names.addView(ui.text(a,candidate.evidence.take(140),
                     11f,ui.secondary),ui.lp(a,4))
+                row.addView(names,LinearLayout.LayoutParams(0,-2,1f))
+                c.addView(row)
+                c.addView(ui.action(a,"VIEW LINKED CREATOR",false){
+                    a.startActivity(android.content.Intent(a,
+                        com.azrael.galleryflow.ProviderWebActivity::class.java)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                            candidate.url))
+                },ui.lp(a,6))
                 c.addView(ui.action(a,"FOLLOW & BACKFILL PROFILE",true){
                     AsterionSmartAdd.followLinkedProfile(a,candidate.url){result->
                         CrossPlatformCreatorDb(a).use{
