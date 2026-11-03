@@ -150,6 +150,14 @@ class AsterionDownloadRequestReceiver:BroadcastReceiver(){
 object AsterionDownloadWorker {
     private const val PERIODIC=49867
     private const val ONCE=49868
+    /** Status is explicit to the verified sender package; URLs and cookies never leave. */
+    private fun report(context:Context,item:InterAppRequest,state:String){
+        context.sendBroadcast(Intent(AsterionDownloadIPC.ACTION_RESULT).apply{
+            setPackage(item.sender)
+            putExtra(AsterionDownloadIPC.EXTRA_REQUEST_ID,item.id)
+            putExtra(AsterionDownloadIPC.EXTRA_STATE,state)
+        })
+    }
     fun ensure(context:Context){
         val service=context.getSystemService(JobScheduler::class.java)
         if(service.allPendingJobs.none{it.id==PERIODIC})
@@ -222,17 +230,16 @@ object AsterionDownloadWorker {
                             original.referer)
                     }
                     db.status(item.id,"QUEUED","Accepted by native download engine")
-                    context.sendBroadcast(Intent(AsterionDownloadIPC.ACTION_RESULT).apply{
-                        setPackage(item.sender)
-                        putExtra(AsterionDownloadIPC.EXTRA_REQUEST_ID,item.id)
-                        putExtra(AsterionDownloadIPC.EXTRA_STATE,"QUEUED")
-                    })
+                    report(context,item,"QUEUED")
                 }catch(t:Exception){
                     val auth=(t as? OriginalAccessException)?.reason in
                         setOf(OriginalAccessCause.ENTITLEMENT,OriginalAccessCause.SIGN_IN)
-                    db.status(item.id,if(auth)"NEEDS_AUTH"
-                        else if(item.attempts>=5)"ERROR" else "RETRY",
-                        t.message?.take(150),item.attempts+1)
+                    val state=if(auth)"NEEDS_AUTH"
+                        else if(item.attempts>=5)"ERROR" else "RETRY"
+                    db.status(item.id,state,t.message?.take(150),item.attempts+1)
+                    // The sender must not remain forever at SUBMITTED when authentication
+                    // is required or the retry budget has been exhausted.
+                    if(state=="NEEDS_AUTH" || state=="ERROR")report(context,item,state)
                 }
             }
         }
