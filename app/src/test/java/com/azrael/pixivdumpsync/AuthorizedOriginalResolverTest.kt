@@ -23,6 +23,15 @@ class AuthorizedOriginalResolverTest {
         val original=AuthorizedOriginalResolver.parse(html,"https://example.org/books","BOOKS")
         assertTrue(original?.url?.endsWith("book.epub")==true)
     }
+    @Test fun signedDownloadUrlsCanUseExposedFilename(){
+        val html="""<article>
+          <a download="FullNovel.epub" href="https://example.org/download?id=246&token=abcd">Download original</a>
+        </article>"""
+        val original=AuthorizedOriginalResolver.parse(html,
+            "https://example.org/post/246","BOOKS")
+        assertEquals("FullNovel.epub",original?.filename)
+        assertEquals("https://example.org/download?id=246&token=abcd",original?.url)
+    }
     @Test fun inaccessibleContentIsNotInvented(){
         val html="<main><p>Subscribe to view originals</p></main>"
         assertNull(AuthorizedOriginalResolver.parse(html,"https://example.org/locked","VIDEOS"))
