@@ -328,48 +328,7 @@ class AsterionHomeActivity:Activity(){
             setPadding(0,dp(6),0,0)
             maxLines=2
         },LinearLayout.LayoutParams(-1,-2))
-        val previews=if(theme.showPreviews(this@AsterionHomeActivity))
-            homePreviews(target) else emptyList()
-        if(previews.isNotEmpty()){
-            val row=theme.row(this@AsterionHomeActivity)
-            for((url,referer) in previews.take(3)){
-                val image=ImageView(this@AsterionHomeActivity).apply{
-                    scaleType=ImageView.ScaleType.CENTER_CROP
-                    background=theme.shape(this@AsterionHomeActivity,theme.raised,8)
-                }
-                row.addView(image,LinearLayout.LayoutParams(0,dp(58),1f).apply{
-                    leftMargin=dp(2);rightMargin=dp(2)
-                })
-                RemoteImageLoader.load(this@AsterionHomeActivity,image,url,referer)
-            }
-            addView(row,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(9)})
-        }
-    }
-    private fun homePreviews(target:String):List<Pair<String,String>> = when(target){
-        "X"->XPhotoQueue(this).use{db->
-            db.recent(80).filter{it.photo.startsWith("https://")}
-                .distinctBy{it.photo}.take(3).map{it.photo to "https://x.com/"}
-        }
-        "Kyora"->GalleryDb(this).use{db->
-            db.latestSelectedGalleries(15).mapNotNull{(_,gallery)->
-                gallery.firstUrl?.takeIf{it.startsWith("https://")}
-                    ?.let{it to it}
-            }.take(3)
-        }
-        "Porn"->(SourceIndex.items(this,"ADULT",5)+
-            SourceIndex.items(this,"HENTAI",5)).mapNotNull{item->
-                item.preview?.let{it to item.source}
-            }.take(3)
-        "Books"->SourceIndex.items(this,"BOOKS",12).mapNotNull{item->
-            item.preview?.let{it to item.source}
-        }.take(3)
-        "Torrents"->SourceIndex.items(this,"GAMES",12).mapNotNull{item->
-            item.preview?.let{it to item.source}
-        }.take(3)
-        "Assets"->SourceIndex.items(this,"ASSETS",12).mapNotNull{item->
-            item.preview?.let{it to item.source}
-        }.take(3)
-        else->emptyList()
+        // Navigation icon only; media belongs to each individual creator card.
     }
     private fun tileRow(left:View,right:View){
         val row=theme.row(this)
