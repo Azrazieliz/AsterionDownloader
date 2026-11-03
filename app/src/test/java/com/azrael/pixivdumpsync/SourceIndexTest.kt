@@ -34,6 +34,15 @@ class SourceIndexTest {
             GamePortPlanner.detect(listOf("mygame.3ds")))
         assertEquals(GamePortPlanner.Engine.WINDOWS,
             GamePortPlanner.detect(listOf("Game.exe")))
+        assertEquals(GamePortPlanner.Engine.UNITY_WINDOWS,
+            GamePortPlanner.detect(listOf("Game.exe","UnityPlayer.dll",
+                "Game_Data/globalgamemanagers")))
+        assertEquals(GamePortPlanner.Engine.UNREAL_WINDOWS,
+            GamePortPlanner.detect(listOf("Game.exe","Engine/Content/Paks/game.pak")))
+        assertEquals(GamePortPlanner.Engine.RPG_MAKER_LEGACY,
+            GamePortPlanner.detect(listOf("Game.exe","Game.rgss3a","Data/Map001.rvdata2")))
+        assertEquals(GamePortPlanner.Engine.GODOT_EXPORT,
+            GamePortPlanner.detect(listOf("game.pck","game.exe")))
         assertEquals(GamePortPlanner.Engine.HTML5,
             GamePortPlanner.detect(listOf("game/index.html")))
     }
