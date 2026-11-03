@@ -1,0 +1,110 @@
+name: Build independent Unity Android port (GitHub hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_archive:
+        description: "Complete editable Unity project ZIP committed under game-ports/inbox/"
+        required: true
+        type: string
+      package_id:
+        description: "Unique Android application ID"
+        required: true
+        type: string
+      game_title:
+        description: "Android display title"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  unity-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require an authorized Unity activation
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$UNITY_LICENSE" && ( -z "$UNITY_SERIAL" ||
+                -z "$UNITY_EMAIL" || -z "$UNITY_PASSWORD" ) ]]; then
+            echo "::error::Unity source rebuild requires the user's valid Unity activation secrets."
+            exit 1
+          fi
+      - name: Stage complete Unity project without mutating original
+        env:
+          SOURCE_ARCHIVE: ${{ inputs.source_archive }}
+          PACKAGE_ID: ${{ inputs.package_id }}
+          GAME_TITLE: ${{ inputs.game_title }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,pathlib,re,zipfile
+          root=pathlib.Path.cwd().resolve()
+          src=(root/os.environ["SOURCE_ARCHIVE"]).resolve()
+          allowed=root/"game-ports"/"inbox"
+          if not src.is_relative_to(allowed) or src.suffix.lower()!=".zip" or not src.is_file():
+              raise SystemExit("Provide an existing editable project ZIP inside game-ports/inbox")
+          if src.stat().st_size>2_000_000_000:
+              raise SystemExit("Project ZIP larger than 2 GB; use an approved remote asset workflow")
+          if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+",os.environ["PACKAGE_ID"]):
+              raise SystemExit("Invalid package ID")
+          if not 1<=len(os.environ["GAME_TITLE"])<=65:
+              raise SystemExit("Invalid display title")
+          with zipfile.ZipFile(src) as z:
+              if z.testzip():raise SystemExit("ZIP integrity check failed")
+          PY
+          python tools/package_game_android.py \
+            --input "$SOURCE_ARCHIVE" --out .asterion-unity-port \
+            --package "$PACKAGE_ID" --label "$GAME_TITLE" --prepare-only
+          python - <<'PY'
+          import json,pathlib
+          report=json.loads(pathlib.Path(".asterion-unity-port/port-report.json").read_text())
+          if report["engine"]!="UNITY_PROJECT":raise SystemExit(
+              "The archive is not an editable Unity project")
+          root=pathlib.Path(report["project"])
+          if not (root/"Assets/Editor/AsterionAndroidBuild.cs").exists():
+              raise SystemExit("Staged Unity native Android build method is missing")
+          (pathlib.Path("unity-port-output")).mkdir(exist_ok=True)
+          PY
+      - uses: game-ci/unity-builder@v4
+        name: Compile Unity Android APK with licensed editor
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          ASTERION_ANDROID_PACKAGE: ${{ inputs.package_id }}
+          ASTERION_ANDROID_LABEL: ${{ inputs.game_title }}
+          ASTERION_ANDROID_OUTPUT: ${{ github.workspace }}/unity-port-output/unity-standalone.apk
+        with:
+          projectPath: .asterion-unity-port/native-source/unity-android-copy
+          targetPlatform: Android
+          buildMethod: Asterion.AndroidBuild.Build
+      - name: Verify real APK package and checksum
+        env:
+          PACKAGE_ID: ${{ inputs.package_id }}
+        run: |
+          set -euo pipefail
+          APK="unity-port-output/unity-standalone.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" |
+            grep -F "package: name='$PACKAGE_ID'"
+          unzip -t "$APK" >/dev/null
+          sha256sum "$APK" > "unity-port-output/unity-standalone.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Unity-Android-Port
+          path: unity-port-output/
+          if-no-files-found: error
+          retention-days: 14
