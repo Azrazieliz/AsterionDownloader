@@ -6,13 +6,13 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.net.Uri
 
-data class Watch(val id: Long, val address: String, val label: String, val enabled: Boolean, val lastCheck: Long, val error: String?)
+data class Watch(val id: Long, val address: String, val label: String, val enabled: Boolean, val lastCheck: Long, val error: String?, val cursor: String? = null, val backfillComplete:Boolean=false)
 data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long)
 
-class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 2) {
+class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 3) {
     private val appContext = context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE watches(id INTEGER PRIMARY KEY, address TEXT UNIQUE NOT NULL, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_check INTEGER NOT NULL DEFAULT 0, error TEXT)")
+        db.execSQL("CREATE TABLE watches(id INTEGER PRIMARY KEY, address TEXT UNIQUE NOT NULL, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_check INTEGER NOT NULL DEFAULT 0, error TEXT, cursor TEXT, backfill_complete INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE INDEX video_queue ON videos(state, updated)")
     }
@@ -20,6 +20,10 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         if(oldVersion<2) {
             db.execSQL("ALTER TABLE videos ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE videos ADD COLUMN retry_after INTEGER NOT NULL DEFAULT 0")
+        }
+        if(oldVersion<3){
+            db.execSQL("ALTER TABLE watches ADD COLUMN cursor TEXT")
+            db.execSQL("ALTER TABLE watches ADD COLUMN backfill_complete INTEGER NOT NULL DEFAULT 0")
         }
     }
     fun addWatch(address: String, label: String = address): Boolean {
@@ -31,7 +35,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         return writableDatabase.insertWithOnConflict("watches", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
     }
     fun resetWatchBackfill(id:Long){
-        writableDatabase.execSQL("UPDATE watches SET last_check=0,error=NULL WHERE id=?",arrayOf(id))
+        writableDatabase.execSQL("UPDATE watches SET last_check=0,error=NULL,cursor=NULL,backfill_complete=0 WHERE id=?",arrayOf(id))
     }
     fun removeWatch(id: Long) { writableDatabase.delete("watches", "id=?", arrayOf("$id")) }
     fun enableWatch(id: Long, enabled: Boolean) {
@@ -39,8 +43,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     }
     fun listWatches(): List<Watch> {
         val out = ArrayList<Watch>()
-        readableDatabase.rawQuery("SELECT id,address,label,enabled,last_check,error FROM watches ORDER BY id", null).use { c ->
-            while(c.moveToNext()) out += Watch(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3)==1, c.getLong(4), c.getString(5))
+        readableDatabase.rawQuery("SELECT id,address,label,enabled,last_check,error,cursor,backfill_complete FROM watches ORDER BY id", null).use { c ->
+            while(c.moveToNext()) out += Watch(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3)==1, c.getLong(4), c.getString(5),c.getString(6),c.getInt(7)==1)
         }
         return out
     }
@@ -49,6 +53,13 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             put("last_check", System.currentTimeMillis())
             if(error==null) putNull("error") else put("error", error.take(300))
         }, "id=?", arrayOf("$id"))
+    }
+    fun setBackfill(id:Long,cursor:String?,complete:Boolean){
+        val v=ContentValues().apply{
+            if(cursor==null)putNull("cursor") else put("cursor",cursor)
+            put("backfill_complete",if(complete)1 else 0)
+        }
+        writableDatabase.update("watches",v,"id=?",arrayOf("$id"))
     }
     fun addVideo(url: String, title: String = url, watchId: Long = 0): Boolean {
         val normalized = WebDiscovery.normalize(url) ?: return false
