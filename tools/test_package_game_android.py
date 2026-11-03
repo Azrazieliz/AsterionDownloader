@@ -34,6 +34,35 @@ def run():
             "com.asterion.portable.rpgtest","RPG",build=False)
         assert report["engine"]=="RPG_MAKER_HTML"
         assert (root/"rpg-out/android-project/app/src/main/assets/game/js/rpg_core.js").exists()
+        # Actual editable-engine projects are routed to their real Android exporters.
+        godot=root/"godot-source"
+        godot.mkdir()
+        (godot/"project.godot").write_text("[application]\nconfig/name=\"Test\"\n")
+        (godot/"export_presets.cfg").write_text(
+            '[preset.0]\nname="Android"\nplatform="Android"\nrunnable=true\n')
+        report=package(godot,root/"godot-out",
+            "com.asterion.portable.godot","Godot",build=False)
+        assert report["engine"]=="GODOT_PROJECT"
+        assert "--export-debug" in report["build_command"]
+        assert report["standalone_apk"] is False
+        unity=root/"unity-source"
+        (unity/"Assets").mkdir(parents=True)
+        (unity/"ProjectSettings").mkdir()
+        (unity/"ProjectSettings/ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.0f1")
+        report=package(unity,root/"unity-out",
+            "com.asterion.portable.unity","Unity",build=False)
+        assert report["engine"]=="UNITY_PROJECT"
+        assert (root/"unity-out/unity-android-copy/Assets/Editor/AsterionAndroidBuild.cs").is_file()
+        assert (unity/"Assets/Editor/AsterionAndroidBuild.cs").exists() is False, \
+            "Original Unity project was modified"
+        assert "-executeMethod" in report["build_command"]
+        unreal=root/"unreal-source"
+        unreal.mkdir()
+        (unreal/"Game.uproject").write_text('{"FileVersion":3}')
+        report=package(unreal,root/"unreal-out",
+            "com.asterion.portable.unreal","Unreal",build=False)
+        assert report["engine"]=="UNREAL_PROJECT"
+        assert "BuildCookRun" in report["build_command"]
         with ZipFile(root/"traversal.zip","w") as z:
             z.writestr("../bad.txt","unsafe")
             z.writestr("index.html","safe")
