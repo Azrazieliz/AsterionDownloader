@@ -215,9 +215,17 @@ object VideoEngine {
             // Collect comparison evidence even for held videos, without granting
             // full-length status to an uncorroborated provider's own metadata.
             if(duration!=null){
-                FullSceneRuntimeDb(context).use{store->
-                    store.remember(item.title,link,duration)
-                    if(extracted!=item.title)store.remember(extracted,link,duration)
+                val newReference=FullSceneRuntimeDb(context).use{store->
+                    val fromItem=store.remember(item.title,link,duration)
+                    val fromPage=if(extracted!=item.title)
+                        store.remember(extracted,link,duration) else false
+                    fromItem || fromPage
+                }
+                // A newly observed user-designated full original can resolve
+                // earlier held uploads on general-purpose platforms.
+                if(newReference){
+                    db.requeueHeldByTitle(item.title)
+                    if(extracted!=item.title)db.requeueHeldByTitle(extracted)
                 }
             }
             return (duration?:0L) to decision
