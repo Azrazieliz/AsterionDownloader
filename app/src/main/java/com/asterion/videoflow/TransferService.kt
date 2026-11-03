@@ -7,10 +7,13 @@ import android.provider.MediaStore
 import android.os.Environment
 import android.net.Uri
 import java.io.File
+import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.ffmpegkit_maintained.ytdlp.YtDlp
 import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
+
+class FullVersionUnavailable(message:String):Exception(message)
 
 object VideoEngine {
     private val busy=AtomicBoolean(false)
@@ -125,8 +128,13 @@ object VideoEngine {
                     }
                     onStatus("Saved ${next.title}")
                 } catch(t:Exception) {
-                    db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
-                    onStatus("Failed ${next.title}")
+                    if(t is FullVersionUnavailable) {
+                        db.update(next.id,"full_only_hold",error=t.message)
+                        onStatus("Full version unverified: ${next.title}")
+                    }else{
+                        db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
+                        onStatus("Failed ${next.title}")
+                    }
                 }
             }
             if(context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getBoolean("cloud_after",false)) {
@@ -172,6 +180,41 @@ object VideoEngine {
                         ?:cookie.takeIf{it.isFile&&it.length()>0}
                     if(selected!=null)addOption("--cookies",selected.absolutePath)
                 }
+        fun preflight(link:String,referer:String?=null):
+                Pair<Long,FullLengthVideoPolicy.Decision> {
+            // Verify runtime before requesting a single media fragment; video
+            // resolution alone cannot establish that a scene is complete.
+            val request=YtDlpRequest(link)
+                .addOption("--dump-single-json")
+                .addOption("--skip-download")
+                .addOption("--no-playlist")
+                .addOption("--socket-timeout","20")
+                .apply{
+                    if(viaProxy && hidden)addOption("--proxy",
+                        "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
+                    if(!referer.isNullOrBlank())addOption("--referer",referer)
+                    val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+                        ?:cookie.takeIf{it.isFile&&it.length()>0}
+                    if(selected!=null)addOption("--cookies",selected.absolutePath)
+                }
+            val response=YtDlp.execute(request){_,_,_->}
+            if(!response.isSuccess)error("Cannot inspect complete-video metadata")
+            val text=response.output.lineSequence().map{it.trim()}
+                .firstOrNull{it.startsWith("{")&&it.endsWith("}")}
+                ?:error("Video extractor returned no metadata JSON")
+            val json=JSONObject(text)
+            val duration=json.optDouble("duration",0.0)
+                .takeIf{it.isFinite() && it>0.0}?.toLong()
+            val expected=FullSceneRuntimeDb(context).use{it.expected(item.title)}
+            val decision=FullLengthVideoPolicy.assess(item.title,
+                json.optString("title",""),link,duration,expected)
+            if(decision.verdict==FullLengthVideoPolicy.Verdict.ACCEPT &&
+                FullLengthVideoPolicy.knownFullReferenceHost(link) && duration!=null){
+                FullSceneRuntimeDb(context).use{it.remember(item.title,link,duration)}
+                db.requeueHeldByTitle(item.title)
+            }
+            return (duration?:0L) to decision
+        }
         fun execute(link:String,referer:String?=null) {
             val response=YtDlp.execute(request(link,referer)){progress,_,_->
                 val percent=progress.toInt().coerceIn(0,100)
@@ -184,27 +227,48 @@ object VideoEngine {
         val variants=listOf(item.url)+SourceDiagnostics.alternateHosts(item.url)
         var last:Throwable?=null
         var downloaded=false
+        var heldReason:String?=null
         try {
             for(candidate in variants.distinct()) {
-                try {
-                    execute(candidate)
-                    downloaded=true
-                    break
-                } catch(t:Exception) {last=t}
-                val media=if(viaProxy)null else runCatching{WebDiscovery.directMedia(candidate)}.getOrNull()
-                if(!media.isNullOrBlank()&&media!=candidate) {
+                val checked=runCatching{preflight(candidate)}
+                if(checked.isSuccess){
+                    val decision=checked.getOrThrow().second
+                    if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                        heldReason=decision.reason
+                        continue
+                    }
                     try {
-                        execute(media,candidate)
+                        execute(candidate)
                         downloaded=true
                         break
-                    } catch(t:Exception) {last=t}
+                    } catch(t:Exception){last=t}
+                }else last=checked.exceptionOrNull()
+                val media=if(viaProxy)null else runCatching{
+                    WebDiscovery.directMedia(candidate)}.getOrNull()
+                if(!media.isNullOrBlank()&&media!=candidate) {
+                    val checkedMedia=runCatching{preflight(media,candidate)}
+                    if(checkedMedia.isSuccess){
+                        val decision=checkedMedia.getOrThrow().second
+                        if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                            heldReason=decision.reason
+                            continue
+                        }
+                        try {
+                            execute(media,candidate)
+                            downloaded=true
+                            break
+                        } catch(t:Exception){last=t}
+                    }else last=checkedMedia.exceptionOrNull()
                 }
             }
         } finally {
             // Do not keep browser authentication in the file system after transfer.
             connectedCookies?.delete()
         }
-        if(!downloaded)throw (last?:IllegalStateException("No video extractor succeeded"))
+        if(!downloaded){
+            if(heldReason!=null)throw FullVersionUnavailable(heldReason!!)
+            throw (last?:IllegalStateException("No video extractor succeeded"))
+        }
         val file=parent.listFiles()?.filter { it.isFile && it.length()>0 &&
             it.extension.lowercase() in setOf("mp4","mkv","webm","mov","ts","m4a","mp3","flac","opus") }
             ?.maxByOrNull { it.length() } ?: error("No completed playable video found")
