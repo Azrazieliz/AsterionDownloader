@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -35,7 +36,7 @@ class AsterionHomeActivity:Activity(){
         if(requestCode==5210) {
             if(resultCode==RESULT_OK && data?.data!=null)
                 GamePortPlanner.inspect(this,data.data!!,
-                    data.data?.lastPathSegment.orEmpty())
+                    importedFileName(data.data!!))
             return
         }
         if(requestCode==5204) {
@@ -57,6 +58,18 @@ class AsterionHomeActivity:Activity(){
         }else if(id>=0) toast("Browser connection was not saved; ZIP retry remains paused.")
         if(::body.isInitialized)render()
     }
+    /** Document-provider URIs often use numeric IDs, not filenames. Resolve
+     * the real DISPLAY_NAME before deciding whether the game is a ZIP.
+     */
+    private fun importedFileName(source:Uri):String =
+        runCatching{
+            contentResolver.query(source,arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,null,null)?.use{cursor->
+                if(cursor.moveToFirst())cursor.getString(0) else null
+            }
+        }.getOrNull()?.takeIf{it.isNotBlank()}
+            ?:source.lastPathSegment.orEmpty()
+
     private val pages=listOf("Home","Add","Search","Queue","Recommend")
     private val navButtons=linkedMapOf<String,TextView>()
     private val navIcons=linkedMapOf<String,ImageView>()
