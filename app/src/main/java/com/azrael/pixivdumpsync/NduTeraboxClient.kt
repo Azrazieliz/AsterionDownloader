@@ -28,6 +28,19 @@ class NduTeraboxClient(private val ndus: String,
 
     companion object {
         const val CHUNK_SIZE = 4*1024*1024
+        /** TeraBox increases part size above 4 GiB to keep block counts bounded.
+         * Matching the provider's transfer strategy avoids oversize block lists for games.
+         */
+        internal fun chunkSizeFor(fileSize:Long):Int {
+            require(fileSize>0)
+            var chunk=CHUNK_SIZE.toLong()
+            var threshold=4L*1024*1024*1024
+            while(fileSize>threshold){
+                chunk*=2
+                threshold*=2
+            }
+            return chunk.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
         // Values used by the open-source TeraBox web backend for precreate.
         private const val DUMMY_MD5_A = "5910a591dd8fc18c32a8f3df4fdc1761"
         private const val DUMMY_MD5_B = "a5fc157d78e6ad1c7e114b056c92821e"
@@ -173,12 +186,13 @@ class NduTeraboxClient(private val ndus: String,
             "GET",false)))
         val host=checkedUploadHost(locate.optString("host"))
         val md5List=JSONArray()
+        val chunkSize=chunkSizeFor(size)
         var uploaded=0L
         resolver.openInputStream(uri)?.use { stream ->
             var part=0
             while(uploaded<size) {
                 if (cancelled()) throw InterruptedException("Cloud upload cancelled")
-                val length=min(CHUNK_SIZE.toLong(),size-uploaded).toInt()
+                val length=min(chunkSize.toLong(),size-uploaded).toInt()
                 val bytes=ByteArray(length)
                 var n=0
                 while(n<length) {
