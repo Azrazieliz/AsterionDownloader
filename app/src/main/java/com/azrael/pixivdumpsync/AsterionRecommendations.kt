@@ -14,23 +14,7 @@ import kotlin.concurrent.thread
 object AsterionRecommendations {
     private val ui=NocturneDesign
     private fun pref(a:Activity)=a.getSharedPreferences("asterion_recommendations",0)
-    /** Two-character Han/kana/hangul names are valid artist names; the
-     * earlier three-letter filter silently excluded many JP/CN/KR creators.
-     */
-    internal fun words(value:String):Set<String> =
-        value.lowercase(Locale.ROOT).split(Regex("[^\\p{L}\\p{N}]+"))
-            .filter{word->
-                word.length>=3 ||
-                    (word.length>=2 && word.any{ch->
-                        when(Character.UnicodeScript.of(ch.code)){
-                            Character.UnicodeScript.HAN,
-                            Character.UnicodeScript.HIRAGANA,
-                            Character.UnicodeScript.KATAKANA,
-                            Character.UnicodeScript.HANGUL->true
-                            else->false
-                        }
-                    })
-            }.toSet()
+    private fun words(value:String):Set<String> = CreatorNameTokens.words(value)
     private fun score(seed:List<String>,name:String):Int{
         val tokens=words(name)
         if(tokens.isEmpty())return 0
