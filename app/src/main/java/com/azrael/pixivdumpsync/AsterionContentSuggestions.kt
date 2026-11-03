@@ -14,7 +14,9 @@ import kotlin.concurrent.thread
 
 /** Local, explainable recommendations across every indexed module and saved video query. */
 object AsterionContentSuggestions {
-    private val ui=NocturneDesign
+    // Defer Android color-resource initialization until a real Activity renders UI.
+    // Pure recommendation ranking must remain executable in local JVM tests.
+    private val ui by lazy { NocturneDesign }
     private val areas=listOf("ALL","ARTWORK","VIDEOS","X","COSPLAY","CREATORS",
         "KOIKATSU","BOOKS","COMICS","GAMES","ASSETS")
     data class Pick(val title:String,val url:String,val preview:String?,val area:String,
