@@ -130,6 +130,15 @@ object AsterionSmartAdd {
                 }
             }
             Kind.VIDEO->{
+                val archived=CreatorArchives.parseCreatorUrl(address)
+                if(archived!=null){
+                    CreatorArchiveStore.set(a,archived,true)
+                    CreatorArchiveScheduler.ensure(a)
+                    CreatorArchiveScheduler.scanNow(a)
+                    record(a,kind,address,"Creator archive follows · backfill queued")
+                    status.text="Creator archive added; checking original attachments";done()
+                    return
+                }
                 val saved=VideoDb(a).use{db->
                     val added=db.addWatch(address,Uri.parse(address).host.orEmpty())
                     val w=db.listWatches().firstOrNull{it.address==address}
@@ -182,8 +191,17 @@ object AsterionSmartAdd {
                 }
             }
             Kind.ASSETS->{
-                record(a,kind,address,"Saved under 3D assets · native provider adapter required")
-                status.text="Saved under 3D assets; open Assets to search for cards and models";done()
+                val archive=CreatorArchives.parseCreatorUrl(address)
+                if(archive!=null){
+                    CreatorArchiveStore.set(a,archive,true)
+                    CreatorArchiveScheduler.ensure(a)
+                    CreatorArchiveScheduler.scanNow(a)
+                    record(a,kind,address,"Creator archive followed · attachment backfill queued")
+                    status.text="Creator archive added to 3D assets";done()
+                }else{
+                    record(a,kind,address,"Saved under 3D assets · indexing supported originals")
+                    status.text="3D assets source enrolled; previews will appear in Assets";done()
+                }
             }
         }
     }
