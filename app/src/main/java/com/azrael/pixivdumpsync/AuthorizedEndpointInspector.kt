@@ -61,16 +61,9 @@ internal object AuthorizedEndpointInspector {
         }
         return try{
             when(connection.responseCode){
-                401->throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
-                    "The original-file endpoint requires login")
-                402->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
-                    "A purchase or subscription is required for this file")
-                403->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
-                    "The provider denied this account access to the original")
-                404,410->throw OriginalAccessException(OriginalAccessCause.NOT_FOUND,
-                    "This original endpoint does not exist")
-                429->throw OriginalAccessException(OriginalAccessCause.RATE_LIMIT,
-                    "The provider is rate limiting original-file requests")
+                // HEAD may be unsupported even while an authorized GET works.
+                // Do not infer account access from these provisional responses.
+                401,402,403,404,405,410,429->null
                 in 200..299->{
                     val name=filename(connection.getHeaderField("Content-Disposition"),url)
                     val type=mediaType(connection.contentType,name)
