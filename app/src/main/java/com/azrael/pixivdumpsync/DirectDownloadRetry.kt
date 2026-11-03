@@ -51,6 +51,8 @@ internal object DirectRetryVault {
             GCMParameterSpec(128,Base64.decode(parts[0],Base64.NO_WRAP)))
         return String(c.doFinal(Base64.decode(parts[1],Base64.NO_WRAP)))
     }
+    fun protect(value:String):String=encrypt(value)
+    fun reveal(value:String):String=decrypt(value)
     fun remember(ctx:Context,request:Request){
         val obj=JSONObject().apply{
             put("url",request.url);put("folder",request.folder)
