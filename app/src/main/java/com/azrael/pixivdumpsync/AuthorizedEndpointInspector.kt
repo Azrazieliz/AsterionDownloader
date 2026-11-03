@@ -44,7 +44,8 @@ internal object AuthorizedEndpointInspector {
         "COMICS"->type=="archive"
         "ASSETS"->type in setOf("model","archive")
         "GAMES"->type in setOf("game","archive")
-        "ADULT","HENTAI","VIDEOS","CREATORS"->type=="video"
+        "VIDEOS"->type=="video"
+        "ADULT","HENTAI","CREATORS"->type in setOf("video","image","archive")
         "COSPLAY","ARTWORK"->type=="image"
         else->type.isNotBlank()
     }
