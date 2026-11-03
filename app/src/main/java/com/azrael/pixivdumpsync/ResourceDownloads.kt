@@ -220,7 +220,8 @@ object ResourceDownloads {
                 if(!referer.isNullOrBlank())
                     privacyReferer(url,referer)?.let{addRequestHeader("Referer",it)}
             }
-            d.enqueue(request)
+            val id=d.enqueue(request)
+            DirectDownloadTracker.record(a,id,file,folder,url)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
         }catch(t:Exception){note(a,"Download rejected: "+t.message)}
     }
