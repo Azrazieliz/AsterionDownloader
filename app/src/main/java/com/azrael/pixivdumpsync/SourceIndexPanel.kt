@@ -18,18 +18,36 @@ object SourceIndexPanel {
         val items=SourceIndex.items(a,area,35)
         if(sources.isEmpty())return
         val card=ui.card(a)
-        val healthy=sources.count{it.enabled && it.error.isNullOrEmpty() && it.lastCheck>0}
+        val healthy=sources.count{
+            it.enabled && it.error.isNullOrEmpty() &&
+                (it.adapter=="native" || it.lastCheck>0)
+        }
         val problems=sources.count{!it.error.isNullOrEmpty()}
         card.addView(ui.text(a,"Latest · "+area.lowercase().replaceFirstChar{it.uppercase()},
             17f,ui.white,true))
         card.addView(ui.text(a,
-            sources.size.toString()+" sources · "+healthy+" checked · "+
+            sources.size.toString()+" sources · "+healthy+" active / scanned · "+
                 problems+" need attention · "+items.size+" indexed previews",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         val toolbar=ui.row(a)
         toolbar.addView(ui.action(a,"SYNC & BACKFILL",false){
             SourceIndex.scanNow(a,area)
-            Toast.makeText(a,"Sync started · results appear in this module",Toast.LENGTH_SHORT).show()
+            // Native source adapters remain the source of truth; trigger their
+            // existing schedulers rather than creating parallel download engines.
+            when(area){
+                "ADULT","HENTAI"->VideoEngine.launch(a,true)
+                "CREATORS","ASSETS"->CreatorArchiveScheduler.scanNow(a)
+                "COMICS"->ChapterArchives.start(a)
+                "COSPLAY"->runCatching{
+                    a.startForegroundService(Intent(a,
+                        com.azrael.galleryflow.SyncForegroundService::class.java)
+                        .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
+                        .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
+                            com.azrael.galleryflow.SyncMode.BACKFILL.name))
+                }
+            }
+            Toast.makeText(a,"Source sync requested · new previews appear here",
+                Toast.LENGTH_SHORT).show()
         },LinearLayout.LayoutParams(0,-2,1f))
         toolbar.addView(ui.action(a,"SOURCE STATUS",false){
             showStatus(a,area)
