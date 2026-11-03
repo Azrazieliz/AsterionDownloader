@@ -47,6 +47,9 @@ object NduUploadEngine {
                                 report("TeraBox "+percent+"% / "+job.name)
                             }
                             queue.completed(job)
+                            // A completed remote API response is the first point where
+                            // Rounder's durable outbox can truthfully mark an upload complete.
+                            RounderOutbox(context).use{it.ack(Uri.parse(job.uri))}
                             uploaded++
                         } catch(t:Throwable) {
                             if(stop() || t is InterruptedException) break
