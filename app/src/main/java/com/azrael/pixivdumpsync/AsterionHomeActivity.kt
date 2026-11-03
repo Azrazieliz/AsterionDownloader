@@ -61,13 +61,34 @@ class AsterionHomeActivity:Activity(){
     private val navButtons=linkedMapOf<String,TextView>()
     private val navIcons=linkedMapOf<String,ImageView>()
     private val navSurfaces=linkedMapOf<String,LinearLayout>()
+    private val pageScroll=linkedMapOf<String,Int>()
     private fun dp(v:Int)=theme.px(this,v)
     private fun text(v:String,size:Float=14f,tint:Int=theme.white,bold:Boolean=false)=
         theme.text(this,v,size,tint,bold)
     private fun button(label:String,action:()->Unit)=theme.action(this,label,false,action)
+    private fun moduleAccent():Int=when(page){
+        "Pixiv"->theme.pixivBlue
+        "X"->theme.xCyan
+        "Site"->theme.cosplayRose
+        "Books","Toonily"->theme.booksGold
+        "Torrents"->theme.gamesTeal
+        "Assets"->theme.assetsLilac
+        "Porn"->theme.violet
+        else->theme.primary
+    }
     private fun section(title:String,subtitle:String=""){
-        body.addView(text(title,23f,theme.white,true),theme.lp(this,20,4))
-        if(subtitle.isNotBlank())body.addView(text(subtitle,12f,theme.secondary))
+        val row=theme.row(this)
+        val indicator=View(this).apply{
+            background=theme.shape(this@AsterionHomeActivity,moduleAccent(),3,moduleAccent())
+        }
+        row.addView(indicator,LinearLayout.LayoutParams(dp(4),dp(26)).apply{
+            rightMargin=dp(10)
+        })
+        row.addView(text(title,22f,theme.white,true),
+            LinearLayout.LayoutParams(0,-2,1f))
+        body.addView(row,theme.lp(this,16,3))
+        if(subtitle.isNotBlank())
+            body.addView(text(subtitle,12f,theme.secondary),theme.lp(this,2,3))
     }
     private fun card():LinearLayout=theme.card(this)
     private fun put(parent:LinearLayout,v:View,top:Int=9){
@@ -90,6 +111,8 @@ class AsterionHomeActivity:Activity(){
         ChapterRecovery.ensure(this)
         CreatorArchiveScheduler.ensure(this)
         XPhotoScheduler.ensure(this)
+        page=getSharedPreferences("asterion_display",MODE_PRIVATE)
+            .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
         val head=theme.row(this).apply{setPadding(dp(14),dp(12),dp(14),dp(12))}
         head.addView(theme.brandMark(this,47),LinearLayout.LayoutParams(dp(47),dp(47)))
@@ -189,8 +212,14 @@ class AsterionHomeActivity:Activity(){
         if(page!="Home")open("Home") else super.onBackPressed()
     }
     private fun open(target:String){
+        if(::scroller.isInitialized)pageScroll[page]=scroller.scrollY
+        val previous=page
         page=target
-        if(::body.isInitialized){render();scroller.scrollTo(0,0)}
+        if(::body.isInitialized){
+            render()
+            val where=if(target==previous)0 else pageScroll[target]?:0
+            scroller.post{scroller.scrollTo(0,where)}
+        }
     }
     private fun render(){
         val selectedTab=if(page in pages)page else "Home"
@@ -279,7 +308,8 @@ class AsterionHomeActivity:Activity(){
             setPadding(0,dp(6),0,0)
             maxLines=2
         },LinearLayout.LayoutParams(-1,-2))
-        val previews=homePreviews(target)
+        val previews=if(theme.showPreviews(this@AsterionHomeActivity))
+            homePreviews(target) else emptyList()
         if(previews.isNotEmpty()){
             val row=theme.row(this@AsterionHomeActivity)
             for((url,referer) in previews.take(3)){
@@ -336,22 +366,22 @@ class AsterionHomeActivity:Activity(){
             sourceTile("Porn & Hentai","Performers · Videos · Sync",
                 R.drawable.ic_source_video,theme.violet,"Porn"),
             sourceTile("Pixiv","Artists · Original Kuroha interface",
-                R.drawable.ic_source_pixiv,android.graphics.Color.rgb(65,161,255),"Pixiv")
+                R.drawable.ic_source_pixiv,theme.pixivBlue,"Pixiv")
         )
         tileRow(
             sourceTile("X","Following · Photos · Backfill",
-                R.drawable.ic_source_x,theme.white,"X"),
+                R.drawable.ic_source_x,theme.xCyan,"X"),
             sourceTile("Cosplay","Kyora · Galleries · Videos",
-                R.drawable.ic_source_kyora,theme.violet,"Kyora")
+                R.drawable.ic_source_kyora,theme.cosplayRose,"Kyora")
         )
         tileRow(
             sourceTile("Books & Comics","EPUB · Toonily · MangaRead · Sushi",
-                R.drawable.ic_source_toonily,theme.violet,"Books"),
+                R.drawable.ic_source_toonily,theme.booksGold,"Books"),
             sourceTile("Torrents / Games","Game releases · Magnet · Progress",
-                R.drawable.ic_source_video,theme.primary,"Torrents")
+                R.drawable.ic_source_video,theme.gamesTeal,"Torrents")
         )
         put(body,sourceTile("3D Assets","Koikatsu cards · Gumroad · Models",
-            R.drawable.ic_source_koikatsu,theme.primary,"Assets"),10)
+            R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets"),10)
         val summary=card()
         val xCount=XPhotoQueue(this).use{it.allSources().size}
         val kyoraCount=GalleryDb(this).use{it.listEntities().size}
