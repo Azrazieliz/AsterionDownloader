@@ -21,10 +21,10 @@ import com.asterion.videoflow.VideoEngine
 import java.security.MessageDigest
 import kotlin.concurrent.thread
 
-/** Signature-protected IPC protocol for other signed Asterion applications.
+/** Certificate-and-consent protected IPC for independently signed Asterion applications.
  * ACTION_REQUEST extras: url (HTTPS), category, name (optional).
- * ACTION_RESULT extras: request_id, state, message; states QUEUED/NEEDS_AUTH/ERROR.
- * No sensitive URL is broadcast, written to logs, or stored in plain database fields.
+ * ACTION_RESULT extras: request_id, state; states QUEUED/COMPLETED/NEEDS_AUTH/ERROR.
+ * No sensitive URL is broadcast, logged, or stored in plaintext.
  */
 object AsterionDownloadIPC {
     const val ACTION_REQUEST="com.azrael.pixivdumpsync.action.DOWNLOAD_REQUEST"
@@ -37,9 +37,9 @@ object AsterionDownloadIPC {
     const val PERMISSION="com.azrael.pixivdumpsync.permission.REQUEST_ASTERION_DOWNLOAD"
     val categories=setOf("ASSETS","ARTWORK","VIDEOS","BOOKS","COMICS","GAMES","KOIKATSU")
     private fun hex(value:ByteArray)=value.joinToString(""){"%02x".format(it)}
-    fun identifier(url:String,category:String):String=hex(
+    fun identifier(url:String,category:String,sender:String=""):String=hex(
         MessageDigest.getInstance("SHA-256")
-            .digest((category+"|"+SearchRanking.canonicalKey(url))
+            .digest((category+"|"+sender+"|"+SearchRanking.canonicalKey(url))
                 .toByteArray(Charsets.UTF_8)))
 }
 data class InterAppRequest(val id:String,val url:String,val category:String,
@@ -80,15 +80,31 @@ class InterAppDownloadDb(context:Context):
         require(url.startsWith("https://") && SearchRanking.validUrl(url)){
             "Only verified HTTPS originals or creator pages are accepted"
         }
-        val id=AsterionDownloadIPC.identifier(url,category)
+        val peer=sender.take(120)
+        // Each sending package owns its request state and result notifications.
+        val id=AsterionDownloadIPC.identifier(url,category,peer)
+        val nextState=if(approved)"PENDING" else "WAITING_APPROVAL"
         val cv=ContentValues().apply{
             put("id",id);put("secret",DirectRetryVault.protect(url))
             put("category",category);put("name",name.take(140))
-            put("sender",sender.take(120));put("last_update",System.currentTimeMillis())
-            put("state",if(approved)"PENDING" else "WAITING_APPROVAL")
+            put("sender",peer);put("last_update",System.currentTimeMillis())
+            put("state",nextState)
         }
-        writableDatabase.insertWithOnConflict("requests",null,cv,
+        val db=writableDatabase
+        val inserted=db.insertWithOnConflict("requests",null,cv,
             SQLiteDatabase.CONFLICT_IGNORE)
+        if(inserted==-1L) {
+            // A second request after login or a failed transfer must be actionable.
+            // Completed/active transfers are never reset or downloaded twice.
+            val retry=ContentValues(cv).apply{
+                remove("id")
+                put("attempts",0);put("retry_after",0);put("download_id",0)
+                putNull("message")
+            }
+            db.update("requests",retry,
+                "id=? AND state IN ('NEEDS_AUTH','ERROR','WAITING_APPROVAL')",
+                arrayOf(id))
+        }
         return id
     }
     fun approve(pkg:String){
@@ -142,6 +158,7 @@ class AsterionDownloadRequestReceiver:BroadcastReceiver(){
         // extras are trusted as identity. Older Android releases must use the
         // existing explicit user-mediated import instead of unverified broadcasts.
         val uid=if(Build.VERSION.SDK_INT>=34)sentFromUid else -1
+        val ordered=isOrderedBroadcast
         val pending=goAsync()
         thread(name="asterion-interapp-intake"){
             try{
@@ -156,12 +173,12 @@ class AsterionDownloadRequestReceiver:BroadcastReceiver(){
                     it.enqueue(url,category,name,peer.pkg,peer.approved)
                 }
                 if(peer.approved)AsterionDownloadWorker.schedule(context)
-                if(isOrderedBroadcast){
-                    setResultCode(android.app.Activity.RESULT_OK)
-                    setResultData(id)
+                if(ordered){
+                    pending.setResultCode(android.app.Activity.RESULT_OK)
+                    pending.setResultData(id)
                 }
             }catch(_:Exception){
-                if(isOrderedBroadcast)setResultCode(android.app.Activity.RESULT_CANCELED)
+                if(ordered)pending.setResultCode(android.app.Activity.RESULT_CANCELED)
             }finally{pending.finish()}
         }
     }
