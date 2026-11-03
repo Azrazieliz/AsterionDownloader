@@ -45,6 +45,9 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <service android:name=".DirectRetryJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name=".RounderJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
