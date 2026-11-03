@@ -55,7 +55,8 @@ class InterAppDownloadDb(context:Context):
             message TEXT)""")
     }
     override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){}
-    @Synchronized fun enqueue(url:String,category:String,name:String,sender:String):String{
+    @Synchronized fun enqueue(url:String,category:String,name:String,sender:String,
+                              approved:Boolean=true):String{
         require(AsterionDownloadIPC.categories.contains(category)){"Unknown content category"}
         require(url.startsWith("https://") && SearchRanking.validUrl(url)){
             "Only verified HTTPS originals or creator pages are accepted"
@@ -65,10 +66,21 @@ class InterAppDownloadDb(context:Context):
             put("id",id);put("secret",DirectRetryVault.protect(url))
             put("category",category);put("name",name.take(140))
             put("sender",sender.take(120));put("last_update",System.currentTimeMillis())
+            put("state",if(approved)"PENDING" else "WAITING_APPROVAL")
         }
         writableDatabase.insertWithOnConflict("requests",null,cv,
             SQLiteDatabase.CONFLICT_IGNORE)
         return id
+    }
+    fun approve(pkg:String){
+        writableDatabase.execSQL(
+            "UPDATE requests SET state='PENDING' WHERE sender=? AND state='WAITING_APPROVAL'",
+            arrayOf(pkg))
+    }
+    fun freeze(pkg:String){
+        writableDatabase.execSQL(
+            "UPDATE requests SET state='WAITING_APPROVAL' "+
+                "WHERE sender=? AND state IN ('PENDING','RETRY')",arrayOf(pkg))
     }
     fun pending(limit:Int=4):List<InterAppRequest>{
         val out=ArrayList<InterAppRequest>()
@@ -107,6 +119,10 @@ class InterAppDownloadDb(context:Context):
 class AsterionDownloadRequestReceiver:BroadcastReceiver(){
     override fun onReceive(context:Context,intent:Intent){
         if(intent.action!=AsterionDownloadIPC.ACTION_REQUEST)return
+        // Capture the system UID before returning from onReceive; no caller-supplied
+        // extras are trusted as identity. Older Android releases must use the
+        // existing explicit user-mediated import instead of unverified broadcasts.
+        val uid=if(Build.VERSION.SDK_INT>=34)sentFromUid else -1
         val pending=goAsync()
         thread(name="asterion-interapp-intake"){
             try{
@@ -115,13 +131,12 @@ class AsterionDownloadRequestReceiver:BroadcastReceiver(){
                     .orEmpty().uppercase()
                 val name=intent.getStringExtra(AsterionDownloadIPC.EXTRA_NAME)
                     .orEmpty()
-                val uid=if(Build.VERSION.SDK_INT>=34)sentFromUid else -1
-                val sender=context.packageManager.getPackagesForUid(uid)?.firstOrNull()
-                    ?:"verified-signature-peer"
+                val peer=AsterionPeerTrust.verifiedCaller(context,uid)
+                    ?:error("Sender was not a verified Asterion app")
                 val id=InterAppDownloadDb(context).use{
-                    it.enqueue(url,category,name,sender)
+                    it.enqueue(url,category,name,peer.pkg,peer.approved)
                 }
-                AsterionDownloadWorker.schedule(context)
+                if(peer.approved)AsterionDownloadWorker.schedule(context)
                 if(isOrderedBroadcast){
                     setResultCode(android.app.Activity.RESULT_OK)
                     setResultData(id)
@@ -207,13 +222,11 @@ object AsterionDownloadWorker {
                             original.referer)
                     }
                     db.status(item.id,"QUEUED","Accepted by native download engine")
-                    if(item.sender!="verified-signature-peer"){
-                        context.sendBroadcast(Intent(AsterionDownloadIPC.ACTION_RESULT).apply{
-                            setPackage(item.sender)
-                            putExtra(AsterionDownloadIPC.EXTRA_REQUEST_ID,item.id)
-                            putExtra(AsterionDownloadIPC.EXTRA_STATE,"QUEUED")
-                        },AsterionDownloadIPC.PERMISSION)
-                    }
+                    context.sendBroadcast(Intent(AsterionDownloadIPC.ACTION_RESULT).apply{
+                        setPackage(item.sender)
+                        putExtra(AsterionDownloadIPC.EXTRA_REQUEST_ID,item.id)
+                        putExtra(AsterionDownloadIPC.EXTRA_STATE,"QUEUED")
+                    })
                 }catch(t:Exception){
                     val auth=(t as? OriginalAccessException)?.reason in
                         setOf(OriginalAccessCause.ENTITLEMENT,OriginalAccessCause.SIGN_IN)
