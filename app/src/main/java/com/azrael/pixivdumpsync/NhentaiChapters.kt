@@ -16,6 +16,22 @@ object NhentaiChapters {
         else galleryPath.matchEntire(uri.path)?.groupValues?.get(1)
     }.getOrNull()
     fun isGallery(url:String)=galleryId(url)!=null
+    fun isPage(url:String):Boolean=runCatching{
+        val uri=URI(url)
+        uri.scheme=="https" && uri.host.lowercase().removePrefix("www.") in hosts &&
+            Regex("""^/g/\d{1,12}/\d{1,6}/?$""").matches(uri.path)
+    }.getOrDefault(false)
+    fun pageImage(doc:Document):List<String>{
+        val image=doc.selectFirst("#image-container img#image,"+
+            "#image-container img,.reader img#image,img#image")?:
+            throw IllegalStateException("No full-resolution gallery page image")
+        for(attr in listOf("data-original","data-src","data-lazy-src","src")){
+            val url=image.absUrl(attr)
+            if(SearchRanking.validUrl(url)&&url.startsWith("https://"))
+                return listOf(url)
+        }
+        throw IllegalStateException("Full-resolution gallery page URL unavailable")
+    }
 
     fun pages(doc:Document,seriesUrl:String):List<ChapterLink> {
         val series=URI(seriesUrl)
