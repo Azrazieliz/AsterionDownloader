@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Package visibility is needed to validate the installed peer certificate
+         on Android 11+. Unknown apps still fail the UID/approval check. -->
+    <queries>
+        <package android:name="com.asterion.art"/>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_asterion_downloader"
