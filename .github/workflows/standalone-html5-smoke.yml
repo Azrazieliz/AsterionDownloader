@@ -6,6 +6,7 @@ on:
     paths:
       - "tools/package_html5_android.py"
       - "tools/package_game_android.py"
+      - "tools/engine_android_ports.py"
       - "tools/test_package_game_android.py"
       - ".github/workflows/standalone-html5-smoke.yml"
 jobs:
