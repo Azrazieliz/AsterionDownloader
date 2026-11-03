@@ -50,9 +50,12 @@ class NduUploadService : Service() {
             try {
                 if(!NduSettings.configured(this)) return@submit
                 if(intent?.action==ACTION_QUEUE_EXISTING) {
-                    currentStatus="Scanning existing Pixiv and cosplay images"
+                    currentStatus="Scanning owned downloads across all modules"
                     notifyNow()
+                    // Retain the legacy Kuroha/Kyora index and capture the unified
+                    // Assets, Games, Books, Comics, Videos, X and Koikatsu folders.
                     NduCloudQueue(this).use { it.enqueueExisting(this) }
+                    RounderDispatch.scan(this)
                 }
                 val outcome=NduUploadEngine.drain(this,20000,12*60_000L,
                     stop={stop || !AppPower.enabled(this) || Thread.currentThread().isInterrupted}) { status ->
