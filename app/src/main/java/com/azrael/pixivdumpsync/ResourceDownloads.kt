@@ -188,10 +188,12 @@ object ResourceDownloads {
             else->http(a,raw,folder)
         }
     }
-    fun downloadFile(a:Activity,url:String,folder:String,filename:String){
-        http(a,url,folder,filename)
+    fun downloadFile(a:Activity,url:String,folder:String,filename:String,
+                     referer:String?=null){
+        http(a,url,folder,filename,referer)
     }
-    private fun http(a:Activity,url:String,folder:String,filename:String?=null){
+    private fun http(a:Activity,url:String,folder:String,filename:String?=null,
+                     referer:String?=null){
         if(!url.startsWith("https://")){note(a,"Use an HTTPS download URL");return}
         try{
             val uri=URI(url)
@@ -206,6 +208,8 @@ object ResourceDownloads {
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
                     "AsterionDownloader/$folder/$file")
                 SiteSession.cookie(url)?.let{addRequestHeader("Cookie",it)}
+                if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer))
+                    addRequestHeader("Referer",referer)
             }
             d.enqueue(request)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
