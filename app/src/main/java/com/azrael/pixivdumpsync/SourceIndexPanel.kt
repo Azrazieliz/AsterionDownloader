@@ -20,10 +20,11 @@ object SourceIndexPanel {
             .distinctBy{it.url}.sortedByDescending{it.discoveredAt}.take(35)
         if(sources.isEmpty())return
         val card=ui.card(a)
-        val healthy=sources.count{
-            it.enabled && it.error.isNullOrEmpty() &&
-                (it.adapter=="native" || it.lastCheck>0)
-        }
+        // A native adapter being installed does not establish a successful
+        // provider backfill. Display separately from actually checked sources.
+        val native=sources.count{it.enabled && it.adapter=="native"}
+        val checked=sources.count{it.enabled &&
+            it.adapter=="generic" && it.lastCheck>0 && it.error.isNullOrEmpty()}
         val problems=sources.count{!it.error.isNullOrEmpty()}
         val accounts=sources.count{it.enabled &&
             com.azrael.galleryflow.SiteSession.bound(a,it.url)}
@@ -31,7 +32,8 @@ object SourceIndexPanel {
             17f,ui.white,true))
         card.addView(ui.text(a,
             sources.size.toString()+" sources · "+accounts+" connected · "+
-                healthy+" active · "+problems+" errors · "+items.size+" previews",
+                checked+" index-checked · "+native+" native-managed · "+
+                problems+" reported errors · "+items.size+" previews",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         val toolbar=ui.row(a)
         toolbar.addView(ui.action(a,"SYNC & BACKFILL",false){
@@ -125,10 +127,12 @@ object SourceIndexPanel {
         }
         for(source in list){
             val label=source.name+" · "+(if(!source.enabled)"PAUSED"
-                else if(source.adapter=="native")"Native engine"
-                else if(source.lastCheck==0L)"Waiting for first scan"
+                else if(source.adapter=="native")"Native engine · check its own backfill"
                 else if(!source.error.isNullOrEmpty())"Error: "+source.error.take(95)
-                else "Indexed "+source.discovered+" items")
+                else if(source.lastCheck==0L)"Waiting for first scan"
+                else "Indexed "+source.discovered+" items · "+
+                    (if(source.cursor.isNullOrBlank())"no further page found"
+                     else "history cursor saved"))
             val row=ui.row(a)
             val view=ui.text(a,label,12f,ui.secondary)
             row.addView(view,LinearLayout.LayoutParams(0,-2,1f))
