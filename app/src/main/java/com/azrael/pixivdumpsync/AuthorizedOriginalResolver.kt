@@ -11,6 +11,11 @@ import java.util.Locale
 data class AccessibleOriginal(val url:String,val filename:String,val kind:String,
     val referer:String)
 
+enum class OriginalAccessCause { SIGN_IN, ENTITLEMENT, RATE_LIMIT, NOT_FOUND, NO_ORIGINAL }
+
+class OriginalAccessException(val cause:OriginalAccessCause,message:String):
+    IllegalStateException(message)
+
 object AuthorizedOriginalResolver {
     private val extensions=mapOf(
         "epub" to setOf("epub"),
@@ -94,10 +99,43 @@ object AuthorizedOriginalResolver {
         val request=Jsoup.connect(pageOrFile).timeout(17000).maxBodySize(3_000_000)
             .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
             .header("Accept","text/html,application/xhtml+xml")
+            .ignoreHttpErrors(true).followRedirects(true)
         SiteSession.cookie(pageOrFile)?.let{request.header("Cookie",it)}
-        val doc=request.get()
-        check(doc.location().startsWith("https://")){"Untrusted source redirect"}
-        return parse(doc.outerHtml(),doc.location(),hint)
-            ?:error("No downloadable original was exposed to this session")
+        val response=request.execute()
+        val destination=response.url().toString()
+        check(SearchRanking.validUrl(destination) && destination.startsWith("https://")){
+            "Untrusted HTTP redirect"
+        }
+        when(response.statusCode()){
+            401->throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
+                "Sign in with an account authorized to access this original")
+            402->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
+                "This file requires an active entitlement or purchase")
+            403->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
+                "The connected account is not permitted to download this file")
+            404,410->throw OriginalAccessException(OriginalAccessCause.NOT_FOUND,
+                "This original file is no longer available")
+            429->throw OriginalAccessException(OriginalAccessCause.RATE_LIMIT,
+                "Provider rate limit reached; try again later")
+        }
+        require(response.statusCode() in 200..299) {
+            "Provider HTTP "+response.statusCode()
+        }
+        val target=java.net.URI(destination)
+        val original=java.net.URI(pageOrFile)
+        if(!target.host.equals(original.host,true) &&
+            (target.path.orEmpty().contains("/login",true) ||
+             target.path.orEmpty().contains("/signin",true) ||
+             target.path.orEmpty().contains("/auth",true)))
+            throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
+                "Provider redirected to account sign-in")
+        if(target.path.orEmpty().matches(Regex("(?i).*/(?:login|signin|sign-in|auth|account/login)/?")))
+            throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
+                "Session expired or account sign-in required")
+        val doc=response.parse()
+        val content=doc.outerHtml()
+        return parse(content,destination,hint)
+            ?:throw OriginalAccessException(OriginalAccessCause.NO_ORIGINAL,
+                "This session exposes no downloadable original; check the account's access rights")
     }
 }
