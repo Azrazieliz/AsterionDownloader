@@ -17,7 +17,7 @@ import kotlin.concurrent.thread
 /** Engine-specific Android routing without pretending desktop/console binaries are native APKs. */
 object GamePortPlanner {
     enum class Engine(val label:String,val method:String) {
-        HTML5("HTML5 visual novel","Play offline now; package an independent APK on the PC"),
+        HTML5("HTML5 visual novel","Play offline now; build an independent APK with GitHub Actions"),
         RPG_MAKER("RPG Maker MV/MZ","Play compatible HTML5 files; package the www directory as an APK"),
         RENPY("Ren'Py visual novel","Use Ren'Py SDK/RAPT for an independent universal Android APK"),
         KIRIKIRI("Kirikiri","Compatible Android interpreter required"),
@@ -161,8 +161,18 @@ object GamePortPlanner {
         }
         val json=JSONObject().apply{
             put("game",name);put("engine",engine.name)
-            put("android_method",engine.method);put("pc_build_command",cmd)
+            put("android_method",engine.method)
+            // Retain the historical CLI field for compatibility with saved manifests.
+            put("pc_build_command",cmd)
+            put("github_build_workflow",".github/workflows/game-port-github-only.yml")
+            put("github_source_directory","game-ports/inbox/")
+            put("github_inputs",JSONObject().apply{
+                put("source_archive","game-ports/inbox/<game-source>.zip")
+                put("package_id","com.asterion.portable.game")
+                put("game_title",name.substringBeforeLast('.'))
+            })
             put("requires_original_game_zip",true)
+            put("github_action_currently_supports",listOf("HTML5","RPG_MAKER"))
         }.toString(2)
         val safe=name.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9_-]"),"_")
             .take(48).ifBlank{"game"}
