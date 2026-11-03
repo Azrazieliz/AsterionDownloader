@@ -45,22 +45,49 @@ object AsterionDownloadIPC {
 data class InterAppRequest(val id:String,val url:String,val category:String,
     val name:String,val sender:String,val attempts:Int)
 class InterAppDownloadDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_interapp_downloads.sqlite",null,2){
+    SQLiteOpenHelper(context,"asterion_interapp_downloads.sqlite",null,3){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE requests(
             id TEXT PRIMARY KEY,secret TEXT NOT NULL,
             category TEXT NOT NULL,name TEXT NOT NULL,sender TEXT NOT NULL,
             state TEXT NOT NULL DEFAULT 'PENDING',attempts INTEGER NOT NULL DEFAULT 0,
             retry_after INTEGER NOT NULL DEFAULT 0,last_update INTEGER NOT NULL,
-            message TEXT,download_id INTEGER NOT NULL DEFAULT 0)""")
+            message TEXT,download_id INTEGER NOT NULL DEFAULT 0,
+            video_transfer_secret TEXT)""")
     }
     override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
         if(a<2)db.execSQL(
             "ALTER TABLE requests ADD COLUMN download_id INTEGER NOT NULL DEFAULT 0")
+        if(a<3)db.execSQL(
+            "ALTER TABLE requests ADD COLUMN video_transfer_secret TEXT")
     }
     fun attachTransfer(id:String,downloadId:Long){
         val cv=ContentValues().apply{put("download_id",downloadId)}
         writableDatabase.update("requests",cv,"id=? AND state='PENDING'",arrayOf(id))
+    }
+    fun attachVideo(id:String,url:String){
+        val cv=ContentValues().apply{
+            put("video_transfer_secret",DirectRetryVault.protect(url))
+        }
+        writableDatabase.update("requests",cv,"id=? AND state='PENDING'",
+            arrayOf(id))
+    }
+    data class VideoTransfer(val requestId:String,val url:String,val sender:String)
+    fun inFlightVideos(limit:Int=500):List<VideoTransfer>{
+        val results=ArrayList<VideoTransfer>()
+        readableDatabase.rawQuery(
+            "SELECT id,video_transfer_secret,sender FROM requests WHERE "+
+                "state='QUEUED' AND category='VIDEOS' AND "+
+                "video_transfer_secret IS NOT NULL ORDER BY last_update ASC LIMIT ?",
+            arrayOf(limit.coerceIn(1,1000).toString())
+        ).use{c->
+            while(c.moveToNext()){
+                val original=runCatching{DirectRetryVault.reveal(c.getString(1))}
+                    .getOrNull()?:continue
+                results+=VideoTransfer(c.getString(0),original,c.getString(2))
+            }
+        }
+        return results
     }
     data class Transfer(val requestId:String,val downloadId:Long,val sender:String)
     fun inFlight(limit:Int=500):List<Transfer>{
@@ -99,7 +126,7 @@ class InterAppDownloadDb(context:Context):
             val retry=ContentValues(cv).apply{
                 remove("id")
                 put("attempts",0);put("retry_after",0);put("download_id",0)
-                putNull("message")
+                putNull("message");putNull("video_transfer_secret")
             }
             db.update("requests",retry,
                 "id=? AND state IN ('NEEDS_AUTH','ERROR','WAITING_APPROVAL')",
@@ -200,26 +227,41 @@ object AsterionDownloadWorker {
     private fun reconcile(context:Context){
         InterAppDownloadDb(context).use{db->
             val jobs=db.inFlight()
-            if(jobs.isEmpty())return
-            val dm=context.getSystemService(DownloadManager::class.java)
-            val byId=jobs.associateBy{it.downloadId}
-            val query=DownloadManager.Query()
-                .setFilterById(*jobs.map{it.downloadId}.toLongArray())
-            dm.query(query)?.use{cursor->
-                val idColumn=cursor.getColumnIndex(DownloadManager.COLUMN_ID)
-                val statusColumn=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                if(idColumn<0 || statusColumn<0)return
-                while(cursor.moveToNext()){
-                    val job=byId[cursor.getLong(idColumn)]?:continue
-                    val state=cursor.getInt(statusColumn)
-                    val result=when(state){
-                        DownloadManager.STATUS_SUCCESSFUL->"COMPLETED"
-                        DownloadManager.STATUS_FAILED->"ERROR"
+            if(jobs.isNotEmpty()){
+                val dm=context.getSystemService(DownloadManager::class.java)
+                val byId=jobs.associateBy{it.downloadId}
+                val query=DownloadManager.Query()
+                    .setFilterById(*jobs.map{it.downloadId}.toLongArray())
+                dm.query(query)?.use{cursor->
+                    val idColumn=cursor.getColumnIndex(DownloadManager.COLUMN_ID)
+                    val statusColumn=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    if(idColumn>=0 && statusColumn>=0)while(cursor.moveToNext()){
+                        val job=byId[cursor.getLong(idColumn)]?:continue
+                        val result=when(cursor.getInt(statusColumn)){
+                            DownloadManager.STATUS_SUCCESSFUL->"COMPLETED"
+                            DownloadManager.STATUS_FAILED->"ERROR"
+                            else->null
+                        }?:continue
+                        db.status(job.requestId,result,
+                            if(result=="COMPLETED")"Local original downloaded" else
+                                "DownloadManager reported a failed transfer")
+                        report(context,job.requestId,job.sender,result)
+                    }
+                }
+            }
+            // VideoFlow has its own native queue and cannot be checked through
+            // DownloadManager. Report completion only after its saved media exists.
+            val videoJobs=db.inFlightVideos()
+            if(videoJobs.isNotEmpty())VideoDb(context).use{videoDb->
+                for(job in videoJobs){
+                    val result=when(videoDb.stateForUrl(job.url)){
+                        "done"->"COMPLETED"
+                        "error"->"ERROR"
                         else->null
                     }?:continue
                     db.status(job.requestId,result,
-                        if(result=="COMPLETED")"Local original downloaded" else
-                            "DownloadManager reported a failed transfer")
+                        if(result=="COMPLETED")"VideoFlow saved the verified full video"
+                        else "VideoFlow reported an unsuccessful download")
                     report(context,job.requestId,job.sender,result)
                 }
             }
@@ -265,6 +307,9 @@ object AsterionDownloadWorker {
                             it.addVideo(original.url,item.name.ifBlank{original.filename})
                         }
                         if(queued)runCatching{VideoEngine.launch(context,false)}
+                        if(queued || VideoDb(context).use{
+                            it.hasVideo(original.url)
+                        })db.attachVideo(item.id,original.url)
                     }else{
                         if(!CrossSourceDedup(context).use{it.reserve(original.url)}){
                             db.status(item.id,"QUEUED","Original already in download history")
