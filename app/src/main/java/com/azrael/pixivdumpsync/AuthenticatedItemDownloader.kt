@@ -47,31 +47,44 @@ object AuthenticatedItemDownloader {
                     }
                 }.onFailure{error->
                     val message=error.message.orEmpty()
-                    val needsAccount=Regex("(?i)\\b(?:401|403)\\b|unauthoriz|forbidden|"+
-                        "login|log in|authentication|session|subscription|"+
-                        "access denied|original was exposed|original unavailable")
-                        .containsMatchIn(message)
-                    if(needsAccount && SourceIndexParser.safe(item.source)){
+                    val failure=error as? OriginalAccessException
+                    val requiresLogin=failure?.cause==OriginalAccessCause.SIGN_IN ||
+                        (failure?.cause==OriginalAccessCause.NO_ORIGINAL &&
+                            !SiteSession.bound(a,item.source))
+                    val restricted=failure?.cause==OriginalAccessCause.ENTITLEMENT
+                    if((requiresLogin || restricted) && SourceIndexParser.safe(item.source)){
                         val data=JSONObject().apply{
                             put("url",item.url);put("source",item.source)
                             put("title",item.title);put("area",item.area)
                             put("kind",item.kind);put("preview",item.preview)
                         }
                         preferences(a).edit().putString(PENDING,data.toString()).apply()
-                        AlertDialog.Builder(a).setTitle("Sign in to access this file")
-                            .setMessage("This file is not accessible to the current session. "+
-                                "Connect an account with access, then retry.\n\n"+
-                                message.take(180))
-                            .setPositiveButton("SIGN IN"){_,_->
+                        AlertDialog.Builder(a).setTitle(if(restricted)
+                            "Access not granted by provider" else "Account session required")
+                            .setMessage(if(restricted)
+                                "The current account has no permission for this original. "+
+                                "Use an account with the appropriate subscription, "+
+                                "purchase or creator permission.\n\n"+message.take(180)
+                                else "Connect an authorized account and retry the "+
+                                    "original-file retrieval.\n\n"+message.take(180))
+                            .setPositiveButton("CONNECT ACCOUNT"){_,_->
                                 a.startActivity(Intent(a,SiteLoginActivity::class.java)
                                     .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
                             }
-                            .setNegativeButton("Cancel"){_,_->
+                            .setNegativeButton("Close"){_,_->
                                 preferences(a).edit().remove(PENDING).apply()
                             }.show()
                     }else{
-                        Toast.makeText(a,"Original unavailable: "+message.take(180),
-                            Toast.LENGTH_LONG).show()
+                        val summary=when(failure?.cause){
+                            OriginalAccessCause.RATE_LIMIT->
+                                "Provider rate-limited this request. Try again later."
+                            OriginalAccessCause.NOT_FOUND->
+                                "Original no longer exists on the provider."
+                            OriginalAccessCause.NO_ORIGINAL->
+                                "No original download is exposed by this account."
+                            else->"Original unavailable: "+message.take(180)
+                        }
+                        Toast.makeText(a,summary,Toast.LENGTH_LONG).show()
                     }
                 }
             }
