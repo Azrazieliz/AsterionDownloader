@@ -7,6 +7,10 @@ def run():
     assert detect(["game/script.rpy","game/archive.rpa"])=="RENPY"
     assert detect(["roms/example.3ds"])=="NINTENDO_3DS"
     assert detect(["Game.exe"])=="WINDOWS"
+    assert detect(["Game.exe","Game_Data/globalgamemanagers","UnityPlayer.dll"])=="UNITY_WINDOWS"
+    assert detect(["Game.exe","Engine/Content/Paks/game.pak"])=="UNREAL_WINDOWS"
+    assert detect(["Game.rgss3a","Data/Map001.rvdata2"])=="RPG_MAKER_LEGACY"
+    assert detect(["mygame.pck"])=="GODOT_EXPORT"
     assert detect(["game/www/index.html","game/www/js/rpg_core.js"])=="RPG_MAKER_HTML"
     assert detect(["mygame/index.html","mygame/main.js"])=="HTML5"
     with TemporaryDirectory() as temp:
@@ -26,6 +30,13 @@ def run():
             "com.asterion.portable.renpytest","RenPy",build=False)
         assert report["engine"]=="RENPY"
         assert "JoiPlay" in report["runtime"]
+        assert report["compatibility_prepared"] and not report["standalone_apk"]
+        assert (root/"renpy-out/compatibility-game/files/Novel/game/script.rpy").is_file()
+        import json
+        renpy_manifest=json.loads(
+            (root/"renpy-out/compatibility-game/asterion-runtime.json").read_text())
+        assert renpy_manifest["result"]=="compatibility_payload_not_native_apk"
+        assert renpy_manifest["engine"]=="RENPY"
         # With the official SDK installed, an isolated Android project is fully
         # prepared for RAPT, without changing the source archive.
         fake_sdk=root/"renpy-sdk"
@@ -95,6 +106,30 @@ def run():
         assert Path(report["project"]).is_relative_to(root/"unreal-out")
         assert Path(report["project"]) != unreal
         assert (unreal/"Game.uproject").read_text()=='{"FileVersion":3}'
+        # Source-free Windows Unity binaries are prepared for a real runtime,
+        # never falsely converted into an Android-native Unity export.
+        with ZipFile(root/"unity-windows.zip","w") as z:
+            z.writestr("Game.exe", b"exe-data")
+            z.writestr("UnityPlayer.dll", b"dll-data")
+            z.writestr("Game_Data/globalgamemanagers", b"game-data")
+        import hashlib
+        original_sha=hashlib.sha256((root/"unity-windows.zip").read_bytes()).hexdigest()
+        win=package(root/"unity-windows.zip",root/"unity-windows-out",
+            "com.asterion.portable.unitybinary","Unity Binaries",build=True)
+        assert win["engine"]=="UNITY_WINDOWS"
+        assert win["runtime"]=="Winlator" and win["standalone_apk"] is False
+        assert win["compatibility_prepared"] is True
+        assert (root/"unity-windows-out/compatibility-game/files/Game.exe").read_bytes()==b"exe-data"
+        assert hashlib.sha256((root/"unity-windows.zip").read_bytes()).hexdigest()==original_sha
+        with ZipFile(root/"rgss.zip","w") as z:
+            z.writestr("Game.exe", b"rgss-binary")
+            z.writestr("Game.rgss3a", b"encrypted-archive")
+            z.writestr("Data/Map001.rvdata2", b"map")
+        legacy=package(root/"rgss.zip",root/"rgss-out",
+            "com.asterion.portable.rgss","Legacy RPG",build=True)
+        assert legacy["engine"]=="RPG_MAKER_LEGACY"
+        assert legacy["runtime_plugin"]=="RPG Maker plugin"
+        assert legacy["runtime_entrypoint"]=="Game.exe"
         with ZipFile(root/"traversal.zip","w") as z:
             z.writestr("../bad.txt","unsafe")
             z.writestr("index.html","safe")
