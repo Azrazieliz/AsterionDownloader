@@ -23,8 +23,15 @@ object FullLengthVideoPolicy {
      * Never merge unrelated files merely because they share a generic keyword.
      */
     fun sceneKey(value:String):String {
-        val clean=Normalizer.normalize(value,Normalizer.Form.NFKC)
-            .lowercase(Locale.ROOT)
+        val normalized=Normalizer.normalize(value,Normalizer.Form.NFKC)
+        // Release identifiers survive translated titles, aliases, watermarks and
+        // varying file names. A code must include a letter prefix and digits.
+        val release=Regex("""(?i)(?:^|[^\\p{L}\\p{N}])([a-z]{2,10})[-_ ]?(\\d{2,6})(?:$|[^\\p{L}\\p{N}])""")
+            .find(normalized)
+        if(release!=null)return "release:"+
+            release.groupValues[1].lowercase(Locale.ROOT)+
+            release.groupValues[2]
+        val clean=normalized.lowercase(Locale.ROOT)
             .replace(Regex("""(?i)\b(?:full\s*scene|full\s*video|complete|1080p|2160p|4k|hd|fhd|uhd)\b""")," ")
             .replace(Regex("""[^\p{L}\p{N}]+""")," ")
             .trim().replace(Regex("\\s+")," ")
