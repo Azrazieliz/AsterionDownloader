@@ -71,4 +71,10 @@ class FullLengthVideoPolicyTest {
         assertNotEquals(FullLengthVideoPolicy.sceneKey("Performer A Original Scene"),
             FullLengthVideoPolicy.sceneKey("Performer B Original Scene"))
     }
+    @Test fun releaseIdMatchesCrossLanguageTitlesWithoutMergingOtherReleases(){
+        assertEquals(FullLengthVideoPolicy.sceneKey("ABP-123 / Actress / English"),
+            FullLengthVideoPolicy.sceneKey("日本語 ABP_123 完全版"))
+        assertNotEquals(FullLengthVideoPolicy.sceneKey("ABP-123"),FullLengthVideoPolicy.sceneKey("ABP-124"))
+    }
+
 }
