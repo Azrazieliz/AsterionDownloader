@@ -59,6 +59,8 @@ class AsterionHomeActivity:Activity(){
     }
     private val pages=listOf("Home","Add","Search","Queue","Recommend")
     private val navButtons=linkedMapOf<String,TextView>()
+    private val navIcons=linkedMapOf<String,ImageView>()
+    private val navSurfaces=linkedMapOf<String,LinearLayout>()
     private fun dp(v:Int)=theme.px(this,v)
     private fun text(v:String,size:Float=14f,tint:Int=theme.white,bold:Boolean=false)=
         theme.text(this,v,size,tint,bold)
@@ -112,16 +114,50 @@ class AsterionHomeActivity:Activity(){
         }
         scroller.addView(body)
         root.addView(scroller,LinearLayout.LayoutParams(-1,0,1f))
-        val tabs=theme.row(this).apply{setPadding(dp(5),dp(7),dp(5),dp(7));setBackgroundColor(theme.surface)}
+        val tabs=theme.row(this).apply{
+            setPadding(dp(5),dp(5),dp(5),dp(5))
+            setBackgroundColor(theme.surface)
+        }
         pages.forEach{tab->
-            val title=when(tab){"Home"->"HOME";"Add"->"ADD SITE";"Search"->"SEARCH";"Queue"->"DOWNLOADS";else->"FOR YOU"}
-            val t=text(title,12f,if(tab==page)theme.primary else theme.secondary,tab==page).apply{
-                gravity=Gravity.CENTER;minHeight=dp(50)
+            val title=when(tab){
+                "Home"->"Home";"Add"->"Add";"Search"->"Search"
+                "Queue"->"Downloads";else->"For You"
+            }
+            val resource=when(tab){
+                "Home"->R.drawable.ic_nav_home
+                "Add"->R.drawable.ic_nav_add
+                "Search"->R.drawable.ic_nav_search
+                "Queue"->R.drawable.ic_nav_downloads
+                else->R.drawable.ic_nav_suggest
+            }
+            val item=LinearLayout(this).apply{
+                orientation=LinearLayout.VERTICAL
+                gravity=Gravity.CENTER
+                minimumHeight=dp(60)
+                setPadding(dp(2),dp(7),dp(2),dp(7))
+                background=theme.touch(this@AsterionHomeActivity,theme.surface,14)
                 isClickable=true;isFocusable=true
+                contentDescription=title
                 setOnClickListener{open(tab)}
             }
+            val image=ImageView(this).apply{
+                setImageResource(resource)
+                scaleType=ImageView.ScaleType.FIT_CENTER
+            }
+            item.addView(image,LinearLayout.LayoutParams(dp(23),dp(23)))
+            val t=text(title,10f,theme.secondary,true).apply{
+                gravity=Gravity.CENTER
+                maxLines=1
+                isSingleLine=true
+                setPadding(0,dp(3),0,0)
+            }
+            item.addView(t,LinearLayout.LayoutParams(-1,-2))
             navButtons[tab]=t
-            tabs.addView(t,LinearLayout.LayoutParams(0,-2,1f))
+            navIcons[tab]=image
+            navSurfaces[tab]=item
+            tabs.addView(item,LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=dp(2);rightMargin=dp(2)
+            })
         }
         root.addView(tabs)
         // Android 15+ enforces edge-to-edge: keep the status/navigation bars clear.
@@ -157,9 +193,16 @@ class AsterionHomeActivity:Activity(){
         if(::body.isInitialized){render();scroller.scrollTo(0,0)}
     }
     private fun render(){
+        val selectedTab=if(page in pages)page else "Home"
         navButtons.forEach{(tab,view)->
-            view.setTextColor(if(tab==page)theme.primary else theme.secondary)
-            view.setTypeface(null,if(tab==page)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            val selected=tab==selectedTab
+            view.setTextColor(if(selected)theme.primary else theme.secondary)
+            view.setTypeface(null,if(selected)android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            navIcons[tab]?.imageTintList=android.content.res.ColorStateList.valueOf(
+                if(selected)theme.primary else theme.secondary)
+            navSurfaces[tab]?.background=theme.touch(this,
+                if(selected)theme.soft else theme.surface,14,
+                if(selected)theme.primary else theme.surface)
         }
         body.removeAllViews()
         val power = Switch(this).apply {
