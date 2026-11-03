@@ -92,14 +92,17 @@ object WebDiscovery {
             if(found.size>=350)break
         }
         val rootPath=URI(root).path.trimEnd('/')
-        val next=doc.selectFirst("a[rel=next][href],.pagination a.next[href],"+
+        val explicit=doc.selectFirst("a[rel=next][href],.pagination a.next[href],"+
             "a.next[href],link[rel=next][href]")?.absUrl("href")
+        val next=(explicit?:com.azrael.pixivdumpsync.SourceIndexParser
+            .next(doc,root,address))
             ?.let(::normalize)?.takeIf{candidate->
                 val u=URI(candidate)
                 val h=u.host.lowercase().removePrefix("www.")
                 (h==host || h.endsWith(".$host")) &&
                     (rootPath.isEmpty() || u.path.startsWith(rootPath) ||
-                        u.query.orEmpty().contains("page=")) &&
+                        u.query.orEmpty().contains("page=") ||
+                        u.path.contains("/page/")) &&
                     candidate!=address && candidate!=root
             }
         return VideoPage(found.values.toList(),next)
