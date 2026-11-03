@@ -25,11 +25,13 @@ object SourceIndexPanel {
                 (it.adapter=="native" || it.lastCheck>0)
         }
         val problems=sources.count{!it.error.isNullOrEmpty()}
+        val accounts=sources.count{it.enabled &&
+            com.azrael.galleryflow.SiteSession.bound(a,it.url)}
         card.addView(ui.text(a,"Latest · "+label.lowercase().replaceFirstChar{it.uppercase()},
             17f,ui.white,true))
         card.addView(ui.text(a,
-            sources.size.toString()+" sources · "+healthy+" active / scanned · "+
-                problems+" need attention · "+items.size+" indexed previews",
+            sources.size.toString()+" sources · "+accounts+" connected · "+
+                healthy+" active · "+problems+" errors · "+items.size+" previews",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         val toolbar=ui.row(a)
         toolbar.addView(ui.action(a,"SYNC & BACKFILL",false){
@@ -49,7 +51,7 @@ object SourceIndexPanel {
             Toast.makeText(a,"Source sync requested · new previews appear here",
                 Toast.LENGTH_SHORT).show()
         },LinearLayout.LayoutParams(0,-2,1f))
-        toolbar.addView(ui.action(a,"SOURCE STATUS",false){
+        toolbar.addView(ui.action(a,"SITES & LOGIN",false){
             showStatus(a,areas,label)
         },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
         card.addView(toolbar,ui.lp(a,9))
