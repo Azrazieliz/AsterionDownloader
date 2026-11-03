@@ -54,6 +54,7 @@ def detect(paths:list[str])->str:
         p.endswith("rpg_core.js") or p.endswith("rmmz_core.js") for p in lower):
         return "RPG_MAKER_HTML"
     if any(p.endswith("index.html") for p in lower):return "HTML5"
+    if any(p.endswith(".pck") for p in lower):return "GODOT_EXPORT"
     # Packaged Windows games are runtime candidates, not editable Unity/Unreal
     # projects. Cooked files cannot be re-exported into Android-native binaries.
     if any(p.endswith((".exe", ".msi")) for p in lower):
@@ -64,7 +65,6 @@ def detect(paths:list[str])->str:
             "/engine/" in ("/"+p) or "/content/paks/" in ("/"+p)
             for p in lower):return "UNREAL_WINDOWS"
         return "WINDOWS"
-    if any(p.endswith(".pck") for p in lower):return "GODOT_EXPORT"
     if any(p.endswith((".apk",".aab")) for p in lower):return "ANDROID"
     if any(p.endswith((".unity3d",".assets")) for p in lower):return "UNITY"
     if any(p.endswith(".pak") for p in lower):return "UNREAL_OR_OTHER"
