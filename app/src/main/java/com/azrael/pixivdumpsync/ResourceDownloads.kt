@@ -184,6 +184,13 @@ object ResourceDownloads {
             note(a,"Enter a valid HTTPS URL or magnet link")
             return
         }
+        if(folder=="Comics" && NhentaiChapters.isGallery(raw)){
+            ChapterQueue(a).use{it.enqueue(raw,"NHentai gallery "+
+                NhentaiChapters.galleryId(raw).orEmpty())}
+            ChapterArchives.start(a)
+            note(a,"Complete image gallery queued as ZIP; no CBZ/PDF conversion")
+            return
+        }
         if(folder=="Books" && NovelEpubParser.supportedSeries(raw)){
             NovelEpubService.enqueue(a,raw,URI(raw).path.substringAfterLast('/')
                 .replace('-',' ').ifBlank{"Novel"})
