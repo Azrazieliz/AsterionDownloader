@@ -15,7 +15,8 @@ import kotlin.concurrent.thread
 /** Local, explainable recommendations across every indexed module and saved video query. */
 object AsterionContentSuggestions {
     private val ui=NocturneDesign
-    private val areas=listOf("ALL","VIDEOS","X","COSPLAY","KOIKATSU","BOOKS","COMICS","GAMES","ASSETS")
+    private val areas=listOf("ALL","ARTWORK","VIDEOS","X","COSPLAY","CREATORS",
+        "KOIKATSU","BOOKS","COMICS","GAMES","ASSETS")
     data class Pick(val title:String,val url:String,val preview:String?,val area:String,
         val kind:String,val source:String,val reason:String,val relevance:Int)
     private val noise=setOf("the","and","for","with","from","video","videos",
@@ -55,7 +56,6 @@ object AsterionContentSuggestions {
         val sources=stored.mapNotNull{x->
             val area=when(x.area){
                 "ADULT","HENTAI","VIDEOS"->"VIDEOS"
-                "COSPLAY","ARTWORK","CREATORS"->"VIDEOS"
                 else->x.area
             }
             if(mode!="ALL"&&area!=mode)return@mapNotNull null
@@ -211,9 +211,10 @@ object AsterionContentSuggestions {
                         item.url.substringBefore('?').substringAfterLast('/'))
                     "model","archive","apk","image","torrent"->
                         ResourceDownloads.route(a,item.url,
-                            when(item.kind){
-                                "model","archive"->"Assets"
-                                "torrent","apk"->"Games"
+                            when{
+                                item.area=="COMICS"->"Comics"
+                                item.area=="GAMES" || item.kind in setOf("torrent","apk")->"Games"
+                                item.area=="ASSETS" || item.kind=="model"->"Assets"
                                 else->"Images"
                             })
                     else->Toast.makeText(a,
