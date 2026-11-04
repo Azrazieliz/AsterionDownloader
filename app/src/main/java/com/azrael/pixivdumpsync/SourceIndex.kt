@@ -178,13 +178,32 @@ class SourceIndexDb(context:Context):
             },"url=?",arrayOf(url))
         }
     }
+    /** A delayed failed detail is not immediately runnable. Repeatedly
+     * scheduling it before the retry deadline wastes battery and network.
+     */
     fun hasPendingDetails():Boolean=
         readableDatabase.rawQuery(
             "SELECT 1 FROM entries e JOIN sources s ON e.source=s.url "+
-                "WHERE e.detail_checked=0 AND s.enabled=1 AND s.adapter='generic' AND " +
+                "WHERE e.detail_checked=0 AND e.detail_retry_after<=? "+
+                "AND s.enabled=1 AND s.adapter='generic' AND " +
                 "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK') "+
                 "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original') LIMIT 1",
-            null).use{it.moveToFirst()}
+            arrayOf(System.currentTimeMillis().toString())).use{it.moveToFirst()}
+
+    fun nextDetailRetryMs():Long?{
+        val now=System.currentTimeMillis()
+        val first=readableDatabase.rawQuery(
+            "SELECT MIN(e.detail_retry_after) FROM entries e "+
+                "JOIN sources s ON e.source=s.url "+
+                "WHERE e.detail_checked=0 AND e.detail_retry_after>? "+
+                "AND s.enabled=1 AND s.adapter='generic' AND "+
+                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK') "+
+                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original')",
+            arrayOf(now.toString())).use{cursor->
+            if(cursor.moveToFirst() && !cursor.isNull(0))cursor.getLong(0) else null
+        }
+        return first?.let{(it-now).coerceAtLeast(1000L)}
+    }
 
     /** Retry only direct originals not yet accepted by their native download
      * engine. Historical pages do not have to be revisited just to retry a URL.
@@ -576,7 +595,10 @@ object SourceIndex {
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true).setPeriodic(6L*60L*60L*1000L).build())
         if(needsCatchup(context))scheduleCatchup(context)
+        else nextDetailRetryMs(context)?.let{scheduleCatchup(context,delayMs=it)}
     }
+    fun nextDetailRetryMs(context:Context):Long? =
+        SourceIndexDb(context).use{it.nextDetailRetryMs()}
     /** A complete provider round is not the same as its historical backfill ending. */
     fun needsCatchup(context:Context):Boolean {
         if(!context.getSharedPreferences(STATE,0).getBoolean("initial",false))
@@ -587,12 +609,13 @@ object SourceIndex {
                 db.hasPendingDetails() || db.hasPendingDirect()
         }
     }
-    fun scheduleCatchup(context:Context,force:Boolean=false){
+    fun scheduleCatchup(context:Context,force:Boolean=false,delayMs:Long=30_000L){
         val jobs=context.getSystemService(JobScheduler::class.java)
         if(!force && jobs.allPendingJobs.any{it.id==CATCHUP_ID})return
+        val delay=delayMs.coerceIn(1_000L,6L*60*60_000L)
         jobs.schedule(JobInfo.Builder(CATCHUP_ID,ComponentName(context,SourceIndexJob::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(30_000L)
-            .setOverrideDeadline(4L*60L*1000L).build())
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(delay).setOverrideDeadline(delay+4L*60_000L).build())
     }
     fun scanNow(context:Context,area:String?=null){
         if(!AppPower.enabled(context))return
@@ -870,9 +893,14 @@ class SourceIndexJob:JobService() {
             try{SourceIndex.scan(applicationContext){stopped.get()}}
             finally{
                 jobFinished(params,false)
-                if(!stopped.get() && params.jobId==48532 &&
-                    SourceIndex.needsCatchup(applicationContext))
-                    SourceIndex.scheduleCatchup(applicationContext,true)
+                if(!stopped.get() && params.jobId==48532){
+                    if(SourceIndex.needsCatchup(applicationContext))
+                        SourceIndex.scheduleCatchup(applicationContext,force=true)
+                    else SourceIndex.nextDetailRetryMs(applicationContext)?.let{
+                        SourceIndex.scheduleCatchup(applicationContext,
+                            force=true,delayMs=it)
+                    }
+                }
             }
         }
         return true
