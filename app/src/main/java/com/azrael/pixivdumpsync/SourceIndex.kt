@@ -205,6 +205,21 @@ class SourceIndexDb(context:Context):
         return first?.let{(it-now).coerceAtLeast(1000L)}
     }
 
+    /** A deferred original should wake at its recorded deadline, not wait up
+     * to six hours for the next provider-wide index scan.
+     */
+    fun nextDirectRetryMs():Long?{
+        val now=System.currentTimeMillis()
+        val first=readableDatabase.rawQuery(
+            "SELECT MIN(e.retry_after) FROM entries e "+
+                "JOIN sources s ON e.source=s.url "+
+                "WHERE e.queued=0 AND e.retry_after>? AND s.enabled=1 "+
+                "AND e.kind IN ('video','epub','original','model','archive','apk','books','comics')",
+            arrayOf(now.toString())).use{cursor->
+            if(cursor.moveToFirst() && !cursor.isNull(0))cursor.getLong(0) else null
+        }
+        return first?.let{(it-now).coerceAtLeast(1000L)}
+    }
     /** Retry only direct originals not yet accepted by their native download
      * engine. Historical pages do not have to be revisited just to retry a URL.
      */
@@ -611,10 +626,11 @@ object SourceIndex {
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true).setPeriodic(6L*60L*60L*1000L).build())
         if(needsCatchup(context))scheduleCatchup(context)
-        else nextDetailRetryMs(context)?.let{scheduleCatchup(context,delayMs=it)}
+        else nextRetryMs(context)?.let{scheduleCatchup(context,delayMs=it)}
     }
-    fun nextDetailRetryMs(context:Context):Long? =
-        SourceIndexDb(context).use{it.nextDetailRetryMs()}
+    fun nextRetryMs(context:Context):Long? = SourceIndexDb(context).use{db->
+        listOfNotNull(db.nextDetailRetryMs(),db.nextDirectRetryMs()).minOrNull()
+    }
     /** A complete provider round is not the same as its historical backfill ending. */
     fun needsCatchup(context:Context):Boolean {
         if(!context.getSharedPreferences(STATE,0).getBoolean("initial",false))
@@ -740,9 +756,9 @@ object SourceIndex {
             if(directAttempted<directBudget)SourceIndexDb(context).use{db->
                 for(item in db.pendingDirect(minOf(120,directBudget-directAttempted))){
                     if(stop() || !AppPower.enabled(context))break
-                    directAttempted++
                     if(area!=null && item.area!=area)continue
                     if(!SourceIndexParser.autoOriginal(item))continue
+                    directAttempted++
                     if(queueDirect(context,item))db.markQueued(item.url)
                     else db.defer(item.url)
                 }
@@ -752,7 +768,13 @@ object SourceIndex {
             // This is separate from post/media download identities.
             if(area==null && !stop() && AppPower.enabled(context))
                 CreatorLinkDiscovery.scan(context,stop)
-        }finally{busy.set(false)}
+        }finally{
+            busy.set(false)
+            if(AppPower.enabled(context)){
+                if(needsCatchup(context))scheduleCatchup(context)
+                else nextRetryMs(context)?.let{scheduleCatchup(context,delayMs=it)}
+            }
+        }
     }
     /** Follow only validated same-site redirects, re-evaluating the cookie vault for
      * each destination instead of forwarding a manually supplied Cookie off-site.
@@ -925,7 +947,7 @@ class SourceIndexJob:JobService() {
                 if(!stopped.get() && params.jobId==48532){
                     if(SourceIndex.needsCatchup(applicationContext))
                         SourceIndex.scheduleCatchup(applicationContext,force=true)
-                    else SourceIndex.nextDetailRetryMs(applicationContext)?.let{
+                    else SourceIndex.nextRetryMs(applicationContext)?.let{
                         SourceIndex.scheduleCatchup(applicationContext,
                             force=true,delayMs=it)
                     }
