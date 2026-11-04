@@ -119,7 +119,8 @@ class RounderOutbox(context:Context):
 }
 object RounderDispatch {
     private const val JOB=48763
-    private const val CATCHUP_JOB=48764
+    // 48764 belongs to DirectDownloadRetry. JobScheduler IDs are app-wide.
+    internal const val CATCHUP_JOB=48872
     private const val SCAN_BATCH=2500
     private val busy=AtomicBoolean(false)
     private const val PREF="asterion_rounder_scanner"
@@ -141,12 +142,15 @@ object RounderDispatch {
                 .setPersisted(true).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPeriodic(15*60_000L).build())
     }
-    private fun folderCategory(path:String):String?{
+    internal fun folderCategory(path:String):String?{
         val p=path.lowercase()
         if(!listOf("asteriondownloader","nocturnepixiv","pixiflow",
             "videoflow","galleryflow","nocturnegallery").any{it in p})return null
         return when{
             "koikatsu" in p->"Koikatsu"
+            "creators" in p->"Creators"
+            "cosplay" in p->"Kyora"
+            "artwork" in p->"Artwork"
             "assets" in p->"Assets"
             "books" in p->"Books"
             "comics" in p->"Comics"
@@ -225,6 +229,7 @@ object RounderDispatch {
                                 "videos"->"videos";"books"->"books"
                                 "games"->"games";"assets"->"assets"
                                 "koikatsu"->"koikatsu";"torrents"->"torrents"
+                                "creators"->"creators"
                                 "images","artwork"->"images"
                                 else->"originals"
                             }

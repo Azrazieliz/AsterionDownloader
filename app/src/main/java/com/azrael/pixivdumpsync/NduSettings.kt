@@ -35,7 +35,7 @@ object NduSettings {
 
     fun destination(ctx: Context, category: String): String {
         require(category in setOf("kuroha","kyora","x","comics","videos",
-            "books","games","assets","koikatsu","images","torrents","originals"))
+            "books","games","assets","koikatsu","images","torrents","creators","originals"))
         val key = when(category) {
             "kuroha"->KUROHA_DIR;"kyora"->KYORA_DIR
             else->category+"_dir"
@@ -46,6 +46,7 @@ object NduSettings {
             "videos"->"Videos";"books"->"Books";"games"->"Games"
             "assets"->"Assets";"koikatsu"->"Koikatsu"
             "images"->"Images";"torrents"->"Torrents"
+            "creators"->"Creators"
             else->"Originals"
         }
         val fallback="/Nocturne/$folder"
