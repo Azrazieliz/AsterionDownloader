@@ -61,7 +61,8 @@ object ContentVerticalsPanel {
                 Provider("BOOTH","https://booth.pm/en"),
                 Provider("Fantia","https://fantia.jp/")))
     )
-    private val ui=NocturneDesign
+    // Defer Android graphics initialization until an actual Activity renders.
+    private val ui get()=NocturneDesign
     private const val PREFS="asterion_integrated_content_verticals"
     private fun prefs(a:Activity)=a.getSharedPreferences(PREFS,Activity.MODE_PRIVATE)
     private fun groupFor(id:String)=sections.firstOrNull{it.id==id}?.group
