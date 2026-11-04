@@ -624,7 +624,7 @@ object SourceIndex {
         if(!force && jobs.allPendingJobs.any{it.id==CATCHUP_ID})return
         val delay=delayMs.coerceIn(1_000L,6L*60*60_000L)
         jobs.schedule(JobInfo.Builder(CATCHUP_ID,ComponentName(context,SourceIndexJob::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true)
             .setMinimumLatency(delay).setOverrideDeadline(delay+4L*60_000L).build())
     }
     fun scanNow(context:Context,area:String?=null){

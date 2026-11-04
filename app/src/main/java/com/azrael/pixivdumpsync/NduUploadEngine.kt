@@ -13,6 +13,7 @@ object NduUploadEngine {
 
     fun drain(context:Context, maximum:Int, durationMs:Long,
               stop:()->Boolean={false}, report:(String)->Unit={}):Result {
+        if(!AppPower.enabled(context)) return Result(0,0,0,"Downloader paused")
         if(!NduSettings.configured(context)) return Result(0,0,0,"NDUS not configured")
         if(!inProgress.compareAndSet(false,true))
             return Result(0,0,0,"Another direct upload is active")

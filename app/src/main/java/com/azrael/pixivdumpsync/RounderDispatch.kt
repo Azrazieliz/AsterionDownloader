@@ -170,7 +170,7 @@ object RounderDispatch {
      * Scan cursor is (date_added,MediaStore ID), so a large history is not lost at a batch edge.
      */
     fun scan(context:Context):Int{
-        if(!busy.compareAndSet(false,true))return 0
+        if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return 0
         try{
             val prefs=context.getSharedPreferences(PREF,0)
             var stamp=prefs.getLong("stamp",0L)

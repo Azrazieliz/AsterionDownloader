@@ -18,6 +18,18 @@ object AppPower {
             XPhotoScheduler.ensure(context)
             com.azrael.galleryflow.Scheduler.ensure(context)
             com.asterion.videoflow.Scheduling.ensure(context)
+            // Resume every existing content family, not only the original
+            // Pixiv/Kyora engines. These calls are idempotent schedulers.
+            SourceIndex.ensure(context)
+            CreatorArchiveScheduler.ensure(context)
+            KoikatsuFollowing.ensure(context)
+            RounderDispatch.ensure(context)
+            DirectDownloadRetry.ensure(context)
+            AsterionDownloadWorker.ensure(context)
+            NovelEpubService.ensure(context)
+            ChapterRecovery.ensure(context)
+            NduCloudScheduler.configure(context,NduSettings.enabled(context))
+            RounderDispatch.scanAsync(context)
         }else{
             Scheduler.cancel(context)
             XPhotoScheduler.cancel(context)
@@ -32,7 +44,20 @@ object AppPower {
             }
             context.getSystemService(JobScheduler::class.java)?.let { jobs->
                 // Work scheduled by components must not restart the app while OFF.
-                for(id in listOf(7751,7752,9811,28914,42681))jobs.cancel(id)
+                // JobScheduler IDs are app-wide. Cancel all registered lanes;
+                // retries and historical cursors remain safely persisted.
+                for(id in listOf(
+                    7751,7752,9811,28914,42681, // Pixiv/Kyora/X/VideoFlow
+                    48531,48532,                 // SourceIndex
+                    41082,41083,                 // Creator archives
+                    48763,48872,                 // Rounder + large-library catch-up
+                    48764,                       // Direct downloads
+                    49867,49868,                 // Inter-app request intake
+                    49862,                       // Koikatsu cards
+                    49874,49875,                 // Novel EPUB chapters
+                    28913,                       // Comic ZIP recovery
+                    9321                         // Direct TeraBox retry
+                ))jobs.cancel(id)
             }
         }
     }
