@@ -63,13 +63,13 @@ class InterAppDownloadDb(context:Context):
     }
     fun attachTransfer(id:String,downloadId:Long){
         val cv=ContentValues().apply{put("download_id",downloadId)}
-        writableDatabase.update("requests",cv,"id=? AND state='PENDING'",arrayOf(id))
+        writableDatabase.update("requests",cv,"id=? AND state IN ('PENDING','RETRY')",arrayOf(id))
     }
     fun attachVideo(id:String,url:String){
         val cv=ContentValues().apply{
             put("video_transfer_secret",DirectRetryVault.protect(url))
         }
-        writableDatabase.update("requests",cv,"id=? AND state='PENDING'",
+        writableDatabase.update("requests",cv,"id=? AND state IN ('PENDING','RETRY')",
             arrayOf(id))
     }
     data class VideoTransfer(val requestId:String,val url:String,val sender:String)
@@ -229,23 +229,26 @@ object AsterionDownloadWorker {
             val jobs=db.inFlight()
             if(jobs.isNotEmpty()){
                 val dm=context.getSystemService(DownloadManager::class.java)
-                val byId=jobs.associateBy{it.downloadId}
+                // Multiple Asterion apps may request the same existing transfer.
+                val byId=jobs.groupBy{it.downloadId}
                 val query=DownloadManager.Query()
                     .setFilterById(*jobs.map{it.downloadId}.toLongArray())
                 dm.query(query)?.use{cursor->
                     val idColumn=cursor.getColumnIndex(DownloadManager.COLUMN_ID)
                     val statusColumn=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                     if(idColumn>=0 && statusColumn>=0)while(cursor.moveToNext()){
-                        val job=byId[cursor.getLong(idColumn)]?:continue
+                        val requests=byId[cursor.getLong(idColumn)].orEmpty()
                         val result=when(cursor.getInt(statusColumn)){
                             DownloadManager.STATUS_SUCCESSFUL->"COMPLETED"
                             DownloadManager.STATUS_FAILED->"ERROR"
                             else->null
                         }?:continue
-                        db.status(job.requestId,result,
-                            if(result=="COMPLETED")"Local original downloaded" else
-                                "DownloadManager reported a failed transfer")
-                        report(context,job.requestId,job.sender,result)
+                        for(job in requests){
+                            db.status(job.requestId,result,
+                                if(result=="COMPLETED")"Local original downloaded" else
+                                    "DownloadManager reported a failed transfer")
+                            report(context,job.requestId,job.sender,result)
+                        }
                     }
                 }
             }
@@ -302,18 +305,43 @@ object AsterionDownloadWorker {
                         error("A Koikatsu character card must be an original PNG")
                     if(item.category=="BOOKS" && original.kind!="epub")
                         error("Books require an original EPUB")
+                    if(item.category=="COMICS" &&
+                        (original.kind!="archive" ||
+                         !original.filename.endsWith(".zip",ignoreCase=true)))
+                        error("Comics require the complete original ZIP archive")
                     if(item.category=="VIDEOS"){
                         val queued=VideoDb(context).use{
                             it.addVideo(original.url,item.name.ifBlank{original.filename})
                         }
                         if(queued)runCatching{VideoEngine.launch(context,false)}
-                        if(queued || VideoDb(context).use{
+                        val accepted=queued || VideoDb(context).use{
                             it.hasVideo(original.url)
-                        })db.attachVideo(item.id,original.url)
+                        }
+                        require(accepted){"VideoFlow did not accept the download request"}
+                        db.attachVideo(item.id,original.url)
                     }else{
                         if(!CrossSourceDedup(context).use{it.reserve(original.url)}){
-                            db.status(item.id,"QUEUED","Original already in download history")
-                            report(context,item,"QUEUED")
+                            val claim=CrossSourceDedup(context).use{
+                                it.claim(original.url)
+                            }
+                            when{
+                                claim?.managerId!=null && claim.managerId>0L->{
+                                    db.attachTransfer(item.id,claim.managerId)
+                                    db.status(item.id,"QUEUED",
+                                        "Already tracked by an existing native transfer")
+                                    report(context,item,"QUEUED")
+                                }
+                                claim?.state=="complete"->{
+                                    db.status(item.id,"COMPLETED",
+                                        "Original was previously marked complete")
+                                    report(context,item,"COMPLETED")
+                                }
+                                else->{
+                                    db.status(item.id,"RETRY",
+                                        "Another transfer reservation is still pending",
+                                        item.attempts+1)
+                                }
+                            }
                             continue
                         }
                         val filename=original.filename.take(95)

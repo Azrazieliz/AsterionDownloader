@@ -61,6 +61,14 @@ class CrossSourceDedup(context:Context):
                 (c.getString(0)=="complete" || !c.isNull(1))
         }
     }
+    /** Bind a duplicate cross-app request to its existing transfer receipt. */
+    data class Claim(val state:String,val managerId:Long?)
+    @Synchronized fun claim(url:String):Claim?=
+        readableDatabase.rawQuery("SELECT state,manager_id FROM claims WHERE key=?",
+            arrayOf(safeKey(url))).use{c->
+            if(!c.moveToFirst())null
+            else Claim(c.getString(0),if(c.isNull(1))null else c.getLong(1))
+        }
     @Synchronized fun attach(url:String,id:Long){
         writableDatabase.update("claims",ContentValues().apply{put("manager_id",id)},
             "key=?",arrayOf(safeKey(url)))
