@@ -19,10 +19,10 @@ object UnifiedMediaGrid {
     private fun match(item:IndexedItem,filter:MediaFilter)=when(filter){
         MediaFilter.ALL->true
         MediaFilter.IMAGES->item.kind=="image" ||
-            (item.kind !in setOf("video","epub","model","archive","apk","torrent","game") &&
+            (item.kind !in setOf("video","epub","model","archive","apk","torrent","game","original") &&
                 item.preview!=null)
         MediaFilter.VIDEO->item.kind=="video"
-        MediaFilter.DOWNLOADS->item.kind in setOf("epub","model","archive","apk","torrent","game")
+        MediaFilter.DOWNLOADS->item.kind in setOf("epub","model","archive","apk","torrent","game","original")
     }
     private fun accent(areas:List<String>):Int=when{
         areas.any{it=="COSPLAY"||it=="ARTWORK"}->ui.cosplayRose

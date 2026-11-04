@@ -260,7 +260,7 @@ class SourceIndexDb(context:Context):
 
 internal object SourceIndexParser {
     private val junk=Regex("(?i)(?:/login|/signup|/register|/privacy|/terms|/contact|/tag/|/tags/|/category/|/account|/settings|/advert|/report)")
-    private val media=Regex("(?i)\\.(?:mp4|m4v|webm|mkv|mov|epub|zip|7z|rar|blend|fbx|obj|glb|gltf|stl|apk|torrent|png|jpg|jpeg|webp)(?:[?#]|$)")
+    private val media=Regex("(?i)\\.(?:mp4|m4v|webm|mkv|mov|epub|zip|7z|rar|blend|fbx|obj|glb|gltf|stl|apk|torrent|png|jpg|jpeg|webp|gif|avif)(?:[?#]|$)")
     internal fun safe(url:String):Boolean=runCatching{
         val uri=URI(url)
         uri.scheme=="https" && SearchRanking.validUrl(url) &&
@@ -290,7 +290,7 @@ internal object SourceIndexParser {
             path.endsWith(".apk")->"apk"
             listOf(".blend",".fbx",".obj",".glb",".gltf",".stl").any{path.endsWith(it)}->"model"
             listOf(".mp4",".m4v",".webm",".mkv",".mov").any{path.endsWith(it)}->"video"
-            listOf(".png",".jpg",".jpeg",".webp").any{path.endsWith(it)}->"image"
+            listOf(".png",".jpg",".jpeg",".webp",".gif",".avif").any{path.endsWith(it)}->"image"
             listOf(".zip",".7z",".rar").any{path.endsWith(it)}->"archive"
             else->area.lowercase(Locale.ROOT)
         }

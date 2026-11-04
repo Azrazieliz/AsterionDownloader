@@ -105,7 +105,8 @@ object SourceIndexPanel {
                         .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url)
                         .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,
                             when(item.area){
-                                "ADULT","HENTAI","VIDEOS","CREATORS"->"Videos"
+                                "ADULT","HENTAI","VIDEOS"->"Videos"
+                                "CREATORS"->"Creators"
                                 "ARTWORK"->"Artwork"
                                 "COSPLAY"->"Cosplay"
                                 "BOOKS"->"Books"
