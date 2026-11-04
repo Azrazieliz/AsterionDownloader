@@ -146,9 +146,10 @@ class SourceIndexDb(context:Context):
                WHERE e.detail_checked=0 AND e.detail_retry_after<=?
                  AND s.enabled=1 AND s.adapter='generic'
                  AND e.area IN ('BOOKS','COMICS','GAMES','ASSETS',
-                     'VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK')
+                     'VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK',
+                     'STUDIO','MMD','LIVE2D','ANIMATION','MODS','VOICE')
                  AND e.kind NOT IN ('epub','archive','apk','model','video',
-                     'image','torrent','original')
+                     'image','torrent','original','creative','mod','audio')
                ORDER BY e.discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,40).toString())).use{c->
@@ -186,8 +187,8 @@ class SourceIndexDb(context:Context):
             "SELECT 1 FROM entries e JOIN sources s ON e.source=s.url "+
                 "WHERE e.detail_checked=0 AND e.detail_retry_after<=? "+
                 "AND s.enabled=1 AND s.adapter='generic' AND " +
-                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK') "+
-                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original') LIMIT 1",
+                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK','STUDIO','MMD','LIVE2D','ANIMATION','MODS','VOICE') "+
+                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original','creative','mod','audio') LIMIT 1",
             arrayOf(System.currentTimeMillis().toString())).use{it.moveToFirst()}
 
     fun nextDetailRetryMs():Long?{
@@ -197,8 +198,8 @@ class SourceIndexDb(context:Context):
                 "JOIN sources s ON e.source=s.url "+
                 "WHERE e.detail_checked=0 AND e.detail_retry_after>? "+
                 "AND s.enabled=1 AND s.adapter='generic' AND "+
-                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK') "+
-                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original')",
+                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK','STUDIO','MMD','LIVE2D','ANIMATION','MODS','VOICE') "+
+                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original','creative','mod','audio')",
             arrayOf(now.toString())).use{cursor->
             if(cursor.moveToFirst() && !cursor.isNull(0))cursor.getLong(0) else null
         }
@@ -214,7 +215,7 @@ class SourceIndexDb(context:Context):
             "SELECT MIN(e.retry_after) FROM entries e "+
                 "JOIN sources s ON e.source=s.url "+
                 "WHERE e.queued=0 AND e.retry_after>? AND s.enabled=1 "+
-                "AND e.kind IN ('video','epub','original','model','archive','apk','books','comics')",
+                "AND e.kind IN ('video','epub','original','model','archive','apk','books','comics','creative','mod','audio')",
             arrayOf(now.toString())).use{cursor->
             if(cursor.moveToFirst() && !cursor.isNull(0))cursor.getLong(0) else null
         }
@@ -242,6 +243,10 @@ class SourceIndexDb(context:Context):
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
                         url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
                     OR (kind='original' AND area IN ('CREATORS','COSPLAY','ARTWORK'))
+                    OR (kind IN ('model','creative','archive','original') AND
+                        area IN ('STUDIO','MMD','LIVE2D','ANIMATION'))
+                    OR (kind IN ('mod','archive','apk','original') AND area='MODS')
+                    OR (kind IN ('audio','archive','original') AND area='VOICE')
                     OR (kind='model' AND area='ASSETS')
                     OR (kind='comics' AND area='COMICS' AND
                         (url LIKE 'https://nhentai.net/g/%' OR
@@ -294,7 +299,7 @@ class SourceIndexDb(context:Context):
 
 internal object SourceIndexParser {
     private val junk=Regex("(?i)(?:/login|/signup|/register|/privacy|/terms|/contact|/tag/|/tags/|/category/|/account|/settings|/advert|/report)")
-    private val media=Regex("(?i)\\.(?:mp4|m4v|webm|mkv|mov|epub|zip|7z|rar|blend|fbx|obj|glb|gltf|stl|apk|torrent|png|jpg|jpeg|webp|gif|avif)(?:[?#]|$)")
+    private val media=Regex("(?i)\\.(?:mp4|m4v|webm|mkv|mov|epub|zip|7z|rar|blend|fbx|obj|glb|gltf|stl|apk|torrent|png|jpg|jpeg|webp|gif|avif|pmx|pmd|vmd|vpd|vrm|moc3|psd|kra|clip|unitypackage|pak|xp3|rpa|rpy|mp3|flac|m4a|wav|ogg|opus|model3\\.json|motion3\\.json|physics3\\.json)(?:[?#]|$)")
     internal fun safe(url:String):Boolean=runCatching{
         val uri=URI(url)
         uri.scheme=="https" && SearchRanking.validUrl(url) &&
@@ -322,7 +327,12 @@ internal object SourceIndexParser {
             path.endsWith(".epub")->"epub"
             path.endsWith(".torrent")->"torrent"
             path.endsWith(".apk")->"apk"
-            listOf(".blend",".fbx",".obj",".glb",".gltf",".stl").any{path.endsWith(it)}->"model"
+            listOf(".blend",".fbx",".obj",".glb",".gltf",".stl",
+                ".pmx",".pmd",".vmd",".vpd",".vrm").any{path.endsWith(it)}->"model"
+            listOf(".psd",".kra",".clip",".moc3",".model3.json",".motion3.json",
+                ".physics3.json").any{path.endsWith(it)}->"creative"
+            listOf(".unitypackage",".pak",".xp3",".rpa",".rpy").any{path.endsWith(it)}->"mod"
+            listOf(".mp3",".flac",".m4a",".wav",".ogg",".opus").any{path.endsWith(it)}->"audio"
             listOf(".mp4",".m4v",".webm",".mkv",".mov").any{path.endsWith(it)}->"video"
             listOf(".png",".jpg",".jpeg",".webp",".gif",".avif").any{path.endsWith(it)}->"image"
             listOf(".zip",".7z",".rar").any{path.endsWith(it)}->"archive"
@@ -342,6 +352,10 @@ internal object SourceIndexParser {
                 SushiScanChapters.isSeries(item.url)))
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
+        "STUDIO","MMD","LIVE2D","ANIMATION"->item.kind in
+            setOf("model","creative","archive","original")
+        "MODS"->item.kind in setOf("mod","archive","apk","original")
+        "VOICE"->item.kind in setOf("audio","archive","original")
         "CREATORS"->item.kind in setOf("video","original")
         "COSPLAY","ARTWORK"->item.kind=="original"
         "VIDEOS","ADULT","HENTAI"->item.kind=="video"
@@ -450,6 +464,10 @@ internal object SourceIndexParser {
                 type in setOf("image","archive","model","epub")
             val galleryOriginal=source.area in setOf("COSPLAY","ARTWORK") &&
                 explicitAttachment && type in setOf("image","archive")
+            val verticalOriginal=source.area in setOf(
+                "STUDIO","MMD","LIVE2D","ANIMATION","MODS","VOICE") &&
+                explicitAttachment && type in setOf(
+                    "image","model","creative","mod","audio","archive","apk")
             val allowed=when(source.area){
                 "BOOKS"->type=="epub"
                 "COMICS"->type=="archive" &&
@@ -457,6 +475,10 @@ internal object SourceIndexParser {
                         filenameHint.endsWith(".zip",ignoreCase=true))
                 "GAMES"->type in setOf("apk","archive")
                 "ASSETS"->type in setOf("model","archive")
+                "STUDIO","MMD","LIVE2D","ANIMATION"->type in
+                    setOf("model","creative","archive") || verticalOriginal
+                "MODS"->type in setOf("mod","archive","apk") || verticalOriginal
+                "VOICE"->type in setOf("audio","archive") || verticalOriginal
                 "CREATORS"->type=="video"||creatorOriginal
                 "COSPLAY","ARTWORK"->galleryOriginal
                 "VIDEOS","ADULT","HENTAI"->type=="video"
@@ -466,7 +488,8 @@ internal object SourceIndexParser {
             val name=filenameHint.ifBlank{caption}.ifBlank{source.title}.take(180)
             results.putIfAbsent(url,IndexedItem(url,name,source.preview,
                 source.source,source.area,
-                if(creatorOriginal || galleryOriginal)"original" else type,
+                if(creatorOriginal || galleryOriginal ||
+                    (verticalOriginal && type=="image"))"original" else type,
                 clock,false))
         }
         for(link in content.take(10_000)){
@@ -501,7 +524,8 @@ internal object SourceIndexParser {
         // Gallery detail pages often store their full-resolution image links in
         // explicit data attributes. Never treat the ordinary img[src] thumbnail
         // or social meta preview as an original to acquire.
-        if(source.area in setOf("COSPLAY","ARTWORK","CREATORS")){
+        if(source.area in setOf("COSPLAY","ARTWORK","CREATORS",
+            "STUDIO","MMD","LIVE2D","ANIMATION")){
             val selectors="main img[data-original],main img[data-full],"+
                 "main img[data-full-src],main img[data-highres],"+
                 "article img[data-original],article img[data-full],"+
@@ -893,7 +917,7 @@ object SourceIndex {
         // Keep the explicit original filename for signed endpoints whose URL
         // is only an opaque file ID. Never use arbitrary post titles as paths.
         val suppliedName=item.title.takeIf{
-            it.matches(Regex("""(?i)[^/\\]{1,150}\.(?:epub|zip|7z|rar|png|jpg|jpeg|gif|webp|avif|blend|fbx|obj|glb|gltf|stl|mp4|webm|mkv|apk)"""))
+            it.matches(Regex("""(?i)[^/\\]{1,150}\.(?:epub|zip|7z|rar|png|jpg|jpeg|gif|webp|avif|blend|fbx|obj|glb|gltf|stl|pmx|pmd|vmd|vpd|vrm|moc3|psd|kra|clip|unitypackage|pak|xp3|rpa|rpy|mp3|flac|m4a|wav|ogg|opus|mp4|webm|mkv|apk)"""))
         }
         val filename=(suppliedName?:URI(item.url).path.substringAfterLast('/'))
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
@@ -901,7 +925,10 @@ object SourceIndex {
         val folder=when(item.area){
             "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
             "CREATORS"->"Creators";"COSPLAY"->"Cosplay"
-            "ARTWORK"->"Artwork";else->"Assets"
+            "ARTWORK"->"Artwork";"STUDIO"->"Assets/Koikatsu Studio"
+            "MMD"->"Assets/MMD";"LIVE2D"->"Assets/Live2D"
+            "ANIMATION"->"Assets/Animation";"MODS"->"Games/Mods"
+            "VOICE"->"Audio/Doujin Voice";else->"Assets"
         }
         if(!CrossSourceDedup(context).use{it.reserve(item.url)}){
             // Existing accepted transfers are already owned by DownloadManager.

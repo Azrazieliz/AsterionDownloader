@@ -275,4 +275,22 @@ class SourceIndexTest {
             SourceIndexParser.autoOriginal(it)})
     }
 
+    @Test fun specialistTypesAreIndexableWithoutDownloadingThumbnails(){
+        val checks=mapOf(
+            "https://example.org/model.pmx" to "model",
+            "https://example.org/motion.vmd" to "model",
+            "https://example.org/character.model3.json" to "creative",
+            "https://example.org/layers.psd" to "creative",
+            "https://example.org/story.rpa" to "mod",
+            "https://example.org/voice.flac" to "audio")
+        for((url,kind) in checks)
+            assertEquals(url,kind,SourceIndexParser.kind(url,"ASSETS"))
+        val original=IndexedItem("https://example.org/voice.flac","Audio",null,
+            "https://example.org/","VOICE","audio",100L,false)
+        assertTrue(SourceIndexParser.autoOriginal(original))
+        val thumbnail=IndexedItem("https://example.org/poster.jpg","Preview",
+            null,"https://example.org/","STUDIO","image",100L,false)
+        assertFalse(SourceIndexParser.autoOriginal(thumbnail))
+    }
+
 }
