@@ -15,8 +15,12 @@ object AsterionPeerTrust {
     private const val PREF="asterion_cross_app_peer_certificates"
     data class Peer(val pkg:String,val digest:String,val approved:Boolean)
     private fun prefs(c:Context)=c.getSharedPreferences(PREF,Context.MODE_PRIVATE)
-    private fun allowedPackage(pkg:String):Boolean=
-        pkg=="com.asterion.art" || pkg.startsWith("com.asterion.") ||
+    internal fun allowedPackage(pkg:String):Boolean=
+        // These exact package identities are taken from the currently connected
+        // Asterion Core and Asterion Games Android manifests. Both still need
+        // independent certificate validation and explicit user approval.
+        pkg in setOf("com.asterion.art","com.ailm.android","com.gamepilot") ||
+            pkg.startsWith("com.asterion.") ||
             pkg.startsWith("com.azrael.asterion.")
     private fun signature(c:Context,pkg:String):String?=runCatching{
         @Suppress("DEPRECATION")

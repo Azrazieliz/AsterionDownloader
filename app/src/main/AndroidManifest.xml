@@ -15,6 +15,8 @@
          on Android 11+. Unknown apps still fail the UID/approval check. -->
     <queries>
         <package android:name="com.asterion.art"/>
+        <package android:name="com.ailm.android"/>
+        <package android:name="com.gamepilot"/>
     </queries>
 
     <application
