@@ -226,6 +226,8 @@ class SourceIndexDb(context:Context):
         }
         return rows
     }
+    /** Only retry items whose persisted backoff has expired. */
+    fun hasPendingDirect():Boolean=pendingDirect(1).isNotEmpty()
     fun defer(url:String){
         readableDatabase.rawQuery("SELECT attempts FROM entries WHERE url=?",
             arrayOf(url)).use{c->
@@ -522,7 +524,7 @@ object SourceIndex {
         return SourceIndexDb(context).use{db->
             db.sources().any{it.enabled && it.adapter=="generic" &&
                 !it.cursor.isNullOrBlank() && it.error.isNullOrBlank()} ||
-                db.hasPendingDetails()
+                db.hasPendingDetails() || db.hasPendingDirect()
         }
     }
     fun scheduleCatchup(context:Context,force:Boolean=false){
@@ -766,7 +768,11 @@ object SourceIndex {
             "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
             else->"Assets"
         }
-        if(!CrossSourceDedup(context).use{it.reserve(item.url)})return false
+        if(!CrossSourceDedup(context).use{it.reserve(item.url)}){
+            // Existing accepted transfers are already owned by DownloadManager.
+            // An unattached lease is different: keep that file in retry state.
+            return CrossSourceDedup(context).use{it.alreadyHandled(item.url)}
+        }
         try{
             val manager=context.getSystemService(DownloadManager::class.java)
             val req=DownloadManager.Request(Uri.parse(item.url)).apply{

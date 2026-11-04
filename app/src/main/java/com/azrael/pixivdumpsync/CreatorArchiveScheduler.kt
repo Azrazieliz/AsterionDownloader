@@ -11,10 +11,10 @@ object CreatorArchiveScheduler {
     private const val CATCHUP=41083
     private const val PAGE_BUDGET=8
     private val scanning=AtomicBoolean(false)
-    private fun scheduleCatchup(context:Context,delayMs:Long=30_000L){
+    internal fun scheduleCatchup(context:Context,delayMs:Long=30_000L,force:Boolean=false){
         if(!AppPower.enabled(context))return
         val jobs=context.getSystemService(JobScheduler::class.java)
-        if(jobs.allPendingJobs.any{it.id==CATCHUP})return
+        if(!force && jobs.allPendingJobs.any{it.id==CATCHUP})return
         jobs.schedule(JobInfo.Builder(CATCHUP,
             ComponentName(context,CreatorArchiveJob::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
@@ -35,9 +35,24 @@ object CreatorArchiveScheduler {
                 .build()
             jobs.schedule(request)
         }
+        if(needsCatchup(context))scheduleCatchup(context)
+    }
+    /** Historical pages or new attachments are unfinished, and no provider error
+     * currently requires waiting for the next scheduled refresh.
+     */
+    internal fun shouldCatchup(complete:Boolean,deferred:Int,error:String):Boolean =
+        (!complete || deferred>0) && error.isBlank()
+    fun needsCatchup(context:Context):Boolean {
+        if(!AppPower.enabled(context))return false
         val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
-        if(creators.any{!prefs.getBoolean("complete_cursor_"+it.url.hashCode(),false)})
-            scheduleCatchup(context)
+        return CreatorArchiveStore.list(context).any{creator->
+            if(!enabled(context,creator))return@any false
+            val key="cursor_"+creator.url.hashCode()
+            shouldCatchup(
+                prefs.getBoolean("complete_"+key,false),
+                prefs.getInt("pending_"+key,0),
+                prefs.getString("error_"+key,"").orEmpty())
+        }
     }
     fun scanNow(context:Context){
         if(!AppPower.enabled(context))return
@@ -125,7 +140,8 @@ object CreatorArchiveScheduler {
                     .putLong("last_"+key,System.currentTimeMillis())
                     .putInt("queued_"+key,newlyQueued)
                     .putString("error_"+key,errors.joinToString(" | ").take(500)).apply()
-                if(!completed && errors.isEmpty() && !shouldStop())pendingCatchup=true
+                if(shouldCatchup(completed,deferred,errors.joinToString(" | ")) && !shouldStop())
+                    pendingCatchup=true
             }
             if(pendingCatchup && !shouldStop())scheduleCatchup(context,2L*60_000L)
         }finally{scanning.set(false)}
@@ -145,7 +161,7 @@ object CreatorArchiveScheduler {
         val error=prefs.getString("error_"+key,"").orEmpty()
         return (if(at==0L)"Not yet checked" else "Last checked "+java.util.Date(at))+
             " · historical offset "+prefs.getInt(key,0)+
-            (if(prefs.getBoolean("complete_"+key,false))" · full history checked" else " · backfill pending")+
+            (if(prefs.getBoolean("complete_"+key,false))" · history pages indexed (downloads may be pending)" else " · backfill pending")+
             (if(prefs.getInt("pending_"+key,0)>0)" · "+prefs.getInt("pending_"+key,0)+" files deferred" else "")+
             if(error.isEmpty())"" else " · "+error
     }
@@ -156,7 +172,15 @@ class CreatorArchiveJob:JobService(){
         stopped.set(false)
         thread(name="asterion-archive-periodic"){
             try{if(!stopped.get())CreatorArchiveScheduler.scan(applicationContext){stopped.get()}}
-            finally{jobFinished(params,false)}
+            finally{
+                jobFinished(params,false)
+                // Reschedule after the running catch-up job has finished. Scheduling
+                // during scan() alone may see the current job ID still registered.
+                if(!stopped.get() &&
+                    CreatorArchiveScheduler.needsCatchup(applicationContext))
+                    CreatorArchiveScheduler.scheduleCatchup(
+                        applicationContext,2L*60_000L,force=true)
+            }
         }
         return true
     }

@@ -49,6 +49,18 @@ class CrossSourceDedup(context:Context):
             return true
         }finally{db.endTransaction()}
     }
+    /** A completed file or a transfer already accepted by DownloadManager must
+     * not remain forever in the provider's pending original queue. A claim with
+     * no attached transfer is NOT handled and can be retried after its lease.
+     */
+    @Synchronized fun alreadyHandled(url:String):Boolean{
+        val key=safeKey(url)
+        return readableDatabase.rawQuery(
+            "SELECT state,manager_id FROM claims WHERE key=?",arrayOf(key)).use{c->
+            c.moveToFirst() &&
+                (c.getString(0)=="complete" || !c.isNull(1))
+        }
+    }
     @Synchronized fun attach(url:String,id:Long){
         writableDatabase.update("claims",ContentValues().apply{put("manager_id",id)},
             "key=?",arrayOf(safeKey(url)))
