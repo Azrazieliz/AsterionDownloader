@@ -10,7 +10,8 @@ import java.net.URI
 /** Kuroha-style comic series archive list, reusing original ZIP download and retry queue. */
 object AsterionComicFollowing {
     private val ui=NocturneDesign
-    private val hosts=setOf("toonily.com","mangaread.org","sushiscan.net")
+    private val hosts=setOf("toonily.com","mangaread.org","sushiscan.net",
+        "nhentai.net","nhentai.xxx")
     private fun allowed(link:String):Boolean=runCatching{
         val uri=URI(link.trim())
         uri.scheme=="https" && uri.host.orEmpty().lowercase().removePrefix("www.") in hosts
@@ -29,6 +30,12 @@ object AsterionComicFollowing {
             val address=input.text.toString().trim()
             if(!allowed(address)) {
                 Toast.makeText(a,"Use a series URL from Toonily, MangaRead or Sushi-Scan",
+                    Toast.LENGTH_LONG).show()
+                return@action
+            }
+            if((Uri.parse(address).host.orEmpty().removePrefix("www.") in
+                setOf("nhentai.net","nhentai.xxx")) && !NhentaiChapters.isGallery(address)){
+                Toast.makeText(a,"Use the full /g/12345 gallery URL, not a listing",
                     Toast.LENGTH_LONG).show()
                 return@action
             }

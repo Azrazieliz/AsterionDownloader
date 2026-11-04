@@ -155,6 +155,12 @@ object AsterionSmartAdd {
                 } else status.text="Video site cannot be enrolled"
             }
             Kind.COMICS->{
+                val domain=Uri.parse(address).host.orEmpty().removePrefix("www.")
+                if(domain in setOf("nhentai.net","nhentai.xxx") &&
+                    !NhentaiChapters.isGallery(address)){
+                    status.text="Select an nHentai gallery /g/ID. Catalog listings cannot form one complete ZIP"
+                    return
+                }
                 val path=Uri.parse(address).path.orEmpty().trim('/')
                 if(path.isNotEmpty() && path !in listOf("","manga","serie","series","home")){
                     val title=path.substringAfterLast('/').ifBlank{"Series"}

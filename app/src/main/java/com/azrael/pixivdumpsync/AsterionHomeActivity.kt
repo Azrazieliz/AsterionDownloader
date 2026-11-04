@@ -375,7 +375,7 @@ class AsterionHomeActivity:Activity(){
                 R.drawable.ic_source_kyora,theme.cosplayRose,"Kyora")
         )
         tileRow(
-            sourceTile("Books & Comics","EPUB · Toonily · MangaRead · Sushi",
+            sourceTile("Books & Doujin","EPUB · ZIP galleries · MangaRead · Sushi",
                 R.drawable.ic_source_toonily,theme.booksGold,"Books"),
             sourceTile("Torrents / Games","Game releases · Magnet · Progress",
                 R.drawable.ic_source_video,theme.gamesTeal,"Torrents")
@@ -394,17 +394,26 @@ class AsterionHomeActivity:Activity(){
     private fun renderBooks(){
         section("Books & Comics","EPUB for books · ZIP for comic chapters.")
         val switches=theme.row(this)
-        switches.addView(theme.chip(this,"EPUB",bookMode=="EPUB"){bookMode="EPUB";render()},
-            LinearLayout.LayoutParams(0,-2,1f))
-        switches.addView(theme.chip(this,"COMICS · ZIP",bookMode=="COMICS"){bookMode="COMICS";render()},
-            LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(9)})
+        val modes=listOf("EPUB" to "EPUB","COMICS · ZIP" to "COMICS",
+            "DOUJIN" to "DOUJIN")
+        for((label,mode) in modes){
+            switches.addView(theme.chip(this,label,bookMode==mode){
+                bookMode=mode;render()
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                rightMargin=dp(5)
+            })
+        }
         put(body,switches,10)
-        if(bookMode=="EPUB"){
-            SourceIndexPanel.render(this,body,"BOOKS")
-            put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
-        }else {
-            AsterionComicFollowing.render(this,body){render()}
-            SourceIndexPanel.render(this,body,"COMICS")
+        when(bookMode){
+            "EPUB"->{
+                SourceIndexPanel.render(this,body,"BOOKS")
+                put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
+            }
+            "DOUJIN"->DoujinGalleryPanel.render(this,body){render()}
+            else->{
+                AsterionComicFollowing.render(this,body){render()}
+                SourceIndexPanel.render(this,body,"COMICS")
+            }
         }
     }
     private fun renderTorrents(){
