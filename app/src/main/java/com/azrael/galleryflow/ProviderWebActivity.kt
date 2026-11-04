@@ -75,16 +75,16 @@ class ProviderWebActivity : Activity() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val link=request.url.toString()
                     val folder=intent.getStringExtra(EXTRA_FOLDER).orEmpty()
-                    val torrentFolder=when(folder){
-                        "Games"->"Games"
-                        "Adult"->"Adult"
-                        "Books"->"Books"
-                        else->null
-                    }
-                    if(torrentFolder!=null && (link.startsWith("magnet:?",true) ||
-                        (link.startsWith("https://") &&
-                            URI(link).path.orEmpty().endsWith(".torrent",true)))){
-                        ResourceDownloads.route(this@ProviderWebActivity,link,torrentFolder)
+                    // Universal site browsing: magnet and torrent links work
+                    // regardless of the source module from which browsing began.
+                    val torrent=link.startsWith("magnet:?xt=urn:btih:",true) ||
+                        (link.startsWith("https://",true) && runCatching{
+                            URI(link).path.orEmpty().endsWith(".torrent",true)
+                        }.getOrDefault(false))
+                    if(torrent){
+                        val target=folder.takeIf{it in setOf(
+                            "Games","Adult","Books","Videos","Files")} ?: "Files"
+                        ResourceDownloads.route(this@ProviderWebActivity,link,target)
                         return true
                     }
                     return false
@@ -138,21 +138,18 @@ class ProviderWebActivity : Activity() {
 
     private fun shouldUseExternalBrowser(url: String): Boolean {
         val host = runCatching { URI(url).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
-        return host.contains("terabox") ||
-            host.endsWith("1024tera.com") ||
-            host.endsWith("4funbox.com") ||
-            host.endsWith("nephobox.com") ||
-            host.endsWith("mirrobox.com") ||
-            host.endsWith("momerybox.com") ||
-            host == "accounts.google.com"
+        // Ordinary storage and creator sites remain inside Asterion. Google
+        // OAuth forbids embedded WebViews and must explicitly use a browser.
+        return host == "accounts.google.com"
     }
 
     private fun providerDownloadListener() = DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
         val folder=intent.getStringExtra(EXTRA_FOLDER).orEmpty()
-        if(folder in setOf("Games","Adult","Books") &&
-            (url.startsWith("magnet:?",true) ||
-                url.startsWith("https://") && runCatching{URI(url).path.endsWith(".torrent",true)}.getOrDefault(false))){
-            ResourceDownloads.route(this,url,folder)
+        if(url.startsWith("magnet:?xt=urn:btih:",true) ||
+            (url.startsWith("https://",true) && runCatching{
+                URI(url).path.endsWith(".torrent",true)
+            }.getOrDefault(false))){
+            ResourceDownloads.route(this,url,folder.ifBlank{"Files"})
             return@DownloadListener
         }
         runCatching {
@@ -163,7 +160,8 @@ class ProviderWebActivity : Activity() {
             val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
             val route = intent.getStringExtra(EXTRA_FOLDER)
                 ?.takeIf { it in setOf("Artwork","Cosplay","Videos","Comics",
-                    "Books","Games","Assets","References") }
+                    "Books","Games","Assets","References",
+                    "Files","Audio","Adult","Creators") }
             if(route=="Books" && !filename.endsWith(".epub",true))
                 throw IllegalArgumentException("Books only accepts EPUB originals")
             if(route=="Comics" && !filename.endsWith(".zip",true))
@@ -182,17 +180,22 @@ class ProviderWebActivity : Activity() {
                 ResourceDownloads.privacyReferer(url,webView.url.orEmpty())?.let {
                     addRequestHeader("Referer", it)
                 }
-                val destination = if (route != null) {
-                    val host = uri.host.orEmpty()
-                        .replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
-                    "AsterionDownloader/" + route + "/" + host + "/" + safeFileName(filename)
-                } else "Cosplay/GalleryFlow/provider_downloads/" + safeFileName(filename)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,destination)
+                val group=route?:"Files"
+                val host=uri.host.orEmpty()
+                    .replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
+                val directory="$group/$host"
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                    "AsterionDownloader/$directory/"+safeFileName(filename))
             }
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val id=manager.enqueue(request)
+            val category=route?:"Files"
+            val host=uri.host.orEmpty()
+                .replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
             com.azrael.pixivdumpsync.DirectDownloadTracker.record(
-                this,id,safeFileName(filename),route?:"Cosplay",url)
+                this,id,safeFileName(filename),category,url)
+            com.azrael.pixivdumpsync.DirectDownloadRetry.remember(
+                this,id,url,"$category/$host",safeFileName(filename),webView.url)
         }.onSuccess {
             Toast.makeText(
                 this,

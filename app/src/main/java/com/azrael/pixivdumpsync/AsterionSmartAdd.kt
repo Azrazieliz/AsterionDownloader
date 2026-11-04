@@ -283,6 +283,28 @@ object AsterionSmartAdd {
                     }.setNegativeButton("Cancel",null).show()
             }else status.text="Enter a valid site or profile URL"
         },ui.lp(a,8))
+        // Unknown providers never need a fake site-specific adapter just to
+        // browse their pages or download an original with the user's session.
+        box.addView(ui.action(a,"BROWSE SITE · IN APP",false){
+            val url=field.text.toString().trim()
+            if(!SearchRanking.validUrl(url)){
+                status.text="Enter a valid HTTPS site URL"
+                return@action
+            }
+            a.startActivity(Intent(a,com.azrael.galleryflow.ProviderWebActivity::class.java)
+                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,url)
+                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,"Files"))
+        },ui.lp(a,8))
+        box.addView(ui.action(a,"DOWNLOAD DIRECT FILE / TORRENT",false){
+            val url=field.text.toString().trim()
+            if(!url.startsWith("magnet:?xt=urn:btih:",true) &&
+                !SearchRanking.validUrl(url)){
+                status.text="Enter an HTTPS file or magnet link"
+                return@action
+            }
+            ResourceDownloads.route(a,url,"Files")
+            status.text="Sent to the unified download queue; provider access is still required"
+        },ui.lp(a,6))
         box.addView(status,ui.lp(a,8))
         p.addView(box,ui.lp(a,11))
         val records=a.getSharedPreferences("asterion_custom_site_enrollment",0)

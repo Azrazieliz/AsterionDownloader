@@ -249,6 +249,7 @@ object ResourceDownloads {
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
                     "AsterionDownloader/$folder/$file")
+                addRequestHeader("User-Agent",com.azrael.galleryflow.HttpClient.USER_AGENT)
                 SiteSession.cookie(url)?.let{addRequestHeader("Cookie",it)}
                 if(!referer.isNullOrBlank())
                     privacyReferer(url,referer)?.let{addRequestHeader("Referer",it)}
