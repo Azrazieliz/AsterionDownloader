@@ -411,6 +411,9 @@ internal object SourceIndexParser {
             ".entry a[href],.attachments a[href],.download a[href],"+
             "a[download][href]")
         val results=LinkedHashMap<String,IndexedItem>()
+        // Large gallery pages may contain hundreds of originals. Hitting the
+        // bounded cap must be visible, not silently reported as full backfill.
+        val maxOriginals=5000
         /** Creator image links can be thumbnails: accept non-video files only from
          * explicit attachments or download controls, never preview listings.
          */
@@ -444,14 +447,14 @@ internal object SourceIndexParser {
                 "VIDEOS","ADULT","HENTAI"->type=="video"
                 else->false
             }
-            if(!allowed || results.size>=150)return
+            if(!allowed || results.size>=maxOriginals)return
             val name=filenameHint.ifBlank{caption}.ifBlank{source.title}.take(180)
             results.putIfAbsent(url,IndexedItem(url,name,source.preview,
                 source.source,source.area,
                 if(creatorOriginal || galleryOriginal)"original" else type,
                 clock,false))
         }
-        for(link in content.take(1000)){
+        for(link in content.take(10_000)){
             val explicit=link.hasAttr("download") ||
                 link.hasClass("download") ||
                 link.closest(".attachments,.attachment,.downloads,.download")!=null
@@ -459,7 +462,7 @@ internal object SourceIndexParser {
             record(link.absUrl("href").substringBefore('#'),
                 nameHint.ifBlank{link.attr("title")}.ifBlank{link.text()},
                 explicit,nameHint)
-            if(results.size>=150)break
+            if(results.size>=maxOriginals)break
         }
         // Publicly exposed file URLs on a post may be stored in button
         // attributes rather than href. A page preview alone is not an original.
@@ -467,7 +470,7 @@ internal object SourceIndexParser {
                 "article [data-download-url],article [data-file-url],"+
                 ".post [data-download-url],.post [data-file-url],"+
                 ".attachments [data-download-url],.attachments [data-file-url],"+
-                ".download [data-download-url],.download [data-file-url]").take(500)){
+                ".download [data-download-url],.download [data-file-url]").take(10_000)){
             for(attr in listOf("data-download-url","data-file-url")){
                 val raw=node.attr(attr)
                 if(raw.isBlank())continue
@@ -478,7 +481,7 @@ internal object SourceIndexParser {
                     hint.ifBlank{node.attr("title")}.ifBlank{node.text()},
                     true,hint)
             }
-            if(results.size>=150)break
+            if(results.size>=maxOriginals)break
         }
         // Gallery detail pages often store their full-resolution image links in
         // explicit data attributes. Never treat the ordinary img[src] thumbnail
@@ -491,7 +494,7 @@ internal object SourceIndexParser {
                 ".gallery img[data-original],.gallery img[data-full],"+
                 ".gallery img[data-full-src],.gallery img[data-highres],"+
                 ".post img[data-original],.post img[data-full]"
-            for(image in doc.select(selectors).take(500)){
+            for(image in doc.select(selectors).take(10_000)){
                 for(attr in listOf("data-original","data-full","data-full-src","data-highres")){
                     val raw=image.attr(attr)
                     if(raw.isBlank())continue
@@ -499,7 +502,7 @@ internal object SourceIndexParser {
                         .getOrDefault("")
                     record(url.substringBefore('#'),image.attr("alt"),true)
                 }
-                if(results.size>=150)break
+                if(results.size>=maxOriginals)break
             }
         }
         if(source.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS")){
@@ -511,6 +514,9 @@ internal object SourceIndexParser {
                 results.putIfAbsent(url,IndexedItem(url,source.title,source.preview,
                     source.source,source.area,"video",clock,false))
             }
+        }
+        require(results.size<maxOriginals){
+            "Album reached the generic original-file limit; use a dedicated gallery adapter"
         }
         return results.values.toList()
     }
@@ -677,6 +683,11 @@ object SourceIndex {
                 if(area==null)edit.putBoolean("initial",advanced==0)
                 edit.apply()
             }
+            // Persist every discovered original, but bound actual Android
+            // DownloadManager submissions in one scheduler pass. The remaining
+            // originals keep their durable unqueued state for catch-up.
+            val directBudget=500
+            var directAttempted=0
             // Visit each discovered detail page independently of listing
             // pagination; retries are persisted and bounded to protect the phone.
             for(item in SourceIndexDb(context).use{it.pendingDetails(12)}){
@@ -710,7 +721,9 @@ object SourceIndex {
                     SourceIndexDb(context).use{db->
                         for(file in files){
                             db.upsert(file)
-                            if(SourceIndexParser.autoOriginal(file)){
+                            if(SourceIndexParser.autoOriginal(file) &&
+                                directAttempted<directBudget){
+                                directAttempted++
                                 if(queueDirect(context,file))db.markQueued(file.url)
                                 else db.defer(file.url)
                             }
@@ -724,9 +737,10 @@ object SourceIndex {
             }
             // Repair transient enqueue failures even after the historical cursor
             // advanced, without downloading duplicate originals.
-            SourceIndexDb(context).use{db->
-                for(item in db.pendingDirect(30)){
+            if(directAttempted<directBudget)SourceIndexDb(context).use{db->
+                for(item in db.pendingDirect(minOf(120,directBudget-directAttempted))){
                     if(stop() || !AppPower.enabled(context))break
+                    directAttempted++
                     if(area!=null && item.area!=area)continue
                     if(!SourceIndexParser.autoOriginal(item))continue
                     if(queueDirect(context,item))db.markQueued(item.url)

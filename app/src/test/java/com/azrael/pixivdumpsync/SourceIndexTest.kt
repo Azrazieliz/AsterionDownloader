@@ -258,4 +258,21 @@ class SourceIndexTest {
         assertEquals(listOf("chapter.zip"),comics.map{it.title})
     }
 
+    @Test fun galleriesWithHundredsOfOriginalsAreNotSilentlyTruncatedAt150(){
+        val html=buildString{
+            append("<main><article><div class='gallery'>")
+            for(i in 1..275)
+                append("<img src='/thumbs/p$i.jpg' data-original='/full/p$i.jpg'>")
+            append("</div></article></main>")
+        }
+        val doc=Jsoup.parse(html,"https://example.org/gallery/275")
+        val src=IndexedItem("https://example.org/gallery/275","Gallery 275",
+            null,"https://example.org/","COSPLAY","cosplay",100L,false)
+        val files=SourceIndexParser.detailOriginals(doc,src,100L)
+        assertEquals(275,files.size)
+        assertEquals(275,files.map{it.url}.toSet().size)
+        assertTrue(files.all{it.kind=="original" &&
+            SourceIndexParser.autoOriginal(it)})
+    }
+
 }
