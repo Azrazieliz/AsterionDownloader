@@ -43,7 +43,7 @@ class NduCloudQueue(context: Context) :
 
     @Synchronized fun enqueue(category:String,name:String,uri:Uri) {
         require(category in setOf("kuroha","kyora","x","comics","videos",
-            "books","games","assets","koikatsu","images","torrents","originals"))
+            "books","games","assets","koikatsu","images","torrents","creators","originals"))
         NduTeraboxClient.safeFileName(name)
         require(uri.scheme=="content") { "Only locally owned files may be queued" }
         val row=ContentValues().apply {
