@@ -146,7 +146,7 @@ class SourceIndexDb(context:Context):
                WHERE e.detail_checked=0 AND e.detail_retry_after<=?
                  AND s.enabled=1 AND s.adapter='generic'
                  AND e.area IN ('BOOKS','COMICS','GAMES','ASSETS',
-                     'VIDEOS','ADULT','HENTAI','CREATORS')
+                     'VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK')
                  AND e.kind NOT IN ('epub','archive','apk','model','video',
                      'image','torrent','original')
                ORDER BY e.discovered_at ASC LIMIT ?""",
@@ -182,7 +182,7 @@ class SourceIndexDb(context:Context):
         readableDatabase.rawQuery(
             "SELECT 1 FROM entries e JOIN sources s ON e.source=s.url "+
                 "WHERE e.detail_checked=0 AND s.enabled=1 AND s.adapter='generic' AND " +
-                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS') "+
+                "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS','COSPLAY','ARTWORK') "+
                 "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original') LIMIT 1",
             null).use{it.moveToFirst()}
 
@@ -207,7 +207,7 @@ class SourceIndexDb(context:Context):
                          url LIKE 'https://www.readnovelfull.com/%') AND
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
                         url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
-                    OR (kind='original' AND area='CREATORS')
+                    OR (kind='original' AND area IN ('CREATORS','COSPLAY','ARTWORK'))
                     OR (kind='model' AND area='ASSETS')
                     OR (kind='comics' AND area='COMICS' AND
                         (url LIKE 'https://nhentai.net/g/%' OR
@@ -309,6 +309,7 @@ internal object SourceIndexParser {
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
         "CREATORS"->item.kind in setOf("video","original")
+        "COSPLAY","ARTWORK"->item.kind=="original"
         "VIDEOS","ADULT","HENTAI"->item.kind=="video"
         else->false
     }
@@ -404,19 +405,23 @@ internal object SourceIndexParser {
             val type=kind(url,source.area)
             val creatorOriginal=source.area=="CREATORS" && explicitAttachment &&
                 type in setOf("image","archive","model","epub")
+            val galleryOriginal=source.area in setOf("COSPLAY","ARTWORK") &&
+                explicitAttachment && type in setOf("image","archive")
             val allowed=when(source.area){
                 "BOOKS"->type=="epub"
                 "COMICS"->type=="archive"&&path.endsWith(".zip")
                 "GAMES"->type in setOf("apk","archive")
                 "ASSETS"->type in setOf("model","archive")
                 "CREATORS"->type=="video"||creatorOriginal
+                "COSPLAY","ARTWORK"->galleryOriginal
                 "VIDEOS","ADULT","HENTAI"->type=="video"
                 else->false
             }
             if(!allowed || results.size>=150)return
             val name=caption.ifBlank{source.title}.take(180)
             results.putIfAbsent(url,IndexedItem(url,name,source.preview,
-                source.source,source.area,if(creatorOriginal)"original" else type,
+                source.source,source.area,
+                if(creatorOriginal || galleryOriginal)"original" else type,
                 clock,false))
         }
         for(link in content.take(1000)){
@@ -445,6 +450,28 @@ internal object SourceIndexParser {
                         .ifBlank{node.text()},true)
             }
             if(results.size>=150)break
+        }
+        // Gallery detail pages often store their full-resolution image links in
+        // explicit data attributes. Never treat the ordinary img[src] thumbnail
+        // or social meta preview as an original to acquire.
+        if(source.area in setOf("COSPLAY","ARTWORK","CREATORS")){
+            val selectors="main img[data-original],main img[data-full],"+
+                "main img[data-full-src],main img[data-highres],"+
+                "article img[data-original],article img[data-full],"+
+                "article img[data-full-src],article img[data-highres],"+
+                ".gallery img[data-original],.gallery img[data-full],"+
+                ".gallery img[data-full-src],.gallery img[data-highres],"+
+                ".post img[data-original],.post img[data-full]"
+            for(image in doc.select(selectors).take(500)){
+                for(attr in listOf("data-original","data-full","data-full-src","data-highres")){
+                    val raw=image.attr(attr)
+                    if(raw.isBlank())continue
+                    val url=runCatching{URI(doc.location()).resolve(raw).toString()}
+                        .getOrDefault("")
+                    record(url.substringBefore('#'),image.attr("alt"),true)
+                }
+                if(results.size>=150)break
+            }
         }
         if(source.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS")){
             for(video in doc.select("main video[src],main video source[src],"+
@@ -799,7 +826,8 @@ object SourceIndex {
             .ifBlank{"original_"+System.currentTimeMillis()+suffix}
         val folder=when(item.area){
             "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
-            "CREATORS"->"Creators";else->"Assets"
+            "CREATORS"->"Creators";"COSPLAY"->"Cosplay"
+            "ARTWORK"->"Artwork";else->"Assets"
         }
         if(!CrossSourceDedup(context).use{it.reserve(item.url)}){
             // Existing accepted transfers are already owned by DownloadManager.

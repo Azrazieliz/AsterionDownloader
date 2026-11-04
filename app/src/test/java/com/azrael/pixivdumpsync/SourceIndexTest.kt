@@ -198,4 +198,36 @@ class SourceIndexTest {
         assertFalse(files.any{it.url.endsWith("poster.jpg")})
     }
 
+    @Test fun genericCosplayDetailResolvesExplicitFullSizeImagesOnly(){
+        val doc=Jsoup.parse("""<main><article>
+          <a href="/album/40"><img src="/images/preview.jpg">Cover</a>
+          <div class="gallery">
+            <img src="/images/thumb-a.jpg" data-original="/images/full-a.jpg">
+            <img src="/images/thumb-b.jpg" data-full="/images/full-b.png">
+            <a download href="/albums/complete.zip">Complete album</a>
+          </div>
+        </article></main>""","https://example.org/album/40")
+        val src=IndexedItem("https://example.org/album/40","Album 40",null,
+            "https://example.org/","COSPLAY","cosplay",10L,false)
+        val files=SourceIndexParser.detailOriginals(doc,src,100L)
+        assertEquals(setOf("https://example.org/images/full-a.jpg",
+            "https://example.org/images/full-b.png",
+            "https://example.org/albums/complete.zip"),files.map{it.url}.toSet())
+        assertTrue(files.all{it.kind=="original" && SourceIndexParser.autoOriginal(it)})
+        assertFalse(files.any{it.url.contains("thumb")||it.url.contains("preview")})
+    }
+
+    @Test fun genericGalleryListingImagesAreNotMistakenForOriginals(){
+        val doc=Jsoup.parse("""<main><article>
+          <a href="/albums/1"><img src="/images/thumb-1.jpg">Album One</a>
+        </article></main>""","https://example.org/")
+        val indexed=SourceIndexParser.entries(doc,"https://example.org/","COSPLAY",100L)
+        assertEquals(1,indexed.size)
+        assertFalse(indexed.any{SourceIndexParser.autoOriginal(it)})
+        val detail=SourceIndexParser.detailOriginals(doc,IndexedItem(
+            "https://example.org/albums/1","Album One",null,
+            "https://example.org/","COSPLAY","cosplay",10L,false),100L)
+        assertTrue(detail.isEmpty())
+    }
+
 }
