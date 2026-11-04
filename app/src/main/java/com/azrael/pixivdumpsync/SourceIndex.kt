@@ -414,21 +414,29 @@ internal object SourceIndexParser {
         /** Creator image links can be thumbnails: accept non-video files only from
          * explicit attachments or download controls, never preview listings.
          */
-        fun record(url:String,caption:String,explicitAttachment:Boolean){
+        fun record(url:String,caption:String,explicitAttachment:Boolean,
+                   filenameHint:String=""){
             if(!safe(url) || url==source.url)return
             val path=runCatching{URI(url).path.orEmpty().lowercase(Locale.ROOT)}
                 .getOrDefault("")
             val basename=path.substringAfterLast('/')
             if(Regex("(?i)(?:^|[-_.])(preview|sample|teaser|thumb|thumbnail)(?:[-_.]|$)")
                 .containsMatchIn(basename))return
-            val type=kind(url,source.area)
+            // Signed CDN endpoints often have no extension. Only an explicit
+            // provider-supplied download filename may identify the file type.
+            val pathType=kind(url,source.area)
+            val type=if(explicitAttachment && filenameHint.isNotBlank() &&
+                pathType==source.area.lowercase(Locale.ROOT))
+                kind(filenameHint,source.area) else pathType
             val creatorOriginal=source.area=="CREATORS" && explicitAttachment &&
                 type in setOf("image","archive","model","epub")
             val galleryOriginal=source.area in setOf("COSPLAY","ARTWORK") &&
                 explicitAttachment && type in setOf("image","archive")
             val allowed=when(source.area){
                 "BOOKS"->type=="epub"
-                "COMICS"->type=="archive"&&path.endsWith(".zip")
+                "COMICS"->type=="archive" &&
+                    (path.endsWith(".zip") ||
+                        filenameHint.endsWith(".zip",ignoreCase=true))
                 "GAMES"->type in setOf("apk","archive")
                 "ASSETS"->type in setOf("model","archive")
                 "CREATORS"->type=="video"||creatorOriginal
@@ -437,7 +445,7 @@ internal object SourceIndexParser {
                 else->false
             }
             if(!allowed || results.size>=150)return
-            val name=caption.ifBlank{source.title}.take(180)
+            val name=filenameHint.ifBlank{caption}.ifBlank{source.title}.take(180)
             results.putIfAbsent(url,IndexedItem(url,name,source.preview,
                 source.source,source.area,
                 if(creatorOriginal || galleryOriginal)"original" else type,
@@ -447,9 +455,10 @@ internal object SourceIndexParser {
             val explicit=link.hasAttr("download") ||
                 link.hasClass("download") ||
                 link.closest(".attachments,.attachment,.downloads,.download")!=null
+            val nameHint=link.attr("download").ifBlank{link.attr("data-filename")}
             record(link.absUrl("href").substringBefore('#'),
-                link.attr("download").ifBlank{link.attr("title")}
-                    .ifBlank{link.text()},explicit)
+                nameHint.ifBlank{link.attr("title")}.ifBlank{link.text()},
+                explicit,nameHint)
             if(results.size>=150)break
         }
         // Publicly exposed file URLs on a post may be stored in button
@@ -464,9 +473,10 @@ internal object SourceIndexParser {
                 if(raw.isBlank())continue
                 val resolved=runCatching{URI(doc.location()).resolve(raw).toString()}
                     .getOrDefault("")
+                val hint=node.attr("data-filename").ifBlank{node.attr("download")}
                 record(resolved.substringBefore('#'),
-                    node.attr("data-filename").ifBlank{node.attr("title")}
-                        .ifBlank{node.text()},true)
+                    hint.ifBlank{node.attr("title")}.ifBlank{node.text()},
+                    true,hint)
             }
             if(results.size>=150)break
         }
@@ -844,7 +854,12 @@ object SourceIndex {
         val suffix=when(item.kind){
             "epub"->".epub";"apk"->".apk";"archive"->".zip";else->".bin"
         }
-        val filename=URI(item.url).path.substringAfterLast('/')
+        // Keep the explicit original filename for signed endpoints whose URL
+        // is only an opaque file ID. Never use arbitrary post titles as paths.
+        val suppliedName=item.title.takeIf{
+            it.matches(Regex("(?i)[^/\\\\]{1,150}\\\\.(?:epub|zip|7z|rar|png|jpg|jpeg|gif|webp|avif|blend|fbx|obj|glb|gltf|stl|mp4|webm|mkv|apk)"))
+        }
+        val filename=(suppliedName?:URI(item.url).path.substringAfterLast('/'))
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
             .ifBlank{"original_"+System.currentTimeMillis()+suffix}
         val folder=when(item.area){

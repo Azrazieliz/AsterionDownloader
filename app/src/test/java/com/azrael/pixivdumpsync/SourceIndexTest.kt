@@ -230,4 +230,32 @@ class SourceIndexTest {
         assertTrue(detail.isEmpty())
     }
 
+    @Test fun signedCreatorAttachmentUsesExplicitFilenameForType(){
+        val doc=Jsoup.parse("""<main><article>
+            <a download="artwork-pack.zip" href="https://cdn.example.org/file/9271?token=a1">
+                Download pack</a>
+        </article></main>""","https://example.org/post/789")
+        val src=IndexedItem("https://example.org/post/789","Creator release",null,
+            "https://example.org/","CREATORS","creators",10L,false)
+        val files=SourceIndexParser.detailOriginals(doc,src,100L)
+        assertEquals(1,files.size)
+        assertEquals("artwork-pack.zip",files[0].title)
+        assertEquals("original",files[0].kind)
+        assertTrue(SourceIndexParser.autoOriginal(files[0]))
+    }
+    @Test fun signedBookAndComicDownloadControlsRetainOutputFormats(){
+        val html="""<main><article>
+            <a download="book.epub" href="https://cdn.example.org/api/file/1">Book</a>
+            <a download="chapter.zip" href="https://cdn.example.org/api/file/2">Chapter</a>
+        </article></main>"""
+        fun source(area:String)=IndexedItem("https://example.org/post/2","Work",
+            null,"https://example.org/",area,area.lowercase(),10L,false)
+        val books=SourceIndexParser.detailOriginals(
+            Jsoup.parse(html,"https://example.org/post/2"),source("BOOKS"),100L)
+        val comics=SourceIndexParser.detailOriginals(
+            Jsoup.parse(html,"https://example.org/post/2"),source("COMICS"),100L)
+        assertEquals(listOf("book.epub"),books.map{it.title})
+        assertEquals(listOf("chapter.zip"),comics.map{it.title})
+    }
+
 }
