@@ -129,27 +129,35 @@ object ContentVerticalsPanel {
             refresh()
         },ui.lp(a,9))
         parent.addView(panel,ui.lp(a,10))
-        for(provider in active.sources){
-            val row=ui.card(a,12)
-            val host=runCatching{URI(provider.url).host.orEmpty()}.getOrDefault("")
-            row.addView(ui.text(a,provider.name,15f,ui.white,true))
-            row.addView(ui.text(a,host+" · "+(if(SiteSession.bound(a,provider.url))
-                "session connected" else "account optional / disconnected"),
-                11f,ui.secondary),ui.lp(a,4))
-            val browse=ui.action(a,"BROWSE IN APP",false){
-                a.startActivity(Intent(a,ProviderWebActivity::class.java)
-                    .putExtra(ProviderWebActivity.EXTRA_URL,provider.url)
-                    .putExtra(ProviderWebActivity.EXTRA_FOLDER,when(group){
-                        Group.ASSETS->"Assets";Group.GAMES->"Games";Group.ADULT->"Videos"
-                    }))
-            }
-            val login=ui.action(a,"ACCOUNT",false){
-                a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                    .putExtra(SiteLoginActivity.EXTRA_URL,provider.url))
-            }
-            row.addView(ui.weighted(a,browse,login),ui.lp(a,8))
-            parent.addView(row,ui.lp(a,8))
-        }
+        // Account selection is a contextual action. The default module view
+        // remains a single unified media grid, never a vertical list of websites.
+        val providers=active.sources
+        panel.addView(ui.action(a,"SOURCES & ACCOUNTS",false){
+            val titles=providers.map{p->
+                p.name+" · "+(if(SiteSession.bound(a,p.url))
+                    "connected" else "account optional")
+            }.toTypedArray()
+            android.app.AlertDialog.Builder(a).setTitle(active.title)
+                .setItems(titles){_,index->
+                    val provider=providers[index]
+                    android.app.AlertDialog.Builder(a).setTitle(provider.name)
+                        .setItems(arrayOf("Browse content in Asterion",
+                            "Connect / manage account")){_,option->
+                            if(option==0){
+                                a.startActivity(Intent(a,ProviderWebActivity::class.java)
+                                    .putExtra(ProviderWebActivity.EXTRA_URL,provider.url)
+                                    .putExtra(ProviderWebActivity.EXTRA_FOLDER,when(group){
+                                        Group.ASSETS->"Assets"
+                                        Group.GAMES->"Games"
+                                        Group.ADULT->"Videos"
+                                    }))
+                            }else{
+                                a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                                    .putExtra(SiteLoginActivity.EXTRA_URL,provider.url))
+                            }
+                        }.setNegativeButton("Cancel",null).show()
+                }.setNegativeButton("Close",null).show()
+        },ui.lp(a,8))
         SourceIndexPanel.render(a,parent,active.area)
     }
 }

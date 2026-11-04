@@ -330,9 +330,8 @@ class AsterionHomeActivity:Activity(){
             when(target){
                 "Pixiv"->open("Pixiv")
                 "Kyora"->open("Site")
-                "Koikatsu"->startActivity(Intent(this@AsterionHomeActivity,KoikatsuCardActivity::class.java))
-                "Site"->startActivity(Intent(this@AsterionHomeActivity,com.azrael.galleryflow.MainActivity::class.java)
-                    .putExtra(com.azrael.galleryflow.MainActivity.EXTRA_ADD_SITE,true))
+                "Koikatsu"->open("Assets")
+                "Site"->open("Site")
                 else->open(target)
             }
         }
