@@ -351,25 +351,36 @@ object AsterionDownloadWorker {
                             "BOOKS"->"Books";"COMICS"->"Comics"
                             else->"Games"
                         }
-                        val dm=context.getSystemService(DownloadManager::class.java)
-                        val request=DownloadManager.Request(Uri.parse(original.url)).apply{
-                            setTitle(filename)
-                            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
-                                "AsterionDownloader/"+folder+"/"+filename)
-                            setNotificationVisibility(
-                                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                            SiteSession.cookie(original.url)?.let{
-                                addRequestHeader("Cookie",it)
+                        try{
+                            val dm=context.getSystemService(DownloadManager::class.java)
+                            val request=DownloadManager.Request(Uri.parse(original.url)).apply{
+                                setTitle(filename)
+                                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                                    "AsterionDownloader/"+folder+"/"+filename)
+                                setNotificationVisibility(
+                                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                SiteSession.cookie(original.url)?.let{
+                                    addRequestHeader("Cookie",it)
+                                }
+                                ResourceDownloads.privacyReferer(original.url,original.referer)
+                                    ?.let{addRequestHeader("Referer",it)}
                             }
-                            ResourceDownloads.privacyReferer(original.url,original.referer)
-                                ?.let{addRequestHeader("Referer",it)}
+                            val id=dm.enqueue(request)
+                            CrossSourceDedup(context).use{it.attach(original.url,id)}
+                            DirectDownloadTracker.record(context,id,filename,folder,original.url)
+                            DirectDownloadRetry.remember(context,id,original.url,folder,filename,
+                                original.referer)
+                            db.attachTransfer(item.id,id)
+                        }catch(t:Exception){
+                            // A failed enqueue must not leave an unattached claim
+                            // blocking all later requests for two hours.
+                            val claim=CrossSourceDedup(context).use{
+                                it.claim(original.url)
+                            }
+                            if(claim?.managerId==null)
+                                CrossSourceDedup(context).use{it.release(original.url)}
+                            throw t
                         }
-                        val id=dm.enqueue(request)
-                        CrossSourceDedup(context).use{it.attach(original.url,id)}
-                        DirectDownloadTracker.record(context,id,filename,folder,original.url)
-                        DirectDownloadRetry.remember(context,id,original.url,folder,filename,
-                            original.referer)
-                        db.attachTransfer(item.id,id)
                     }
                     db.status(item.id,"QUEUED","Accepted by native download engine")
                     report(context,item,"QUEUED")
