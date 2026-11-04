@@ -295,12 +295,17 @@ class AsterionHomeActivity:Activity(){
                 AsterionUnifiedFollowing.adult(this,body){render()}
                 SourceIndexPanel.render(this,body,
                     listOf("ADULT","HENTAI","CREATORS"),"Porn & Hentai")
+                ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.ADULT){render()}
                 AsterionVideoAccounts.render(this,body)
             }
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
-            "Assets"->{AssetsPanel.render(this,body){render()};SourceIndexPanel.render(this,body,"ASSETS")}
+            "Assets"->{
+                AssetsPanel.render(this,body){render()}
+                ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.ASSETS){render()}
+                SourceIndexPanel.render(this,body,"ASSETS")
+            }
             "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
             "Search"->AsterionSearchHub.render(this,body){render()}
             "Recommend"->AsterionRecommendations.render(this,body){render()}
@@ -311,7 +316,7 @@ class AsterionHomeActivity:Activity(){
         }
     }
     private fun sourceTile(label:String,subtitle:String,icon:Int,tint:Int,
-                           target:String):LinearLayout=LinearLayout(this).apply{
+                           target:String,system:String?=null):LinearLayout=LinearLayout(this).apply{
         orientation=LinearLayout.VERTICAL
         gravity=Gravity.CENTER_HORIZONTAL
         minimumHeight=dp(138)
@@ -321,6 +326,7 @@ class AsterionHomeActivity:Activity(){
         isFocusable=true
         contentDescription="$label. $subtitle"
         setOnClickListener{
+            if(system!=null)ContentVerticalsPanel.select(this@AsterionHomeActivity,system)
             when(target){
                 "Pixiv"->open("Pixiv")
                 "Kyora"->open("Site")
@@ -382,6 +388,27 @@ class AsterionHomeActivity:Activity(){
         )
         put(body,sourceTile("3D Assets","Koikatsu cards · Gumroad · Models",
             R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets"),10)
+        section("Specialist collections","All sources use the same archive, previews and queue.")
+        tileRow(
+            sourceTile("Koikatsu Studio","After Party scenes · Mods · Outfits",
+                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","STUDIO"),
+            sourceTile("MMD · Motions","PMX / VMD · Stages · Rigs",
+                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","MMD")
+        )
+        tileRow(
+            sourceTile("Live2D","Models · Rig files · Expressions",
+                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","LIVE2D"),
+            sourceTile("Animated Art","Spine · PSD · Layered projects",
+                R.drawable.ic_source_pixiv,theme.pixivBlue,"Assets","ANIMATION")
+        )
+        tileRow(
+            sourceTile("Visual Novel Mods","Eroge patches · Routes · Translations",
+                R.drawable.ic_source_video,theme.gamesTeal,"Torrents","MODS"),
+            sourceTile("Doujin Voice","Voice dramas · ASMR · Audio packs",
+                R.drawable.ic_source_video,theme.violet,"Porn","VOICE")
+        )
+        put(body,sourceTile("VR Media · Files","Download compatible videos · Headset not required",
+            R.drawable.ic_source_video,theme.violet,"Porn","VR"),10)
         val summary=card()
         val xCount=XPhotoQueue(this).use{it.allSources().size}
         val kyoraCount=GalleryDb(this).use{it.listEntities().size}
@@ -435,6 +462,7 @@ class AsterionHomeActivity:Activity(){
                 },5210)
             },11)
         }
+        ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.GAMES){render()}
         SourceIndexPanel.render(this,body,"GAMES")
     }
     private fun renderToonily(){
