@@ -10,14 +10,15 @@ import java.net.URI
 /** Kuroha-style comic series archive list, reusing original ZIP download and retry queue. */
 object AsterionComicFollowing {
     private val ui=NocturneDesign
-    private val hosts=setOf("toonily.com","mangaread.org","sushiscan.net",
-        "nhentai.net","nhentai.xxx")
+    private val hosts=setOf("toonily.com","mangaread.org","sushiscan.net")
     private fun allowed(link:String):Boolean=runCatching{
         val uri=URI(link.trim())
         uri.scheme=="https" && uri.host.orEmpty().lowercase().removePrefix("www.") in hosts
     }.getOrDefault(false)
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
-        val tasks=ChapterQueue(a).use{it.list()}
+        val tasks=ChapterQueue(a).use{it.list().filterNot{job->
+            NhentaiChapters.isGallery(job.url)
+        }}
         parent.addView(ui.text(a,"Comics · ZIP archives",21f,ui.white,true),ui.lp(a,13))
         val inputCard=ui.card(a)
         val input=EditText(a).apply{
@@ -30,12 +31,6 @@ object AsterionComicFollowing {
             val address=input.text.toString().trim()
             if(!allowed(address)) {
                 Toast.makeText(a,"Use a series URL from Toonily, MangaRead or Sushi-Scan",
-                    Toast.LENGTH_LONG).show()
-                return@action
-            }
-            if((Uri.parse(address).host.orEmpty().removePrefix("www.") in
-                setOf("nhentai.net","nhentai.xxx")) && !NhentaiChapters.isGallery(address)){
-                Toast.makeText(a,"Use the full /g/12345 gallery URL, not a listing",
                     Toast.LENGTH_LONG).show()
                 return@action
             }

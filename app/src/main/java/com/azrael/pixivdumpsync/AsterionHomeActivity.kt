@@ -381,7 +381,7 @@ class AsterionHomeActivity:Activity(){
                 R.drawable.ic_source_kyora,theme.cosplayRose,"Kyora")
         )
         tileRow(
-            sourceTile("Books & Doujin","EPUB · ZIP galleries · MangaRead · Sushi",
+            sourceTile("Books","Novels · Comics · Doujin ZIPs",
                 R.drawable.ic_source_toonily,theme.booksGold,"Books"),
             sourceTile("Torrents / Games","Game releases · Magnet · Progress",
                 R.drawable.ic_source_video,theme.gamesTeal,"Torrents")
@@ -407,8 +407,6 @@ class AsterionHomeActivity:Activity(){
             sourceTile("Doujin Voice","Voice dramas · ASMR · Audio packs",
                 R.drawable.ic_source_video,theme.violet,"Porn","VOICE")
         )
-        put(body,sourceTile("VR Media · Files","Download compatible videos · Headset not required",
-            R.drawable.ic_source_video,theme.violet,"Porn","VR"),10)
         val summary=card()
         val xCount=XPhotoQueue(this).use{it.allSources().size}
         val kyoraCount=GalleryDb(this).use{it.listEntities().size}
@@ -419,10 +417,9 @@ class AsterionHomeActivity:Activity(){
         put(body,summary,12)
     }
     private fun renderBooks(){
-        section("Books & Comics","EPUB for books · ZIP for comic chapters.")
+        section("Books","EPUB novels · comics and doujin galleries as ZIP.")
         val switches=theme.row(this)
-        val modes=listOf("EPUB" to "EPUB","COMICS · ZIP" to "COMICS",
-            "DOUJIN" to "DOUJIN")
+        val modes=listOf("NOVELS · EPUB" to "EPUB","COMICS & DOUJIN · ZIP" to "COMICS")
         for((label,mode) in modes){
             switches.addView(theme.chip(this,label,bookMode==mode){
                 bookMode=mode;render()
@@ -436,9 +433,9 @@ class AsterionHomeActivity:Activity(){
                 SourceIndexPanel.render(this,body,"BOOKS")
                 put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
             }
-            "DOUJIN"->DoujinGalleryPanel.render(this,body){render()}
             else->{
                 AsterionComicFollowing.render(this,body){render()}
+                DoujinGalleryPanel.render(this,body){render()}
                 SourceIndexPanel.render(this,body,"COMICS")
             }
         }

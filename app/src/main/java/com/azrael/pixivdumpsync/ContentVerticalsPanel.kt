@@ -59,13 +59,7 @@ object ContentVerticalsPanel {
             Group.ADULT,"VOICE",listOf(
                 Provider("DLsite doujin","https://www.dlsite.com/maniax/"),
                 Provider("BOOTH","https://booth.pm/en"),
-                Provider("Fantia","https://fantia.jp/"))),
-        Vertical("VR","Immersive Video Files",
-            "Download accessible VR180 / VR360 recordings via the same "+
-            "video engine. No headset or VR character creator is required.",
-            Group.ADULT,"VR",listOf(
-                Provider("VRPorn","https://vrporn.com/"),
-                Provider("SexLikeReal","https://www.sexlikereal.com/")))
+                Provider("Fantia","https://fantia.jp/")))
     )
     private val ui=NocturneDesign
     private const val PREFS="asterion_integrated_content_verticals"
@@ -86,7 +80,7 @@ object ContentVerticalsPanel {
         val title=when(group){
             Group.ASSETS->"Studio · MMD · Live2D · Animated art"
             Group.GAMES->"Game mods · Patches · Fan translations"
-            Group.ADULT->"Voice archives · VR media"
+            Group.ADULT->"Doujin voice · ASMR archives"
         }
         parent.addView(ui.text(a,title,20f,ui.white,true),ui.lp(a,20))
         parent.addView(ui.text(a,

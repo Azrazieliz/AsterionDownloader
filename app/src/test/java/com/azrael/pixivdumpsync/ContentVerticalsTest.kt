@@ -5,9 +5,9 @@ import org.junit.Test
 
 class ContentVerticalsTest {
     @Test fun allApprovedSystemsAreOneExistingAppContentRegistry(){
-        assertEquals(7,ContentVerticalsPanel.sections.size)
-        assertEquals(7,ContentVerticalsPanel.sections.map{it.id}.toSet().size)
-        assertEquals(setOf("STUDIO","MMD","LIVE2D","ANIMATION","MODS","VOICE","VR"),
+        assertEquals(6,ContentVerticalsPanel.sections.size)
+        assertEquals(6,ContentVerticalsPanel.sections.map{it.id}.toSet().size)
+        assertEquals(setOf("STUDIO","MMD","LIVE2D","ANIMATION","MODS","VOICE"),
             ContentVerticalsPanel.sections.map{it.area}.toSet())
     }
     @Test fun characterCreationIsLimitedToKoikatsuAfterParty(){
@@ -15,6 +15,12 @@ class ContentVerticalsTest {
         assertTrue(entry.title.contains("Koikatsu After Party"))
         assertFalse(entry.subtitle.contains("Honey Select"))
         assertFalse(entry.subtitle.contains("AI Shoujo"))
+    }
+    @Test fun immersiveOrHeadsetOnlyContentIsAbsent(){
+        assertFalse(ContentVerticalsPanel.sections.any{
+            it.id=="VR" || it.title.contains("VR",ignoreCase=true) ||
+                it.subtitle.contains("headset",ignoreCase=true)
+        })
     }
     @Test fun approvedSystemsReuseExistingSourceIndex(){
         assertTrue(ContentVerticalsPanel.sections.all{item->
