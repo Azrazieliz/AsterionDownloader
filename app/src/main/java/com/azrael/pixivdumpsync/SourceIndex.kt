@@ -148,7 +148,7 @@ class SourceIndexDb(context:Context):
                  AND e.area IN ('BOOKS','COMICS','GAMES','ASSETS',
                      'VIDEOS','ADULT','HENTAI','CREATORS')
                  AND e.kind NOT IN ('epub','archive','apk','model','video',
-                     'image','torrent')
+                     'image','torrent','original')
                ORDER BY e.discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 limit.coerceIn(1,40).toString())).use{c->
@@ -183,7 +183,7 @@ class SourceIndexDb(context:Context):
             "SELECT 1 FROM entries e JOIN sources s ON e.source=s.url "+
                 "WHERE e.detail_checked=0 AND s.enabled=1 AND s.adapter='generic' AND " +
                 "e.area IN ('BOOKS','COMICS','GAMES','ASSETS','VIDEOS','ADULT','HENTAI','CREATORS') "+
-                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent') LIMIT 1",
+                "AND e.kind NOT IN ('epub','archive','apk','model','video','image','torrent','original') LIMIT 1",
             null).use{it.moveToFirst()}
 
     /** Retry only direct originals not yet accepted by their native download
@@ -207,6 +207,7 @@ class SourceIndexDb(context:Context):
                          url LIKE 'https://www.readnovelfull.com/%') AND
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
                         url NOT LIKE '%/chapter-%' AND url NOT LIKE '%/chapitre-%')
+                    OR (kind='original' AND area='CREATORS')
                     OR (kind='model' AND area='ASSETS')
                     OR (kind='comics' AND area='COMICS' AND
                         (url LIKE 'https://nhentai.net/g/%' OR
@@ -307,7 +308,8 @@ internal object SourceIndexParser {
                 SushiScanChapters.isSeries(item.url)))
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
-        "VIDEOS","ADULT","HENTAI","CREATORS"->item.kind=="video"
+        "CREATORS"->item.kind in setOf("video","original")
+        "VIDEOS","ADULT","HENTAI"->item.kind=="video"
         else->false
     }
     private fun preview(link:Element):String?{
@@ -389,28 +391,59 @@ internal object SourceIndexParser {
             ".entry a[href],.attachments a[href],.download a[href],"+
             "a[download][href]")
         val results=LinkedHashMap<String,IndexedItem>()
-        for(link in content.take(1000)){
-            val url=link.absUrl("href").substringBefore('#')
-            if(!safe(url) || url==source.url)continue
+        /** Creator image links can be thumbnails: accept non-video files only from
+         * explicit attachments or download controls, never preview listings.
+         */
+        fun record(url:String,caption:String,explicitAttachment:Boolean){
+            if(!safe(url) || url==source.url)return
             val path=runCatching{URI(url).path.orEmpty().lowercase(Locale.ROOT)}
                 .getOrDefault("")
             val basename=path.substringAfterLast('/')
             if(Regex("(?i)(?:^|[-_.])(preview|sample|teaser|thumb|thumbnail)(?:[-_.]|$)")
-                .containsMatchIn(basename))continue
+                .containsMatchIn(basename))return
             val type=kind(url,source.area)
+            val creatorOriginal=source.area=="CREATORS" && explicitAttachment &&
+                type in setOf("image","archive","model","epub")
             val allowed=when(source.area){
                 "BOOKS"->type=="epub"
                 "COMICS"->type=="archive"&&path.endsWith(".zip")
                 "GAMES"->type in setOf("apk","archive")
                 "ASSETS"->type in setOf("model","archive")
-                "VIDEOS","ADULT","HENTAI","CREATORS"->type=="video"
+                "CREATORS"->type=="video"||creatorOriginal
+                "VIDEOS","ADULT","HENTAI"->type=="video"
                 else->false
             }
-            if(!allowed)continue
-            val title=link.attr("download").ifBlank{link.attr("title")}
-                .ifBlank{link.text()}.ifBlank{source.title}
-            results.putIfAbsent(url,IndexedItem(url,title.take(180),
-                source.preview,source.source,source.area,type,clock,false))
+            if(!allowed || results.size>=150)return
+            val name=caption.ifBlank{source.title}.take(180)
+            results.putIfAbsent(url,IndexedItem(url,name,source.preview,
+                source.source,source.area,if(creatorOriginal)"original" else type,
+                clock,false))
+        }
+        for(link in content.take(1000)){
+            val explicit=link.hasAttr("download") ||
+                link.hasClass("download") ||
+                link.closest(".attachments,.attachment,.downloads,.download")!=null
+            record(link.absUrl("href").substringBefore('#'),
+                link.attr("download").ifBlank{link.attr("title")}
+                    .ifBlank{link.text()},explicit)
+            if(results.size>=150)break
+        }
+        // Publicly exposed file URLs on a post may be stored in button
+        // attributes rather than href. A page preview alone is not an original.
+        for(node in doc.select("main [data-download-url],main [data-file-url],"+
+                "article [data-download-url],article [data-file-url],"+
+                ".post [data-download-url],.post [data-file-url],"+
+                ".attachments [data-download-url],.attachments [data-file-url],"+
+                ".download [data-download-url],.download [data-file-url]").take(500)){
+            for(attr in listOf("data-download-url","data-file-url")){
+                val raw=node.attr(attr)
+                if(raw.isBlank())continue
+                val resolved=runCatching{URI(doc.location()).resolve(raw).toString()}
+                    .getOrDefault("")
+                record(resolved.substringBefore('#'),
+                    node.attr("data-filename").ifBlank{node.attr("title")}
+                        .ifBlank{node.text()},true)
+            }
             if(results.size>=150)break
         }
         if(source.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS")){
@@ -766,7 +799,7 @@ object SourceIndex {
             .ifBlank{"original_"+System.currentTimeMillis()+suffix}
         val folder=when(item.area){
             "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
-            else->"Assets"
+            "CREATORS"->"Creators";else->"Assets"
         }
         if(!CrossSourceDedup(context).use{it.reserve(item.url)}){
             // Existing accepted transfers are already owned by DownloadManager.

@@ -157,4 +157,45 @@ class SourceIndexTest {
         assertFalse(eligible("ARTWORK","image","preview.jpg"))
     }
 
+    @Test fun creatorPostDownloadsExplicitAttachmentsNotPreviewImages(){
+        val doc=Jsoup.parse("""<html><main><article>
+            <a href="/images/thumb.jpg"><img src="/images/thumb-small.jpg">Preview</a>
+            <a href="/images/sample.jpg">Sample portrait</a>
+            <div class="attachments">
+              <a href="/files/complete-artwork.png">Original illustration</a>
+              <a href="/files/creator-pack.zip">Complete image pack</a>
+            </div>
+            <a download href="/files/character.glb">Character model</a>
+        </article></main></html>""","https://example.org/post/124")
+        val source=IndexedItem("https://example.org/post/124","Creator work",
+            null,"https://example.org/","CREATORS","creators",10L,false)
+        val originals=SourceIndexParser.detailOriginals(doc,source,100L)
+        assertEquals(setOf("https://example.org/files/complete-artwork.png",
+            "https://example.org/files/creator-pack.zip",
+            "https://example.org/files/character.glb"),originals.map{it.url}.toSet())
+        assertTrue(originals.all{it.kind=="original" &&
+            SourceIndexParser.autoOriginal(it)})
+        val listing=SourceIndexParser.entries(doc,"https://example.org/",
+            "CREATORS",100L)
+        assertTrue(listing.none{it.kind=="original"})
+        assertTrue(listing.none{it.kind=="image" &&
+            SourceIndexParser.autoOriginal(it)})
+    }
+
+    @Test fun creatorDownloadButtonsExposeOriginalsWithoutOrdinaryLinks(){
+        val doc=Jsoup.parse("""<main><article>
+            <button data-download-url="/files/illustrations.zip"
+                data-filename="illustrations.zip">Download pack</button>
+            <div data-file-url="/files/high-res.jpg"
+                data-filename="high-res.jpg">Original image</div>
+            <img src="/images/poster.jpg">
+        </article></main>""","https://example.org/post/125")
+        val source=IndexedItem("https://example.org/post/125","Creator work",
+            null,"https://example.org/","CREATORS","creators",10L,false)
+        val files=SourceIndexParser.detailOriginals(doc,source,100L)
+        assertEquals(2,files.size)
+        assertTrue(files.all{it.kind=="original"})
+        assertFalse(files.any{it.url.endsWith("poster.jpg")})
+    }
+
 }
