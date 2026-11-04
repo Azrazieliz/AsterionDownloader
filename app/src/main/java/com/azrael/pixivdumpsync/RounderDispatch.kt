@@ -124,9 +124,9 @@ object RounderDispatch {
     private const val SCAN_BATCH=2500
     private val busy=AtomicBoolean(false)
     private const val PREF="asterion_rounder_scanner"
-    private fun scheduleCatchup(context:Context){
+    internal fun scheduleCatchup(context:Context,force:Boolean=false){
         val jobs=context.getSystemService(JobScheduler::class.java)
-        if(jobs.allPendingJobs.any{it.id==CATCHUP_JOB})return
+        if(!force && jobs.allPendingJobs.any{it.id==CATCHUP_JOB})return
         jobs.schedule(JobInfo.Builder(CATCHUP_JOB,
             ComponentName(context,RounderJob::class.java))
             .setPersisted(true)
@@ -141,7 +141,10 @@ object RounderDispatch {
             jobs.schedule(JobInfo.Builder(JOB,ComponentName(context,RounderJob::class.java))
                 .setPersisted(true).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPeriodic(15*60_000L).build())
+        if(needsCatchup(context))scheduleCatchup(context)
     }
+    internal fun needsCatchup(context:Context):Boolean=
+        context.getSharedPreferences(PREF,0).getBoolean("needs_catchup",false)
     internal fun folderCategory(path:String):String?{
         val p=path.lowercase()
         if(!listOf("asteriondownloader","nocturnepixiv","pixiflow",
@@ -199,10 +202,13 @@ object RounderDispatch {
                     }
                 }
             }
-            prefs.edit().putLong("stamp",stamp).putLong("last_id",lastId).apply()
-            // A device with hundreds of thousands of files must not need one
-            // fifteen-minute interval per 2,500 rows. Save cursor and continue.
-            if(scanned>=SCAN_BATCH)scheduleCatchup(context)
+            val needsMore=scanned>=SCAN_BATCH
+            prefs.edit().putLong("stamp",stamp).putLong("last_id",lastId)
+                .putBoolean("needs_catchup",needsMore).apply()
+            // Persist the catch-up requirement across job completion or device
+            // restart; the current JobScheduler ID cannot reschedule itself
+            // until its own execution has finished.
+            if(needsMore)scheduleCatchup(context)
             // Complete exact-URL dedup claims for DownloadManager transfers.
             val manager=context.getSystemService(DownloadManager::class.java)
             CrossSourceDedup(context).use{dedup->
@@ -303,7 +309,12 @@ class RounderJob:JobService(){
     override fun onStartJob(params:JobParameters):Boolean{
         thread(name="asterion-rounder-job"){
             try{RounderDispatch.scan(applicationContext)}
-            finally{jobFinished(params,false)}
+            finally{
+                jobFinished(params,false)
+                if(params.jobId==RounderDispatch.CATCHUP_JOB &&
+                    RounderDispatch.needsCatchup(applicationContext))
+                    RounderDispatch.scheduleCatchup(applicationContext,force=true)
+            }
         }
         return true
     }
