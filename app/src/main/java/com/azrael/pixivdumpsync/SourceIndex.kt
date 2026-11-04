@@ -857,7 +857,7 @@ object SourceIndex {
         // Keep the explicit original filename for signed endpoints whose URL
         // is only an opaque file ID. Never use arbitrary post titles as paths.
         val suppliedName=item.title.takeIf{
-            it.matches(Regex("(?i)[^/\\\\]{1,150}\\\\.(?:epub|zip|7z|rar|png|jpg|jpeg|gif|webp|avif|blend|fbx|obj|glb|gltf|stl|mp4|webm|mkv|apk)"))
+            it.matches(Regex("""(?i)[^/\\]{1,150}\.(?:epub|zip|7z|rar|png|jpg|jpeg|gif|webp|avif|blend|fbx|obj|glb|gltf|stl|mp4|webm|mkv|apk)"""))
         }
         val filename=(suppliedName?:URI(item.url).path.substringAfterLast('/'))
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
