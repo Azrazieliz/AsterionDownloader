@@ -334,6 +334,7 @@ class AsterionHomeActivity:Activity(){
             }
         }
         setContentView(root)
+        if(AppPower.enabled(this))BackfillStatusNotification.show(this)
         window.decorView.systemUiVisibility=0
         when(intent?.action){
             Intent.ACTION_SEND->intent.getStringExtra(Intent.EXTRA_TEXT)?.let{submitInput(it)}
