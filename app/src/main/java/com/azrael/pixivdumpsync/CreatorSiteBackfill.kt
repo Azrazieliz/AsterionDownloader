@@ -55,7 +55,7 @@ internal object CreatorSiteBackfill {
         val host=normalizedHost(source)
         val route=routes[host]?.takeIf{it.area==area}?:return null
         val result=LinkedHashMap<String,IndexedItem>()
-        for(link in doc.select(route.selector).take(10000)){
+        for(link in doc.select(route.selector).take(15000)){
             val raw=link.attr("href")
             if(raw.isBlank())continue
             val url=runCatching{URI(doc.location()).resolve(raw)}
@@ -78,7 +78,12 @@ internal object CreatorSiteBackfill {
             val canonical=url.toString().substringBefore('#').trimEnd('/')+"/"
             result.putIfAbsent(canonical,IndexedItem(canonical,title,image,
                 source,area,route.kind,now,false))
-            if(result.size>=500)break
+            require(result.size<3000){
+                "Creator post listing exceeds one-page capacity; cursor not advanced"
+            }
+        }
+        require(doc.select(route.selector).size<=15000){
+            "Creator site has over 15000 listing links; use a specific API adapter"
         }
         return result.values.toList()
     }
