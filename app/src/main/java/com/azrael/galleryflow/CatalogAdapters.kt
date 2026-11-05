@@ -346,7 +346,7 @@ class BuonDuaAdapter(private val http: HttpClient) : SourceAdapter {
     override val statusLabel = "Enabled • whole-site • direct album images"
 
     override fun defaultEntities(): List<SourceEntity> = listOf(
-        SourceEntity(source, "site:all", "BuonDua — entire site", "https://buondua.net/albums", "site")
+        SourceEntity(source, "site:all", "BuonDua", "https://buondua.net/albums", "site")
     )
 
     override fun matches(url: String): Boolean = runCatching {
@@ -476,7 +476,7 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
     override val statusLabel = "Direct images • embedded video when available"
 
     override fun defaultEntities(): List<SourceEntity> = listOf(
-        SourceEntity(source, "site:all", "CosplayTele — entire site", "https://cosplaytele.com/", "site")
+        SourceEntity(source, "site:all", "CosplayTele", "https://cosplaytele.com/", "site")
     )
 
     override fun matches(url: String): Boolean = runCatching {
