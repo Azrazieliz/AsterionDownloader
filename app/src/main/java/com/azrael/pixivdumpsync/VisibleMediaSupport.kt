@@ -39,12 +39,22 @@ internal object VisibleMediaSupport {
             it.substringAfterLast('.').length in 2..8}
             ?: "media_"+media.url.hashCode().toUInt().toString(16)+ext
     }
-    fun queue(context:Context,source:String,files:List<VisibleMedia>):VisibleMediaResult {
+    fun queue(context:Context,source:String,files:List<VisibleMedia>,
+              categoryHint:String?=null):VisibleMediaResult {
         var queued=0;var already=0;var failed=0
         for(media in files.distinctBy{it.url}.take(150)){
             if(!accepted(source,media)){failed++;continue}
-            val folder=when(media.kind){
-                "video"->"Videos";"image"->"Creators";else->"Files"
+            // EPUB forum/novel shelves should not silently download video,
+            // cover images or HTML as a book. Other modules retain their routes.
+            if(categoryHint=="Books" &&
+                (media.kind!="file" || !fileName(media).endsWith(".epub",true))){
+                failed++;continue
+            }
+            val folder=when{
+                categoryHint=="Books"->"Books"
+                media.kind=="video"->"Videos"
+                media.kind=="image"->"Creators"
+                else->"Files"
             }
             // The native video pipeline continues to enforce its own full-file
             // validation. Other accessible originals use the existing dedup queue.
