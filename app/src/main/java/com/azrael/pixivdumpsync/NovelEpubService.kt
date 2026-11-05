@@ -155,6 +155,12 @@ object NovelEpubService {
             .joinToString(""){"%02x".format(it.toInt() and 255)}
         return File(context.filesDir,"novel-epub-cache/"+key).apply{mkdirs()}
     }
+    /** Real count of completed chapter-cache records, never a guessed percentage. */
+    fun cachedCount(context:Context,url:String):Int=
+        cacheDir(context,url).listFiles()?.count{
+            it.isFile && it.name.endsWith(".json")
+        }?:0
+
     private fun chapterKey(url:String):String =
         MessageDigest.getInstance("SHA-256")
             .digest(url.toByteArray()).take(10)
