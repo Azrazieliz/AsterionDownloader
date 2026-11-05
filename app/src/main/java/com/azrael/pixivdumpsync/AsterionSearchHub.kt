@@ -85,10 +85,13 @@ object AsterionSearchHub {
         }
         return Reply(unique,errors,checked+if(mode==0)1 else 0)
     }
-    fun render(a:Activity,p:LinearLayout,refresh:()->Unit){
+    fun render(a:Activity,p:LinearLayout,refresh:()->Unit,
+               addSource:()->Unit={}){
         p.addView(ui.text(a,"Search",23f,ui.white,true),ui.lp(a,14))
-        p.addView(ui.text(a,"Select the content type. Only matching files and media are shown.",
+        p.addView(ui.text(a,"Find original media across connected sites.",
             12f,ui.secondary),ui.lp(a,4))
+        p.addView(ui.action(a,"Add source or follow creator",false){addSource()},
+            ui.lp(a,8))
         val prefs=preferences(a)
         var selected=prefs.getInt("mode",0).coerceIn(0,modes.lastIndex)
         val picker=Spinner(a)
