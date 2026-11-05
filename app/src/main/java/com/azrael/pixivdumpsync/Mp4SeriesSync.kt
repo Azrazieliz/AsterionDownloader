@@ -113,45 +113,60 @@ object Mp4SeriesSync {
         val seed=if(work.type=="ZIP")
             listOf(catalogManga,alternateManga)
         else listOf(catalogLn)
-        val found=LinkedHashMap<String,Mp4SeriesLink>()
-        val docs=ArrayList<Document>()
-        for(address in seed){
-            val doc=page(address)
-            docs+=doc
-            for(link in Mp4SeriesRules.forumLinks(doc,address,work.name,work.aliases))
-                found.putIfAbsent(link.url,link)
+        // Start with latest listings and the retained historical cursor.
+        // Related-work titles must come from a real category/index link.
+        val queue=ArrayDeque<Pair<String,Int>>()
+        seed.forEach{queue.addLast(it to 0)}
+        work.cursor?.takeIf{SourceIndexParser.safe(it)}?.let{
+            queue.addLast(it to 1)
         }
-        // Only related works visibly listed under the parent series are added.
-        // The parent and each spin-off have independent backfill floors.
-        if(work.name==work.family && work.type=="EPUB"){
-            for(doc in docs+listOf(page(catalogManga))){
+        if(work.name==work.family && work.type=="EPUB")
+            queue.addLast(catalogManga to 0)
+        val visited=HashSet<String>()
+        var scanned=0
+        val budget=if(work.backfill)32 else 4
+        while(queue.isNotEmpty() && scanned<budget){
+            val (address,depth)=queue.removeFirst()
+            if(!visited.add(address))continue
+            val doc=page(address)
+            scanned++
+            if(address==catalogManga && work.name==work.family &&
+                    work.type=="EPUB"){
                 for(title in Mp4SeriesRules.relatedNames(doc,work.name,work.aliases)){
-                    if(Mp4SeriesRules.normalize(title) !=
+                    if(Mp4SeriesRules.normalize(title)!=
                             Mp4SeriesRules.normalize(work.name))
                         db.add(work.family,title,1,"ZIP")
                 }
             }
-        }
-        val inspected=HashSet<String>()
-        for(link in found.values.take(45)){
-            db.observe(work,link)
-            if(!link.isThread){
-                if(work.backfill||work.sync)
-                    if(enqueue(context,work,link,seed.first()))
-                        db.mark(link.url,"QUEUED")
-                continue
+            val links=Mp4SeriesRules.forumLinks(doc,address,work.name,work.aliases)
+            for(link in links.take(150)){
+                db.observe(work,link)
+                if(link.isThread && depth<3){
+                    if(link.url !in visited)queue.addLast(link.url to depth+1)
+                }else if(!link.isThread &&
+                        enqueue(context,work,link,address)){
+                    db.mark(link.url,"QUEUED")
+                }
             }
-            if(!inspected.add(link.url))continue
-            val doc=page(link.url)
-            for(original in Mp4SeriesRules.threadOriginals(doc,link.url,work.type)){
-                db.observe(work,original)
-                if(work.backfill||work.sync){
-                    if(enqueue(context,work,original,link.url))
+            if(address.contains("/threads/")){
+                for(original in Mp4SeriesRules.threadOriginals(
+                        doc,address,work.type).take(100)){
+                    db.observe(work,original)
+                    if(enqueue(context,work,original,address))
                         db.mark(original.url,"QUEUED")
                 }
             }
+            if(work.backfill && depth<4){
+                val next=SourceIndexParser.next(doc,address,address)
+                if(next!=null && next !in visited &&
+                    SourceIndexParser.sameSite(address,next))
+                    queue.addLast(next to depth+1)
+            }
         }
-        db.checked(work.id,null,null)
+        // A non-null cursor means historical discovery still has work to do.
+        // Null only means no more pagination was observed in this pass,
+        // NOT that all published volumes or spin-offs necessarily exist here.
+        db.checked(work.id,queue.firstOrNull()?.first,null)
     }
     fun scan(context:Context,stop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
