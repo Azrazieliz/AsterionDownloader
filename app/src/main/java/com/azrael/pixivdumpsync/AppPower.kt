@@ -14,6 +14,7 @@ object AppPower {
         context.getSharedPreferences(NAME,Context.MODE_PRIVATE).edit()
             .putBoolean("enabled",value).commit()
         if(value){
+            BackfillStatusNotification.show(context)
             // Scheduling and database initialization must never run on the UI
             // thread when the user resumes a large existing library.
             val app=context.applicationContext
@@ -49,6 +50,7 @@ object AppPower {
                 if(enabled(app))RounderDispatch.scanAsync(app)
             }
         }else{
+            BackfillStatusNotification.hide(context)
             // Persist the OFF state above before doing any cancellation.
             // Crucially, never block a frozen UI on JobScheduler, service
             // teardown or the TeraBox uploader. All workers consult enabled().
