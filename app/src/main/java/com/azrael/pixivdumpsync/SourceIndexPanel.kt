@@ -31,12 +31,13 @@ object SourceIndexPanel {
         card.addView(ui.text(a,"Latest · "+label.lowercase().replaceFirstChar{it.uppercase()},
             17f,ui.white,true))
         card.addView(ui.text(a,
-            sources.size.toString()+" sources · "+accounts+" connected · "+
-                checked+" index-checked · "+native+" native-managed · "+
-                problems+" reported errors · "+items.size+" previews",
+            sources.distinctBy{SiteControls.key(it.url)}.size.toString()+
+                " sites · "+checked+" index-checked · "+problems+
+                " errors · "+items.size+" previews"+
+                " · native coverage not assumed",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         val toolbar=ui.row(a)
-        toolbar.addView(ui.action(a,"SYNC & BACKFILL",false){
+        toolbar.addView(ui.action(a,"RUN ENABLED SOURCES",false){
             thread(name="asterion-module-backfill"){
                 for(area in areas)SourceIndex.scan(a,area)
             }
@@ -53,7 +54,7 @@ object SourceIndexPanel {
             Toast.makeText(a,"Source sync requested · new previews appear here",
                 Toast.LENGTH_SHORT).show()
         },LinearLayout.LayoutParams(0,-2,1f))
-        toolbar.addView(ui.action(a,"SITES & LOGIN",false){
+        toolbar.addView(ui.action(a,"SITES · SYNC / BACKFILL",false){
             showStatus(a,areas,label)
         },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
         card.addView(toolbar,ui.lp(a,9))
@@ -121,56 +122,118 @@ object SourceIndexPanel {
             }.setNegativeButton("Close",null).show()
     }
     private fun showStatus(a:Activity,areas:List<String>,label:String){
-        val list=areas.flatMap{SourceIndex.status(a,it)}.distinctBy{it.url}
-        val body=LinearLayout(a).apply{
-            orientation=LinearLayout.VERTICAL
-            setPadding(ui.px(a,14),ui.px(a,8),ui.px(a,14),ui.px(a,14))
+        // Each host appears ONCE. Native categories and old album rows are
+        // implementation details, not separate user-facing subscriptions.
+        val sites=areas.flatMap{SourceIndex.status(a,it)}
+            .filter{SiteControls.key(it.url).isNotBlank()}
+            .groupBy{SiteControls.key(it.url)}
+            .toSortedMap().map{(host,entries)->
+                host to entries
+            }
+        if(sites.isEmpty()){
+            Toast.makeText(a,"No sources registered yet",Toast.LENGTH_SHORT).show()
+            return
         }
-        for(source in list){
-            val label=source.name+" · "+(if(!source.enabled)"PAUSED"
-                else if(source.adapter=="native")"Native engine · check its own backfill"
-                else if(!source.error.isNullOrEmpty())"Error: "+source.error.take(95)
-                else if(source.lastCheck==0L)"Waiting for first scan"
-                else "Indexed "+source.discovered+" items · "+
-                    (if(source.cursor.isNullOrBlank())"no further page found"
-                     else "history cursor saved"))
-            val row=ui.row(a)
-            val view=ui.text(a,label,12f,ui.secondary)
-            row.addView(view,LinearLayout.LayoutParams(0,-2,1f))
-            if(source.adapter=="native"){
-                // Native engines already have persistent per-artist and per-source toggles.
-                // A second switch here would not control their real scheduler.
-                row.addView(ui.text(a,"Managed in Following",11f,ui.secondary))
-            }else{
-                val toggle=Switch(a).apply{
-                    isChecked=source.enabled
-                    contentDescription="Sync "+source.name
-                    setOnCheckedChangeListener{_,checked->
-                        SourceIndexDb(a).use{it.enable(source.url,checked)}
+        val list=ListView(a).apply{
+            dividerHeight=ui.px(a,6)
+            setPadding(ui.px(a,8),ui.px(a,8),ui.px(a,8),ui.px(a,8))
+            clipToPadding=false
+        }
+        list.adapter=object:BaseAdapter(){
+            override fun getCount()=sites.size
+            override fun getItem(position:Int):Any=sites[position]
+            override fun getItemId(position:Int)=position.toLong()
+            override fun getView(position:Int,convertView:android.view.View?,
+                                 parent:android.view.ViewGroup?):android.view.View{
+                val (host,group)=sites[position]
+                val site=group.firstOrNull{it.adapter=="native"}?:group.first()
+                val name=if(host=="4khd.com")"4KHD" else
+                    AlohaSources.all.firstOrNull{SiteControls.key(it.url)==host}
+                        ?.name?:site.name
+                val root=convertView as? LinearLayout?:ui.card(a)
+                root.removeAllViews()
+                root.addView(ui.text(a,name,15f,ui.white,true),ui.lp(a,2))
+                val issues=group.mapNotNull{it.error?.takeIf(String::isNotBlank)}
+                val checked=group.filter{it.adapter=="generic" && it.lastCheck>0}
+                val progress=when{
+                    issues.isNotEmpty()->"ERROR · "+issues.first().take(110)
+                    checked.isNotEmpty()->"Indexed "+
+                        checked.sumOf{it.discovered}+" observed items · "+
+                        if(checked.any{!it.cursor.isNullOrBlank()})
+                            "older pages remain" else "no next page detected"
+                    group.any{it.adapter=="native"}->
+                        "Native download engine · history not verified"
+                    else->"Not checked yet"
+                }
+                root.addView(ui.text(a,progress,11f,
+                    if(issues.isNotEmpty())ui.danger else ui.secondary),
+                    ui.lp(a,3))
+                val flags=ui.row(a)
+                val sync=Switch(a).apply{
+                    text="Sync"
+                    textSize=12f
+                    setTextColor(ui.white)
+                    isChecked=SiteControls.sync(a,site.url,
+                        group.any{it.enabled})
+                    contentDescription="Sync new items on "+name
+                    setOnCheckedChangeListener{_,enabled->
+                        SiteControls.setSync(a,site.url,enabled)
+                        thread(name="asterion-site-sync-pref"){
+                            SiteControls.applyToEngines(a.applicationContext,site.url)
+                        }
                     }
                 }
-                row.addView(toggle)
-            }
-            body.addView(row,ui.lp(a,8))
-            body.addView(ui.action(a,"BACKFILL THIS SITE",false){
-                val result=runCatching{
-                    ProviderBackfillActions.request(a,source)
+                val backfill=Switch(a).apply{
+                    text="Backfill"
+                    textSize=12f
+                    setTextColor(ui.white)
+                    isChecked=SiteControls.backfill(a,site.url,
+                        group.any{it.enabled})
+                    contentDescription="Backfill older items on "+name
+                    setOnCheckedChangeListener{_,enabled->
+                        SiteControls.setBackfill(a,site.url,enabled)
+                        thread(name="asterion-site-backfill-pref"){
+                            SiteControls.applyToEngines(a.applicationContext,site.url)
+                        }
+                    }
                 }
-                Toast.makeText(a,result.getOrElse{
-                    "Source could not start: "+(it.message?:"Unavailable")
-                },Toast.LENGTH_LONG).show()
-            },ui.lp(a,4))
-        }
-        body.addView(ui.action(a,"CONNECT AN ACCOUNT",false){
-            val accounts=list.filter{SourceIndexParser.safe(it.url)}
-            AlertDialog.Builder(a).setTitle("Select a provider")
-                .setItems(accounts.map{it.name}.toTypedArray()){_,index->
+                flags.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
+                flags.addView(backfill,LinearLayout.LayoutParams(0,-2,1f))
+                root.addView(flags,ui.lp(a,3))
+                val commands=ui.row(a)
+                commands.addView(ui.action(a,"CHECK NOW",false){
+                    if(!AppPower.enabled(a)){
+                        Toast.makeText(a,"App is paused in Settings",
+                            Toast.LENGTH_SHORT).show()
+                    }else if(!SiteControls.any(a,site.url)){
+                        Toast.makeText(a,"Enable Sync or Backfill for "+name,
+                            Toast.LENGTH_SHORT).show()
+                    }else thread(name="asterion-check-provider"){
+                        SiteControls.applyToEngines(a.applicationContext,site.url)
+                        val result=runCatching{
+                            ProviderBackfillActions.request(a,site)
+                        }.getOrElse{it.message?:"Source request failed"}
+                        a.runOnUiThread{
+                            if(!a.isFinishing)Toast.makeText(a,result,
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },LinearLayout.LayoutParams(0,-2,1f))
+                commands.addView(ui.action(a,"LOGIN",false){
                     a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                        .putExtra(SiteLoginActivity.EXTRA_URL,accounts[index].url))
-                }.setNegativeButton("Cancel",null).show()
-        },ui.lp(a,14))
-        AlertDialog.Builder(a).setTitle(label+" · Source health")
-            .setView(ScrollView(a).apply{addView(body)})
-            .setPositiveButton("Close",null).show()
+                        .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                },LinearLayout.LayoutParams(0,-2,1f).apply{
+                    leftMargin=ui.px(a,8)
+                })
+                root.addView(commands,ui.lp(a,5))
+                return root
+            }
+        }
+        // ListView virtualizes rows; no 50-card ScrollView allocation or
+        // synchronous source rescan on every setting change.
+        val maxHeight=(a.resources.displayMetrics.heightPixels*0.67f).toInt()
+        list.layoutParams=LinearLayout.LayoutParams(-1,maxHeight)
+        AlertDialog.Builder(a).setTitle(label+" · "+sites.size+" sites")
+            .setView(list).setPositiveButton("Close",null).show()
     }
 }
