@@ -920,10 +920,10 @@ object SourceIndex {
                 SourceIndexParser.sameSite(source.url,it)
         }
         val historyEnabled=SiteControls.backfill(context,source.url,source.enabled)
-        if(saved!=null && historyEnabled)pages+=saved
+        if(saved!=null && historyEnabled && !source.historyComplete)pages+=saved
         var index=0
         val visited=HashSet<String>()
-        while(index<pages.size && index<(if(historyEnabled)4 else 1)){
+        while(index<pages.size && (historyEnabled && !source.historyComplete || index==0)){
             if(!AppPower.enabled(context) ||
                 (!SiteControls.sync(context,source.url) &&
                  !SiteControls.backfill(context,source.url)))break
@@ -971,9 +971,12 @@ object SourceIndex {
                 throw IllegalStateException("No supported originals found; dedicated adapter or login required")
             // Persist each successful page before the next request. A network failure
             // on the following page must resume here instead of restarting history.
-            if(historyEnabled)cursor=if(index==1 && saved!=null)saved else next
+            if(historyEnabled && !source.historyComplete)
+                cursor=if(index==1 && saved!=null)saved else next
+            val complete=historyEnabled &&
+                (source.historyComplete || (next==null && (saved==null || index>1)))
             SourceIndexDb(context).use{db->
-                db.update(source.url,cursor,null,source.discovered+fresh)
+                db.update(source.url,cursor,null,source.discovered+fresh,complete)
             }
         }
     }
