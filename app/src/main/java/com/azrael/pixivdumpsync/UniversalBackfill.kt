@@ -45,6 +45,10 @@ object UniversalBackfill {
             SourceIndex.ensure(a)
             SourceIndex.scanNow(a.applicationContext)
         }
+        request("OneJAV and Sukebei torrent history"){
+            TorrentSourceBackfill.ensure(a)
+            TorrentSourceBackfill.scanAsync(a)
+        }
         request("MP4Directs series subscriptions"){
             Mp4SeriesSync.ensure(a)
             Mp4SeriesSync.scanNow(a)
