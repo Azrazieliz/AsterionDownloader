@@ -329,6 +329,7 @@ object NovelEpubService {
     }
     fun run(context:Context,stop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
+        BackfillPerformance.backgroundWorker()
         try{
             NovelEpubQueue(context).use{db->
                 db.recover()
