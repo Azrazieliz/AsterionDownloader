@@ -44,4 +44,46 @@ object SiteControls {
             .edit().putBoolean("backfill:$host",enabled).apply()
     }
     fun any(context:Context,url:String)=sync(context,url)||backfill(context,url)
+
+    /** Reflect the single provider setting in each existing engine's saved
+     * source-level switches. Run off the UI thread; creator-specific follows,
+     * original files, and historical cursors are never deleted or reset.
+     */
+    fun applyToEngines(context:Context,url:String){
+        val app=context.applicationContext
+        val host=key(url)
+        if(host.isBlank())return
+        val live=sync(app,url)
+        val historical=backfill(app,url)
+        val active=live||historical
+        runCatching {
+            SourceIndexDb(app).use{db->
+                db.sources().filter{key(it.url)==host}.forEach{
+                    db.enable(it.url,active)
+                }
+            }
+        }
+        runCatching{
+            com.azrael.galleryflow.GalleryDb(app).use{db->
+                db.listEntities().filter{
+                    it.kind=="site" && key(it.canonicalUrl)==host
+                }.forEach{entity->
+                    db.setSelected(entity.source,entity.entityId,active)
+                    db.setLiveEnabled(entity.source,entity.entityId,live)
+                }
+            }
+        }
+        runCatching{
+            com.asterion.videoflow.VideoDb(app).use{db->
+                db.listWatches().filter{watch->
+                    if(key(watch.address)!=host)return@filter false
+                    val path=runCatching{
+                        URI(watch.address).path.orEmpty().trim('/')
+                    }.getOrDefault("")
+                    // Do not overwrite user-disabled actor/model watches.
+                    path.isBlank()
+                }.forEach{db.enableWatch(it.id,active)}
+            }
+        }
+    }
 }
