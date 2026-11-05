@@ -184,7 +184,7 @@ object AsterionSmartAdd {
                         .substringAfterLast('/').replace('-', ' ').ifBlank{"Novel"}
                     NovelEpubService.enqueue(a,address,series)
                     record(a,kind,address,"Complete novel readable ZIP queued")
-                    status.text="Entire novel queued as one readable ZIP (HTML chapters + EPUB)"
+                    status.text="Novel chapters queued for EPUB assembly"
                     done()
                 }else{
                     record(a,kind,address,"Provider indexed · EPUB original required")
