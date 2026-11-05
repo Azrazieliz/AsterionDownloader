@@ -74,6 +74,15 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.insertWithOnConflict("sources",null,v,SQLiteDatabase.CONFLICT_IGNORE)
     }
+    /** Promote supported torrent feeds into their own history engine without
+     * resetting user's include/exclude preference or saved source metadata.
+     */
+    fun setAdapter(url:String,adapter:String){
+        require(adapter in setOf("native","generic"))
+        writableDatabase.update("sources",ContentValues().apply{
+            put("adapter",adapter)
+        },"url=?",arrayOf(url))
+    }
     fun enable(url:String,value:Boolean){
         val v=ContentValues().apply{put("enabled",if(value)1 else 0)}
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
@@ -626,8 +635,14 @@ object SourceIndex {
     )
     fun ensure(context:Context){
         SourceIndexDb(context).use{db->
-            for(site in AlohaSources.all)db.add(site.url,site.name,site.area.name,
-                if(site.host in AlohaSources.alreadyIntegratedHosts)"native" else "generic")
+            for(site in AlohaSources.all){
+                val ownsFeed=site.host in setOf("onejav.com","sukebei.nyaa.si")
+                db.add(site.url,site.name,site.area.name,
+                    if(ownsFeed ||
+                        site.host in AlohaSources.alreadyIntegratedHosts)
+                        "native" else "generic")
+                if(ownsFeed)db.setAdapter(site.url,"native")
+            }
             for((name,url,area) in extra)db.add(url,name,area,
                 if(name in setOf("KoikatsuCards","Pawchive","Kemono","Coomer"))"native" else "generic")
             val added=context.getSharedPreferences("asterion_custom_site_enrollment",0)
