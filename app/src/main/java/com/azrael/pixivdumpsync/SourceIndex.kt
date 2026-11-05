@@ -402,7 +402,7 @@ internal object SourceIndexParser {
             ".gallery a[href],.entry a[href],.item a[href],.content a[href],"+
             ".video a[href],.thumb a[href],a[href*='/post/'],a[href*='/view/']")
         val candidates=if(scoped.isEmpty())doc.select("a[href]") else scoped
-        for(link in candidates.take(700)){
+        for(link in candidates.take(8000)){
             val url=link.absUrl("href").substringBefore('#')
             if(!safe(url)||!sameSite(base,url)||junk.containsMatchIn(url))continue
             val path=URI(url).path.orEmpty()
@@ -421,7 +421,9 @@ internal object SourceIndexParser {
             if(title.length<3 || title.equals("next",true) || title.equals("previous",true))continue
             val image=preview(link)
             out.putIfAbsent(url,IndexedItem(url,title,image,base,area,type,clock,false))
-            if(out.size>=110)break
+            require(out.size<5000){
+                "Provider page exceeds 5000 discovered originals; cursor is not advanced"
+            }
         }
         // Some providers expose legitimate direct MP4/WebM originals in <video>
         // rather than <a>. Do not harvest arbitrary image thumbnails or trackers.
@@ -440,8 +442,13 @@ internal object SourceIndexParser {
                     .takeIf{safe(it)}
                 out[url]=IndexedItem(url,title.take(180),cover,base,area,"video",
                     clock,false)
-                if(out.size>=110)break
+                require(out.size<5000){
+                "Provider page exceeds 5000 discovered originals; cursor is not advanced"
             }
+            }
+        }
+        require(candidates.size<=8000){
+            "Provider listing has over 8000 links; requires paginated native adapter"
         }
         return out.values.toList()
     }
@@ -914,14 +921,12 @@ object SourceIndex {
             val records=SourceIndexParser.entries(doc,source.url,source.area,System.currentTimeMillis())
             SourceIndexDb(context).use{db->
                 for(item in records){
-                    if(db.upsert(item)){
-                        fresh++
-                        if(SourceIndexParser.autoOriginal(item)){
-                            if(queueDirect(context,item))db.markQueued(item.url)
-                            else db.defer(item.url)
-                        }
-                    }
+                    if(db.upsert(item))fresh++
                 }
+                // Newly found originals remain durable in the download queue;
+                // the global scheduler submits a bounded, deduplicated batch.
+                // Do not start thousands of DownloadManager requests while a
+                // single large listing page is still being indexed.
             }
             val next=SourceIndexParser.next(doc,source.url,address)
             if(index==1 && saved==null && next!=null && next !in visited)
