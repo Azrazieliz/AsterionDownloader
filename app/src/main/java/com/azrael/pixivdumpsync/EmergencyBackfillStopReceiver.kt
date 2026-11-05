@@ -1,7 +1,7 @@
 package com.azrael.pixivdumpsync
 
 import android.app.ActivityManager
-import android.app.JobScheduler
+import android.app.job.JobScheduler
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
