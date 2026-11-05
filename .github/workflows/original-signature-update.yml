@@ -93,11 +93,11 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           APK="app/build/outputs/apk/release/app-release.apk"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync'"
-          "$AAPT" dump badging "$APK" | grep -F "versionName='1.3.35'"
+          "$AAPT" dump badging "$APK" | grep -F "versionName='1.3.36'"
       - name: Upload upgrade-compatible signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: AsterionDownloader-v1.3.35-original-signature-upgrade
+          name: AsterionDownloader-v1.3.36-original-signature-upgrade
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
@@ -107,15 +107,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="asterion-downloader-v1.3.35-preserve-data-$(git rev-parse --short=10 "$GITHUB_SHA")"
-          cp app/build/outputs/apk/release/app-release.apk Asterion-Downloader-v1.3.35-Preserve-Data.apk
-          sha256sum Asterion-Downloader-v1.3.35-Preserve-Data.apk > Asterion-Downloader-v1.3.35-Preserve-Data.sha256
+          TAG="asterion-downloader-v1.3.36-preserve-data-$(git rev-parse --short=10 "$GITHUB_SHA")"
+          cp app/build/outputs/apk/release/app-release.apk Asterion-Downloader-v1.3.36-Preserve-Data.apk
+          sha256sum Asterion-Downloader-v1.3.36-Preserve-Data.apk > Asterion-Downloader-v1.3.36-Preserve-Data.sha256
           gh release create "$TAG" \
-            Asterion-Downloader-v1.3.35-Preserve-Data.apk \
-            Asterion-Downloader-v1.3.35-Preserve-Data.sha256 \
+            Asterion-Downloader-v1.3.36-Preserve-Data.apk \
+            Asterion-Downloader-v1.3.36-Preserve-Data.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Asterion Downloader v1.3.35 — original-signature data-preserving update" \
+            --title "Asterion Downloader v1.3.36 — original-signature data-preserving update" \
             --notes "Verified original Kuroha signing certificate and stable production package. Intended for in-place update from the matching original Kuroha/Downloader installation. Release published only after original keystore validation, full Gradle tests and APK signature verification." \
             --prerelease
 
