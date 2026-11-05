@@ -6,6 +6,9 @@ on:
       - feature/asterion-unified-downloads-20261030
     paths:
       - '.github/workflows/asterion-installable-preview.yml'
+      - 'app/src/main/**'
+      - 'app/src/test/**'
+      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -58,7 +61,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Asterion Downloader v1.3.37 — Android preview" \
-            --notes "Built from the exact GitHub source SHA. Adds source-free game recognition and Android compatibility export for JoiPlay/Winlator/Kirikiri/NScripter, native source-project workflows retained, multilingual public creator-profile matching, JSON-LD sameAs links, one-hop creator link hubs and evidence-based reciprocal profiles; also retains full-video gating, EPUB/ZIP, secure site indexing and original native adapters. This separate com.azrael.pixivdumpsync.nocturne preview is NOT an update to the original production app. Actual Windows game runtime compatibility and provider authentication require device testing." \
+            --notes "Built from the exact GitHub source SHA. v1.3.37 adds site-specific EPUB novel sync, incremental comic ZIP history, provider-specific video/gallery/creator discovery, OneJAV and Sukebei historical torrent indexes, per-site backfill actions, MP4Directs named-series subscriptions and Rounder inventory integration. Preserves Pixiv, X, Kyora, VideoFlow, native game and asset workflows. Registered sites are not automatically verified complete; authentication and live provider behavior require device testing. This separate com.azrael.pixivdumpsync.nocturne preview does not replace the original production app." \
             --prerelease; then
             echo "::warning::Release publication denied by GitHub token. Verified APK and sha256 remain available in the successfully uploaded Actions artifact."
           fi
