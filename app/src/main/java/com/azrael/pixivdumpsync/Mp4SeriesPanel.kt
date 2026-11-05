@@ -1,6 +1,7 @@
 package com.azrael.pixivdumpsync
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.text.InputType
@@ -95,13 +96,18 @@ object Mp4SeriesPanel {
                 }
             })
             card.addView(actions,ui.lp(a,6))
-            val alias=entry(a,"Alternate series title / transliteration")
+            val alias=entry(a,"Related novel, side story or image-based spin-off")
             card.addView(alias,ui.lp(a,5))
             card.addView(ui.action(a,"ADD RELATED WORK",false){
                 val value=alias.text.toString().trim()
                 if(value.length>=3){
-                    Mp4SeriesStore(a).use{it.add(work.family,value,1,"ZIP")}
-                    Mp4SeriesSync.scanNow(a);refresh()
+                    AlertDialog.Builder(a).setTitle("Related work format")
+                        .setItems(arrayOf("Text novel · EPUB",
+                            "Image-based comic · ZIP")){_,format->
+                            val kind=if(format==0)"EPUB" else "ZIP"
+                            Mp4SeriesStore(a).use{it.add(work.family,value,1,kind)}
+                            Mp4SeriesSync.scanNow(a);refresh()
+                        }.setNegativeButton("Cancel",null).show()
                 }
             },ui.lp(a,3))
             val candidates=Mp4SeriesStore(a).use{it.items(work.id,8)}
