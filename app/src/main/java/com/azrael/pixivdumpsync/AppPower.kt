@@ -14,22 +14,28 @@ object AppPower {
         context.getSharedPreferences(NAME,Context.MODE_PRIVATE).edit()
             .putBoolean("enabled",value).commit()
         if(value){
-            Scheduler.ensure(context)
-            XPhotoScheduler.ensure(context)
-            com.azrael.galleryflow.Scheduler.ensure(context)
-            com.asterion.videoflow.Scheduling.ensure(context)
-            // Resume every existing content family, not only the original
-            // Pixiv/Kyora engines. These calls are idempotent schedulers.
-            SourceIndex.ensure(context)
-            CreatorArchiveScheduler.ensure(context)
-            KoikatsuFollowing.ensure(context)
-            RounderDispatch.ensure(context)
-            DirectDownloadRetry.ensure(context)
-            AsterionDownloadWorker.ensure(context)
-            NovelEpubService.ensure(context)
-            ChapterRecovery.ensure(context)
-            NduCloudScheduler.configure(context,NduSettings.enabled(context))
-            RounderDispatch.scanAsync(context)
+            // Scheduling and database initialization must never run on the UI
+            // thread when the user resumes a large existing library.
+            val app=context.applicationContext
+            kotlin.concurrent.thread(name="asterion-resume-schedulers"){
+                if(!enabled(app))return@thread
+                runCatching{Scheduler.ensure(app)}
+                runCatching{XPhotoScheduler.ensure(app)}
+                runCatching{com.azrael.galleryflow.Scheduler.ensure(app)}
+                runCatching{com.asterion.videoflow.Scheduling.ensure(app)}
+                runCatching{SourceIndex.ensure(app)}
+                runCatching{CreatorArchiveScheduler.ensure(app)}
+                runCatching{KoikatsuFollowing.ensure(app)}
+                runCatching{RounderDispatch.ensure(app)}
+                runCatching{Mp4SeriesSync.ensure(app)}
+                runCatching{TorrentSourceBackfill.ensure(app)}
+                runCatching{DirectDownloadRetry.ensure(app)}
+                runCatching{AsterionDownloadWorker.ensure(app)}
+                runCatching{NovelEpubService.ensure(app)}
+                runCatching{ChapterRecovery.ensure(app)}
+                runCatching{NduCloudScheduler.configure(app,NduSettings.enabled(app))}
+                if(enabled(app))RounderDispatch.scanAsync(app)
+            }
         }else{
             Scheduler.cancel(context)
             XPhotoScheduler.cancel(context)
@@ -41,6 +47,18 @@ object AppPower {
             runCatching {
                 context.startService(android.content.Intent(context,NduUploadService::class.java)
                     .setAction(NduUploadService.ACTION_STOP))
+            }
+            // Immediately stop service-owned backfill workers. The existing
+            // queues and downloaded files remain intact for future resumption.
+            for(service in listOf(
+                com.azrael.galleryflow.SyncForegroundService::class.java,
+                com.asterion.videoflow.TransferService::class.java,
+                ChapterArchiveService::class.java,
+                NduUploadService::class.java
+            )){
+                runCatching{
+                    context.stopService(android.content.Intent(context,service))
+                }
             }
             context.getSystemService(JobScheduler::class.java)?.let { jobs->
                 // Work scheduled by components must not restart the app while OFF.
@@ -58,6 +76,9 @@ object AppPower {
                     28913,                       // Comic ZIP recovery
                     9321                         // Direct TeraBox retry
                 ))jobs.cancel(id)
+                // Catch future and already-installed job IDs as well: hardcoded
+                // IDs previously omitted MP4Directs and torrent backfill.
+                jobs.cancelAll()
             }
         }
     }
