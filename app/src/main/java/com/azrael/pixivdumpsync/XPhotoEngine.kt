@@ -56,7 +56,9 @@ object XPhotoEngine {
         }
         return total
     }
-    private fun scan(db:XPhotoQueue,source:String,handle:String,initialCursor:String?){
+    private fun scan(db:XPhotoQueue,source:String,handle:String,
+                     initialCursor:String?,live:Boolean,backfill:Boolean,
+                     historyComplete:Boolean){
         val path=runCatching{URI(source).path.orEmpty()}.getOrDefault("")
         val id=Regex("/status/([0-9]+)").find(path)?.groupValues?.get(1)
         if(id!=null){
@@ -87,6 +89,7 @@ object XPhotoEngine {
         }
         // Always examine the newest posts first. The saved cursor is exclusively
         // the older-content backfill position and must not suppress live sync.
+        if(!live && (!backfill || historyComplete))return
         val latest=getPage(null)
         val newest=latest.optJSONArray("results")
         if(newest!=null){
@@ -95,9 +98,14 @@ object XPhotoEngine {
                 enqueuePhotos(db,source,post)
             }
         }
+        if(!backfill || historyComplete)return
         var cursor=initialCursor?:latest.optJSONObject("cursor")
             ?.optString("bottom")?.takeIf{it.isNotBlank()}
-        for(page in 0 until 20){
+        if(cursor.isNullOrBlank()){
+            db.cursor(source,handle,null)
+            return
+        }
+        while(!Thread.currentThread().isInterrupted){
             if(cursor.isNullOrBlank()||!visited.add(cursor))break
             val root=getPage(cursor)
             val list=root.optJSONArray("results")?:error("X media list missing")
@@ -124,27 +132,44 @@ object XPhotoEngine {
             .setContentText(description.take(100)).setContentIntent(open)
             .setOngoing(true).build()
     }
-    fun start(context:Context,automatic:Boolean=false) {
+    fun start(context:Context,automatic:Boolean=false,targetSource:String?=null) {
         if(!AppPower.enabled(context))return
         val intent=Intent(context,XPhotoService::class.java)
             .putExtra("asterion_auto_sync",automatic)
+            .putExtra("asterion_target_source",targetSource)
         if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
         else context.startService(intent)
     }
-    fun submit(context:Context,automatic:Boolean=false,onStatus:(String)->Unit={})=executor.submit{
+    fun submit(context:Context,automatic:Boolean=false,targetSource:String?=null,
+               onStatus:(String)->Unit={})=executor.submit{
         if(!AppPower.enabled(context))return@submit
         if(!working.compareAndSet(false,true))return@submit
         try{
             XPhotoQueue(context).use{db->
                 db.recover()
                 db.retryDueFailures()
-                for((source,handle,cursor) in db.sources()) {
+                val watchers=db.allSources().filter{source->
+                    source.enabled && (source.liveEnabled ||
+                        (source.backfillEnabled && !source.historyComplete)) &&
+                    (targetSource==null || source.url==targetSource)
+                }
+                val tasks=watchers.map{source->
+                    BackfillAgents.submit(context,"xphotos:"+source.url){
+                        if(AppPower.enabled(context)){
+                            XPhotoQueue(context).use{worker->
+                                onStatus("Scanning X @"+source.handle)
+                                runCatching{scan(worker,source.url,source.handle,
+                                    source.cursor,source.liveEnabled,
+                                    source.backfillEnabled,source.historyComplete)}
+                                    .onFailure{worker.markSourceError(source.url,
+                                        it.message?:"X scan failed")}
+                            }
+                        }
+                    }
+                }
+                for(task in tasks){
                     if(!AppPower.enabled(context))break
-                    if(automatic && !context.getSharedPreferences("asterion_x_live",0)
-                        .getBoolean(source,true))continue
-                    onStatus("Scanning X images @${handle}")
-                    runCatching{scan(db,source,handle,cursor)}
-                        .onFailure{db.cursor(source,handle,cursor,it.message)}
+                    runCatching{task.get()}
                 }
                 while(AppPower.enabled(context)){
                     val photo=db.next()?:break
@@ -234,7 +259,8 @@ class XPhotoService:Service(){
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
         startForeground(25823,XPhotoEngine.notice(this,"Checking images"))
         val automatic=intent?.getBooleanExtra("asterion_auto_sync",false)==true
-        val future=XPhotoEngine.submit(applicationContext,automatic){message->
+        val target=intent?.getStringExtra("asterion_target_source")
+        val future=XPhotoEngine.submit(applicationContext,automatic,target){message->
             getSystemService(NotificationManager::class.java)
                 .notify(25823,XPhotoEngine.notice(this,message))
         }
