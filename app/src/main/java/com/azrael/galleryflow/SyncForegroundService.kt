@@ -92,9 +92,7 @@ class SyncForegroundService : Service() {
         val toggle = PendingIntent.getService(
             this, 1, Intent(this, SyncForegroundService::class.java).setAction(toggleAction), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val stop = PendingIntent.getService(
-            this, 2, Intent(this, SyncForegroundService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val stop = com.azrael.pixivdumpsync.EmergencyBackfillStopReceiver.action(this)
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Asterion · Kyora")
