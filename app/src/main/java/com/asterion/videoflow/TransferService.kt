@@ -45,6 +45,7 @@ object VideoEngine {
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {}) {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
         if(!busy.compareAndSet(false,true)) return
+        com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         try {
             val db=VideoDb(context)
             db.recover()
