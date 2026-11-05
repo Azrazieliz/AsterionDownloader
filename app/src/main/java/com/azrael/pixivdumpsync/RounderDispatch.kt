@@ -280,29 +280,51 @@ object RounderDispatch {
         }
     }
     fun render(a:Activity,p:LinearLayout){
-        val status=RounderOutbox(a).use{it.state()}
+        val summary=RounderOutbox(a).use{it.state()}
+        val directState=NduCloudQueue(a).use{it.status()}
         val ui=NocturneDesign
         val card=ui.card(a,12)
-        card.addView(ui.text(a,"TeraBox · Rounder handoff",17f,ui.white,true))
-        val configured=RoundSyncBridge.enabled(a) && RoundSyncBridge.taskId(a)>=0
+        card.addView(ui.text(a,"TO TERABOX",17f,ui.white,true))
         val direct=NduSettings.configured(a)
-        card.addView(ui.text(a,status.queued.toString()+" awaiting dispatch · "+
-            status.requested+" awaiting cloud confirmation · "+
-            status.uploaded+" verified direct uploads · "+
-            when{
-                direct->"Authenticated direct TeraBox upload enabled"
-                configured->"Round Sync task configured (completion unconfirmed)"
-                else->"Configure TeraBox to start cloud transfers"
-            },12f,ui.secondary),ui.lp(a,6))
-        if(!status.lastError.isNullOrBlank())
-            card.addView(ui.text(a,status.lastError,12f,ui.danger),ui.lp(a,5))
-        card.addView(ui.weighted(a,ui.action(a,"SCAN FILES",false){
-            scanAsync(a)
-            android.widget.Toast.makeText(a,"Checking owned downloaded files",
-                android.widget.Toast.LENGTH_SHORT).show()
-        },ui.action(a,"ROUNDER SETTINGS",false){
-            RoundSyncBridge.showSettings(a)
-        }),ui.lp(a,8))
+        val round=RoundSyncBridge.enabled(a) && RoundSyncBridge.taskId(a)>=0
+        card.addView(ui.text(a,
+            summary.uploaded.toString()+" confirmed uploads · "+
+            directState.pending+" queued · "+
+            summary.queued+" awaiting inventory scan · "+
+            when {
+                direct->"Direct TeraBox account connected"
+                round->"Rounder connected · cloud confirmation pending"
+                else->"Connect TeraBox or Rounder to transfer files"
+            },
+            12f,ui.secondary),ui.lp(a,5))
+        if(!summary.lastError.isNullOrBlank())
+            card.addView(ui.text(a,summary.lastError,12f,ui.danger),ui.lp(a,4))
+        if(!directState.error.isNullOrBlank())
+            card.addView(ui.text(a,directState.error.take(140),12f,ui.danger),
+                ui.lp(a,4))
+        card.addView(ui.action(a,"UPLOAD DOWNLOADED FILES TO TERABOX",true){
+            if(direct){
+                runCatching{NduUploadService.uploadNow(a)}
+                    .onSuccess{
+                        android.widget.Toast.makeText(a,
+                            "TeraBox transfer running · notification shows progress",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }.onFailure{
+                        android.widget.Toast.makeText(a,
+                            "Upload failed to start: "+it.message,
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+            }else if(round){
+                scanAsync(a)
+                android.widget.Toast.makeText(a,
+                    "Rounder handoff requested; remote completion unconfirmed",
+                    android.widget.Toast.LENGTH_LONG).show()
+            }else NduSettingsDialog.show(a)
+        },ui.lp(a,7))
+        card.addView(ui.weighted(a,
+            ui.action(a,"TERABOX ACCOUNT",false){NduSettingsDialog.show(a)},
+            ui.action(a,"ROUNDER",false){RoundSyncBridge.showSettings(a)}),
+            ui.lp(a,7))
         p.addView(card,ui.lp(a,10))
     }
 }
