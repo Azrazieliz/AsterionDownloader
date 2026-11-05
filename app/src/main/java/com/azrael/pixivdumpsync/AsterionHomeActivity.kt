@@ -33,6 +33,26 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==5220){
+            val document=data?.data
+            if(resultCode==RESULT_OK && document!=null){
+                kotlin.concurrent.thread(name="asterion-rounder-inventory-import"){
+                    val result=runCatching{
+                        contentResolver.openInputStream(document)?.use{
+                            RounderInventoryIndex.importSnapshot(this,it)
+                        }?:error("Cannot read selected inventory")
+                    }
+                    runOnUiThread{
+                        result.onSuccess{count->
+                            toast("Rounder confirmed cloud records: "+count)
+                            Mp4SeriesSync.scanNow(this)
+                        }.onFailure{toast("Inventory import failed: "+it.message)}
+                        if(::body.isInitialized)render()
+                    }
+                }
+            }
+            return
+        }
         if(requestCode==5210) {
             if(resultCode==RESULT_OK && data?.data!=null)
                 GamePortPlanner.inspect(this,data.data!!,
@@ -123,6 +143,7 @@ class AsterionHomeActivity:Activity(){
         SourceIndex.ensure(this)
         KoikatsuFollowing.ensure(this)
         RounderDispatch.ensure(this)
+        Mp4SeriesSync.ensure(this)
         DirectDownloadRetry.ensure(this)
         AsterionDownloadWorker.ensure(this)
         RounderDispatch.scanAsync(applicationContext)
@@ -431,7 +452,7 @@ class AsterionHomeActivity:Activity(){
             "EPUB"->{
                 val archive=card()
                 put(archive,text("Whole-novel archive",16f,theme.white,true),0)
-                put(archive,text("Export every available chapter in order as one readable ZIP containing offline HTML chapters and an EPUB. Supports recognized chapter-based novel series.",12f,theme.secondary),5)
+                put(archive,text("Export chapters found at the source into one EPUB. No inferred final chapter count.",12f,theme.secondary),5)
                 val link=edit("Paste a complete novel series URL")
                 put(archive,link,8)
                 put(archive,button("ARCHIVE ENTIRE NOVEL"){
@@ -460,18 +481,24 @@ class AsterionHomeActivity:Activity(){
                                 .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,item.url))
                         },5)
                     if(item.state=="DONE" && item.savedUri!=null)
-                        put(archive,button("OPEN "+if(NovelEpubParser.readableZipSeries(item.url))"ZIP" else "EPUB"){
+                        put(archive,button("OPEN EPUB"){
                             runCatching{
                                 startActivity(Intent(Intent.ACTION_VIEW).apply{
                                     setDataAndType(Uri.parse(item.savedUri),
-                                        if(NovelEpubParser.readableZipSeries(item.url))
-                                            "application/zip" else "application/epub+zip")
+                                        "application/epub+zip")
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 })
                             }.onFailure{toast("No compatible archive reader found")}
                         },5)
                 }
                 put(body,archive,12)
+                Mp4SeriesPanel.render(this,body){render()}
+                put(body,button("IMPORT ROUNDER VERIFIED INVENTORY"){
+                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+                        type="application/json"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    },5220)
+                },8)
                 SourceIndexPanel.render(this,body,"BOOKS")
                 put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
             }
