@@ -65,6 +65,7 @@ object CreatorArchiveScheduler {
      */
     fun scan(context:Context,shouldStop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!scanning.compareAndSet(false,true))return
+        BackfillPerformance.backgroundWorker()
         try{
             val prefs=context.getSharedPreferences("asterion_creator_sync",Context.MODE_PRIVATE)
             var pendingCatchup=false
