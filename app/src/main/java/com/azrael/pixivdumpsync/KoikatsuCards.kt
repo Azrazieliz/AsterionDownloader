@@ -72,7 +72,9 @@ object KoikatsuCards {
         val errors=ArrayList<String>()
         // Separate site agents: slow/blocked KoikatsuCards must not delay a
         // working BepisDB character search (verified official JSON endpoint).
-        val workers=java.util.concurrent.Executors.newFixedThreadPool(2)
+        val workers=java.util.concurrent.Executors.newFixedThreadPool(2){task->
+            Thread(task,"asterion-koikatsu-provider").apply{isDaemon=true}
+        }
         try{
             val bepis=workers.submit<List<KoikatsuCard>>{
                 val found=ArrayList<KoikatsuCard>()
