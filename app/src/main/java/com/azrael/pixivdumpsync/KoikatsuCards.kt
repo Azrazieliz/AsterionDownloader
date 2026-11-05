@@ -68,23 +68,38 @@ object KoikatsuCards {
     }
     fun search(name:String):Pair<List<KoikatsuCard>,List<String>>{
         require(name.trim().length in 2..120){"Enter a character name"}
-        val results=ArrayList<KoikatsuCard>()
+        val normalized=name.trim()
         val errors=ArrayList<String>()
-        runCatching{
-            for(page in 1..3){
-                val found=parseBepis(response("https://db.bepis.moe/api/frontend/search?cardType=KK&name="+
-                    encode(name.trim())+"&page="+page))
-                if(found.isEmpty())break
-                results+=found
+        // Separate site agents: slow/blocked KoikatsuCards must not delay a
+        // working BepisDB character search (verified official JSON endpoint).
+        val workers=java.util.concurrent.Executors.newFixedThreadPool(2)
+        try{
+            val bepis=workers.submit<List<KoikatsuCard>>{
+                val found=ArrayList<KoikatsuCard>()
+                for(page in 1..3){
+                    val cards=parseBepis(response(
+                        "https://db.bepis.moe/api/frontend/search?cardType=KK&name="+
+                            encode(normalized)+"&page="+page))
+                    if(cards.isEmpty())break
+                    found+=cards
+                }
+                found
             }
-        }.onFailure{errors+="BepisDB: "+it.message}
-        runCatching{
-            // KoikatsuCards exposes work/character filters but no documented public name API.
-            val base="https://koikatsucards.com/search?types=type-character-card"
-            results+=parseArchive(response(base),base).filter{
-                it.name.contains(name.trim(),true)}
-        }.onFailure{errors+="KoikatsuCards: "+it.message}
-        return results.distinctBy{it.page}.take(90) to errors
+            val archive=workers.submit<List<KoikatsuCard>>{
+                val base="https://koikatsucards.com/search?types=type-character-card"
+                parseArchive(response(base),base).filter{
+                    it.name.contains(normalized,true)
+                }
+            }
+            val found=ArrayList<KoikatsuCard>()
+            runCatching{bepis.get(25,java.util.concurrent.TimeUnit.SECONDS)}
+                .onSuccess{found+=it}
+                .onFailure{errors+="BepisDB: "+(it.message?:it.javaClass.simpleName)}
+            runCatching{archive.get(3,java.util.concurrent.TimeUnit.SECONDS)}
+                .onSuccess{found+=it}
+                .onFailure{errors+="KoikatsuCards: unavailable or timed out"}
+            return found.distinctBy{it.page} to errors
+        }finally{workers.shutdownNow()}
     }
     internal fun parseArchiveDownload(html:String,base:String):String?{
         val doc=Jsoup.parse(html,base)
