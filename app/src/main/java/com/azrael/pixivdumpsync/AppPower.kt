@@ -37,48 +37,32 @@ object AppPower {
                 if(enabled(app))RounderDispatch.scanAsync(app)
             }
         }else{
-            Scheduler.cancel(context)
-            XPhotoScheduler.cancel(context)
-            com.azrael.galleryflow.Scheduler.cancel(context)
-            com.asterion.videoflow.Scheduling.cancel(context)
+            // Persist the OFF state above before doing any cancellation.
+            // Crucially, never block a frozen UI on JobScheduler, service
+            // teardown or the TeraBox uploader. All workers consult enabled().
             com.azrael.galleryflow.SyncControl.stop()
             SyncControl.stop()
-            // A running upload has its own stop flag and is cooperatively cancelled.
-            runCatching {
-                context.startService(android.content.Intent(context,NduUploadService::class.java)
-                    .setAction(NduUploadService.ACTION_STOP))
-            }
-            // Immediately stop service-owned backfill workers. The existing
-            // queues and downloaded files remain intact for future resumption.
-            for(service in listOf(
-                com.azrael.galleryflow.SyncForegroundService::class.java,
-                com.asterion.videoflow.TransferService::class.java,
-                ChapterArchiveService::class.java,
-                NduUploadService::class.java
-            )){
+            val app=context.applicationContext
+            kotlin.concurrent.thread(name="asterion-emergency-stop",isDaemon=true){
+                if(enabled(app))return@thread
+                runCatching{Scheduler.cancel(app)}
+                runCatching{XPhotoScheduler.cancel(app)}
+                runCatching{com.azrael.galleryflow.Scheduler.cancel(app)}
+                runCatching{com.asterion.videoflow.Scheduling.cancel(app)}
                 runCatching{
-                    context.stopService(android.content.Intent(context,service))
+                    app.startService(android.content.Intent(app,NduUploadService::class.java)
+                        .setAction(NduUploadService.ACTION_STOP))
                 }
-            }
-            context.getSystemService(JobScheduler::class.java)?.let { jobs->
-                // Work scheduled by components must not restart the app while OFF.
-                // JobScheduler IDs are app-wide. Cancel all registered lanes;
-                // retries and historical cursors remain safely persisted.
-                for(id in listOf(
-                    7751,7752,9811,28914,42681, // Pixiv/Kyora/X/VideoFlow
-                    48531,48532,                 // SourceIndex
-                    41082,41083,                 // Creator archives
-                    48763,48872,                 // Rounder + large-library catch-up
-                    48764,                       // Direct downloads
-                    49867,49868,                 // Inter-app request intake
-                    49862,                       // Koikatsu cards
-                    49874,49875,                 // Novel EPUB chapters
-                    28913,                       // Comic ZIP recovery
-                    9321                         // Direct TeraBox retry
-                ))jobs.cancel(id)
-                // Catch future and already-installed job IDs as well: hardcoded
-                // IDs previously omitted MP4Directs and torrent backfill.
-                jobs.cancelAll()
+                // Do not delete any downloaded files, subscriptions, or queues.
+                for(service in listOf(
+                    com.azrael.galleryflow.SyncForegroundService::class.java,
+                    com.asterion.videoflow.TransferService::class.java,
+                    ChapterArchiveService::class.java,
+                    NduUploadService::class.java
+                )){
+                    runCatching{app.stopService(android.content.Intent(app,service))}
+                }
+                runCatching{app.getSystemService(JobScheduler::class.java)?.cancelAll()}
             }
         }
     }
