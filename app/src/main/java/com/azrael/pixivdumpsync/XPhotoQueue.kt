@@ -11,7 +11,7 @@ data class XSourceRecord(
     val state:String,val error:String?,val updated:Long
 )
 data class XPhotoTask(val id:Long,val source:String,val photo:String,val state:String,
-    val saved:String?,val attempts:Int,val error:String?)
+    val saved:String?,val attempts:Int,val error:String?,val updated:Long=0L)
 
 class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.sqlite",null,1) {
     override fun onCreate(db:SQLiteDatabase){
@@ -109,7 +109,7 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             "photos",null,cv,SQLiteDatabase.CONFLICT_IGNORE)>0
     }
     fun next():XPhotoTask? {
-        readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error
+        readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error,updated
             FROM photos WHERE status='queued' ORDER BY id LIMIT 1""",null).use{c->
             if(!c.moveToFirst())return null
             return XPhotoTask(c.getLong(0),c.getString(1),c.getString(2),
@@ -165,7 +165,7 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error
             FROM photos ORDER BY id DESC LIMIT ${limit.coerceIn(1,1000)}""",null).use{c->
             while(c.moveToNext())out.add(XPhotoTask(c.getLong(0),c.getString(1),
-                c.getString(2),c.getString(3),c.getString(4),c.getInt(5),c.getString(6)))
+                c.getString(2),c.getString(3),c.getString(4),c.getInt(5),c.getString(6),c.getLong(7)))
         }
         return out
     }
