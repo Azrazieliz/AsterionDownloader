@@ -99,6 +99,35 @@ object NovelEpubParser {
         }
         return links.minByOrNull{it.first}?.second
     }
+    /** Follow a provider's actual Next Chapter href rather than guessing IDs. */
+    fun nextReader(doc:Document,source:String,current:String):String? {
+        val home=URI(source)
+        for(a in doc.select("a[href]")){
+            val label=a.text().trim()
+            val next=label.matches(Regex("""(?i)^next\s*(chapter)?\s*[→»›]?$""")) ||
+                a.attr("rel").equals("next",true) ||
+                a.classNames().any{it.contains("next",true)}
+            if(!next)continue
+            val dest=runCatching{URI(doc.location()).resolve(a.attr("href"))}
+                .getOrNull()?:continue
+            if(dest.scheme=="https" && dest.host.equals(home.host,true) &&
+                dest.userInfo==null && dest.fragment==null &&
+                dest.path.startsWith(home.path.trimEnd('/')+"/") &&
+                parseChapterNumber(dest.path)!=null &&
+                dest.toString()!=current)return dest.toString()
+        }
+        return null
+    }
+    /** The visible title is authoritative: chapter-N URLs can use different IDs. */
+    fun readerChapter(doc:Document,address:String):NovelChapter {
+        val heading=doc.select("h1,h2,h3,h4,.chapter-title")
+            .map{it.text().trim()}
+            .firstOrNull{parseChapterNumber(it)!=null}
+            ?:throw IllegalStateException("Reader chapter number not visible")
+        val number=parseChapterNumber(heading)
+            ?:throw IllegalStateException("Reader chapter number missing")
+        return NovelChapter(number,heading.take(180),address)
+    }
     fun chapterText(doc:Document):NovelText {
         val content=doc.selectFirst("#chapter-content,.chapter-content,"+
             "#chapterContent,.reading-content,.read-content,.novel-content,"+

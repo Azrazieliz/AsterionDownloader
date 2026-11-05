@@ -102,6 +102,29 @@ object NovelEpubService {
                 onPage.maxOfOrNull{it.number.toInt()}?:0)
             current=NovelEpubParser.nextIndex(doc,url,seen)
         }
+        // FreeWebNovel can render only the first 40 index links while showing
+        // the latest chapter at 1318. Its actual reader pages expose a Next
+        // Chapter link even when the index has no usable pagination URL.
+        // Follow these explicit links and cache text as we go, avoiding a
+        // second fetch for hundreds of chapters when the ZIP is assembled.
+        if(URI(url).host.orEmpty().removePrefix("www.")=="freewebnovel.com" &&
+            found.size<expected && !stop()){
+            val first=found.values.minByOrNull{it.number}
+                ?:error("Cannot find starting chapter for complete archive")
+            val walked=HashSet<String>()
+            val dir=cacheDir(context,url)
+            var link:String?=first.url
+            while(link!=null && walked.size<10000 && !stop()){
+                val address=link
+                if(!walked.add(address))break
+                val doc=page(context,address,url)
+                val actual=NovelEpubParser.readerChapter(doc,address)
+                found[address]=actual
+                storeChapterText(actual,NovelEpubParser.chapterText(doc),dir)
+                link=NovelEpubParser.nextReader(doc,url,address)
+            }
+            require(link==null){"Reader chapter pagination did not finish"}
+        }
         check(!stop()){"EPUB job stopped before chapter discovery ended"}
         check(current==null){"Novel index pagination did not finish"}
         val chapters=found.values.sortedWith(compareBy<NovelChapter>{it.number}
@@ -129,11 +152,25 @@ object NovelEpubService {
             .joinToString(""){"%02x".format(it.toInt() and 255)}
         return File(context.filesDir,"novel-epub-cache/"+key).apply{mkdirs()}
     }
+    private fun chapterKey(url:String):String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(url.toByteArray()).take(10)
+            .joinToString(""){"%02x".format(it.toInt() and 255)}
+    private fun storeChapterText(chapter:NovelChapter,text:NovelText,directory:File){
+        val id=chapterKey(chapter.url)
+        val cached=File(directory,id+".json")
+        if(cached.isFile)return
+        val body=JSONObject().apply{
+            put("title",chapter.title)
+            put("paragraphs",JSONArray(text.paragraphs))
+        }
+        val tmp=File(directory,id+".part")
+        tmp.writeText(body.toString())
+        check(tmp.renameTo(cached)){"Unable to cache extracted chapter"}
+    }
     private fun chapterText(context:Context,source:String,chapter:NovelChapter,
                             directory:File):NovelText {
-        val id=MessageDigest.getInstance("SHA-256")
-            .digest(chapter.url.toByteArray()).take(10)
-            .joinToString(""){"%02x".format(it.toInt() and 255)}
+        val id=chapterKey(chapter.url)
         val cached=File(directory,id+".json")
         if(cached.isFile){
             runCatching{
@@ -145,13 +182,7 @@ object NovelEpubService {
             }
         }
         val text=NovelEpubParser.chapterText(page(context,chapter.url,source))
-        val body=JSONObject().apply{
-            put("title",chapter.title)
-            put("paragraphs",JSONArray(text.paragraphs))
-        }
-        val tmp=File(directory,id+".part")
-        tmp.writeText(body.toString())
-        check(tmp.renameTo(cached)){"Unable to cache extracted chapter"}
+        storeChapterText(chapter,text,directory)
         return NovelText(chapter.title,text.paragraphs)
     }
     private fun safeName(raw:String):String=raw

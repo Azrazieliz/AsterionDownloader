@@ -60,6 +60,18 @@ class NovelEpubTest {
         assertEquals(source+"?page=2",
             NovelEpubParser.nextIndex(doc,source,setOf(source)))
     }
+    @Test fun readerFollowsTrueNextLinkAndUsesChapterHeading(){
+        val doc=Jsoup.parse("""<h1>I Am the Fated Villain</h1>
+            <h4>Chapter 1314: My Chapter</h4>
+            <a href="/novel/my-favorite-book/chapter-1597">Next Chapter</a>
+            <a href="/novel/my-favorite-book/chapter-1595">Prev Chapter</a>
+            <a href="/novel/other-book/chapter-1598">Next Chapter</a>
+            """,source+"/chapter-1596")
+        assertEquals(1314.0,NovelEpubParser.readerChapter(doc,
+            source+"/chapter-1596").number,0.0)
+        assertEquals(source+"/chapter-1597",NovelEpubParser.nextReader(
+            doc,source,source+"/chapter-1596"))
+    }
     @Test fun readableZipHasOfflineIndexOrderedHtmlAndEpub(){
         val buffer=ByteArrayOutputStream()
         NovelEpubParser.writeReadableZip(buffer,"Title & More",source,listOf(
