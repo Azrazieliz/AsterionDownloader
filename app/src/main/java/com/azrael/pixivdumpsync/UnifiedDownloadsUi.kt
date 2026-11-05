@@ -25,7 +25,9 @@ object UnifiedDownloadsUi {
         AlertDialog.Builder(a).setTitle(row.title)
             .setMessage(row.category+" · "+row.detail)
             .setPositiveButton(when(row.state){
-                State.FAILED->"RETRY";State.DONE->"OPEN";State.ACTIVE,State.HELD->"CLOSE"
+                State.FAILED->"RETRY";State.DONE->"OPEN"
+                State.HELD->if(row.category.startsWith("Novel"))"CONNECT ACCOUNT" else "CLOSE"
+                State.ACTIVE->"CLOSE"
             }){_,_->row.action()}
             .setNegativeButton("Close",null).show()
     }
@@ -76,6 +78,34 @@ object UnifiedDownloadsUi {
                             ChapterQueue(a).use{it.retry(item.id)}
                             ChapterArchives.start(a)
                         }
+                        else->{}
+                    }
+                })
+        }
+        // Full-novel EPUB/ZIP jobs have their own durable queue. Show their
+        // genuine cached chapter count instead of a fabricated percentage.
+        val novels=NovelEpubQueue(a).use{it.list(120)}
+        for(item in novels){
+            val status=when(item.state){
+                "DONE"->State.DONE
+                "WAIT_LOGIN"->State.HELD
+                else->State.ACTIVE
+            }
+            val isZip=NovelEpubParser.readableZipSeries(item.url)
+            val cached=NovelEpubService.cachedCount(a,item.url)
+            val kind=if(isZip)"Novel ZIP" else "Novel EPUB"
+            val description=item.state.replace('_',' ').lowercase()+
+                " · "+cached+" chapters cached"+
+                (item.error?.let{" · "+it.take(100)}?:"")
+            collected+=Row(kind,item.title,description,status,
+                if(status==State.DONE)100 else null,ui.booksGold,item.updated,{
+                    when(status){
+                        State.DONE->item.savedUri?.let{open(a,it,
+                            if(isZip)"application/zip" else "application/epub+zip")}
+                        State.HELD->a.startActivity(Intent(a,
+                            com.azrael.galleryflow.SiteLoginActivity::class.java)
+                            .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,
+                                item.url))
                         else->{}
                     }
                 })
