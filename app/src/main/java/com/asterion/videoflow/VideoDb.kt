@@ -95,9 +95,12 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             ORDER BY v.updated ASC""",arrayOf(now)).use { c ->
             while(c.moveToNext()){
                 val watchId=c.getLong(7)
-                if(watchId!=0L &&
-                    !com.azrael.pixivdumpsync.SiteControls.any(
-                        appContext,c.getString(8)?:continue))continue
+                if(watchId!=0L){
+                    val origin=c.getString(8)
+                    if(origin.isNullOrBlank() ||
+                        !com.azrael.pixivdumpsync.SiteControls.any(appContext,origin))
+                        continue
+                }
                 return Video(c.getLong(0),c.getString(1),c.getString(2),
                     c.getString(3),c.getInt(4),c.getString(5),
                     c.getString(6),watchId)
