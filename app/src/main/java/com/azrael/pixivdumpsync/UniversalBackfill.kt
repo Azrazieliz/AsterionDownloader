@@ -20,6 +20,13 @@ object UniversalBackfill {
                 issues+="$name: "+(t.message?:t.javaClass.simpleName)
             }
         }
+        request("Pixiv artist backfill"){
+            check(SessionStore.isLoggedIn(a)){"Pixiv account connection required"}
+            a.startForegroundService(Intent(a,SyncForegroundService::class.java)
+                .setAction(SyncForegroundService.ACTION_START)
+                .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
+                .putExtra(SyncForegroundService.EXTRA_SELECTED_ONLY,false))
+        }
         request("All registered generic sources"){
             SourceIndex.ensure(a)
             SourceIndex.scanNow(a.applicationContext)
