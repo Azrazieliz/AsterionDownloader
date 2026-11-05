@@ -17,6 +17,14 @@ class NovelEpubTest {
         assertFalse(NovelEpubParser.supportedSeries("https://malicious.invalid/novel/book"))
         assertFalse(NovelEpubParser.supportedSeries("http://freewebnovel.com/novel/book"))
     }
+    @Test fun suppliedFreewebnovelTitleSelectsCompleteReadableZip(){
+        val target="https://freewebnovel.com/novel/i-am-the-fated-villain"
+        assertTrue(NovelEpubParser.supportedSeries(target))
+        assertTrue(NovelEpubParser.readableZipSeries(target))
+        assertFalse(NovelEpubParser.readableZipSeries(target+"/chapter-1"))
+        assertFalse(NovelEpubParser.readableZipSeries(
+            "https://novelbuddy.com/novel/i-am-the-fated-villain"))
+    }
     @Test fun chapterCollectorRetainsOrderAndRejectsSidebarCrossSeries(){
         val doc=Jsoup.parse("""<main class="chapter-list">
             <a href="/novel/my-favorite-book/chapter-20">Chapter 20</a>
