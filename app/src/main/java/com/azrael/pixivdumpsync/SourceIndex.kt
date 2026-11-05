@@ -26,17 +26,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 data class IndexedSource(val url:String,val name:String,val area:String,val enabled:Boolean,
-    val cursor:String?,val lastCheck:Long,val error:String?,val discovered:Int,val adapter:String)
+    val cursor:String?,val lastCheck:Long,val error:String?,val discovered:Int,
+    val adapter:String,val historyComplete:Boolean=false)
 data class IndexedItem(val url:String,val title:String,val preview:String?,val source:String,
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,4) {
+    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,5) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1,cursor TEXT,last_check INTEGER NOT NULL DEFAULT 0,
-            error TEXT,discovered INTEGER NOT NULL DEFAULT 0,adapter TEXT NOT NULL DEFAULT 'generic')""")
+            error TEXT,discovered INTEGER NOT NULL DEFAULT 0,
+            adapter TEXT NOT NULL DEFAULT 'generic',
+            history_complete INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("""CREATE TABLE entries(
             url TEXT PRIMARY KEY,source TEXT NOT NULL,title TEXT NOT NULL,preview TEXT,
             area TEXT NOT NULL,kind TEXT NOT NULL,discovered_at INTEGER NOT NULL,
@@ -67,6 +70,7 @@ class SourceIndexDb(context:Context):
             db.execSQL("CREATE INDEX IF NOT EXISTS entries_detail_queue ON entries(detail_checked,detail_retry_after,discovered_at)")
             db.execSQL("CREATE INDEX IF NOT EXISTS entries_original_queue ON entries(queued,retry_after,discovered_at)")
         }
+        if(a<5)db.execSQL("ALTER TABLE sources ADD COLUMN history_complete INTEGER NOT NULL DEFAULT 0")
     }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
         val v=ContentValues().apply{
@@ -88,14 +92,16 @@ class SourceIndexDb(context:Context):
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
     }
     fun reset(url:String){
-        writableDatabase.execSQL("UPDATE sources SET cursor=NULL,error=NULL WHERE url=?",arrayOf(url))
+        writableDatabase.execSQL("UPDATE sources SET cursor=NULL,error=NULL,history_complete=0 WHERE url=?",arrayOf(url))
     }
-    fun update(url:String,cursor:String?,error:String?,count:Int){
+    fun update(url:String,cursor:String?,error:String?,count:Int,
+               historyComplete:Boolean?=null){
         val v=ContentValues().apply{
             if(cursor==null)putNull("cursor") else put("cursor",cursor)
             if(error==null)putNull("error") else put("error",error.take(280))
             put("last_check",System.currentTimeMillis())
             put("discovered",count)
+            if(historyComplete!=null)put("history_complete",if(historyComplete)1 else 0)
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
     }
@@ -110,10 +116,10 @@ class SourceIndexDb(context:Context):
     fun sources():List<IndexedSource>{
         val out=ArrayList<IndexedSource>()
         readableDatabase.rawQuery("""SELECT url,name,area,enabled,cursor,last_check,error,
-                discovered,adapter FROM sources ORDER BY area,name COLLATE NOCASE""",null).use{c->
+                discovered,adapter,history_complete FROM sources ORDER BY area,name COLLATE NOCASE""",null).use{c->
             while(c.moveToNext())out+=IndexedSource(c.getString(0),c.getString(1),
                 c.getString(2),c.getInt(3)==1,c.getString(4),c.getLong(5),
-                c.getString(6),c.getInt(7),c.getString(8))
+                c.getString(6),c.getInt(7),c.getString(8),c.getInt(9)==1)
         }
         return out
     }
