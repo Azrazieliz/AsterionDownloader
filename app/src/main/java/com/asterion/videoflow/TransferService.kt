@@ -30,7 +30,10 @@ object VideoEngine {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(context,CHANNEL).setContentTitle("Asterion · VideoFlow")
             .setContentText(message).setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true).setContentIntent(open).build()
+            .setOngoing(true).setContentIntent(open)
+            .addAction(Notification.Action.Builder(null,"STOP ALL BACKFILL",
+                com.azrael.pixivdumpsync.EmergencyBackfillStopReceiver.action(context)).build())
+            .build()
     }
     fun launch(context: Context, scan: Boolean = false): Boolean {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
