@@ -447,6 +447,13 @@ class AsterionHomeActivity:Activity(){
         val artistCount=AppDb(this).use{it.listArtists().size}
         put(summary,text("$artistCount Pixiv artists · $xCount X accounts · $kyoraCount cosplay sources",
             12f,theme.secondary),0)
+        val coverage=UniversalBackfill.coverage(this)
+        put(summary,text(coverage.registered.toString()+" registered providers · "+
+            coverage.specialized+" native-managed · "+
+            coverage.checkedGeneric+" generic index-checked · "+
+            coverage.awaitingFirstCheck+" awaiting first scan · "+
+            coverage.errors+" reported errors",
+            11f,theme.secondary),5)
         put(summary,button("SYNC & BACKFILL ALL FOLLOWED SOURCES"){
             val result=UniversalBackfill.start(this)
             toast(result.requested.toString()+" source engines requested"+
