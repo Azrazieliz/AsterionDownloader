@@ -19,6 +19,12 @@ object NovelEpubParser {
     private val number=Regex("""(?i)(?:^|[/\s_-])(?:chapter|chapitre|ch|episode)[/_\s.-]*(\d+(?:[._]\d+)?)""")
     private val readerHosts=setOf(
         "freewebnovel.com","novelbuddy.com","readnovelfull.com")
+    /** Only FreeWebNovel currently has the complete offline HTML+EPUB ZIP
+     * exporter. Other registered novel adapters keep their EPUB-only output.
+     */
+    fun readableZipSeries(url:String):Boolean = supportedSeries(url) &&
+        runCatching{URI(url).host.orEmpty().lowercase().removePrefix("www.")==
+            "freewebnovel.com"}.getOrDefault(false)
     fun supportedSeries(url:String):Boolean = runCatching{
         val uri=URI(url)
         val host=uri.host.lowercase().removePrefix("www.")
