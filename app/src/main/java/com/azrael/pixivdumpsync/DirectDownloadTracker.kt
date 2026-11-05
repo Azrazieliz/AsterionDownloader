@@ -19,7 +19,7 @@ object DirectDownloadTracker {
     data class State(val job:Tracked,val status:Int,val bytes:Long,
                      val total:Long,val reason:Int,val localUri:String?)
     private fun prefs(c:Context)=c.getSharedPreferences(PREF,0)
-    internal fun read(c:Context):List<Tracked> = runCatching{
+    @Synchronized internal fun read(c:Context):List<Tracked> = runCatching{
         val a=JSONArray(prefs(c).getString(KEY,"[]"))
         (0 until a.length()).mapNotNull{i->
             val o=a.optJSONObject(i)?:return@mapNotNull null
@@ -27,7 +27,7 @@ object DirectDownloadTracker {
                 o.optString("host"),o.optLong("created"))
         }.filter{it.id>0}
     }.getOrDefault(emptyList())
-    fun record(c:Context,id:Long,filename:String,folder:String,url:String){
+    @Synchronized fun record(c:Context,id:Long,filename:String,folder:String,url:String){
         if(id<=0)return
         val host=runCatching{Uri.parse(url).host.orEmpty()}.getOrDefault("")
         val saved=read(c).filter{it.id!=id}.toMutableList()
@@ -41,7 +41,7 @@ object DirectDownloadTracker {
         })
         prefs(c).edit().putString(KEY,arr.toString()).apply()
     }
-    fun forget(c:Context,id:Long){
+    @Synchronized fun forget(c:Context,id:Long){
         val saved=read(c).filter{it.id!=id}
         val arr=JSONArray()
         for(job in saved)arr.put(JSONObject().apply{
@@ -52,7 +52,7 @@ object DirectDownloadTracker {
         prefs(c).edit().putString(KEY,arr.toString()).apply()
     }
     fun states(c:Context,limit:Int=50):List<State>{
-        val saved=read(c).take(limit.coerceIn(1,200))
+        val saved=read(c).take(limit.coerceIn(1,250))
         if(saved.isEmpty())return emptyList()
         val manager=c.getSystemService(DownloadManager::class.java)
         val byId=HashMap<Long,State>()
