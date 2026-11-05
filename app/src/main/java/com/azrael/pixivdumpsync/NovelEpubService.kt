@@ -229,7 +229,7 @@ object NovelEpubService {
     private fun generate(context:Context,task:NovelEpubTask,stop:()->Boolean):String{
         val (title,chapters)=discover(context,task.url,stop)
         val cache=cacheDir(context,task.url)
-        val asZip=URI(task.url).host.orEmpty().removePrefix("www.")=="freewebnovel.com"
+        val asZip=NovelEpubParser.readableZipSeries(task.url)
         val part=File(cache,if(asZip)"complete.zip.part" else "complete.epub.part")
         try{
             FileOutputStream(part).use{output->
