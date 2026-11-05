@@ -17,6 +17,7 @@ class SyncEngine(private val context: Context) {
     private val http = HttpClient()
 
     fun run(mode: SyncMode, targetEntityId: String? = null, progress: (String) -> Unit = {}): Stats {
+        com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
         if (!SyncControl.tryStart(mode, queueLiveIfBusy = true)) return stats
         val db = GalleryDb(context)
