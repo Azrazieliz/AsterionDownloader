@@ -17,6 +17,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
 import com.azrael.pixivdumpsync.ResourceDownloads
+import com.azrael.pixivdumpsync.NovelEpubParser
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.view.Gravity
@@ -27,6 +29,7 @@ import java.util.Locale
 class ProviderWebActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var status: TextView
+    private lateinit var archiveNovel: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +96,9 @@ class ProviderWebActivity : Activity() {
                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
                     CookieManager.getInstance().flush()
                     status.text = pageUrl ?: "Provider page"
+                    if(::archiveNovel.isInitialized)
+                        archiveNovel.visibility=if(pageUrl!=null &&
+                            NovelEpubParser.supportedSeries(pageUrl)) View.VISIBLE else View.GONE
                 }
             }
             webChromeClient = WebChromeClient()
@@ -132,6 +138,42 @@ class ProviderWebActivity : Activity() {
             setOnClickListener{collectVisibleMedia()}
         }
         root.addView(collect,1,LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+        archiveNovel = TextView(this).apply {
+            text="ARCHIVE ALL NOVEL CHAPTERS · READABLE ZIP / EPUB"
+            textSize=12f
+            setTextColor(Color.WHITE)
+            gravity=Gravity.CENTER
+            setPadding(dp(12),dp(12),dp(12),dp(12))
+            setBackgroundColor(Color.rgb(34,75,68))
+            visibility=if(NovelEpubParser.supportedSeries(url))View.VISIBLE else View.GONE
+            isClickable=true
+            setOnClickListener{
+                val current=webView.url.orEmpty()
+                if(NovelEpubParser.supportedSeries(current))
+                    ResourceDownloads.route(this@ProviderWebActivity,current,"Books")
+                else status.text="Navigate to an eligible novel series page first"
+            }
+        }
+        root.addView(archiveNovel,1,LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+        val connect=TextView(this).apply {
+            text="CONNECT / CHANGE WEBSITE ACCOUNT"
+            textSize=12f
+            gravity=Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(dp(12),dp(10),dp(12),dp(10))
+            setBackgroundColor(Color.rgb(43,45,54))
+            isClickable=true
+            setOnClickListener {
+                val site=webView.url.orEmpty().takeIf{it.startsWith("https://")}
+                    ?:url
+                startActivity(Intent(this@ProviderWebActivity,SiteLoginActivity::class.java)
+                    .putExtra(SiteLoginActivity.EXTRA_URL,site))
+                status.text="Use your own eligible website account; credentials are not embedded in the APK"
+            }
+        }
+        root.addView(connect,1,LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
         setContentView(root)
         webView.loadUrl(url)
@@ -213,7 +255,8 @@ class ProviderWebActivity : Activity() {
                     status.text=files.size.toString()+" media links found · queueing accessible files…"
                     kotlin.concurrent.thread(name="asterion-visible-media"){ 
                         val result=com.azrael.pixivdumpsync.VisibleMediaSupport.queue(
-                            applicationContext,page,files)
+                            applicationContext,page,files,
+                            intent.getStringExtra(EXTRA_FOLDER))
                         runOnUiThread{
                             if(!isFinishing && !isDestroyed)status.text=
                                 "${result.queued} queued · ${result.already} already saved · "+
