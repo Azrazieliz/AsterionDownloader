@@ -9,7 +9,8 @@ import java.util.Locale
 
 data class NovelEpubTask(val url:String,val title:String,val attempts:Int)
 data class NovelArchiveStatus(val url:String,val title:String,val state:String,
-    val attempts:Int,val error:String?,val savedUri:String?,val updated:Long)
+    val attempts:Int,val error:String?,val savedUri:String?,val updated:Long,
+    val syncEnabled:Boolean=true,val lastCheck:Long=0L)
 
 /** Separate EPUB collection queue; no PDF/CBZ and no changes to manga ZIP jobs. */
 class NovelEpubQueue(context:Context):
@@ -77,14 +78,15 @@ class NovelEpubQueue(context:Context):
     fun list(limit:Int=50):List<NovelArchiveStatus>{
         val results=ArrayList<NovelArchiveStatus>()
         readableDatabase.rawQuery(
-            """SELECT url,title,state,attempts,last_error,saved_uri,last_update
+            """SELECT url,title,state,attempts,last_error,saved_uri,last_update,
+                      sync_enabled,last_check
                FROM novels ORDER BY last_update DESC
                LIMIT ${limit.coerceIn(1,300)}""",null).use{cursor->
             while(cursor.moveToNext()){
                 results+=NovelArchiveStatus(
                     cursor.getString(0),cursor.getString(1),cursor.getString(2),
                     cursor.getInt(3),cursor.getString(4),cursor.getString(5),
-                    cursor.getLong(6))
+                    cursor.getLong(6),cursor.getInt(7)==1,cursor.getLong(8))
             }
         }
         return results
