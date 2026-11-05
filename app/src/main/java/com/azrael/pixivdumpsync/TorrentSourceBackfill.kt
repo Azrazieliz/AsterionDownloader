@@ -2,6 +2,11 @@ package com.azrael.pixivdumpsync
 
 import android.content.ContentValues
 import android.content.Context
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.azrael.galleryflow.HttpClient
@@ -9,6 +14,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 /** Dedicated historical torrent indexes: OneJAV and Sukebei.
  * The feed tracks actual torrent metadata and preserves pagination.
@@ -178,7 +184,36 @@ class TorrentFeedDb(ctx:Context):
 }
 
 object TorrentSourceBackfill {
+    private const val PERIODIC=49898
+    private const val CATCHUP=49899
     private val busy=AtomicBoolean(false)
+    fun ensure(ctx:Context){
+        if(!AppPower.enabled(ctx))return
+        val jobs=ctx.getSystemService(JobScheduler::class.java)
+        if(jobs.allPendingJobs.none{it.id==PERIODIC}){
+            jobs.schedule(JobInfo.Builder(PERIODIC,
+                ComponentName(ctx,TorrentFeedJob::class.java))
+                .setPersisted(true).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPeriodic(6L*60L*60L*1000L).build())
+        }
+        if(TorrentFeedDb(ctx).use{db->db.status().any{it.cursor!=null}})
+            scheduleCatchup(ctx)
+    }
+    fun scheduleCatchup(ctx:Context){
+        if(!AppPower.enabled(ctx))return
+        val jobs=ctx.getSystemService(JobScheduler::class.java)
+        if(jobs.allPendingJobs.any{it.id==CATCHUP})return
+        jobs.schedule(JobInfo.Builder(CATCHUP,
+            ComponentName(ctx,TorrentFeedJob::class.java))
+            .setPersisted(true).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(120_000L)
+            .setOverrideDeadline(6L*60L*1000L).build())
+    }
+    fun scanAsync(ctx:Context){
+        thread(name="asterion-torrent-feed"){
+            scan(ctx.applicationContext)
+        }
+    }
     private fun document(url:String):Document {
         require(TorrentFeedParser.source(url)!=null)
         val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
@@ -225,6 +260,26 @@ object TorrentSourceBackfill {
                     }
                 }
             }
-        }}finally{busy.set(false)}
+        }}finally{
+            busy.set(false)
+            if(!stop() && AppPower.enabled(ctx) &&
+                TorrentFeedDb(ctx).use{db->db.status().any{it.cursor!=null}})
+                scheduleCatchup(ctx)
+        }
+    }
+}
+class TorrentFeedJob:JobService(){
+    private val stopped=AtomicBoolean(false)
+    override fun onStartJob(params:JobParameters):Boolean{
+        stopped.set(false)
+        thread(name="asterion-torrent-history"){
+            try{TorrentSourceBackfill.scan(applicationContext){stopped.get()}}
+            finally{jobFinished(params,false)}
+        }
+        return true
+    }
+    override fun onStopJob(params:JobParameters):Boolean{
+        stopped.set(true)
+        return true
     }
 }
