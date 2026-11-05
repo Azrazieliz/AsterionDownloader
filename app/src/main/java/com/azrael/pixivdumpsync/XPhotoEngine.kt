@@ -106,6 +106,7 @@ object XPhotoEngine {
             return
         }
         while(AppPower.enabled(context) &&
+            db.wantsBackfill(source) &&
             !Thread.currentThread().isInterrupted){
             if(cursor.isNullOrBlank()||!visited.add(cursor))break
             val root=getPage(cursor)
@@ -150,7 +151,10 @@ object XPhotoEngine {
                 db.recover()
                 db.retryDueFailures()
                 val watchers=db.allSources().filter{source->
-                    source.enabled && (source.liveEnabled ||
+                    val liveAllowed=source.liveEnabled &&
+                        (!automatic || context.getSharedPreferences("asterion_x_live",0)
+                            .getBoolean(source.url,true))
+                    source.enabled && (liveAllowed ||
                         (source.backfillEnabled && !source.historyComplete)) &&
                     (targetSource==null || source.url==targetSource)
                 }
@@ -160,7 +164,10 @@ object XPhotoEngine {
                             XPhotoQueue(context).use{worker->
                                 onStatus("Scanning X @"+source.handle)
                                 runCatching{scan(context,worker,source.url,source.handle,
-                                    source.cursor,source.liveEnabled,
+                                    source.cursor,source.liveEnabled &&
+                                        (!automatic ||
+                                            context.getSharedPreferences("asterion_x_live",0)
+                                                .getBoolean(source.url,true)),
                                     source.backfillEnabled,source.historyComplete)}
                                     .onFailure{worker.markSourceError(source.url,
                                         it.message?:"X scan failed")}
