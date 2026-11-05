@@ -85,18 +85,72 @@ object NovelEpubService {
         }
         error("Novel source redirect limit exceeded")
     }
-    private fun discover(context:Context,url:String,stop:()->Boolean):
-            Pair<String,List<NovelChapter>> {
+    private data class Discovery(val title:String,val chapters:List<NovelChapter>,
+                                 val observed:String,val cacheReused:Boolean)
+    private fun fingerprint(chapters:List<NovelChapter>):String {
+        val bytes=chapters.joinToString("\n"){it.url+"\t"+it.number+"\t"+it.title}
+            .toByteArray(Charsets.UTF_8)
+        return MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString(""){"%02x".format(it.toInt() and 255)}
+    }
+    private fun existingCatalog(context:Context,url:String,visible:String):List<NovelChapter>? =
+        runCatching {
+            val file=File(cacheDir(context,url),"catalog-index.json")
+            if(!file.isFile || System.currentTimeMillis()-file.lastModified()>
+                7L*24L*60L*60_000L)return null
+            val root=JSONObject(file.readText())
+            if(root.optString("visible")!=visible)return null
+            val entries=root.getJSONArray("chapters")
+            val directory=cacheDir(context,url)
+            val chapters=(0 until entries.length()).map{i->
+                val item=entries.getJSONObject(i)
+                NovelChapter(item.getDouble("number"),item.getString("title"),
+                    item.getString("url"))
+            }
+            if(chapters.isEmpty() || chapters.any{
+                !File(directory,chapterKey(it.url)+".json").isFile
+            })return null
+            chapters
+        }.getOrNull()
+    private fun saveCatalog(context:Context,url:String,scan:Discovery){
+        val directory=cacheDir(context,url)
+        val items=JSONArray()
+        scan.chapters.forEach{chapter->
+            items.put(JSONObject().apply {
+                put("url",chapter.url);put("title",chapter.title)
+                put("number",chapter.number)
+            })
+        }
+        val file=File(directory,"catalog-index.json")
+        val temp=File(directory,"catalog-index.part")
+        temp.writeText(JSONObject().apply{
+            put("visible",scan.observed);put("chapters",items)
+        }.toString())
+        if(!temp.renameTo(file)){
+            file.delete()
+            check(temp.renameTo(file)){"Unable to record novel chapter catalogue"}
+        }
+    }
+    private fun discover(context:Context,url:String,stop:()->Boolean):Discovery {
         val seen=HashSet<String>()
         val found=LinkedHashMap<String,NovelChapter>()
         var current:String?=url
         var title="Novel"
+        var visible=""
         while(current!=null && seen.size<500 && !stop()){
             if(!seen.add(current))break
             val doc=page(context,current,url)
             if(seen.size==1)title=doc.selectFirst("h1")?.text()?.take(180)
                 ?.takeIf{it.isNotBlank()}?:doc.title().take(180)
             val onPage=NovelEpubParser.chapters(doc,url)
+            if(seen.size==1){
+                visible=fingerprint(onPage)
+                // Fast live checks: if current visible chapter links are unchanged,
+                // reuse the previously verified and cached chapter catalogue.
+                existingCatalog(context,url,visible)?.let{cached->
+                    return Discovery(title,cached,visible,true)
+                }
+            }
             for(item in onPage)found.putIfAbsent(item.url,item)
             // Index links identify observed chapters, not a definitive total.
             current=NovelEpubParser.nextIndex(doc,url,seen)
@@ -126,7 +180,7 @@ object NovelEpubService {
         val chapters=found.values.sortedWith(compareBy<NovelChapter>{it.number}
             .thenBy{it.url})
         require(chapters.isNotEmpty()){"No accessible numbered chapters discovered"}
-        return title to chapters
+        return Discovery(title,chapters,visible,false)
     }
     private fun cacheDir(context:Context,url:String):File{
         val key=MessageDigest.getInstance("SHA-256")
@@ -205,8 +259,21 @@ object NovelEpubService {
             throw t
         }
     }
-    private fun generate(context:Context,task:NovelEpubTask,stop:()->Boolean):String{
-        val (title,chapters)=discover(context,task.url,stop)
+    private fun generate(context:Context,task:NovelEpubTask,stop:()->Boolean,
+                         db:NovelEpubQueue):Pair<String,String>{
+        val scan=discover(context,task.url,stop)
+        val (title,chapters)=scan
+        val signature=fingerprint(chapters)
+        val cached=db.previous(task.url)
+        if(cached!=null && cached.second==signature){
+            // Only treat this as an existing successful EPUB when Android can
+            // still open the actual MediaStore entry. Never guess cloud presence.
+            val present=runCatching{
+                context.contentResolver.openAssetFileDescriptor(
+                    Uri.parse(cached.first),"r")?.use{it.length!=0L}?:false
+            }.getOrDefault(false)
+            if(present)return cached
+        }
         val cache=cacheDir(context,task.url)
         val part=File(cache,"novel.epub.part")
         try{
@@ -222,13 +289,14 @@ object NovelEpubService {
             }
             require(part.length()>2000){"Book archive content unexpectedly empty"}
             val saved=commit(context,part,title,false)
+            if(!scan.cacheReused)saveCatalog(context,task.url,scan)
             if(NduSettings.configured(context)){
                 NduCloudQueue(context).use{cloud->
                     cloud.enqueue("books",safeName(title)+".epub",Uri.parse(saved))
                 }
                 NduUploadService.launch(context)
             }
-            return saved
+            return saved to signature
         }finally{part.delete()}
     }
     fun run(context:Context,stop:()->Boolean={false}){
@@ -236,12 +304,15 @@ object NovelEpubService {
         try{
             NovelEpubQueue(context).use{db->
                 db.recover()
+                db.refreshDue()
                 for(i in 0 until 2){
                     if(stop()||!AppPower.enabled(context))break
                     val task=db.next()?:break
                     db.started(task.url)
-                    try{db.completed(task.url,generate(context,task,stop))}
-                    catch(t:Exception){db.failure(task,t.message?:t.javaClass.simpleName)}
+                    try{
+                        val (saved,signature)=generate(context,task,stop,db)
+                        db.completed(task.url,saved,signature)
+                    }catch(t:Exception){db.failure(task,t.message?:t.javaClass.simpleName)}
                 }
             }
         }finally{busy.set(false)}
