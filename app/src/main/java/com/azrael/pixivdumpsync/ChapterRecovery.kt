@@ -26,6 +26,7 @@ class ChapterRecoveryService:JobService(){
         val pending=ChapterQueue(this).use{db->
             db.recover()
             db.retryDueFailures()
+            db.refreshDue()
             db.next()!=null
         }
         if(pending)runCatching{ChapterArchives.start(this)}
