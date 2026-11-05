@@ -90,22 +90,42 @@ internal object TorrentFeedParser {
         }
         return null
     }
+    private fun pageNumber(url:String):Int{
+        val uri=runCatching{URI(url)}.getOrNull()?:return 1
+        val query=uri.rawQuery.orEmpty().split('&')
+        for(entry in query){
+            if(entry.substringBefore('=') in setOf("page","p")){
+                val number=entry.substringAfter('=').toIntOrNull()
+                if(number!=null && number in 1..1_000_000)return number
+            }
+        }
+        return Regex("""/(?:page|paged)/([0-9]{1,7})/?$""")
+            .find(uri.path.orEmpty())?.groupValues?.getOrNull(1)
+            ?.toIntOrNull()?:1
+    }
     fun next(doc:Document,source:String,current:String):String? {
         val host=if(source=="ONEJAV")"onejav.com" else "sukebei.nyaa.si"
+        val currentNumber=pageNumber(current)
+        val choices=ArrayList<Pair<Int,String>>()
         val next=doc.select("a[rel=next][href],a.pagination-next[href],"+
             "a.next[href],.pagination a.next[href],"+
             ".pagination a[aria-label=Next][href],"+
-            ".pagination a[href*='p='],.pagination a[href*='page=']")
+            ".pagination a[href*='p='],.pagination a[href*='page='], "+
+            ".pagination a[href*='/page/']")
         for(a in next){
             val u=runCatching{URI(doc.location()).resolve(a.attr("href"))}
                 .getOrNull()?:continue
-            if(u.scheme=="https" && u.userInfo==null &&
-                u.host?.lowercase()?.removePrefix("www.")==host &&
-                u.toString()!=current && SourceIndexParser.safe(u.toString()))
-                return u.toString()
+            if(u.scheme!="https" || u.userInfo!=null ||
+                u.host?.lowercase()?.removePrefix("www.")!=host ||
+                u.toString()==current || !SourceIndexParser.safe(u.toString()))
+                continue
+            val page=pageNumber(u.toString())
+            if(page>currentNumber && page<=currentNumber+50)
+                choices+=page to u.toString()
         }
-        return null
+        return choices.minByOrNull{it.first}?.second
     }
+
 }
 
 class TorrentFeedDb(ctx:Context):
