@@ -12,6 +12,20 @@ import com.asterion.videoflow.VideoEngine
  */
 object UniversalBackfill {
     data class Result(val requested:Int,val errors:List<String>)
+    data class Coverage(val registered:Int,val specialized:Int,
+        val checkedGeneric:Int,val awaitingFirstCheck:Int,
+        val errors:Int,val disabled:Int)
+    fun coverage(a:Activity):Coverage{
+        val sources=SourceIndexDb(a).use{it.sources()}
+        return Coverage(sources.size,
+            sources.count{it.adapter=="native"},
+            sources.count{it.adapter=="generic"&&it.lastCheck>0&&
+                it.error.isNullOrBlank()},
+            sources.count{it.adapter=="generic"&&it.lastCheck==0L},
+            sources.count{!it.error.isNullOrBlank()},
+            sources.count{!it.enabled})
+    }
+
     fun start(a:Activity):Result{
         val issues=ArrayList<String>()
         var count=0
