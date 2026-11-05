@@ -71,7 +71,8 @@ object CreatorArchiveScheduler {
             var pendingCatchup=false
             for(creator in CreatorArchiveStore.list(context)){
                 if(shouldStop()||!AppPower.enabled(context))break
-                if(!prefs.getBoolean("active_"+creator.url.hashCode(),true))continue
+                if(!prefs.getBoolean("active_"+creator.url.hashCode(),true) ||
+                   !SiteControls.any(context,creator.url))continue
                 val key="cursor_"+creator.url.hashCode()
                 var cursor=prefs.getInt(key,0).coerceIn(0,50000)
                 var completed=prefs.getBoolean("complete_"+key,false)
@@ -95,7 +96,8 @@ object CreatorArchiveScheduler {
                 // Resume up to PAGE_BUDGET historical pages per pass. Keep the existing
                 // per-page 40-download ceiling, retry deferred items before advancing,
                 // and checkpoint each completed page to survive process termination.
-                if(latest.isSuccess && !completed && cursor>0 &&
+                if(SiteControls.backfill(context,creator.url) &&
+                    latest.isSuccess && !completed && cursor>0 &&
                     !shouldStop() && AppPower.enabled(context)){
                     var pages=0
                     while(pages<PAGE_BUDGET && !completed && errors.isEmpty() &&
