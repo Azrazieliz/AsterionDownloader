@@ -17,6 +17,7 @@ class NduUploadService : Service() {
         private const val CHANNEL="nocturne_ndus_cloud"
         private const val ID=193
         const val ACTION_UPLOAD="com.azrael.nocturne.ndus.UPLOAD"
+        const val ACTION_MANUAL_UPLOAD="com.azrael.nocturne.ndus.MANUAL_UPLOAD"
         const val ACTION_STOP="com.azrael.nocturne.ndus.STOP"
         const val ACTION_QUEUE_EXISTING="com.azrael.nocturne.ndus.QUEUE_EXISTING"
         private val executor=Executors.newSingleThreadExecutor()
@@ -29,6 +30,13 @@ class NduUploadService : Service() {
             val i=Intent(context,NduUploadService::class.java)
                 .setAction(if(backfill) ACTION_QUEUE_EXISTING else ACTION_UPLOAD)
             context.startForegroundService(i)
+        }
+        /** Explicit TeraBox upload; does not turn on site backfill/sync. */
+        fun uploadNow(context:android.content.Context):Boolean{
+            if(!NduSettings.configured(context))return false
+            context.startForegroundService(Intent(context,NduUploadService::class.java)
+                .setAction(ACTION_MANUAL_UPLOAD))
+            return true
         }
     }
     override fun onCreate() {
@@ -49,7 +57,8 @@ class NduUploadService : Service() {
             }
             return START_NOT_STICKY
         }
-        if(!AppPower.enabled(this)){
+        val manual=intent?.action==ACTION_MANUAL_UPLOAD
+        if(!manual && !AppPower.enabled(this)){
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             return START_NOT_STICKY
@@ -59,16 +68,18 @@ class NduUploadService : Service() {
         running=executor.submit {
             try {
                 if(!NduSettings.configured(this)) return@submit
-                if(intent?.action==ACTION_QUEUE_EXISTING) {
+                if(manual || intent?.action==ACTION_QUEUE_EXISTING) {
                     currentStatus="Scanning owned downloads across all modules"
                     notifyNow()
                     // Retain the legacy Kuroha/Kyora index and capture the unified
                     // Assets, Games, Books, Comics, Videos, X and Koikatsu folders.
                     NduCloudQueue(this).use { it.enqueueExisting(this) }
-                    RounderDispatch.scan(this)
+                    RounderDispatch.scan(this,manual=manual)
                 }
                 val outcome=NduUploadEngine.drain(this,20000,12*60_000L,
-                    stop={stop || !AppPower.enabled(this) || Thread.currentThread().isInterrupted}) { status ->
+                    stop={stop || (!manual && !AppPower.enabled(this)) ||
+                        Thread.currentThread().isInterrupted},
+                    manual=manual) { status ->
                     currentStatus=status
                     notifyNow()
                 }
