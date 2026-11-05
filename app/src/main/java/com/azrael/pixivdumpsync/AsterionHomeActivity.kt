@@ -429,6 +429,49 @@ class AsterionHomeActivity:Activity(){
         put(body,switches,10)
         when(bookMode){
             "EPUB"->{
+                val archive=card()
+                put(archive,text("Whole-novel archive",16f,theme.white,true),0)
+                put(archive,text("Export every available chapter in order. FreeWebNovel makes one readable ZIP with offline HTML and EPUB. Other recognized readers export EPUB.",12f,theme.secondary),5)
+                val link=edit("Paste a complete novel series URL")
+                put(archive,link,8)
+                put(archive,button("ARCHIVE ENTIRE NOVEL"){
+                    val raw=link.text.toString().trim()
+                    if(!NovelEpubParser.supportedSeries(raw)){
+                        toast("Enter a supported novel series page; forum and individual chapter links are not complete books")
+                        return@button
+                    }
+                    ResourceDownloads.route(this,raw,"Books")
+                    render()
+                },9)
+                val recent=NovelEpubQueue(this).use{it.list(12)}
+                if(recent.isNotEmpty())
+                    put(archive,text("RECENT NOVEL ARCHIVES",12f,theme.secondary,true),13)
+                for(item in recent){
+                    val cached=NovelEpubService.cachedCount(this,item.url)
+                    put(archive,text(item.title+" · "+item.state+
+                        " · "+cached+" chapters cached",12f,
+                        if(item.state=="WAIT_LOGIN")theme.danger else theme.secondary),8)
+                    if(!item.error.isNullOrBlank())
+                        put(archive,text(item.error.take(160),11f,theme.danger),3)
+                    if(item.state=="WAIT_LOGIN")
+                        put(archive,button("CONNECT ACCOUNT & RESUME"){
+                            startActivity(Intent(this,
+                                com.azrael.galleryflow.SiteLoginActivity::class.java)
+                                .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,item.url))
+                        },5)
+                    if(item.state=="DONE" && item.savedUri!=null)
+                        put(archive,button("OPEN "+if(NovelEpubParser.readableZipSeries(item.url))"ZIP" else "EPUB"){
+                            runCatching{
+                                startActivity(Intent(Intent.ACTION_VIEW).apply{
+                                    setDataAndType(Uri.parse(item.savedUri),
+                                        if(NovelEpubParser.readableZipSeries(item.url))
+                                            "application/zip" else "application/epub+zip")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                })
+                            }.onFailure{toast("No compatible archive reader found")}
+                        },5)
+                }
+                put(body,archive,12)
                 SourceIndexPanel.render(this,body,"BOOKS")
                 put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
             }
