@@ -41,7 +41,18 @@ internal object SiteBackfillProfiles {
             cosplay+",main a[href],.gallery-grid a[href]",
             Regex("^/[0-9]{1,9}/?$"),"cosplay"),
         Profile("cosplaytele.com","COSPLAY",cosplay,
-            Regex("^/[a-z0-9][a-z0-9_-]{2,180}/?$"),"cosplay")
+            Regex("^/[a-z0-9][a-z0-9_-]{2,180}/?$"),"cosplay"),
+        Profile("pornpics.com","COSPLAY",
+            cosplay+",.gallery-thumb a[href],.thumb a[href],.galleries a[href]",
+            Regex("^/(?:galleries|gallery)/[^/?#]+(?:/[^/?#]+)?/?$"),"cosplay"),
+        Profile("archivebate.com","COSPLAY",
+            cosplay+",.gallery-thumb a[href],.thumb a[href]",
+            Regex("^/(?:gallery|galleries|album|post|posts|photos)/[^/?#]+/?$"),
+            "cosplay"),
+        Profile("celeb.st","COSPLAY",
+            cosplay+",.feed a[href],.media-list a[href]",
+            Regex("^/(?:p|post|posts|gallery|photos|media)/[^/?#]+/?$"),
+            "cosplay")
     ).associateBy{it.host}
 
     fun supports(host:String):Boolean=host.lowercase(Locale.ROOT)
@@ -118,7 +129,8 @@ internal object SiteBackfillProfiles {
             List<IndexedItem>{
         val host=runCatching{URI(item.url).host?.lowercase(Locale.ROOT)
             ?.removePrefix("www.")}.getOrNull()
-        if(host !in setOf("kiutaku.com","cosplaytele.com"))return emptyList()
+        if(host !in setOf("kiutaku.com","cosplaytele.com","pornpics.com",
+                "archivebate.com","celeb.st"))return emptyList()
         val results=LinkedHashMap<String,IndexedItem>()
         val banned=Regex("(?i)(?:thumb|thumbnail|preview|sample|avatar|logo|icon|sprite|placeholder|spinner)")
         fun record(raw:String,label:String){
