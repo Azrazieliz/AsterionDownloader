@@ -68,6 +68,22 @@ class NovelEpubTest {
         assertEquals(source+"?page=2",
             NovelEpubParser.nextIndex(doc,source,setOf(source)))
     }
+    @Test fun freewebnovelActualReaderArticleAndNextIdAreParsed() {
+        val current="https://freewebnovel.com/novel/i-am-the-fated-villain/chapter-1"
+        val doc=Jsoup.parse("""<h1>I Am the Fated Villain</h1>
+            <div id="article"><h4>Chapter 1: Young Lord, Gu Changge</h4>
+              <p>First authentic chapter paragraph: this is a sufficiently long sentence to validate the chapter reader and provide meaningful content.</p>
+              <p>Second paragraph: chapter extraction must keep its text in the correct order without including the surrounding site menus.</p>
+            </div>
+            <nav><a id="next_url" href="/novel/i-am-the-fated-villain/chapter-2">›</a></nav>
+            """,current)
+        val text=NovelEpubParser.chapterText(doc)
+        assertEquals(2,text.paragraphs.size)
+        assertEquals(1.0,NovelEpubParser.readerChapter(doc,current).number,0.0)
+        assertEquals("https://freewebnovel.com/novel/i-am-the-fated-villain/chapter-2",
+            NovelEpubParser.nextReader(doc,
+                "https://freewebnovel.com/novel/i-am-the-fated-villain",current))
+    }
     @Test fun readerFollowsTrueNextLinkAndUsesChapterHeading(){
         val doc=Jsoup.parse("""<h1>I Am the Fated Villain</h1>
             <h4>Chapter 1314: My Chapter</h4>
