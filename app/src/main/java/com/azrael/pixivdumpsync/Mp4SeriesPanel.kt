@@ -134,8 +134,17 @@ object Mp4SeriesPanel {
             parent.addView(card,ui.lp(a,10))
         }
         val inventory=RounderInventoryIndex.confirmedCount(a)
-        parent.addView(ui.text(a,"Rounder · "+inventory+
-            " confirmed cloud volume records imported. Files shown in Rounder without a verified inventory record are not assumed present or absent.",
+        val tree=RounderTreeScanner.status(a)
+        parent.addView(ui.text(a,"Rounder collection · "+tree.files+
+            " raw files indexed · "+tree.pendingDirectories+
+            " folders awaiting scan · "+inventory+" confirmed volume records.",
             12f,ui.secondary),ui.lp(a,8))
+        tree.lastError?.let{
+            parent.addView(ui.text(a,"Rounder index: "+it.take(170),
+                11f,ui.danger),ui.lp(a,5))
+        }
+        parent.addView(ui.text(a,
+            "Raw folder visibility is not proof of an existing volume. Verified volume records are needed before automatic cloud duplicate suppression.",
+            11f,ui.secondary),ui.lp(a,5))
     }
 }
