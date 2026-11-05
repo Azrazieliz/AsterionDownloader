@@ -47,20 +47,25 @@ object Mp4SeriesSync {
                 .setMinimumLatency(1000L)
                 .setOverrideDeadline(30_000L).build())
     }
-    private fun page(url:String):Document{
+    private fun page(context:Context,url:String):Document{
         require(SourceIndexParser.safe(url) &&
             URI(url).host.orEmpty().removePrefix("www.")=="mp4directs.com")
-        val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
-            .timeout(24000).maxBodySize(10_000_000)
-            .followRedirects(false).ignoreHttpErrors(true)
-            .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
-            .execute()
-        if(response.statusCode() in setOf(401,403))
-            error("MP4Directs account session required (HTTP ${response.statusCode()})")
-        require(response.statusCode() in 200..299){
-            "MP4Directs HTTP ${response.statusCode()}"
+        try{
+            val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
+                .timeout(24000).maxBodySize(10_000_000)
+                .followRedirects(false).ignoreHttpErrors(true)
+                .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
+                .execute()
+            if(response.statusCode() in setOf(401,403))
+                error("MP4Directs account session required (HTTP ${response.statusCode()})")
+            require(response.statusCode() in 200..299){
+                "MP4Directs HTTP ${response.statusCode()}"
+            }
+            return response.parse()
+        }catch(error:Exception){
+            if(!SiteSession.bound(context,url))throw error
+            return Jsoup.parse(BrowserPageFetch.html(context,url),url)
         }
-        return response.parse()
     }
     private fun nameFor(url:String,work:Mp4Follow):String{
         val suffix=if(work.type=="ZIP")".zip" else ".epub"
@@ -128,7 +133,7 @@ object Mp4SeriesSync {
         while(queue.isNotEmpty() && scanned<budget){
             val (address,depth)=queue.removeFirst()
             if(!visited.add(address))continue
-            val doc=page(address)
+            val doc=page(context,address)
             scanned++
             if(address==catalogManga && work.name==work.family &&
                     work.type=="EPUB"){
