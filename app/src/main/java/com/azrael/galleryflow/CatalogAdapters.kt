@@ -191,9 +191,10 @@ class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
     override val enabled = true
     override val statusLabel = "Enabled • direct album images • TeraBox fallback"
 
+    // ONE logical 4KHD provider. Categories are pages INSIDE the provider,
+    // never separate subscriptions. Old gallery records remain in the DB.
     override fun defaultEntities(): List<SourceEntity> = listOf(
-        SourceEntity(source, "site:cosplay", "4KHD — cosplay", "https://www.4khd.com/pages/cosplay", "site"),
-        SourceEntity(source, "site:album", "4KHD — album", "https://www.4khd.com/pages/album", "site")
+        SourceEntity(source, "site:all", "4KHD", "https://www.4khd.com/", "site")
     )
 
     override fun matches(url: String): Boolean = runCatching {
@@ -206,8 +207,8 @@ class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
         val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
         if (host != "4khd.com" && !host.endsWith(".4khd.com")) throw AdapterException("Not a 4KHD URL")
         val path = uri.path.trimEnd('/')
-        if (path == "/pages/album") return defaultEntities()[1]
-        if (path == "/pages/cosplay" || path.isBlank()) return defaultEntities()[0]
+        if (path == "/pages/album" || path == "/pages/cosplay" ||
+            path.isBlank()) return defaultEntities()[0]
         if (path.startsWith("/content/") && path.endsWith(".html")) {
             val stable = path.removePrefix("/content/").removeSuffix(".html")
             return SourceEntity(source, "gallery:$stable", "4KHD gallery", "https://www.4khd.com$path", "gallery_only")
@@ -225,11 +226,16 @@ class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
 
         val visited = linkedSetOf<String>()
         val seen = linkedSetOf<String>()
-        var next: String? = entity.canonicalUrl
-        while (!next.isNullOrBlank() && visited.add(next)) {
-            if (!SyncControl.checkpoint()) throw SyncCancelledException()
-            val doc = http.document(next)
-            for (a in doc.select("a[href*=/content/]")) {
+        val listings = if (entity.stableId == "site:all")
+            listOf("https://www.4khd.com/pages/cosplay",
+                   "https://www.4khd.com/pages/album")
+        else listOf(entity.canonicalUrl)
+        for (start in listings) {
+            var next: String? = start
+            while (!next.isNullOrBlank() && visited.add(next)) {
+                if (!SyncControl.checkpoint()) throw SyncCancelledException()
+                val doc = http.document(next)
+                for (a in doc.select("a[href*=/content/]")) {
                 val href = absoluteUrl(a, "href")
                 val uri = runCatching { URI(href) }.getOrNull() ?: continue
                 val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
@@ -240,7 +246,8 @@ class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
                 if (!seen.add(id)) continue
                 yield(GalleryRef(source, id, entity.stableId, "https://www.4khd.com$path", a.text().trim().ifBlank { id }))
             }
-            next = nextListing(doc, entity.canonicalUrl, visited)
+                next = nextListing(doc, start, visited)
+            }
         }
     }
 
