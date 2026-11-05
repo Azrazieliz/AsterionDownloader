@@ -6,9 +6,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 data class ChapterTask(val id:Long,val url:String,val title:String,val state:String,
-    val progress:Int,val error:String?,val savedUri:String?,val attempts:Int,val updated:Long=0L)
+    val progress:Int,val error:String?,val savedUri:String?,val attempts:Int,val updated:Long=0L,
+    val syncEnabled:Boolean=true,val lastCheck:Long=0L,val fingerprint:String?=null)
 
-class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_queue.sqlite",null,1){
+class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_queue.sqlite",null,2){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE tasks(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,9 +20,18 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
           attempts INTEGER NOT NULL DEFAULT 0,
           error TEXT,
           saved_uri TEXT,
-          updated INTEGER NOT NULL)""")
+          updated INTEGER NOT NULL,
+          sync_enabled INTEGER NOT NULL DEFAULT 1,
+          last_check INTEGER NOT NULL DEFAULT 0,
+          fingerprint TEXT)""")
     }
-    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){}
+    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){
+        if(oldVersion<2){
+            db.execSQL("ALTER TABLE tasks ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE tasks ADD COLUMN last_check INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE tasks ADD COLUMN fingerprint TEXT")
+        }
+    }
     fun enqueue(url:String,title:String=url):Boolean {
         val v=ContentValues().apply{
             put("url",url.trim());put("title",title.take(130));put("state","queued")
@@ -32,15 +42,58 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
     }
     fun list():List<ChapterTask>{
         val result=ArrayList<ChapterTask>()
-        readableDatabase.rawQuery("""SELECT id,url,title,state,progress,error,saved_uri,attempts,updated
+        readableDatabase.rawQuery("""SELECT id,url,title,state,progress,error,saved_uri,attempts,updated,
+                   sync_enabled,last_check,fingerprint
             FROM tasks ORDER BY updated DESC LIMIT 1000""",null).use{c->
             while(c.moveToNext()){
                 result.add(ChapterTask(c.getLong(0),c.getString(1),c.getString(2),
                     c.getString(3),c.getInt(4),c.getString(5),c.getString(6),
-                    c.getInt(7),c.getLong(8)))
+                    c.getInt(7),c.getLong(8),c.getInt(9)==1,c.getLong(10),
+                    c.getString(11)))
             }
         }
         return result
+    }
+    fun setSync(id:Long,enabled:Boolean){
+        writableDatabase.update("tasks",ContentValues().apply{
+            put("sync_enabled",if(enabled)1 else 0)
+        },"id=?",arrayOf(id.toString()))
+    }
+    fun refreshDue(now:Long=System.currentTimeMillis()):Int{
+        val eligible=readableDatabase.rawQuery(
+            "SELECT id,url FROM tasks WHERE state='done' AND sync_enabled=1 "+
+            "AND last_check<=?",
+            arrayOf((now-6L*60L*60_000L).toString())).use{c->
+            val ids=ArrayList<Long>()
+            while(c.moveToNext()){
+                val url=c.getString(1)
+                if(!NhentaiChapters.isGallery(url) && 
+                    !ChapterScraper.isSingleChapter(url))ids+=c.getLong(0)
+            }
+            ids
+        }
+        for(id in eligible){
+            writableDatabase.update("tasks",ContentValues().apply{
+                put("state","queued");put("progress",0)
+            },"id=? AND state='done'",arrayOf(id.toString()))
+        }
+        return eligible.size
+    }
+    fun savedSignature(id:Long):Pair<String,String>?=
+        readableDatabase.rawQuery(
+            "SELECT saved_uri,fingerprint FROM tasks WHERE id=?",
+            arrayOf(id.toString())).use{c->
+            if(c.moveToFirst() && !c.isNull(0) && !c.isNull(1))
+                c.getString(0) to c.getString(1) else null
+        }
+    fun completeCheck(id:Long,saved:String,signature:String){
+        writableDatabase.update("tasks",ContentValues().apply{
+            put("state","done");put("progress",100)
+            put("saved_uri",saved);put("fingerprint",signature)
+            put("last_check",System.currentTimeMillis())
+            put("updated",System.currentTimeMillis())
+            putNull("error")
+        },"id=?",arrayOf(id.toString()))
     }
     fun recover(){
         writableDatabase.execSQL("UPDATE tasks SET state='queued' WHERE state='working'")
