@@ -195,10 +195,17 @@ object ResourceDownloads {
             note(a,"Complete image gallery queued as ZIP; no CBZ/PDF conversion")
             return
         }
-        if(folder=="Books" && NovelEpubParser.supportedSeries(raw)){
-            NovelEpubService.enqueue(a,raw,URI(raw).path.substringAfterLast('/')
-                .replace('-',' ').ifBlank{"Novel"})
-            note(a,"Full chapter collection queued as EPUB; no PDF will be generated")
+        // Recognize entire novel series regardless of which entry point routed
+        // the URL. The universal direct-file action must never download HTML
+        // as if it were an EPUB, or silently skip the complete-book exporter.
+        if(NovelEpubParser.supportedSeries(raw)){
+            val title=URI(raw).path.trimEnd('/').substringAfterLast('/')
+                .replace('-',' ').ifBlank{"Novel"}
+            val fresh=NovelEpubService.enqueue(a,raw,title)
+            val archive=if(NovelEpubParser.readableZipSeries(raw))
+                "one readable ZIP (HTML chapters and EPUB)" else "one EPUB"
+            note(a,if(fresh) "Complete novel queued as $archive"
+                else "Novel already queued or saved; existing progress retained")
             return
         }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
