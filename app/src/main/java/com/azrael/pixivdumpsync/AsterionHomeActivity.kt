@@ -431,7 +431,7 @@ class AsterionHomeActivity:Activity(){
             "EPUB"->{
                 val archive=card()
                 put(archive,text("Whole-novel archive",16f,theme.white,true),0)
-                put(archive,text("Export every available chapter in order. FreeWebNovel makes one readable ZIP with offline HTML and EPUB. Other recognized readers export EPUB.",12f,theme.secondary),5)
+                put(archive,text("Export every available chapter in order as one readable ZIP containing offline HTML chapters and an EPUB. Supports recognized chapter-based novel series.",12f,theme.secondary),5)
                 val link=edit("Paste a complete novel series URL")
                 put(archive,link,8)
                 put(archive,button("ARCHIVE ENTIRE NOVEL"){
