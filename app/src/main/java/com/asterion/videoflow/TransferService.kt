@@ -63,6 +63,8 @@ object VideoEngine {
                 val settings=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
                 val max=settings.getInt("max_new",3).coerceIn(1,20)
                 for(watch in db.listWatches().filter { it.enabled }) {
+                    if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                        Thread.currentThread().isInterrupted)break
                     try {
                         onStatus("Scanning ${watch.label}")
                         if(!WebDiscovery.isUrl(watch.address)){
@@ -79,14 +81,17 @@ object VideoEngine {
                             var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=hashSetOf(watch.address)
                             var pages=0
-                            while(cursor!=null && pages<8 && visited.add(cursor)){
+                            while(cursor!=null && pages<8 && visited.add(cursor) &&
+                                com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                !Thread.currentThread().isInterrupted){
                                 val history=WebDiscovery.watchPornArtistPage(
                                     watch.address,cursor)
                                 for(hit in history.hits)collected.putIfAbsent(hit.url,hit)
                                 cursor=history.next
                                 pages++
                             }
-                            if(backfill)db.setBackfill(watch.id,cursor,cursor==null)
+                            if(backfill && com.azrael.pixivdumpsync.AppPower.enabled(context))
+                                db.setBackfill(watch.id,cursor,cursor==null)
                             collected.values.toList()
                         }else{
                             val collected=linkedMapOf<String,VideoHit>()
@@ -99,7 +104,9 @@ object VideoEngine {
                             val visited=HashSet<String>()
                             var pages=0
                             while(cursor!=null && pages<(if(backfill)8 else 1) &&
-                                collected.size<650 && visited.add(cursor)){
+                                collected.size<650 && visited.add(cursor) &&
+                                com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                !Thread.currentThread().isInterrupted){
                                 val page=WebDiscovery.page(cursor,watch.address)
                                 for(hit in page.hits)collected.putIfAbsent(hit.url,hit)
                                 cursor=page.next
@@ -108,9 +115,13 @@ object VideoEngine {
                             if(backfill)db.setBackfill(watch.id,cursor,cursor==null)
                             collected.values.toList()
                         }
+                        if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                            Thread.currentThread().isInterrupted)break
                         if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
                         var added=0
                         for(hit in hits) {
+                            if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                                Thread.currentThread().isInterrupted)break
                             if(db.addVideo(hit.url,hit.title,watch.id)) added++
                             if(!artistArchive && watch.backfillComplete && added>=max)break
                         }
