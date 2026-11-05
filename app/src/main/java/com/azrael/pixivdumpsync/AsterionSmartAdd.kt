@@ -72,7 +72,8 @@ object AsterionSmartAdd {
         val native=when(kind){
             Kind.PIXIV,Kind.X,Kind.COSPLAY,Kind.VIDEO->true
             Kind.COMICS->status.contains("ZIP queued")
-            Kind.BOOKS->address.substringBefore('?').endsWith(".epub",true)
+            Kind.BOOKS->address.substringBefore('?').endsWith(".epub",true) ||
+                NovelEpubParser.supportedSeries(address)
             Kind.TORRENTS->address.startsWith("magnet:",true) ||
                 address.substringBefore('?').endsWith(".torrent",true)
             Kind.ASSETS->{
@@ -297,9 +298,17 @@ object AsterionSmartAdd {
                 status.text="Enter a valid HTTPS site URL"
                 return@action
             }
+            val category=when(guess(url)){
+                Kind.BOOKS->"Books"
+                Kind.COMICS->"Comics"
+                Kind.VIDEO->"Videos"
+                Kind.ASSETS->"Assets"
+                Kind.COSPLAY->"Cosplay"
+                else->"Files"
+            }
             a.startActivity(Intent(a,com.azrael.galleryflow.ProviderWebActivity::class.java)
                 .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,url)
-                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,"Files"))
+                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,category))
         },ui.lp(a,8))
         box.addView(ui.action(a,"DOWNLOAD DIRECT FILE / TORRENT",false){
             val url=field.text.toString().trim()
@@ -308,8 +317,11 @@ object AsterionSmartAdd {
                 status.text="Enter an HTTPS file or magnet link"
                 return@action
             }
-            ResourceDownloads.route(a,url,"Files")
-            status.text="Sent to the unified download queue; provider access is still required"
+            val category=if(NovelEpubParser.supportedSeries(url))"Books" else "Files"
+            ResourceDownloads.route(a,url,category)
+            status.text=if(category=="Books")
+                "Complete novel archive queued or previously recorded; check Books"
+            else "Sent to the unified download queue; provider access is still required"
         },ui.lp(a,6))
         box.addView(status,ui.lp(a,8))
         p.addView(box,ui.lp(a,11))
