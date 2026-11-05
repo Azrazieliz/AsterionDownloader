@@ -382,6 +382,10 @@ internal object SourceIndexParser {
         return null
     }
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
+        // Prefer a validated source-specific listing path over arbitrary
+        // navigation links. Generic indexing remains for other providers.
+        val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
+        if(!dedicated.isNullOrEmpty())return dedicated
         val out=LinkedHashMap<String,IndexedItem>()
         val scoped=doc.select("article a[href],main a[href],.post a[href],.posts a[href],"+
             ".gallery a[href],.entry a[href],.item a[href],.content a[href],"+
@@ -578,6 +582,7 @@ internal object SourceIndexParser {
             .find(path)?.groupValues?.get(1)?.toIntOrNull()
     }
     internal fun next(doc:Document,base:String,current:String=doc.location()):String? {
+        SiteBackfillProfiles.next(doc,base,current)?.let{return it}
         val explicit=doc.select("a[rel=next][href],link[rel=next][href],"+
             "a.next[href],.pagination a.next[href],"+
             "a[aria-label=Next][href],a[aria-label='Next page'][href]")
@@ -745,8 +750,10 @@ object SourceIndex {
                         "Detail is outside its approved source"
                     }
                     val doc=fetchPage(context,source,item.url)
-                    val files=SourceIndexParser.detailOriginals(
-                        doc,item,System.currentTimeMillis())
+                    val checkedAt=System.currentTimeMillis()
+                    val files=(SiteBackfillProfiles.galleryOriginals(doc,item,checkedAt)+
+                        SourceIndexParser.detailOriginals(doc,item,checkedAt))
+                        .distinctBy{it.url}
                     val videoPage=item.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS") &&
                         com.asterion.videoflow.WebDiscovery.isVideoPage(item.url)
                     // Native VideoFlow resolves compatible HTML video pages,
