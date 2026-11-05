@@ -32,8 +32,9 @@ object ProviderBackfillActions {
             return "Historical page scan requested for "+site.name
         }
         if(site.area in setOf("ADULT","VIDEOS","HENTAI")){
-            VideoEngine.launch(a,true)
-            return "VideoFlow watch scan requested; existing source filters preserved"
+            val accepted=VideoEngine.launch(a,true,host)
+            return if(accepted)"Video scan queued for "+host
+                else "Unable to start video check for "+host
         }
         if(site.area=="COSPLAY"){
             val selected=GalleryDb(a).use{db->
