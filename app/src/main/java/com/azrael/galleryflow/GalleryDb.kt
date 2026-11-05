@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 
-class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", null, 5) {
+class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", null, 6) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entities(
             source TEXT NOT NULL,
@@ -95,6 +95,26 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             db.execSQL("""
                 UPDATE entities SET archived=0
                 WHERE source IN ('4khd','buondua','cosplaytele','4kgirl','everia')
+            """.trimIndent())
+        }
+        if (oldVersion < 6) {
+            // Consolidate historic 4KHD categories in the FOLLOWING view.
+            // Album and cosplay history, media, errors, and saved cursors stay
+            // in their original tables; do not drop or delete any records.
+            // Preserve opt-out: if every old subscription is disabled, the
+            // new shared provider is also disabled.
+            db.execSQL("""
+                INSERT OR IGNORE INTO entities(
+                    source,entity_id,display_name,canonical_url,kind,
+                    selected,live_enabled,archived)
+                SELECT '4khd','site:all','4KHD','https://www.4khd.com/',
+                    'site',MAX(selected),MAX(live_enabled),0
+                FROM entities WHERE source='4khd' AND archived=0
+                GROUP BY source
+            """.trimIndent())
+            db.execSQL("""
+                UPDATE entities SET archived=1
+                WHERE source='4khd' AND entity_id<>'site:all'
             """.trimIndent())
         }
     }
