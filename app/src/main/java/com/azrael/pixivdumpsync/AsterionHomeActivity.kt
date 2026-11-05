@@ -30,6 +30,66 @@ class AsterionHomeActivity:Activity(){
     private var page="Home"
     private var pendingChapterRetry:Long=-1L
     private val chapterSessionRequest=418
+    private data class Overview(val pending:Int=0,val x:Int=0,val gallery:Int=0,
+        val artists:Int=0,val coverage:UniversalBackfill.Coverage?=null,
+        val loaded:Boolean=false)
+    @Volatile private var overview=Overview()
+    private val overviewBusy=java.util.concurrent.atomic.AtomicBoolean(false)
+    private var lastOverviewRefresh=0L
+    private var firstResume=true
+    private var countsLabel:TextView?=null
+    private var providerLabel:TextView?=null
+    private lateinit var emergencyLabel:TextView
+
+    private fun updateOverview(){
+        if(!overviewBusy.compareAndSet(false,true))return
+        if(System.currentTimeMillis()-lastOverviewRefresh<4500L && overview.loaded){
+            overviewBusy.set(false);return
+        }
+        kotlin.concurrent.thread(name="asterion-ui-metrics"){
+            try{
+                val app=applicationContext
+                val next=runCatching{
+                    val video=VideoDb(app).use{db->
+                        db.count("queued")+db.count("running")+db.count("retry_wait")
+                    }
+                    val chapters=ChapterQueue(app).use{db->
+                        db.list().count{it.state=="working"||it.state=="queued"}
+                    }
+                    val direct=DirectDownloadTracker.states(app,60).count{
+                        it.status in setOf(android.app.DownloadManager.STATUS_PENDING,
+                            android.app.DownloadManager.STATUS_RUNNING,
+                            android.app.DownloadManager.STATUS_PAUSED)
+                    }
+                    Overview(video+chapters+direct,
+                        XPhotoQueue(app).use{it.allSources().size},
+                        GalleryDb(app).use{it.listEntities().size},
+                        AppDb(app).use{it.listArtists().size},
+                        SourceIndexDb(app).use{db->
+                            val sources=db.sources()
+                            UniversalBackfill.Coverage(sources.size,
+                                sources.count{it.adapter=="native"},
+                                sources.count{it.adapter=="generic"&&it.lastCheck>0L&&
+                                    it.error.isNullOrBlank()},
+                                sources.count{it.adapter=="generic"&&it.lastCheck==0L},
+                                sources.count{!it.error.isNullOrBlank()},
+                                sources.count{!it.enabled})
+                        },true)
+                }.getOrNull()
+                if(next!=null)runOnUiThread{
+                    if(isFinishing||isDestroyed)return@runOnUiThread
+                    overview=next
+                    lastOverviewRefresh=System.currentTimeMillis()
+                    navButtons["Queue"]?.text=if(next.pending>0)
+                        "Downloads (${next.pending})" else "Downloads"
+                    countsLabel?.text="${next.artists} Pixiv artists · ${next.x} X accounts · ${next.gallery} cosplay sources"
+                    next.coverage?.let{c->
+                        providerLabel?.text="${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors"
+                    }
+                }
+            }finally{overviewBusy.set(false)}
+        }
+    }
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
@@ -150,24 +210,6 @@ class AsterionHomeActivity:Activity(){
         super.onCreate(savedInstanceState)
         window.statusBarColor=theme.background
         window.navigationBarColor=theme.background
-        GalleryDb(this).use{it.seedCatalogOnce(this)}
-        AlohaDefaults.ensure(this)
-        SourceIndex.ensure(this)
-        KoikatsuFollowing.ensure(this)
-        RounderDispatch.ensure(this)
-        Mp4SeriesSync.ensure(this)
-        TorrentSourceBackfill.ensure(this)
-        DirectDownloadRetry.ensure(this)
-        AsterionDownloadWorker.ensure(this)
-        RounderDispatch.scanAsync(applicationContext)
-        if(RounderTreeScanner.tree(this)!=null)
-            RounderTreeScanner.scanAsync(applicationContext)
-        kotlin.concurrent.thread(name="asterion-seed-name-vocabulary"){
-            runCatching{CreatorNames.seed(applicationContext)}
-        }
-        ChapterRecovery.ensure(this)
-        CreatorArchiveScheduler.ensure(this)
-        XPhotoScheduler.ensure(this)
         page=getSharedPreferences("asterion_display",MODE_PRIVATE)
             .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
@@ -187,6 +229,20 @@ class AsterionHomeActivity:Activity(){
             setOnClickListener{open("Settings")}
         }
         head.addView(settings)
+        emergencyLabel=text(if(AppPower.enabled(this))"STOP" else "PAUSED",
+            11f,theme.danger,true).apply{
+            contentDescription="Stop all background sync and backfill"
+            isClickable=true;isFocusable=true
+            setPadding(dp(10),dp(11),dp(10),dp(11))
+            setOnClickListener{
+                if(AppPower.enabled(this@AsterionHomeActivity)){
+                    AppPower.set(this@AsterionHomeActivity,false)
+                    toast("Background backfill and sync stopped; queues preserved")
+                    render()
+                }else open("Settings")
+            }
+        }
+        head.addView(emergencyLabel)
         scroller=ScrollView(this).apply{isFillViewport=true}
         body=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
@@ -256,11 +312,38 @@ class AsterionHomeActivity:Activity(){
             Intent.ACTION_SEND->intent.getStringExtra(Intent.EXTRA_TEXT)?.let{submitInput(it)}
         }
         render()
+        // Never perform catalogue seeding, scheduler registration or cloud tree
+        // scans while constructing the first frame. Existing jobs stay persisted.
+        root.postDelayed({
+            kotlin.concurrent.thread(name="asterion-background-bootstrap"){
+                runCatching{
+                    GalleryDb(applicationContext).use{it.seedCatalogOnce(applicationContext)}
+                }
+                runCatching{AlohaDefaults.ensure(applicationContext)}
+                runCatching{SourceIndex.ensure(applicationContext)}
+                runCatching{KoikatsuFollowing.ensure(applicationContext)}
+                runCatching{RounderDispatch.ensure(applicationContext)}
+                runCatching{Mp4SeriesSync.ensure(applicationContext)}
+                runCatching{TorrentSourceBackfill.ensure(applicationContext)}
+                runCatching{DirectDownloadRetry.ensure(applicationContext)}
+                runCatching{AsterionDownloadWorker.ensure(applicationContext)}
+                if(AppPower.enabled(applicationContext)){
+                    runCatching{RounderDispatch.scanAsync(applicationContext)}
+                    if(RounderTreeScanner.tree(applicationContext)!=null)
+                        runCatching{RounderTreeScanner.scanAsync(applicationContext)}
+                }
+                runCatching{CreatorNames.seed(applicationContext)}
+                runCatching{ChapterRecovery.ensure(applicationContext)}
+                runCatching{CreatorArchiveScheduler.ensure(applicationContext)}
+                runCatching{XPhotoScheduler.ensure(applicationContext)}
+            }
+        },1100L)
     }
     override fun onResume(){
         super.onResume()
         if(::body.isInitialized){
-            render()
+            if(firstResume)firstResume=false else render()
+            updateOverview()
             AuthenticatedItemDownloader.resumeIfConnected(this)
         }
     }
@@ -274,26 +357,16 @@ class AsterionHomeActivity:Activity(){
         page=target
         if(::body.isInitialized){
             render()
+            if(target=="Home")updateOverview()
             val where=if(target==previous)0 else pageScroll[target]?:0
             scroller.post{scroller.scrollTo(0,where)}
         }
     }
     private fun render(){
-        val pending=runCatching{
-            val video=VideoDb(this).use{
-                it.count("queued")+it.count("running")+it.count("retry_wait")
-            }
-            val chapters=ChapterQueue(this).use{queue->
-                queue.list().count{it.state=="working"||it.state=="queued"}
-            }
-            val direct=DirectDownloadTracker.states(this,60).count{
-                it.status in setOf(android.app.DownloadManager.STATUS_PENDING,
-                    android.app.DownloadManager.STATUS_RUNNING,
-                    android.app.DownloadManager.STATUS_PAUSED)
-            }
-            video+chapters+direct
-        }.getOrDefault(0)
+        val pending=overview.pending
         navButtons["Queue"]?.text=if(pending>0)"Downloads ($pending)" else "Downloads"
+        if(::emergencyLabel.isInitialized)
+            emergencyLabel.text=if(AppPower.enabled(this))"STOP" else "PAUSED"
         val selectedTab=if(page in pages)page else "Home"
         navButtons.forEach{(tab,view)->
             val selected=tab==selectedTab
@@ -443,24 +516,36 @@ class AsterionHomeActivity:Activity(){
                 R.drawable.ic_source_video,theme.violet,"Porn","VOICE")
         )
         val summary=card()
-        val xCount=XPhotoQueue(this).use{it.allSources().size}
-        val kyoraCount=GalleryDb(this).use{it.listEntities().size}
-        val artistCount=AppDb(this).use{it.listArtists().size}
-        put(summary,text("$artistCount Pixiv artists · $xCount X accounts · $kyoraCount cosplay sources",
-            12f,theme.secondary),0)
-        val coverage=UniversalBackfill.coverage(this)
-        put(summary,text(coverage.registered.toString()+" registered providers · "+
-            coverage.specialized+" native-managed · "+
-            coverage.checkedGeneric+" generic index-checked · "+
-            coverage.awaitingFirstCheck+" awaiting first scan · "+
-            coverage.errors+" reported errors",
-            11f,theme.secondary),5)
+        countsLabel=text(if(overview.loaded)
+            "${overview.artists} Pixiv artists · ${overview.x} X accounts · ${overview.gallery} cosplay sources"
+            else "Loading saved library counts…",12f,theme.secondary)
+        put(summary,countsLabel!!,0)
+        val c=overview.coverage
+        providerLabel=text(if(c==null)"Loading source health…"
+            else "${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors",
+            11f,theme.secondary)
+        put(summary,providerLabel!!,5)
         put(summary,button("SYNC & BACKFILL ALL FOLLOWED SOURCES"){
-            val result=UniversalBackfill.start(this)
-            toast(result.requested.toString()+" source engines requested"+
-                (if(result.errors.isEmpty())"" else
-                    " · "+result.errors.size+" could not start"))
+            if(!AppPower.enabled(this)){
+                toast("Background sync is paused; enable it in Settings")
+            }else kotlin.concurrent.thread(name="asterion-user-backfill"){
+                val result=runCatching{UniversalBackfill.start(this)}
+                runOnUiThread{
+                    if(!isFinishing&&!isDestroyed)
+                        toast(result.fold(
+                            {"${it.requested} source engines requested · ${it.errors.size} errors"},
+                            {"Backfill could not start: "+it.message}))
+                }
+            }
         },7)
+        put(summary,button(if(AppPower.enabled(this))"STOP ALL BACKFILL & SYNC"
+            else "SYNC STOPPED · OPEN SETTINGS"){
+            if(AppPower.enabled(this)){
+                AppPower.set(this,false)
+                toast("All scheduled backfill stopped; downloads preserved")
+                render()
+            }else open("Settings")
+        },5)
         put(summary,button("OPEN DOWNLOADED FILES"){open("Library")},7)
         put(body,summary,12)
     }
