@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.net.URI
+import java.util.Locale
 
 data class NovelEpubTask(val url:String,val title:String,val attempts:Int)
 
@@ -76,17 +78,43 @@ class NovelEpubQueue(context:Context):
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(url))
     }
+    /** A blocked website must not be hammered automatically for hours.
+     * Preserve acquired chapter cache until the website account is reconnected.
+     */
     fun failure(item:NovelEpubTask,error:String){
         val n=(item.attempts+1).coerceAtMost(30)
+        val blocked=NovelAccountPolicy.needsBrowserConnection(error)
         val delay=(60_000L shl n.coerceAtMost(7)).coerceAtMost(6*60*60_000L)
         writableDatabase.update("novels",ContentValues().apply{
-            // Transient source outages must never permanently exhaust an
-            // autonomous archive queue. Backoff is capped, not the attempt count.
-            put("state","RETRY")
+            put("state",if(blocked)"WAIT_LOGIN" else "RETRY")
             put("attempts",n)
-            put("retry_after",System.currentTimeMillis()+delay)
+            put("retry_after",if(blocked)0L else System.currentTimeMillis()+delay)
             put("last_error",error.take(200))
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(item.url))
     }
+
+    /** Resume only the blocked novels belonging to the newly connected host. */
+    @Synchronized fun resumeForSite(site:String):Int {
+        val host=runCatching{URI(site).host?.lowercase(Locale.ROOT)
+            ?.removePrefix("www.")}.getOrNull()?:return 0
+        val waiting=ArrayList<String>()
+        readableDatabase.rawQuery("SELECT url FROM novels WHERE state='WAIT_LOGIN'",
+            null).use{cursor->
+            while(cursor.moveToNext()){
+                val url=cursor.getString(0)
+                val source=runCatching{URI(url).host?.lowercase(Locale.ROOT)
+                    ?.removePrefix("www.")}.getOrNull()
+                if(source==host)waiting+=url
+            }
+        }
+        for(url in waiting){
+            writableDatabase.update("novels",ContentValues().apply{
+                put("state","PENDING");put("retry_after",0L)
+                put("last_update",System.currentTimeMillis())
+            },"url=? AND state='WAIT_LOGIN'",arrayOf(url))
+        }
+        return waiting.size
+    }
+
 }
