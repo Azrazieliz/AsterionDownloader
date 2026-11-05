@@ -76,7 +76,7 @@ internal object TorrentFeedParser {
         val host=uri.host?.lowercase()?.removePrefix("www.")?:return null
         if(host !in setOf("onejav.com","sukebei.nyaa.si"))return null
         return raw.takeIf{uri.path.orEmpty().endsWith(".torrent",true) ||
-            Regex("^/download/[0-9]{1,20}(?:\.torrent)?$")
+            Regex("""^/download/[0-9]{1,20}(?:\.torrent)?$""")
                 .matches(uri.path.orEmpty())}
     }
     fun detail(doc:Document,source:String):String? {
