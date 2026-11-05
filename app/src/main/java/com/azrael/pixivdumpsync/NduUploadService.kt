@@ -79,10 +79,11 @@ class NduUploadService : Service() {
                 val outcome=NduUploadEngine.drain(this,20000,12*60_000L,
                     stop={stop || (!manual && !AppPower.enabled(this)) ||
                         Thread.currentThread().isInterrupted},
-                    manual=manual) { status ->
-                    currentStatus=status
-                    notifyNow()
-                }
+                    report={status->
+                        currentStatus=status
+                        notifyNow()
+                    },
+                    manual=manual)
                 if(outcome.connectionError!=null) {
                     currentStatus="Direct upload: "+outcome.connectionError
                     notifyNow()
