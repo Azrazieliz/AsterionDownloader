@@ -183,14 +183,8 @@ object AsterionSmartAdd {
                     val series=Uri.parse(address).path.orEmpty().trim('/')
                         .substringAfterLast('/').replace('-', ' ').ifBlank{"Novel"}
                     NovelEpubService.enqueue(a,address,series)
-                    val zipped=Uri.parse(address).host.orEmpty()
-                        .removePrefix("www.")=="freewebnovel.com"
-                    record(a,kind,address,if(zipped)
-                        "Complete novel readable ZIP queued" else
-                        "Complete novel EPUB extraction queued")
-                    status.text=if(zipped)
-                        "Entire novel queued as one readable ZIP (HTML chapters + EPUB)"
-                        else "Entire novel queued for EPUB assembly · historical chapters included"
+                    record(a,kind,address,"Complete novel readable ZIP queued")
+                    status.text="Entire novel queued as one readable ZIP (HTML chapters + EPUB)"
                     done()
                 }else{
                     record(a,kind,address,"Provider indexed · EPUB original required")
