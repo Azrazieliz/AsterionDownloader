@@ -91,9 +91,7 @@ class NduUploadService : Service() {
         val open=PendingIntent.getActivity(this,0,
             Intent(this,DownloaderHubActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val halt=PendingIntent.getService(this,1,
-            Intent(this,NduUploadService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val halt=EmergencyBackfillStopReceiver.action(this)
         return Notification.Builder(this,CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle("Nocturne / TeraBox")
