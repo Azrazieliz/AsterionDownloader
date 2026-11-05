@@ -640,7 +640,9 @@ object SourceIndex {
                     else->"CREATORS"
                 }
                 db.add(url,URI(url).host.orEmpty(),area,
-                    if(type in setOf("PIXIV","X","COSPLAY","VIDEO"))"native" else "generic")
+                    if(type in setOf("PIXIV","X","COSPLAY","VIDEO") ||
+                        (type=="BOOKS" && NovelEpubParser.supportedSeries(url)))
+                        "native" else "generic")
             }
         }
         val jobs=context.getSystemService(JobScheduler::class.java)
