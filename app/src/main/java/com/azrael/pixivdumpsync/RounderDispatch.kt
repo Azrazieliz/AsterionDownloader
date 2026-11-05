@@ -299,8 +299,8 @@ object RounderDispatch {
             12f,ui.secondary),ui.lp(a,5))
         if(!summary.lastError.isNullOrBlank())
             card.addView(ui.text(a,summary.lastError,12f,ui.danger),ui.lp(a,4))
-        if(!directState.error.isNullOrBlank())
-            card.addView(ui.text(a,directState.error.take(140),12f,ui.danger),
+        if(!directState.lastError.isNullOrBlank())
+            card.addView(ui.text(a,directState.lastError.take(140),12f,ui.danger),
                 ui.lp(a,4))
         card.addView(ui.action(a,"UPLOAD DOWNLOADED FILES TO TERABOX",true){
             if(direct){
