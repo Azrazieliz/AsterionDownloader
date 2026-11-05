@@ -73,6 +73,37 @@ class CrossSourceDedup(context:Context):
         writableDatabase.update("claims",ContentValues().apply{put("manager_id",id)},
             "key=?",arrayOf(safeKey(url)))
     }
+    /** Atomically move a failed DownloadManager transfer's claim to a verified
+     * replacement. Never take over a completed file or another active request.
+     * A previously unclaimed browser download can acquire its first claim here.
+     */
+    @Synchronized fun replaceDownloadId(url:String,previousId:Long,nextId:Long):Boolean{
+        require(previousId>0 && nextId>0)
+        val key=safeKey(url)
+        val db=writableDatabase
+        db.beginTransaction()
+        try{
+            val existing=db.rawQuery(
+                "SELECT state,manager_id FROM claims WHERE key=?",arrayOf(key)).use{c->
+                if(c.moveToFirst()){
+                    c.getString(0) to (if(c.isNull(1))null else c.getLong(1))
+                }else null
+            }
+            if(existing!=null && (existing.first=="complete" ||
+                existing.second!=previousId))return false
+            val values=ContentValues().apply{
+                put("key",key);put("state","active")
+                put("created",System.currentTimeMillis());put("manager_id",nextId)
+            }
+            val updated=if(existing==null)
+                db.insertWithOnConflict("claims",null,values,
+                    SQLiteDatabase.CONFLICT_IGNORE)>0
+            else db.update("claims",values,
+                "key=? AND manager_id=?",arrayOf(key,previousId.toString()))==1
+            if(updated)db.setTransactionSuccessful()
+            return updated
+        }finally{db.endTransaction()}
+    }
     @Synchronized fun completeById(id:Long){
         writableDatabase.update("claims",ContentValues().apply{put("state","complete")},
             "manager_id=?",arrayOf(id.toString()))
