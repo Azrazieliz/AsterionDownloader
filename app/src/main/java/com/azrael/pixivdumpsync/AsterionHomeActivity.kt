@@ -156,6 +156,7 @@ class AsterionHomeActivity:Activity(){
         KoikatsuFollowing.ensure(this)
         RounderDispatch.ensure(this)
         Mp4SeriesSync.ensure(this)
+        TorrentSourceBackfill.ensure(this)
         DirectDownloadRetry.ensure(this)
         AsterionDownloadWorker.ensure(this)
         RounderDispatch.scanAsync(applicationContext)
