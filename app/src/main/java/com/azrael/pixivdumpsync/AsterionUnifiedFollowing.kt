@@ -161,23 +161,24 @@ object AsterionUnifiedFollowing {
             }
             if(!source.error.isNullOrBlank())
                 put(a,c,ui.text(a,source.error.take(160),12f,ui.danger),5)
-            toggle(a,c,"Include in sync",source.enabled){enabled->
-                XPhotoQueue(a).use{db->db.setEnabled(source.url,enabled)}
-                XPhotoScheduler.ensure(a)
-            }
-            val automatic=a.getSharedPreferences("asterion_x_live",0)
-                .getBoolean(source.url,true)
-            toggle(a,c,"Sync new media automatically",automatic){enabled->
+            toggle(a,c,"Sync new",source.enabled && source.liveEnabled){enabled->
+                XPhotoQueue(a).use{it.setMode(source.url,"live_enabled",enabled)}
                 a.getSharedPreferences("asterion_x_live",0).edit()
                     .putBoolean(source.url,enabled).apply()
+                XPhotoScheduler.ensure(a)
+            }
+            toggle(a,c,"Backfill history",source.enabled && source.backfillEnabled){enabled->
+                XPhotoQueue(a).use{it.setMode(source.url,"backfill_enabled",enabled)}
+                XPhotoScheduler.ensure(a)
             }
             pair(a,c,"CHECK NEW","BACKFILL",{
                 XPhotoQueue(a).use{it.clearError(source.url)}
-                XPhotoEngine.start(a)
-                notice(a,"Creator sync requested")
+                XPhotoEngine.start(a,false,source.url)
+                notice(a,"Checking X @"+source.handle)
             },{
                 XPhotoQueue(a).use{it.backfill(source.url)}
-                XPhotoEngine.start(a);refresh()
+                XPhotoEngine.start(a,false,source.url)
+                notice(a,"Resuming X history @"+source.handle)
             })
             put(a,p,c,10)
         }
