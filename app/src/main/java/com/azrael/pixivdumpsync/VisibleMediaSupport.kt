@@ -39,6 +39,9 @@ internal object VisibleMediaSupport {
             it.substringAfterLast('.').length in 2..8}
             ?: "media_"+media.url.hashCode().toUInt().toString(16)+ext
     }
+    internal fun isEpubOriginal(media:VisibleMedia):Boolean=
+        media.kind=="file" && fileName(media).endsWith(".epub",true)
+
     fun queue(context:Context,source:String,files:List<VisibleMedia>,
               categoryHint:String?=null):VisibleMediaResult {
         var queued=0;var already=0;var failed=0
@@ -46,8 +49,7 @@ internal object VisibleMediaSupport {
             if(!accepted(source,media)){failed++;continue}
             // EPUB forum/novel shelves should not silently download video,
             // cover images or HTML as a book. Other modules retain their routes.
-            if(categoryHint=="Books" &&
-                (media.kind!="file" || !fileName(media).endsWith(".epub",true))){
+            if(categoryHint=="Books" && !isEpubOriginal(media)){
                 failed++;continue
             }
             val folder=when{
