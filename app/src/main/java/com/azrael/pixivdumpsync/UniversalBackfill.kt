@@ -68,9 +68,11 @@ object UniversalBackfill {
             CreatorArchiveScheduler.scanNow(a)
         }
         request("Kyora image galleries"){
-            a.startForegroundService(Intent(a,GalleryService::class.java)
-                .setAction(GalleryService.ACTION_START)
-                .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name))
+            for(mode in listOf(SyncMode.LIVE,SyncMode.BACKFILL)){
+                a.startForegroundService(Intent(a,GalleryService::class.java)
+                    .setAction(GalleryService.ACTION_START)
+                    .putExtra(GalleryService.EXTRA_MODE,mode.name))
+            }
         }
         request("Koikatsu cards"){KoikatsuFollowing.ensure(a)}
         return Result(count,issues)
