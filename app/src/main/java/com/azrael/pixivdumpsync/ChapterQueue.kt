@@ -98,7 +98,18 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
     fun recover(){
         writableDatabase.execSQL("UPDATE tasks SET state='queued' WHERE state='working'")
     }
-    fun next():ChapterTask?=list().asReversed().firstOrNull{it.state=="queued"}
+    /** SQL queue lookup has no UI-list limit: even large libraries retain
+     * every pending series instead of starving tasks outside the first 1000.
+     */
+    fun next():ChapterTask?=readableDatabase.rawQuery(
+        """SELECT id,url,title,state,progress,error,saved_uri,attempts,updated,
+                  sync_enabled,last_check,fingerprint FROM tasks
+           WHERE state='queued' ORDER BY updated ASC LIMIT 1""",null).use{c->
+        if(c.moveToFirst())ChapterTask(c.getLong(0),c.getString(1),c.getString(2),
+            c.getString(3),c.getInt(4),c.getString(5),c.getString(6),
+            c.getInt(7),c.getLong(8),c.getInt(9)==1,c.getLong(10),c.getString(11))
+        else null
+    }
     fun update(task:Long,state:String,progress:Int,error:String?=null,savedUri:String?=null){
         val v=ContentValues().apply{
             put("state",state);put("progress",progress.coerceIn(0,100))
