@@ -33,6 +33,18 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==5221){
+            if(resultCode==RESULT_OK && data?.data!=null){
+                val result=runCatching{
+                    RounderTreeScanner.selectTree(this,data.data!!)
+                    RounderTreeScanner.scanAsync(this)
+                }
+                result.onSuccess{toast("Rounder document tree connected; indexing started")}
+                    .onFailure{toast("Unable to read Rounder tree: "+it.message)}
+            }
+            if(::body.isInitialized)render()
+            return
+        }
         if(requestCode==5220){
             val document=data?.data
             if(resultCode==RESULT_OK && document!=null){
@@ -147,6 +159,8 @@ class AsterionHomeActivity:Activity(){
         DirectDownloadRetry.ensure(this)
         AsterionDownloadWorker.ensure(this)
         RounderDispatch.scanAsync(applicationContext)
+        if(RounderTreeScanner.tree(this)!=null)
+            RounderTreeScanner.scanAsync(applicationContext)
         kotlin.concurrent.thread(name="asterion-seed-name-vocabulary"){
             runCatching{CreatorNames.seed(applicationContext)}
         }
@@ -499,6 +513,12 @@ class AsterionHomeActivity:Activity(){
                 }
                 put(body,archive,12)
                 Mp4SeriesPanel.render(this,body){render()}
+                put(body,button("LINK ROUNDER / TERABOX COLLECTION TREE"){
+                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                    },5221)
+                },8)
                 put(body,button("IMPORT ROUNDER VERIFIED INVENTORY"){
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
                         type="application/json"
