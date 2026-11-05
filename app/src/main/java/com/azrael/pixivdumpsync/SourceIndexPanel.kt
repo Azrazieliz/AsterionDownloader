@@ -45,11 +45,14 @@ object SourceIndexPanel {
             if(areas.any{it=="CREATORS"||it=="ASSETS"})CreatorArchiveScheduler.scanNow(a)
             if("COMICS" in areas)ChapterArchives.start(a)
             if("COSPLAY" in areas)runCatching{
-                a.startForegroundService(Intent(a,
-                    com.azrael.galleryflow.SyncForegroundService::class.java)
-                    .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
-                    .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
-                        com.azrael.galleryflow.SyncMode.BACKFILL.name))
+                for(mode in listOf(com.azrael.galleryflow.SyncMode.LIVE,
+                    com.azrael.galleryflow.SyncMode.BACKFILL)){
+                    a.startForegroundService(Intent(a,
+                        com.azrael.galleryflow.SyncForegroundService::class.java)
+                        .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
+                        .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
+                            mode.name))
+                }
             }
             Toast.makeText(a,"Source sync requested · new previews appear here",
                 Toast.LENGTH_SHORT).show()
