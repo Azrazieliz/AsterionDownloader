@@ -667,8 +667,13 @@ object SourceIndex {
                 val url=record.substring(delim+1)
                 if(!SourceIndexParser.safe(url))continue
                 val area=when(type){
-                    "PIXIV","X","COSPLAY"->"COSPLAY"
-                    "VIDEO"->"ADULT"
+                    "PIXIV"->"ARTWORK"
+                    "X"->"X"
+                    "COSPLAY"->"COSPLAY"
+                    "VIDEO"->if(AlohaSources.all.any{
+                        SiteControls.key(it.url)==SiteControls.key(url) &&
+                            it.area==AlohaArea.HENTAI
+                    })"HENTAI" else "ADULT"
                     "BOOKS"->"BOOKS"
                     "COMICS"->"COMICS"
                     "TORRENTS"->"GAMES"
@@ -910,7 +915,22 @@ object SourceIndex {
             return Jsoup.parse(browser,address)
         }
     }
-    private fun scanOne(context:Context,source:IndexedSource){
+    /** A real synchronous single-site scan, owned by a cancellable site job. */
+    fun scanSingle(context:Context,address:String,stop:()->Boolean){
+        val source=SourceIndexDb(context).use{db->
+            db.sources().firstOrNull{it.url==address}
+        }?:error("Site is not registered")
+        require(source.adapter=="generic"){"This provider uses a native scanner"}
+        try{
+            scanOne(context,source,stop,true)
+        }catch(e:Exception){
+            if(!stop())SourceIndexDb(context).use{it.failure(address,
+                e.message?:"Site check failed")}
+            throw e
+        }
+    }
+    private fun scanOne(context:Context,source:IndexedSource,
+                        stop:()->Boolean={false},manual:Boolean=false){
         var cursor=source.cursor
         var fresh=0
         val pages=ArrayList<String>()
@@ -919,14 +939,14 @@ object SourceIndex {
             it!=source.url && SourceIndexParser.safe(it) &&
                 SourceIndexParser.sameSite(source.url,it)
         }
-        val historyEnabled=SiteControls.backfill(context,source.url,source.enabled)
+        val historyEnabled=manual || SiteControls.sync(context,source.url,source.enabled)
         if(saved!=null && historyEnabled && !source.historyComplete)pages+=saved
         var index=0
         val visited=HashSet<String>()
         while(index<pages.size && (historyEnabled && !source.historyComplete || index==0)){
+            if(stop()||Thread.currentThread().isInterrupted) return
             if(!AppPower.enabled(context) ||
-                (!SiteControls.sync(context,source.url) &&
-                 !SiteControls.backfill(context,source.url)))break
+                (!manual && !SiteControls.sync(context,source.url)))break
             val address=pages[index++]
             if(!visited.add(address))continue
             var doc=fetchPage(context,source,address)

@@ -134,13 +134,21 @@ object XPhotoEngine {
             .setContentText(description.take(100)).setContentIntent(open)
             .setOngoing(true).build()
     }
-    fun start(context:Context,automatic:Boolean=false,targetSource:String?=null) {
-        if(!AppPower.enabled(context))return
+    fun start(context:Context,automatic:Boolean=false,targetSource:String?=null,
+              allowJobFallback:Boolean=true):Boolean {
+        if(!AppPower.enabled(context))return false
         val intent=Intent(context,XPhotoService::class.java)
             .putExtra("asterion_auto_sync",automatic)
             .putExtra("asterion_target_source",targetSource)
-        if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
-        else context.startService(intent)
+        return try{
+            if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
+            else context.startService(intent)
+            true
+        }catch(_:Exception){
+            if(allowJobFallback)XPhotoScheduler.requestImmediate(
+                context,automatic,targetSource)
+            false
+        }
     }
     fun submit(context:Context,automatic:Boolean=false,targetSource:String?=null,
                onStatus:(String)->Unit={})=executor.submit{
@@ -150,6 +158,33 @@ object XPhotoEngine {
             XPhotoQueue(context).use{db->
                 db.recover()
                 db.retryDueFailures()
+                // Drain existing downloads FIRST: the previous order scanned
+                // hundreds of remote accounts before touching 2,300+ queued photos.
+                var processed=0
+                val deadline=android.os.SystemClock.elapsedRealtime()+90000L
+                fun drainQueued(max:Int){
+                    while(AppPower.enabled(context) && processed<max &&
+                        android.os.SystemClock.elapsedRealtime()<deadline){
+                        val photo=db.next()?:break
+                        db.change(photo.id,"running")
+                        try{
+                            val saved=fetchPhoto(context,photo.photo)
+                            db.change(photo.id,"done",saved)
+                            if(NduSettings.configured(context)){
+                                NduCloudQueue(context).use{it.enqueue("x",
+                                    Uri.parse(saved).lastPathSegment.orEmpty()
+                                        .ifBlank{"x_"+photo.id+".jpg"},Uri.parse(saved))}
+                                NduUploadService.launch(context)
+                            }
+                            onStatus("Saved X image "+(processed+1))
+                        }catch(t:Exception){
+                            db.change(photo.id,"error",error=t.message)
+                            onStatus("X download failed: "+(t.message?:"unknown").take(80))
+                        }
+                        processed++
+                    }
+                }
+                drainQueued(30)
                 val watchers=db.allSources().filter{source->
                     val liveAllowed=source.liveEnabled &&
                         (!automatic || context.getSharedPreferences("asterion_x_live",0)
@@ -158,7 +193,8 @@ object XPhotoEngine {
                         (source.backfillEnabled && !source.historyComplete)) &&
                     (targetSource==null || source.url==targetSource)
                 }
-                val tasks=watchers.map{source->
+                val tasks=(if(targetSource==null)
+                    XPhotoScheduler.selectBatch(context,watchers,8) else watchers).map{source->
                     BackfillAgents.submit(context,"xphotos:"+source.url){
                         if(AppPower.enabled(context)){
                             XPhotoQueue(context).use{worker->
@@ -179,24 +215,12 @@ object XPhotoEngine {
                     if(!AppPower.enabled(context))break
                     runCatching{task.get()}
                 }
-                while(AppPower.enabled(context)){
-                    val photo=db.next()?:break
-                    db.change(photo.id,"running")
-                    try{
-                        val saved=fetchPhoto(context,photo.photo)
-                        db.change(photo.id,"done",saved)
-                        if(NduSettings.configured(context)){
-                            NduCloudQueue(context).use{it.enqueue("x",
-                                Uri.parse(saved).lastPathSegment.orEmpty().ifBlank{"x_"+photo.id+".jpg"},
-                                Uri.parse(saved))}
-                            NduUploadService.launch(context)
-                        }
-                        onStatus("Saved X image")
-                    }catch(t:Exception){
-                        db.change(photo.id,"error",error=t.message)
-                        onStatus("X image failed")
-                    }
-                }
+                drainQueued(60)
+                // Continue in a later durable worker pass, not as an endless
+                // foreground freeze when thousands of media jobs are pending.
+                if(AppPower.enabled(context) && db.next()!=null)
+                    XPhotoScheduler.requestImmediate(context,true)
+
             }
         }finally{working.set(false)}
     }

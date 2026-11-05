@@ -30,29 +30,70 @@ object KoikatsuInlineSearch {
                     response.onSuccess{(items,errors)->
                         status.text=items.size.toString()+" matching cards · "+
                             errors.size+" source errors"
-                        for(item in items.take(45)){
-                            val row=ui.card(a,12)
-                            val image=ImageView(a).apply{
-                                scaleType=ImageView.ScaleType.CENTER_CROP
-                                setImageResource(R.drawable.ic_source_koikatsu)
-                            }
-                            row.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,120)))
-                            val cover=item.preview?:if(item.source=="BepisDB")item.download else null
-                            if(cover!=null)RemoteImageLoader.load(a,image,cover,item.page)
-                            row.addView(ui.text(a,item.name,15f,ui.white,true),ui.lp(a,6))
-                            row.addView(ui.text(a,item.source,12f,ui.secondary),ui.lp(a,3))
-                            row.addView(ui.action(a,"DOWNLOAD PNG CARD",true){
-                                thread(name="asterion-koikatsu-inline-save"){
-                                    val result=runCatching{
-                                        KoikatsuCards.download(a,KoikatsuCards.resolve(item),item.name)
-                                    }
-                                    a.runOnUiThread{
-                                        status.text=result.fold(
-                                            {"Saved "+item.name},{"Card download failed: "+it.message})
+                        // A compact two-column media gallery, not a repeated
+                        // sequence of giant buttons for variants of one character.
+                        for(group in items.take(60).chunked(2)){
+                            val line=ui.row(a).apply{gravity=android.view.Gravity.TOP}
+                            for(item in group){
+                                val tile=ui.card(a,7).apply{
+                                    background=ui.touch(a,ui.surface,14)
+                                    isClickable=true
+                                    isFocusable=true
+                                    contentDescription=item.name+" · "+item.source+
+                                        " · card actions"
+                                    setOnClickListener{
+                                        android.app.AlertDialog.Builder(a)
+                                            .setTitle(item.name)
+                                            .setItems(arrayOf("Download original PNG",
+                                                "Open source page")){_,option->
+                                                if(option==0){
+                                                    status.text="Saving "+item.name+"…"
+                                                    thread(name="asterion-koikatsu-inline-save"){
+                                                        val output=runCatching{
+                                                            KoikatsuCards.download(a,
+                                                                KoikatsuCards.resolve(item),
+                                                                item.name)
+                                                        }
+                                                        a.runOnUiThread{
+                                                            if(!a.isFinishing){
+                                                                status.text=output.fold(
+                                                                    {"Saved "+item.name},
+                                                                    {"Download failed: "+it.message})
+                                                            }
+                                                        }
+                                                    }
+                                                }else{
+                                                    a.startActivity(android.content.Intent(a,
+                                                        com.azrael.galleryflow.ProviderWebActivity::class.java)
+                                                        .putExtra(
+                                                            com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                                                            item.page))
+                                                }
+                                            }.setNegativeButton("Close",null).show()
                                     }
                                 }
-                            },ui.lp(a,7))
-                            results.addView(row,ui.lp(a,8))
+                                val image=ImageView(a).apply{
+                                    scaleType=ImageView.ScaleType.CENTER_CROP
+                                    setImageResource(R.drawable.ic_source_koikatsu)
+                                    contentDescription=item.name+" preview"
+                                }
+                                tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,156)))
+                                val cover=item.preview
+                                    ?:item.download.takeIf{item.source=="BepisDB"}
+                                if(!cover.isNullOrBlank())
+                                    RemoteImageLoader.load(a,image,cover,item.page)
+                                tile.addView(ui.text(a,item.source,10f,ui.secondary),
+                                    ui.lp(a,6))
+                                tile.addView(ui.text(a,item.name,13f,ui.white,true).apply{
+                                    maxLines=2
+                                    ellipsize=android.text.TextUtils.TruncateAt.END
+                                },ui.lp(a,4))
+                                line.addView(tile,LinearLayout.LayoutParams(0,-2,1f)
+                                    .apply{rightMargin=ui.px(a,7)})
+                            }
+                            if(group.size==1)line.addView(android.view.View(a),
+                                LinearLayout.LayoutParams(0,1,1f))
+                            results.addView(line,ui.lp(a,7))
                         }
                     }.onFailure{status.text="Card search failed: "+it.message}
                 }

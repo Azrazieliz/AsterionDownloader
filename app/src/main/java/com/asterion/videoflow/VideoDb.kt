@@ -92,7 +92,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             WHERE (v.state='queued' OR
                 (v.state='retry_wait' AND v.retry_after<=?))
               AND (v.watch_id=0 OR w.enabled=1)
-            ORDER BY v.updated ASC""",arrayOf(now)).use { c ->
+            ORDER BY CASE WHEN v.watch_id=0 THEN 0 ELSE 1 END,
+                v.updated ASC LIMIT 300""",arrayOf(now)).use { c ->
             while(c.moveToNext()){
                 val watchId=c.getLong(7)
                 if(watchId!=0L){

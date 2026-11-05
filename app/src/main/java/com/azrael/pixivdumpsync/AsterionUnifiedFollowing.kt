@@ -213,7 +213,16 @@ object AsterionUnifiedFollowing {
             val thumbnail=first?.firstUri?:first?.firstUrl
             val cached=KyoraCreatorPreviews.cached(a,entity.canonicalUrl)
             val cover=thumbnail?:cached?.entries?.firstOrNull()?.cover
-            val avatar=cardTitle(a,c,entity.displayName,entity.source.wireName,cover,
+            val isProvider=entity.kind=="site"
+            val siteHost=SiteControls.key(entity.canonicalUrl)
+            val shortName=if(isProvider){
+                AlohaSources.all.firstOrNull{
+                    SiteControls.key(it.url)==siteHost
+                }?.name?:siteHost.substringBefore('.')
+                    .replaceFirstChar{it.uppercase()}
+            }else entity.displayName
+            val avatar=cardTitle(a,c,shortName.take(if(isProvider)28 else 90),
+                if(isProvider)siteHost else entity.source.wireName,cover,
                 cover!=null && !cover.startsWith("content:"))
             val holder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             val nativePreviews=gallery.mapNotNull{item->
@@ -263,20 +272,12 @@ object AsterionUnifiedFollowing {
                 put(a,c,ui.text(a,entity.lastError.take(130),12f,ui.danger),5)
             val currentSync=SiteControls.sync(a,entity.canonicalUrl,
                 entity.selected && entity.liveEnabled)
-            val currentBackfill=SiteControls.backfill(a,entity.canonicalUrl,
-                entity.selected)
-            toggle(a,c,"Sync new",currentSync){enabled->
+            toggle(a,c,"Sync",currentSync){enabled->
                 SiteControls.setSync(a,entity.canonicalUrl,enabled)
                 GalleryDb(a).use{db->
                     db.setLiveEnabled(entity.source,entity.entityId,enabled)
-                    db.setSelected(entity.source,entity.entityId,
-                        enabled || SiteControls.backfill(a,entity.canonicalUrl))
+                    db.setSelected(entity.source,entity.entityId,enabled)
                 }
-            }
-            toggle(a,c,"Backfill history",currentBackfill){enabled->
-                SiteControls.setBackfill(a,entity.canonicalUrl,enabled)
-                GalleryDb(a).use{db->db.setSelected(entity.source,entity.entityId,
-                    enabled || SiteControls.sync(a,entity.canonicalUrl))}
             }
             pair(a,c,"CHECK NEW","BACKFILL",{
                 if(!AppPower.enabled(a))notice(a,"Background work is paused")
@@ -307,7 +308,7 @@ object AsterionUnifiedFollowing {
     fun adult(a:Activity,p:LinearLayout,refresh:()->Unit){
         val creators=NameWatchDb(a).use{it.list()}
         val providers=VideoDb(a).use{it.listWatches()}
-        put(a,p,ui.text(a,"Porn & Hentai",22f,ui.white,true),8)
+        put(a,p,ui.text(a,"Followed performers",19f,ui.white,true),13)
         put(a,p,ui.text(a,creators.size.toString()+" followed names · "+
             providers.count{it.enabled}+" active providers",12f,ui.secondary),3)
         // Creator previews live inside the corresponding followed-name cards.
@@ -327,7 +328,6 @@ object AsterionUnifiedFollowing {
         for(creator in creators.take(currentLimit(a,"creators"))){
             val c=ui.card(a)
             val hits=SearchResultsDb(a).use{it.listForQuery(creator.name,10)}
-            put(a,c,ui.text(a,creator.name,17f,ui.white,true),0)
             val previews=hits.mapNotNull{hit->
                 hit.thumbnail?.let{url->
                     url to {
@@ -350,8 +350,10 @@ object AsterionUnifiedFollowing {
                 }
                 put(a,c,HorizontalScrollView(a).apply{addView(line)},8)
             }
+            put(a,c,ui.text(a,creator.name,17f,ui.white,true),9)
             if(!creator.lastError.isNullOrBlank())
-                put(a,c,ui.text(a,creator.lastError.take(130),12f,ui.danger),5)
+                put(a,c,ui.text(a,"Last scan: "+creator.lastError.take(90),
+                    11f,ui.danger),5)
             toggle(a,c,"Live discovery",creator.enabled){enabled->
                 NameWatchDb(a).use{db->db.setEnabled(creator.id,enabled)}
             }

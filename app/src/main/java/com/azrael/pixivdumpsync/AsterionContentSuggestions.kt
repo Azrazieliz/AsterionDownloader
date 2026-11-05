@@ -203,7 +203,7 @@ object AsterionContentSuggestions {
         }
         parent.addView(section,ui.lp(a,11))
     }
-    private fun show(a:Activity,item:Pick){
+    internal fun show(a:Activity,item:Pick){
         AlertDialog.Builder(a).setTitle(item.title)
             .setMessage(item.reason+"\n"+item.area+" · "+item.kind)
             .setItems(arrayOf("Download accessible original","Open item page")){_,which->

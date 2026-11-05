@@ -89,40 +89,24 @@ object SourceIndexPanel {
         }
         parent.addView(card,ui.lp(a,10))
     }
-    private fun details(a:Activity,item:IndexedItem){
-        val host=runCatching{Uri.parse(item.source).host.orEmpty()}.getOrDefault("")
+    internal fun details(a:Activity,item:IndexedItem){
+        val host=runCatching{Uri.parse(item.source).host.orEmpty()}
+            .getOrDefault("")
         AlertDialog.Builder(a).setTitle(item.title)
-            .setMessage(host+" · "+item.kind+
-                if(item.queued)"\nOriginal queued" else "\nIndexed metadata; not downloaded")
-            .setItems(arrayOf("DOWNLOAD ACCESSIBLE ORIGINAL",
-                "VIEW IN APP (SESSION)","SIGN IN TO PROVIDER")){_,i->
-                when(i){
-                    0->{
-                        if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
-                            NovelEpubService.enqueue(a,item.url,item.title)
-                            Toast.makeText(a,"Entire novel queued for EPUB assembly",
-                                Toast.LENGTH_LONG).show()
-                        }else AuthenticatedItemDownloader.download(a,item)
-                    }
-                    1->a.startActivity(Intent(a,
-                        com.azrael.galleryflow.ProviderWebActivity::class.java)
-                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url)
-                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,
-                            when(item.area){
-                                "ADULT","HENTAI","VIDEOS"->"Videos"
-                                "CREATORS"->"Creators"
-                                "ARTWORK"->"Artwork"
-                                "COSPLAY"->"Cosplay"
-                                "BOOKS"->"Books"
-                                "COMICS"->"Comics"
-                                "GAMES"->"Games"
-                                "ASSETS"->"Assets"
-                                else->"References"
-                            }))
-                    2->a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                        .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
-                }
-            }.setNegativeButton("Close",null).show()
+            .setMessage(host+" · "+if(item.queued)
+                "Transfer previously requested" else
+                "Indexed media · not yet saved")
+            .setPositiveButton("DOWNLOAD ORIGINAL"){_,_->
+                if(item.area=="BOOKS" &&
+                    NovelEpubParser.supportedSeries(item.url)){
+                    NovelEpubService.enqueue(a,item.url,item.title)
+                }else AuthenticatedItemDownloader.download(a,item)
+            }
+            .setNeutralButton("SIGN IN"){_,_->
+                a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                    .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
+            }
+            .setNegativeButton("CANCEL",null).show()
     }
     private fun showStatus(a:Activity,areas:List<String>,label:String){
         // Each host appears ONCE. Native categories and old album rows are

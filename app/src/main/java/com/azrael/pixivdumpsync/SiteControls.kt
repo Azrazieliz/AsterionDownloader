@@ -48,7 +48,9 @@ object SiteControls {
         context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .edit().putBoolean("backfill:$host",enabled).apply()
     }
-    fun any(context:Context,url:String)=sync(context,url)||backfill(context,url)
+    // One per-site Sync switch controls automatic work. Manual Backfill is
+    // a command, not an unrelated always-on toggle.
+    fun any(context:Context,url:String)=sync(context,url)
 
     /** Reflect the single provider setting in each existing engine's saved
      * source-level switches. Run off the UI thread; creator-specific follows,
@@ -59,8 +61,8 @@ object SiteControls {
         val host=key(url)
         if(host.isBlank())return
         val live=sync(app,url)
-        val historical=backfill(app,url)
-        val active=live||historical
+        val historical=live
+        val active=live
         runCatching {
             SourceIndexDb(app).use{db->
                 db.sources().filter{key(it.url)==host}.forEach{

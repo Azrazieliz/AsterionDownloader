@@ -28,7 +28,8 @@ object UnifiedDownloadsUi {
     private data class Row(
         val source:String,val filename:String,val info:String,val state:State,
         val percent:Int?,val updated:Long,val action:()->Unit,
-        val saved:String?=null,val image:String?=null,val mime:String="*/*"
+        val saved:String?=null,val image:String?=null,val mime:String="*/*",
+        val actionText:String?=null
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -72,23 +73,39 @@ object UnifiedDownloadsUi {
                 val state=when{
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
-                    item.status=="full_only_hold"->State.HELD
+                    item.status in setOf("full_only_hold","retry_wait")->State.HELD
                     else->State.ACTIVE
                 }
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
-                    State.HELD->"Video · Full-length source required"
-                    else->"Video · "+if(item.status=="running")"Downloading" else "Queued"
+                    State.HELD->if(item.status=="retry_wait")
+                        "Video · Automatic retry pending: "+item.error.orEmpty().take(110)
+                        else "Video · Full-length original requires verification"
+                    else->"Video · "+when(item.status){
+                        "running"->if(item.progress>0)"Downloading" else "Inspecting source"
+                        else->"Queued"
+                    }
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
                     info,state,if(item.status=="running")item.progress else null,item.updated,{
                         when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED->{VideoDb(a).use{it.retry(item.id)};VideoEngine.launch(a,false)}
+                            State.HELD->if(item.status=="retry_wait"){
+                                VideoDb(a).use{it.retry(item.id)}
+                                VideoEngine.launch(a,false)
+                            }else{
+                                a.startActivity(Intent(a,
+                                    com.azrael.galleryflow.ProviderWebActivity::class.java)
+                                    .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                                        item.url))
+                            }
                             else->{}
                         }
-                    },if(present)item.savedUri else null,mime="video/*")
+                    },if(present)item.savedUri else null,mime="video/*",
+                    actionText=if(item.status=="retry_wait")"RETRY"
+                        else if(item.status=="full_only_hold")"SOURCE" else null)
             }
         }
         ChapterQueue(a).use{db->
@@ -295,17 +312,50 @@ object UnifiedDownloadsUi {
         val failed=rows.count{it.state==State.FAILED}
         val saved=rows.count{it.state==State.DONE}
         parent.addView(ui.text(a,"Downloads",24f,ui.white,true),ui.lp(a,15))
+        if(!AppPower.enabled(a)){
+            val notice=ui.card(a,12)
+            notice.addView(ui.text(a,"Transfers paused",15f,ui.danger,true))
+            notice.addView(ui.text(a,
+                "Existing jobs stay queued until you resume. Nothing has been discarded.",
+                12f,ui.secondary),ui.lp(a,5))
+            notice.addView(ui.action(a,"Resume transfers",true){
+                AppPower.set(a,true)
+                val started=VideoEngine.launch(a,false)
+                if(!started)VideoEngine.submit(a,false)
+                XPhotoEngine.start(a)
+                ChapterArchives.start(a)
+                NovelEpubService.schedule(a)
+                refresh()
+            },ui.lp(a,7))
+            parent.addView(notice,ui.lp(a,9))
+        }
         parent.addView(ui.text(a,
             "Recent files · $inProgress active · $waiting need attention · "+
                 "$failed failed · $saved saved",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
         val shortcuts=ui.row(a)
+        shortcuts.addView(ui.action(a,"Start queued transfers",true){
+            if(!AppPower.enabled(a)){
+                Toast.makeText(a,"Resume transfers first",Toast.LENGTH_LONG).show()
+            }else{
+                val started=VideoEngine.launch(a,false)
+                if(!started)VideoEngine.submit(a,false)
+                XPhotoEngine.start(a)
+                ChapterArchives.start(a)
+                NovelEpubService.schedule(a)
+                Toast.makeText(a,"Transfer workers requested; progress appears here",
+                    Toast.LENGTH_LONG).show()
+            }
+            refresh()
+        },LinearLayout.LayoutParams(0,-2,1f))
         shortcuts.addView(ui.action(a,"Refresh",false){refresh()},
-            LinearLayout.LayoutParams(0,-2,1f))
-        shortcuts.addView(ui.action(a,"Torrent transfers",false){
-            TorrentTransfers.showQueue(a)
-        },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
+            LinearLayout.LayoutParams(0,-2,0.6f).apply{
+                leftMargin=ui.px(a,8)
+            })
         parent.addView(shortcuts,ui.lp(a,12))
+        parent.addView(ui.action(a,"Torrent transfers",false){
+            TorrentTransfers.showQueue(a)
+        },ui.lp(a,5))
         val pref=a.getSharedPreferences("asterion_downloads_ui",0)
         val filter=runCatching{
             Filter.valueOf(pref.getString("filter","ALL").orEmpty())
@@ -353,7 +403,8 @@ object UnifiedDownloadsUi {
             val label=when(item.state){
                 State.DONE->"Saved"
                 State.FAILED->"Failed"
-                State.HELD->"Action needed"
+                State.HELD->if(item.actionText=="RETRY")"Retry scheduled"
+                    else "Action needed"
                 State.ACTIVE->when{
                     item.info.contains("paused",true)->"Paused"
                     item.info.contains("queued",true)->"Queued"
@@ -376,12 +427,13 @@ object UnifiedDownloadsUi {
             card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
             if(item.state!=State.ACTIVE){
                 val command=when(item.state){
-                    State.DONE->"OPEN";State.FAILED->"RETRY";State.HELD->"SIGN IN"
+                    State.DONE->"OPEN";State.FAILED->"RETRY"
+                    State.HELD->item.actionText?:"SIGN IN"
                     else->""
                 }
                 card.addView(ui.action(a,command,false){
                     item.action()
-                    if(item.state==State.FAILED)refresh()
+                    if(item.state==State.FAILED || item.state==State.HELD)refresh()
                 },LinearLayout.LayoutParams(ui.px(a,82),-2).apply{
                     leftMargin=ui.px(a,6)
                 })

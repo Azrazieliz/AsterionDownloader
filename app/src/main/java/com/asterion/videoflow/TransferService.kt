@@ -36,15 +36,20 @@ object VideoEngine {
             .build()
     }
     fun launch(context: Context, scan: Boolean = false,
-               targetHost:String?=null): Boolean {
+               targetHost:String?=null,allowJobFallback:Boolean=true): Boolean {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val intent=Intent(context,TransferService::class.java).putExtra("scan",scan)
             .putExtra("target_site_host",targetHost)
         return try {
-            if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent) else context.startService(intent)
+            if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent)
+            else context.startService(intent)
             true
         } catch (_: Exception) {
-            false // JobService can use its own job execution when FGS launch is restricted.
+            // Android 14+ often forbids starting a foreground service from a
+            // source-scan callback or background receiver. Persist an imminent
+            // JobScheduler request instead of silently abandoning the queue.
+            if(allowJobFallback)Scheduling.requestImmediate(context,scan,targetHost)
+            false
         }
     }
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
@@ -206,13 +211,95 @@ object VideoEngine {
             }
         } finally { busy.set(false) }
     }
+    /** Manual per-provider discovery, independent of the busy transfer engine.
+     * Save actual preview metadata and a durable cursor, NOT thousands of
+     * unrequested download jobs. Download only when the user selects an item.
+     */
+    fun scanSite(context:Context,address:String,area:String,stop:()->Boolean){
+        val host=com.azrael.pixivdumpsync.SiteControls.key(address)
+        val db=VideoDb(context)
+        try{
+            var watch=db.listWatches().firstOrNull{
+                com.azrael.pixivdumpsync.SiteControls.key(it.address)==host &&
+                    it.address.trimEnd('/')==address.trimEnd('/')
+            } ?: db.listWatches().firstOrNull{
+                com.azrael.pixivdumpsync.SiteControls.key(it.address)==host
+            }
+            if(watch==null){
+                require(db.addWatch(address,host)){"Source could not be enrolled"}
+                watch=db.listWatches().firstOrNull{
+                    com.azrael.pixivdumpsync.SiteControls.key(it.address)==host
+                }
+            }
+            require(watch!=null){"Source is not recognized"}
+            val selected=watch
+            var cursor=selected.cursor
+            val pages=ArrayList<String>()
+            pages+=selected.address
+            if(!cursor.isNullOrBlank() && !selected.backfillComplete)
+                pages+=cursor
+            val seen=HashSet<String>()
+            var count=0
+            var pageIndex=0
+            while(pageIndex<pages.size && pageIndex<8 && !stop() &&
+                com.azrael.pixivdumpsync.AppPower.enabled(context)){
+                val page=pages[pageIndex++]
+                if(!seen.add(page))continue
+                val response=try { WebDiscovery.page(page,selected.address) }
+                    catch(e:Exception){
+                        db.checked(selected.id,e.message?:"Provider discovery failed")
+                        com.azrael.pixivdumpsync.SourceIndexDb(context).use{
+                            it.failure(address,e.message?:"Provider discovery failed")
+                        }
+                        throw e
+                    }
+                if(response.hits.isEmpty() && count==0)
+                    error("No videos found; this provider needs a supported parser or account")
+                val clock=System.currentTimeMillis()
+                com.azrael.pixivdumpsync.SourceIndexDb(context).use{index->
+                    index.add(address,selected.label,area,"native")
+                    for(hit in response.hits){
+                        if(stop())break
+                        val thumb=hit.preview?.takeIf{
+                            com.azrael.pixivdumpsync.SearchRanking.validUrl(it)
+                        }
+                        if(index.upsert(com.azrael.pixivdumpsync.IndexedItem(
+                            hit.url,hit.title,thumb,address,area,"video",clock,false)))
+                            count++
+                    }
+                    // A checked page is evidence of discovery only.
+                    index.update(address,response.next,null,count,
+                        response.next==null)
+                }
+                cursor=response.next
+                db.setBackfill(selected.id,cursor,cursor==null)
+                db.checked(selected.id,null)
+                if(pageIndex==1 && pages.size==1 && cursor!=null && cursor !in seen)
+                    pages+=cursor
+                else if(pageIndex>1 && cursor!=null && cursor !in seen)
+                    pages+=cursor
+            }
+            if(stop())throw InterruptedException("Stopped by user")
+        }finally{db.close()}
+    }
     fun submit(context: Context, scan: Boolean, targetHost:String?=null,
                onStatus: (String)->Unit = {}) =
         executor.submit { work(context,scan,onStatus,targetHost) }
     private fun downloadOne(context: Context, db: VideoDb, item: Video, status:(Int)->Unit): String {
-        val parent=File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),"videoflow-staging/${item.id}")
-        parent.mkdirs()
+        // Native yt-dlp may run in a read-only working directory on Android.
+        // Force every output and .part file into a writable private staging area.
+        val parent=File(context.cacheDir,"videoflow-staging/${item.id}")
+        if(!parent.isDirectory && !parent.mkdirs())
+            throw java.io.IOException("Cannot create private download staging directory")
+        val probe=File.createTempFile(".write-probe",null,parent)
+        check(probe.delete()){"Cannot clean up download staging probe"}
         val template=File(parent,"%(title).160s [%(id)s].%(ext)s").absolutePath
+        val stage=parent.absolutePath
+        // The embedded Python yt-dlp process still produced relative .part
+        // names despite --output. Android's default process working directory
+        // is read-only. chdir prevents the confirmed EROFS error even if the
+        // underlying yt-dlp wrapper drops a path override.
+        AsterionCwd.enter(parent)
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
         val viaProxy=prefs.getBoolean("tor_proxy",false)
         val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
@@ -222,6 +309,11 @@ object VideoEngine {
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
         fun request(link:String, referer:String?=null)=
             YtDlpRequest(link).setOutputTemplate(template)
+                // An explicit output path overrides the wrapper's relative default.
+                .addOption("--paths","home:"+stage)
+                .addOption("--paths","temp:"+stage)
+                .addOption("--output",template)
+                .addOption("--no-cache-dir")
                 .addOption("--no-playlist").addOption("--continue")
                 .addOption("--no-overwrites").addOption("--retries","2")
                 .addOption("--fragment-retries","3")
@@ -243,6 +335,8 @@ object VideoEngine {
             // Verify runtime before requesting a single media fragment; video
             // resolution alone cannot establish that a scene is complete.
             val request=YtDlpRequest(link)
+                .addOption("--no-cache-dir")
+                .addOption("--paths","home:"+stage)
                 .addOption("--dump-single-json")
                 .addOption("--skip-download")
                 .addOption("--no-playlist")

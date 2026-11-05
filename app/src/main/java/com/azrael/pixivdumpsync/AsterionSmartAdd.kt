@@ -61,9 +61,12 @@ object AsterionSmartAdd {
         p.edit().putStringSet("sites",current).putString("status_"+key,status).apply()
         val area=when(kind){
             Kind.PIXIV->"ARTWORK"
-            Kind.X->"ARTWORK"
+            Kind.X->"X"
             Kind.COSPLAY->"COSPLAY"
-            Kind.VIDEO->"ADULT"
+            Kind.VIDEO->if(AlohaSources.all.any{
+                SiteControls.key(it.url)==SiteControls.key(address) &&
+                    it.area==AlohaArea.HENTAI
+            })"HENTAI" else "ADULT"
             Kind.COMICS->"COMICS"
             Kind.BOOKS->"BOOKS"
             Kind.TORRENTS->"GAMES"
@@ -253,8 +256,8 @@ object AsterionSmartAdd {
         onDone("Creator profile enrolled; originals and access checked by SourceIndex")
     }
     fun render(a:Activity,p:LinearLayout,done:()->Unit){
-        p.addView(ui.text(a,"Add a site",23f,ui.white,true),ui.lp(a,14))
-        p.addView(ui.text(a,"Paste a creator, collection or source URL. Known sites are categorized automatically.",
+        p.addView(ui.text(a,"Add a source",23f,ui.white,true),ui.lp(a,14))
+        p.addView(ui.text(a,"Enter a creator or site URL. It stays in its category and syncs with that module.",
             12f,ui.secondary),ui.lp(a,5))
         val box=ui.card(a)
         val field=EditText(a).apply{
@@ -263,7 +266,7 @@ object AsterionSmartAdd {
         }
         box.addView(field,ui.lp(a,0))
         val status=ui.text(a,"",12f,ui.secondary)
-        box.addView(ui.action(a,"ADD & BACKFILL",true){
+        box.addView(ui.action(a,"SAVE SOURCE & SYNC",true){
             val url=field.text.toString().trim()
             if(url.startsWith("magnet:?xt=urn:btih:",true)){
                 AlertDialog.Builder(a).setTitle("Select torrent content type")
@@ -275,6 +278,13 @@ object AsterionSmartAdd {
                     }.setNegativeButton("Cancel",null).show()
                 return@action
             }
+            val mediaFile=Regex("(?i)\\.(?:mp4|webm|mkv|zip|epub|torrent|png|jpg|jpeg|webp|apk)(?:[?#]|$)")
+                .containsMatchIn(url)
+            if(mediaFile){
+                ResourceDownloads.route(a,url,"Files")
+                status.text="File transfer requested · see Downloads for results"
+                return@action
+            }
             val proposed=guess(url)
             if(proposed!=null)register(a,url,proposed,status,done)
             else if(SearchRanking.validUrl(url)){
@@ -284,45 +294,7 @@ object AsterionSmartAdd {
                     }.setNegativeButton("Cancel",null).show()
             }else status.text="Enter a valid site or profile URL"
         },ui.lp(a,8))
-        // Unknown providers never need a fake site-specific adapter just to
-        // browse their pages or download an original with the user's session.
-        box.addView(ui.action(a,"BROWSE SITE · IN APP",false){
-            val url=field.text.toString().trim()
-            if(!SearchRanking.validUrl(url)){
-                status.text="Enter a valid HTTPS site URL"
-                return@action
-            }
-            val category=when(guess(url)){
-                Kind.BOOKS->"Books"
-                Kind.COMICS->"Comics"
-                Kind.VIDEO->"Videos"
-                Kind.ASSETS->"Assets"
-                Kind.COSPLAY->"Cosplay"
-                else->"Files"
-            }
-            a.startActivity(Intent(a,com.azrael.galleryflow.ProviderWebActivity::class.java)
-                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,url)
-                .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,category))
-        },ui.lp(a,8))
-        box.addView(ui.action(a,"DOWNLOAD DIRECT FILE / TORRENT",false){
-            val url=field.text.toString().trim()
-            if(!url.startsWith("magnet:?xt=urn:btih:",true) &&
-                !SearchRanking.validUrl(url)){
-                status.text="Enter an HTTPS file or magnet link"
-                return@action
-            }
-            val category=if(NovelEpubParser.supportedSeries(url))"Books" else "Files"
-            ResourceDownloads.route(a,url,category)
-            status.text=if(category=="Books")
-                "Complete novel archive queued or previously recorded; check Books"
-            else "Sent to the unified download queue; provider access is still required"
-        },ui.lp(a,6))
         box.addView(status,ui.lp(a,8))
         p.addView(box,ui.lp(a,11))
-        val records=a.getSharedPreferences("asterion_custom_site_enrollment",0)
-            .getStringSet("sites",emptySet()).orEmpty()
-        if(records.isNotEmpty())
-            p.addView(ui.text(a,records.size.toString()+" added sources are retained in their modules",
-                12f,ui.secondary),ui.lp(a,11))
     }
 }

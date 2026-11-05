@@ -90,8 +90,7 @@ class AsterionHomeActivity:Activity(){
                     if(isFinishing||isDestroyed)return@runOnUiThread
                     overview=next
                     lastOverviewRefresh=System.currentTimeMillis()
-                    navButtons["Queue"]?.text=if(next.pending>0)
-                        "Downloads (${next.pending})" else "Downloads"
+                    navButtons["Queue"]?.text="Downloads"
                     countsLabel?.text="${next.artists} Pixiv artists · ${next.x} X accounts · ${next.gallery} cosplay sources"
                     next.coverage?.let{c->
                         providerLabel?.text="${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors"
@@ -172,7 +171,7 @@ class AsterionHomeActivity:Activity(){
         }.getOrNull()?.takeIf{it.isNotBlank()}
             ?:source.lastPathSegment.orEmpty()
 
-    private val pages=listOf("Home","Add","Search","Queue","Recommend")
+    private val pages=listOf("Home","Search","Queue")
     private val navButtons=linkedMapOf<String,TextView>()
     private val navIcons=linkedMapOf<String,ImageView>()
     private val navSurfaces=linkedMapOf<String,LinearLayout>()
@@ -188,7 +187,7 @@ class AsterionHomeActivity:Activity(){
         "Books","Toonily"->theme.booksGold
         "Torrents"->theme.gamesTeal
         "Assets"->theme.assetsLilac
-        "Porn"->theme.violet
+        "Porn","Hentai"->theme.violet
         else->theme.primary
     }
     private fun section(title:String,subtitle:String=""){
@@ -236,29 +235,34 @@ class AsterionHomeActivity:Activity(){
         head.addView(backControl,LinearLayout.LayoutParams(dp(38),dp(48)))
         head.addView(theme.brandMark(this,47),LinearLayout.LayoutParams(dp(47),dp(47)))
         val label=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(11),0,0,0)}
-        label.addView(text("ASTERION DOWNLOADER",19f,theme.white,true))
-        pageContext=text("Discover · Follow · Download",11f,theme.secondary)
+        label.addView(text("ASTERION",19f,theme.white,true))
+        pageContext=text("Downloader · Home",11f,theme.secondary)
         label.addView(pageContext)
         head.addView(label,LinearLayout.LayoutParams(0,-2,1f))
         root.addView(head)
-        val settings=text("SETTINGS",12f,theme.secondary,true).apply{
-            gravity=Gravity.CENTER
+        val settings=ImageView(this).apply{
+            setImageResource(android.R.drawable.ic_menu_preferences)
+            imageTintList=android.content.res.ColorStateList.valueOf(theme.secondary)
+            scaleType=ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(9),dp(11),dp(9),dp(11))
             isClickable=true
             isFocusable=true
-            contentDescription="Open settings"
-            setPadding(dp(12),dp(10),dp(12),dp(10))
+            contentDescription="Settings"
             setOnClickListener{open("Settings")}
         }
-        head.addView(settings)
-        emergencyLabel=text(if(AppPower.enabled(this))"STOP" else "PAUSED",
+        head.addView(settings,LinearLayout.LayoutParams(dp(43),dp(47)))
+        emergencyLabel=text(if(AppPower.enabled(this))"PAUSE" else "RESUME",
             11f,theme.danger,true).apply{
-            contentDescription="Stop all background sync and backfill"
+            contentDescription="Pause all sync or resume downloads"
             isClickable=true;isFocusable=true
-            setPadding(dp(10),dp(11),dp(10),dp(11))
+            setPadding(dp(7),dp(11),dp(7),dp(11))
             setOnClickListener{
                 if(AppPower.enabled(this@AsterionHomeActivity)){
                     stopBackgroundNow()
-                }else open("Settings")
+                }else {
+                    AppPower.set(this@AsterionHomeActivity,true)
+                    render()
+                }
             }
         }
         head.addView(emergencyLabel)
@@ -275,15 +279,13 @@ class AsterionHomeActivity:Activity(){
         }
         pages.forEach{tab->
             val title=when(tab){
-                "Home"->"Home";"Add"->"Add";"Search"->"Search"
-                "Queue"->"Downloads";else->"For You"
+                "Home"->"Home";"Search"->"Search"
+                else->"Downloads"
             }
             val resource=when(tab){
                 "Home"->R.drawable.ic_nav_home
-                "Add"->R.drawable.ic_nav_add
                 "Search"->R.drawable.ic_nav_search
-                "Queue"->R.drawable.ic_nav_downloads
-                else->R.drawable.ic_nav_suggest
+                else->R.drawable.ic_nav_downloads
             }
             val item=LinearLayout(this).apply{
                 orientation=LinearLayout.VERTICAL
@@ -400,12 +402,15 @@ class AsterionHomeActivity:Activity(){
     private fun render(){
         navButtons["Queue"]?.text="Downloads"
         if(::emergencyLabel.isInitialized)
-            emergencyLabel.text=if(AppPower.enabled(this))"STOP" else "PAUSED"
+            emergencyLabel.text=if(AppPower.enabled(this))"PAUSE" else "RESUME"
         backControl.visibility=if(page in pages && history.isEmpty())View.GONE else View.VISIBLE
-        pageContext.text=if(page in pages)"Discover · Follow · Download"
-            else "‹ Back  /  "+when(page){
-                "Queue"->"Downloads";"Recommend"->"For You";else->page
-            }
+        pageContext.text=when(page){
+            "Queue"->"Downloads"
+            "Add"->"Add source"
+            "CreatorDiscovery"->"Creators"
+            "Site"->"Cosplay"
+            else->page
+        }
         val selectedTab=if(page in pages)page
             else history.lastOrNull{it in pages} ?: "Home"
         navButtons.forEach{(tab,view)->
@@ -416,7 +421,7 @@ class AsterionHomeActivity:Activity(){
                 if(selected)theme.primary else theme.secondary)
             navSurfaces[tab]?.background=theme.touch(this,
                 if(selected)theme.soft else theme.surface,14,
-                if(selected)theme.primary else theme.surface)
+                if(selected)theme.soft else theme.surface)
         }
         body.removeAllViews()
         val power = Switch(this).apply {
@@ -440,13 +445,8 @@ class AsterionHomeActivity:Activity(){
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
             "Site"->{AsterionUnifiedFollowing.kyora(this,body){render()};SourceIndexPanel.render(this,body,"COSPLAY")}
-            "Porn"->{
-                AsterionUnifiedFollowing.adult(this,body){render()}
-                SourceIndexPanel.render(this,body,
-                    listOf("ADULT","HENTAI","CREATORS"),"Porn & Hentai")
-                ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.ADULT){render()}
-                AsterionVideoAccounts.render(this,body)
-            }
+            "Porn"->AsterionAdultHub.render(this,body,"ADULT"){render()}
+            "Hentai"->AsterionAdultHub.render(this,body,"HENTAI"){render()}
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
@@ -455,9 +455,10 @@ class AsterionHomeActivity:Activity(){
                 ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.ASSETS){render()}
                 SourceIndexPanel.render(this,body,"ASSETS")
             }
-            "Add"->{AsterionSmartAdd.render(this,body){render()};AsterionAddedSitesPanel.render(this,body)}
-            "Search"->AsterionSearchHub.render(this,body){render()}
-            "Recommend"->AsterionRecommendations.render(this,body){render()}
+            "Add"->AsterionSmartAdd.render(this,body){render()}
+            "Search"->AsterionSearchHub.render(this,body,{render()},{open("Add")})
+            "Recommend"->AsterionSuggestedUi.render(this,body)
+            "CreatorDiscovery"->AsterionRecommendations.render(this,body){render()}
             "Queue"->UnifiedDownloadsUi.render(this,body){render()}
             "Library"->renderLibrary()
             "Sources"->renderSources()
@@ -517,43 +518,28 @@ class AsterionHomeActivity:Activity(){
     private fun renderHome(){
         section("Your library","Choose what to follow or download.")
         tileRow(
-            sourceTile("Porn & Hentai","Performers · Videos · Sync",
+            sourceTile("Porn","Video sites · Performers · Sync",
                 R.drawable.ic_source_video,theme.violet,"Porn"),
-            sourceTile("Pixiv","Artists · Original Kuroha interface",
-                R.drawable.ic_source_pixiv,theme.pixivBlue,"Pixiv")
+            sourceTile("Hentai","Animated videos · Sources · History",
+                R.drawable.ic_source_video,theme.violet,"Hentai")
         )
         tileRow(
+            sourceTile("Pixiv","Artwork · Artists · Backfill",
+                R.drawable.ic_source_pixiv,theme.pixivBlue,"Pixiv"),
             sourceTile("X","Following · Photos · Backfill",
-                R.drawable.ic_source_x,theme.xCyan,"X"),
+                R.drawable.ic_source_x,theme.xCyan,"X")
+        )
+        tileRow(
             sourceTile("Cosplay","Kyora · Galleries · Videos",
-                R.drawable.ic_source_kyora,theme.cosplayRose,"Kyora")
+                R.drawable.ic_source_kyora,theme.cosplayRose,"Kyora"),
+            sourceTile("Books","EPUB novels · Comic ZIPs",
+                R.drawable.ic_source_toonily,theme.booksGold,"Books")
         )
         tileRow(
-            sourceTile("Books","Novels · Comics · Doujin ZIPs",
-                R.drawable.ic_source_toonily,theme.booksGold,"Books"),
-            sourceTile("Torrents / Games","Game releases · Magnet · Progress",
-                R.drawable.ic_source_video,theme.gamesTeal,"Torrents")
-        )
-        put(body,sourceTile("3D Assets","Koikatsu cards · Gumroad · Models",
-            R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets"),10)
-        section("Specialist collections","All sources use the same archive, previews and queue.")
-        tileRow(
-            sourceTile("Koikatsu Studio","After Party scenes · Mods · Outfits",
-                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","STUDIO"),
-            sourceTile("MMD · Motions","PMX / VMD · Stages · Rigs",
-                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","MMD")
-        )
-        tileRow(
-            sourceTile("Live2D","Models · Rig files · Expressions",
-                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets","LIVE2D"),
-            sourceTile("Animated Art","Spine · PSD · Layered projects",
-                R.drawable.ic_source_pixiv,theme.pixivBlue,"Assets","ANIMATION")
-        )
-        tileRow(
-            sourceTile("Visual Novel Mods","Eroge patches · Routes · Translations",
-                R.drawable.ic_source_video,theme.gamesTeal,"Torrents","MODS"),
-            sourceTile("Doujin Voice","Voice dramas · ASMR · Audio packs",
-                R.drawable.ic_source_video,theme.violet,"Porn","VOICE")
+            sourceTile("Torrents & Games","Torrents · Releases · Mods",
+                R.drawable.ic_source_video,theme.gamesTeal,"Torrents"),
+            sourceTile("3D Assets","Koikatsu · MMD · Live2D",
+                R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets")
         )
         val summary=card()
         countsLabel=text(if(overview.loaded)
@@ -565,7 +551,7 @@ class AsterionHomeActivity:Activity(){
             else "${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors",
             11f,theme.secondary)
         put(summary,providerLabel!!,5)
-        put(summary,button("SYNC & BACKFILL ALL FOLLOWED SOURCES"){
+        put(summary,button("SYNC & BACKFILL FOLLOWED SOURCES"){
             if(!AppPower.enabled(this)){
                 toast("Background sync is paused; enable it in Settings")
             }else kotlin.concurrent.thread(name="asterion-user-backfill"){
@@ -579,6 +565,7 @@ class AsterionHomeActivity:Activity(){
             }
         },7)
         put(body,summary,12)
+        AsterionSuggestedUi.render(this,body)
     }
     private fun renderBooks(){
         section("Books","EPUB novels · comics and doujin galleries as ZIP.")
