@@ -22,8 +22,12 @@ class NovelEpubTest {
         assertTrue(NovelEpubParser.supportedSeries(target))
         assertTrue(NovelEpubParser.readableZipSeries(target))
         assertFalse(NovelEpubParser.readableZipSeries(target+"/chapter-1"))
-        assertFalse(NovelEpubParser.readableZipSeries(
+        assertTrue(NovelEpubParser.readableZipSeries(
             "https://novelbuddy.com/novel/i-am-the-fated-villain"))
+        assertTrue(NovelEpubParser.readableZipSeries(
+            "https://readnovelfull.com/book/my-favorite-novel"))
+        assertFalse(NovelEpubParser.readableZipSeries(
+            "https://mp4directs.com/threads/example.123"))
     }
     @Test fun chapterCollectorRetainsOrderAndRejectsSidebarCrossSeries(){
         val doc=Jsoup.parse("""<main class="chapter-list">
