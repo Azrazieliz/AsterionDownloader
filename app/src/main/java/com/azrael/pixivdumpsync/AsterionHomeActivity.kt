@@ -433,6 +433,12 @@ class AsterionHomeActivity:Activity(){
         val artistCount=AppDb(this).use{it.listArtists().size}
         put(summary,text("$artistCount Pixiv artists · $xCount X accounts · $kyoraCount cosplay sources",
             12f,theme.secondary),0)
+        put(summary,button("SYNC & BACKFILL ALL FOLLOWED SOURCES"){
+            val result=UniversalBackfill.start(this)
+            toast(result.requested.toString()+" source engines requested"+
+                (if(result.errors.isEmpty())"" else
+                    " · "+result.errors.size+" could not start"))
+        },7)
         put(summary,button("OPEN DOWNLOADED FILES"){open("Library")},7)
         put(body,summary,12)
     }
