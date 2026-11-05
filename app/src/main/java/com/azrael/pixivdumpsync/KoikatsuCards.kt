@@ -29,8 +29,13 @@ object KoikatsuCards {
                 meta?.optString("lastName").orEmpty()).filter{it.isNotBlank()}
                 .joinToString(" ").ifBlank{"Card "+id}
             val author=card.optJSONObject("uploader")?.optString("username").orEmpty()
-            val png="https://db.bepis.moe/card/full/KK_"+id.toString().padStart(6,'0')+".png"
-            KoikatsuCard(name,author,png,"BepisDB","https://db.bepis.moe/koikatsu/view/"+id)
+            val key="KK_"+id.toString().padStart(6,'0')
+            val png="https://db.bepis.moe/card/full/"+key+".png"
+            // Verified BepisDB frontend thumbnail endpoint. Loading a full
+            // 22+ MiB card for each search tile previously stalled Android.
+            val thumbnail="https://db.bepis.moe/card/thumb/"+key+"_thumb.webp"
+            KoikatsuCard(name,author,png,"BepisDB",
+                "https://db.bepis.moe/koikatsu/view/"+id,thumbnail)
         }
     }
     private fun safe(url:String):Boolean=runCatching{
