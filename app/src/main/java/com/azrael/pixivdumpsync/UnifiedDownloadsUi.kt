@@ -20,7 +20,8 @@ object UnifiedDownloadsUi {
     private enum class Filter(val title:String){ALL("All"),ACTIVE("Active"),HELD("Held"),FAILED("Failed"),DONE("Saved")}
     private data class Row(val category:String,val title:String,val detail:String,
         val state:State,val percent:Int?,val color:Int,val order:Long,
-        val action:()->Unit)
+        val action:()->Unit,
+        val preview:String?=null,val saved:String?=null)
     private fun display(a:Activity,row:Row){
         AlertDialog.Builder(a).setTitle(row.title)
             .setMessage(row.category+" · "+row.detail)
@@ -61,7 +62,7 @@ object UnifiedDownloadsUi {
                         }
                         else->{}
                     }
-                })
+                },saved=item.savedUri)
         }
         val comics=ChapterQueue(a).use{it.list().take(180)}
         for(item in comics){
@@ -129,7 +130,7 @@ object UnifiedDownloadsUi {
                         }
                         else->{}
                     }
-                })
+                },preview=item.photo,saved=item.saved)
         }
         val direct=DirectDownloadTracker.states(a,180)
         for(item in direct){
@@ -171,7 +172,26 @@ object UnifiedDownloadsUi {
         }.thenByDescending{it.order})
     }
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
-        val rows=get(a)
+        // Reading several independent SQLite / DownloadManager queues on the
+        // main thread caused slow navigation and sometimes an app freeze.
+        val loading=ui.text(a,"Loading downloaded files…",12f,ui.secondary)
+        parent.addView(loading,ui.lp(a,6))
+        kotlin.concurrent.thread(name="asterion-download-list-read"){
+            val read=runCatching{get(a)}
+            a.runOnUiThread{
+                if(a.isFinishing || a.isDestroyed || loading.parent!==parent)
+                    return@runOnUiThread
+                parent.removeView(loading)
+                read.onSuccess{renderLoaded(a,parent,refresh,it)}
+                    .onFailure{
+                        parent.addView(ui.text(a,
+                            "Download list error: "+it.message,12f,ui.danger))
+                    }
+            }
+        }
+    }
+    private fun renderLoaded(a:Activity,parent:LinearLayout,refresh:()->Unit,
+                             rows:List<Row>){
         val active=rows.count{it.state==State.ACTIVE}
         val held=rows.count{it.state==State.HELD}
         val failed=rows.count{it.state==State.FAILED}
@@ -208,7 +228,7 @@ object UnifiedDownloadsUi {
             })
         }
         parent.addView(choices,ui.lp(a,12))
-        val size=pref.getInt("page",20).coerceIn(10,140)
+        val size=pref.getInt("page",12).coerceIn(10,160)
         for(item in filtered.take(size)){
             val row=ui.row(a).apply{
                 background=ui.touch(a,ui.surface,14)
@@ -217,19 +237,36 @@ object UnifiedDownloadsUi {
                 isClickable=true;isFocusable=true
                 contentDescription=item.category+" "+item.title+" "+item.detail
             }
-            val stripe=android.view.View(a).apply{
-                background=ui.shape(a,item.color,4,item.color)
+            val preview=ImageView(a).apply{
+                scaleType=ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(ui.raised)
+                setImageResource(when(item.category){
+                    "Video"->R.drawable.ic_source_video
+                    "Novel EPUB","Comic ZIP"->R.drawable.ic_source_toonily
+                    else->R.drawable.ic_source_site
+                })
             }
-            row.addView(stripe,LinearLayout.LayoutParams(ui.px(a,4),ui.px(a,42))
+            row.addView(preview,LinearLayout.LayoutParams(ui.px(a,60),ui.px(a,60))
                 .apply{rightMargin=ui.px(a,10)})
+            if(item.saved?.startsWith("content:")==true){
+                CreatorPreviews.galleryThumbnail(a,preview,item.saved,null)
+            }else if(item.preview?.startsWith("https://")==true){
+                RemoteImageLoader.load(a,preview,item.preview,item.preview)
+            }
             val main=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            main.addView(ui.text(a,item.title.take(95),14f,ui.white,true).apply{
+            main.addView(ui.text(a,item.title.take(115),14f,ui.white,true).apply{
                 maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
             })
-            main.addView(ui.text(a,item.category+" · "+item.detail,11f,
-                if(item.state==State.FAILED)ui.danger else ui.secondary).apply{
-                maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
-            },ui.lp(a,3))
+            val label=when(item.state){
+                State.DONE->"SUCCESS"
+                State.FAILED->"FAILED · TAP TO RETRY"
+                State.HELD->"NEEDS ACCOUNT / ACTION"
+                State.ACTIVE->if(item.percent!=null && item.percent>0)
+                    "DOWNLOADING · "+item.percent+"%" else "QUEUED / RUNNING"
+            }
+            main.addView(ui.text(a,label,11f,
+                if(item.state==State.FAILED)ui.danger else ui.secondary),
+                ui.lp(a,3))
             if(item.percent!=null && item.state==State.ACTIVE){
                 val progress=ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal).apply{
                     max=100
