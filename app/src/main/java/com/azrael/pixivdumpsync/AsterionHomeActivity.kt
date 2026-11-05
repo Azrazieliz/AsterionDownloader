@@ -499,6 +499,34 @@ class AsterionHomeActivity:Activity(){
                     put(archive,text(item.title+" · "+item.state+
                         " · "+cached+" chapters cached",12f,
                         if(item.state=="WAIT_LOGIN")theme.danger else theme.secondary),8)
+                    val control=theme.row(this)
+                    val sync=Switch(this).apply{
+                        text="Sync new chapters"
+                        textSize=12f
+                        setTextColor(theme.white)
+                        isChecked=item.syncEnabled
+                        setOnCheckedChangeListener{_,enabled->
+                            NovelEpubQueue(this@AsterionHomeActivity).use{
+                                it.setSync(item.url,enabled)
+                            }
+                            if(enabled)NovelEpubService.schedule(this@AsterionHomeActivity)
+                        }
+                    }
+                    control.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
+                    control.addView(button("CHECK NEW"){
+                        val requested=NovelEpubQueue(this).use{
+                            it.requestedRefresh(item.url)
+                        }
+                        if(requested)NovelEpubService.schedule(this)
+                        else if(item.state=="WAIT_LOGIN")toast("Reconnect the website account")
+                        else toast("Novel already queued or running")
+                    })
+                    put(archive,control,4)
+                    if(item.lastCheck>0L)
+                        put(archive,text("Last successful chapter check: "+
+                            java.text.DateFormat.getDateTimeInstance()
+                                .format(java.util.Date(item.lastCheck)),
+                            11f,theme.secondary),3)
                     if(!item.error.isNullOrBlank())
                         put(archive,text(item.error.take(160),11f,theme.danger),3)
                     if(item.state=="WAIT_LOGIN")
