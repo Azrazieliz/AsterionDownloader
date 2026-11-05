@@ -19,6 +19,18 @@ object AppPower {
             val app=context.applicationContext
             kotlin.concurrent.thread(name="asterion-resume-schedulers"){
                 if(!enabled(app))return@thread
+                android.os.Process.setThreadPriority(
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND)
+                // On paused startup these operations are skipped. Resume
+                // initializes them here so no source is silently lost.
+                runCatching{
+                    com.azrael.galleryflow.GalleryDb(app).use{
+                        it.seedCatalogOnce(app)
+                    }
+                }
+                if(enabled(app))runCatching{AlohaDefaults.ensure(app)}
+                if(enabled(app))runCatching{CreatorNames.seed(app)}
+                if(!enabled(app))return@thread
                 runCatching{Scheduler.ensure(app)}
                 runCatching{XPhotoScheduler.ensure(app)}
                 runCatching{com.azrael.galleryflow.Scheduler.ensure(app)}
