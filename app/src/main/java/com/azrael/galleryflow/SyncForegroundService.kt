@@ -33,6 +33,10 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android requires every startForegroundService() request to reach
+        // startForeground() promptly, even when sync is disabled, already
+        // running, or paused. Returning early previously crashed Android 17.
+        startForeground(NOTIFICATION_ID, notification())
         when (intent?.action) {
             ACTION_PAUSE -> { SyncControl.pause(); notifyNow(); return START_NOT_STICKY }
             ACTION_RESUME -> { SyncControl.resume(); notifyNow(); return START_NOT_STICKY }
@@ -45,7 +49,9 @@ class SyncForegroundService : Service() {
         }
 
         if(!com.azrael.pixivdumpsync.AppPower.enabled(this)) {
-            stopSelf();return START_NOT_STICKY
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
         }
         val mode = runCatching { SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE) ?: SyncMode.LIVE.name) }
             .getOrDefault(SyncMode.LIVE)
@@ -54,7 +60,6 @@ class SyncForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        startForeground(NOTIFICATION_ID, notification())
         currentRun = executor.submit {
             try {
                 SyncEngine(applicationContext).run(
