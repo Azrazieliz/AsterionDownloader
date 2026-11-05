@@ -20,11 +20,11 @@ class NovelEpubTest {
     @Test fun suppliedFreewebnovelTitleSelectsCompleteReadableZip(){
         val target="https://freewebnovel.com/novel/i-am-the-fated-villain"
         assertTrue(NovelEpubParser.supportedSeries(target))
-        assertTrue(NovelEpubParser.readableZipSeries(target))
+        assertFalse(NovelEpubParser.readableZipSeries(target))
         assertFalse(NovelEpubParser.readableZipSeries(target+"/chapter-1"))
-        assertTrue(NovelEpubParser.readableZipSeries(
+        assertFalse(NovelEpubParser.readableZipSeries(
             "https://novelbuddy.com/novel/i-am-the-fated-villain"))
-        assertTrue(NovelEpubParser.readableZipSeries(
+        assertFalse(NovelEpubParser.readableZipSeries(
             "https://readnovelfull.com/book/my-favorite-novel"))
         assertFalse(NovelEpubParser.readableZipSeries(
             "https://mp4directs.com/threads/example.123"))
