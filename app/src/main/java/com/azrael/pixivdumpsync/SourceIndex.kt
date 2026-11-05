@@ -755,7 +755,8 @@ object SourceIndex {
         try {
             val pref=context.getSharedPreferences(STATE,0)
             val all=SourceIndexDb(context).use{it.sources().filter{source->
-                source.enabled && source.adapter=="generic" &&
+                source.enabled && SiteControls.any(context,source.url) &&
+                    source.adapter=="generic" &&
                     (area==null||area==source.area)
             }}
             // Pending post details and original enqueue retries must keep
@@ -913,10 +914,14 @@ object SourceIndex {
             it!=source.url && SourceIndexParser.safe(it) &&
                 SourceIndexParser.sameSite(source.url,it)
         }
-        if(saved!=null)pages+=saved
+        val historyEnabled=SiteControls.backfill(context,source.url,source.enabled)
+        if(saved!=null && historyEnabled)pages+=saved
         var index=0
         val visited=HashSet<String>()
-        while(index<pages.size && index<4){
+        while(index<pages.size && index<(if(historyEnabled)4 else 1)){
+            if(!AppPower.enabled(context) ||
+                (!SiteControls.sync(context,source.url) &&
+                 !SiteControls.backfill(context,source.url)))break
             val address=pages[index++]
             if(!visited.add(address))continue
             var doc=fetchPage(context,source,address)
@@ -953,15 +958,15 @@ object SourceIndex {
                 // single large listing page is still being indexed.
             }
             val next=SourceIndexParser.next(doc,source.url,address)
-            if(index==1 && saved==null && next!=null && next !in visited)
+            if(historyEnabled && index==1 && saved==null && next!=null && next !in visited)
                 pages+=next
-            else if(index>1 && next!=null && next !in visited)
+            else if(historyEnabled && index>1 && next!=null && next !in visited)
                 pages+=next
             if(records.isEmpty() && fresh==0 && index==1 && saved==null)
                 throw IllegalStateException("No supported originals found; dedicated adapter or login required")
             // Persist each successful page before the next request. A network failure
             // on the following page must resume here instead of restarting history.
-            cursor=if(index==1 && saved!=null)saved else next
+            if(historyEnabled)cursor=if(index==1 && saved!=null)saved else next
             SourceIndexDb(context).use{db->
                 db.update(source.url,cursor,null,source.discovered+fresh)
             }
