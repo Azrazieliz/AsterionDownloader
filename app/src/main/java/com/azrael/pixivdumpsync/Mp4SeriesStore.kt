@@ -82,10 +82,13 @@ class Mp4SeriesStore(context:Context):
         },"id=?",arrayOf(id.toString()))
     }
     fun observe(work:Mp4Follow,link:Mp4SeriesLink){
-        val kind=if(link.isEpub)"EPUB" else "THREAD"
-        val status=if(link.isEpub && Mp4SeriesRules.eligible(
-                link.volume,work.firstVolume) && work.type=="EPUB")
-            "READY" else "REVIEW"
+        val kind=when{
+            link.isEpub->"EPUB"
+            link.isImageZip->"ZIP"
+            else->"THREAD"
+        }
+        val status=if(kind==work.type && Mp4SeriesRules.eligible(
+                link.volume,work.firstVolume))"READY" else "REVIEW"
         val v=ContentValues().apply{
             put("url",link.url);put("work_id",work.id)
             put("title",link.title);link.volume?.let{put("volume",it)}
