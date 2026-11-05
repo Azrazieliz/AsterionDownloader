@@ -64,13 +64,16 @@ object VideoEngine {
             if(scan) {
                 if(targetHost==null)
                     com.azrael.pixivdumpsync.NameCrawler.scan(context,onStatus)
-                val settings=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
-                val max=settings.getInt("max_new",3).coerceIn(1,20)
-                for(watch in db.listWatches().filter {
+                // Independent per-provider discovery agents run concurrently.
+                // Downloads still use their durable shared queue to avoid OOM.
+                val scans=db.listWatches().filter {
                     it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address) &&
                     (targetHost==null ||
                         com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost)
-                }) {
+                }.map{selected->
+                    com.azrael.pixivdumpsync.BackfillAgents.submit(
+                        context,"videoflow:"+selected.address){
+                        for(watch in listOf(selected)){
                     if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                         Thread.currentThread().isInterrupted)break
                     try {
@@ -108,7 +111,8 @@ object VideoEngine {
                             for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
                             // Every scan checks latest posts. A durable cursor then resumes
                             // older pages, instead of always resetting at the homepage.
-                            val backfill=!watch.backfillComplete
+                            val backfill=!watch.backfillComplete &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
                             var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=HashSet<String>()
                             var pages=0
@@ -121,7 +125,10 @@ object VideoEngine {
                                 cursor=page.next
                                 pages++
                             }
-                            if(backfill)db.setBackfill(watch.id,cursor,cursor==null)
+                            if(backfill && com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address) &&
+                                !Thread.currentThread().isInterrupted)
+                                db.setBackfill(watch.id,cursor,cursor==null)
                             collected.values.toList()
                         }
                         if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
@@ -133,7 +140,8 @@ object VideoEngine {
                             if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                                 Thread.currentThread().isInterrupted)break
                             if(db.addVideo(hit.url,hit.title,watch.id)) added++
-                            if(!artistArchive && watch.backfillComplete && added>=max)break
+                            // Every observed new item is recorded; never truncate
+                            // a followed provider after three videos.
                         }
                         if(hits.any{!it.preview.isNullOrBlank()}){
                             com.azrael.pixivdumpsync.SearchResultsDb(context).use{results->
@@ -148,6 +156,13 @@ object VideoEngine {
                     } catch(t:Exception) {
                         db.checked(watch.id,t.message?: "Discovery failed")
                     }
+                        }
+                    }
+                }
+                for(scan in scans){
+                    if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                        Thread.currentThread().isInterrupted)break
+                    runCatching{scan.get()}
                 }
             }
             while(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
