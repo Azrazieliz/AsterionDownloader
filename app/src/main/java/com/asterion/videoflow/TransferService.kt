@@ -35,9 +35,11 @@ object VideoEngine {
                 com.azrael.pixivdumpsync.EmergencyBackfillStopReceiver.action(context)).build())
             .build()
     }
-    fun launch(context: Context, scan: Boolean = false): Boolean {
+    fun launch(context: Context, scan: Boolean = false,
+               targetHost:String?=null): Boolean {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val intent=Intent(context,TransferService::class.java).putExtra("scan",scan)
+            .putExtra("target_site_host",targetHost)
         return try {
             if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent) else context.startService(intent)
             true
@@ -45,7 +47,8 @@ object VideoEngine {
             false // JobService can use its own job execution when FGS launch is restricted.
         }
     }
-    fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {}) {
+    fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
+             targetHost:String?=null) {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
         if(!busy.compareAndSet(false,true)) return
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
@@ -59,11 +62,14 @@ object VideoEngine {
                 return
             }
             if(scan) {
-                com.azrael.pixivdumpsync.NameCrawler.scan(context,onStatus)
+                if(targetHost==null)
+                    com.azrael.pixivdumpsync.NameCrawler.scan(context,onStatus)
                 val settings=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
                 val max=settings.getInt("max_new",3).coerceIn(1,20)
                 for(watch in db.listWatches().filter {
-                    it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address)
+                    it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address) &&
+                    (targetHost==null ||
+                        com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost)
                 }) {
                     if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                         Thread.currentThread().isInterrupted)break
@@ -185,8 +191,9 @@ object VideoEngine {
             }
         } finally { busy.set(false) }
     }
-    fun submit(context: Context, scan: Boolean, onStatus: (String)->Unit = {}) =
-        executor.submit { work(context,scan,onStatus) }
+    fun submit(context: Context, scan: Boolean, targetHost:String?=null,
+               onStatus: (String)->Unit = {}) =
+        executor.submit { work(context,scan,onStatus,targetHost) }
     private fun downloadOne(context: Context, db: VideoDb, item: Video, status:(Int)->Unit): String {
         val parent=File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),"videoflow-staging/${item.id}")
         parent.mkdirs()
@@ -379,7 +386,9 @@ class TransferService: Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         VideoEngine.makeChannel(this)
         startForeground(24014,VideoEngine.notification(this,"Preparing downloads"))
-        VideoEngine.submit(applicationContext,intent?.getBooleanExtra("scan",false)==true) { text ->
+        VideoEngine.submit(applicationContext,
+            intent?.getBooleanExtra("scan",false)==true,
+            intent?.getStringExtra("target_site_host")) { text ->
             getSystemService(NotificationManager::class.java)
                 .notify(24014,VideoEngine.notification(this,text.take(80)))
         }.let { future ->
