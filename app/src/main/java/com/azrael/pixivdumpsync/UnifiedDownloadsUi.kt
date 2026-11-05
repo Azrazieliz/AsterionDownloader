@@ -16,8 +16,8 @@ import com.asterion.videoflow.VideoEngine
  */
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
-    private enum class State { ACTIVE,FAILED,DONE }
-    private enum class Filter(val title:String){ALL("All"),ACTIVE("Active"),FAILED("Failed"),DONE("Saved")}
+    private enum class State { ACTIVE,HELD,FAILED,DONE }
+    private enum class Filter(val title:String){ALL("All"),ACTIVE("Active"),HELD("Held"),FAILED("Failed"),DONE("Saved")}
     private data class Row(val category:String,val title:String,val detail:String,
         val state:State,val percent:Int?,val color:Int,val order:Long,
         val action:()->Unit)
@@ -25,7 +25,7 @@ object UnifiedDownloadsUi {
         AlertDialog.Builder(a).setTitle(row.title)
             .setMessage(row.category+" · "+row.detail)
             .setPositiveButton(when(row.state){
-                State.FAILED->"RETRY";State.DONE->"OPEN";State.ACTIVE->"CLOSE"
+                State.FAILED->"RETRY";State.DONE->"OPEN";State.ACTIVE,State.HELD->"CLOSE"
             }){_,_->row.action()}
             .setNegativeButton("Close",null).show()
     }
@@ -42,14 +42,15 @@ object UnifiedDownloadsUi {
     private fun get(a:Activity):List<Row>{
         val collected=ArrayList<Row>()
         val videos=VideoDb(a).use{it.listVideos(180)}
-        for((i,item) in videos.withIndex()){
+        for(item in videos){
             val state=when(item.status) {
-                "done"->State.DONE;"error"->State.FAILED;else->State.ACTIVE
+                "done"->State.DONE;"error"->State.FAILED
+                "full_only_hold"->State.HELD;else->State.ACTIVE
             }
             collected+=Row("Video",item.title,
                 item.status.replace('_',' ')+" · "+item.progress+"%"+
                     (item.error?.let{" · "+it.take(90)}?:""),
-                state,item.progress,ui.primary,(videos.size-i).toLong(),{
+                state,item.progress,ui.primary,item.updated,{
                     when(state){
                         State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                         State.FAILED->{
@@ -61,14 +62,14 @@ object UnifiedDownloadsUi {
                 })
         }
         val comics=ChapterQueue(a).use{it.list().take(180)}
-        for((i,item) in comics.withIndex()){
+        for(item in comics){
             val state=when(item.state){
                 "done"->State.DONE;"error"->State.FAILED;else->State.ACTIVE
             }
             collected+=Row("Comic ZIP",item.title,
                 item.state+" · "+item.progress+"%"+
                     (item.error?.let{" · "+it.take(90)}?:""),
-                state,item.progress,ui.booksGold,(comics.size-i).toLong(),{
+                state,item.progress,ui.booksGold,item.updated,{
                     when(state){
                         State.DONE->item.savedUri?.let{open(a,it,"application/zip")}
                         State.FAILED->{
@@ -80,7 +81,7 @@ object UnifiedDownloadsUi {
                 })
         }
         val photos=XPhotoQueue(a).use{it.recent(180)}
-        for((i,item) in photos.withIndex()){
+        for(item in photos){
             val state=when(item.state){
                 "done"->State.DONE;"error"->State.FAILED;else->State.ACTIVE
             }
@@ -89,7 +90,7 @@ object UnifiedDownloadsUi {
             collected+=Row("X image",title,item.state+
                 (item.error?.let{" · "+it.take(90)}?:""),
                 state,if(state==State.DONE)100 else null,ui.xCyan,
-                (photos.size-i).toLong(),{
+                item.updated,{
                     when(state){
                         State.DONE->item.saved?.let{open(a,it,"image/*")}
                         State.FAILED->{
@@ -136,18 +137,19 @@ object UnifiedDownloadsUi {
                 })
         }
         return collected.sortedWith(compareBy<Row>{
-            when(it.state){State.ACTIVE->0;State.FAILED->1;State.DONE->2}
+            when(it.state){State.ACTIVE->0;State.HELD->1;State.FAILED->2;State.DONE->3}
         }.thenByDescending{it.order})
     }
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
         val rows=get(a)
         val active=rows.count{it.state==State.ACTIVE}
+        val held=rows.count{it.state==State.HELD}
         val failed=rows.count{it.state==State.FAILED}
         val completed=rows.count{it.state==State.DONE}
         parent.addView(ui.text(a,"Downloads",23f,ui.white,true),ui.lp(a,15))
         val summary=ui.card(a,12)
         summary.addView(ui.text(a,
-            "$active active   ·   $failed failed   ·   $completed saved",
+            "$active active   ·   $held held   ·   $failed failed   ·   $completed saved",
             13f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,0))
         val actions=ui.weighted(a,ui.action(a,"RETRY & RESUME",false){
             VideoEngine.launch(a,false)
@@ -210,6 +212,7 @@ object UnifiedDownloadsUi {
             row.addView(main,LinearLayout.LayoutParams(0,-2,1f))
             val indicator=when(item.state){
                 State.ACTIVE->"…"
+                State.HELD->"‖"
                 State.FAILED->"!"
                 State.DONE->"✓"
             }
