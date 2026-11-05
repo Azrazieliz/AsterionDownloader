@@ -1,4 +1,4 @@
-name: Asterion Downloader v1.3.35 Installable Preview
+name: Asterion Downloader v1.3.36 Installable Preview
 
 on:
   push:
@@ -34,16 +34,16 @@ jobs:
           test -s "$APK"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.nocturne'"
-          "$AAPT" dump badging "$APK" | grep -F "versionName='1.3.35-preview'"
+          "$AAPT" dump badging "$APK" | grep -F "versionName='1.3.36-preview'"
           unzip -t "$APK" >/dev/null
-          cp "$APK" Asterion-Downloader-v1.3.35-Preview.apk
-          sha256sum Asterion-Downloader-v1.3.35-Preview.apk > Asterion-Downloader-v1.3.35-Preview.sha256
+          cp "$APK" Asterion-Downloader-v1.3.36-Preview.apk
+          sha256sum Asterion-Downloader-v1.3.36-Preview.apk > Asterion-Downloader-v1.3.36-Preview.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Asterion-Downloader-v1.3.35-Preview-Installable
+          name: Asterion-Downloader-v1.3.36-Preview-Installable
           path: |
-            Asterion-Downloader-v1.3.35-Preview.apk
-            Asterion-Downloader-v1.3.35-Preview.sha256
+            Asterion-Downloader-v1.3.36-Preview.apk
+            Asterion-Downloader-v1.3.36-Preview.sha256
           if-no-files-found: error
       - name: Publish direct-link GitHub prerelease for Android
         env:
@@ -51,13 +51,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="asterion-downloader-v1.3.35-preview-$(git rev-parse --short=10 "$GITHUB_SHA")"
+          TAG="asterion-downloader-v1.3.36-preview-$(git rev-parse --short=10 "$GITHUB_SHA")"
           if ! gh release create "$TAG" \
-            Asterion-Downloader-v1.3.35-Preview.apk \
-            Asterion-Downloader-v1.3.35-Preview.sha256 \
+            Asterion-Downloader-v1.3.36-Preview.apk \
+            Asterion-Downloader-v1.3.36-Preview.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Asterion Downloader v1.3.35 — Android preview" \
+            --title "Asterion Downloader v1.3.36 — Android preview" \
             --notes "Built from the exact GitHub source SHA. Adds source-free game recognition and Android compatibility export for JoiPlay/Winlator/Kirikiri/NScripter, native source-project workflows retained, multilingual public creator-profile matching, JSON-LD sameAs links, one-hop creator link hubs and evidence-based reciprocal profiles; also retains full-video gating, EPUB/ZIP, secure site indexing and original native adapters. This separate com.azrael.pixivdumpsync.nocturne preview is NOT an update to the original production app. Actual Windows game runtime compatibility and provider authentication require device testing." \
             --prerelease; then
             echo "::warning::Release publication denied by GitHub token. Verified APK and sha256 remain available in the successfully uploaded Actions artifact."
