@@ -81,7 +81,7 @@ object AsterionUnifiedFollowing {
         },9)
     }
     private fun currentLimit(a:Activity,key:String)=
-        a.getSharedPreferences("asterion_unified_ui",0).getInt(key,20).coerceIn(10,400)
+        a.getSharedPreferences("asterion_unified_ui",0).getInt(key,10).coerceIn(10,400)
     private fun more(a:Activity,p:LinearLayout,key:String,total:Int,refresh:()->Unit){
         val n=currentLimit(a,key)
         if(n<total)action(a,p,"SHOW MORE ("+(total-n)+" remaining)"){
@@ -248,10 +248,13 @@ object AsterionUnifiedFollowing {
                 // Fetch only cards rendered by the current "Show more" page;
                 // existing per-site TTL and shared two-thread pool limit requests.
                 KyoraCreatorPreviews.load(a,entity.canonicalUrl){snapshot->
-                    snapshot.entries.firstOrNull()?.cover?.let{src->
-                        RemoteImageLoader.load(a,avatar,src,entity.canonicalUrl)
+                    // Do not recreate stale cards after tab changes.
+                    if(holder.isAttachedToWindow && !a.isFinishing){
+                        snapshot.entries.firstOrNull()?.cover?.let{src->
+                            RemoteImageLoader.load(a,avatar,src,entity.canonicalUrl)
+                        }
+                        drawSite(snapshot)
                     }
-                    drawSite(snapshot)
                 }
             }
             c.addView(holder)
