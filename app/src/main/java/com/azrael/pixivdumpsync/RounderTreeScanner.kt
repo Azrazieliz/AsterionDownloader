@@ -85,6 +85,7 @@ object RounderTreeScanner {
         }
     }
     private fun scan(ctx:Context){
+        BackfillPerformance.backgroundWorker()
         val root=tree(ctx)?:return
         val pref=ctx.getSharedPreferences(PREF,0)
         try{
