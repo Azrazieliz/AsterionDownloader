@@ -84,13 +84,26 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     }
     fun next(): Video? {
         val now=System.currentTimeMillis().toString()
-        readableDatabase.rawQuery("""SELECT id,url,title,state,progress,saved_uri,error,watch_id
-            FROM videos WHERE state='queued' OR (state='retry_wait' AND retry_after<=?)
-            ORDER BY updated ASC LIMIT 1""",arrayOf(now)).use { c ->
-            if(!c.moveToFirst())return null
-            return Video(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),
-                c.getInt(4),c.getString(5),c.getString(6),c.getLong(7))
+        // Pausing a site's Sync AND Backfill must stop its pending transfers.
+        // User-added one-off downloads (watch_id=0) remain independently usable.
+        readableDatabase.rawQuery("""SELECT v.id,v.url,v.title,v.state,v.progress,
+                v.saved_uri,v.error,v.watch_id,w.address
+            FROM videos v LEFT JOIN watches w ON w.id=v.watch_id
+            WHERE (v.state='queued' OR
+                (v.state='retry_wait' AND v.retry_after<=?))
+              AND (v.watch_id=0 OR w.enabled=1)
+            ORDER BY v.updated ASC""",arrayOf(now)).use { c ->
+            while(c.moveToNext()){
+                val watchId=c.getLong(7)
+                if(watchId!=0L &&
+                    !com.azrael.pixivdumpsync.SiteControls.any(
+                        appContext,c.getString(8)?:continue))continue
+                return Video(c.getLong(0),c.getString(1),c.getString(2),
+                    c.getString(3),c.getInt(4),c.getString(5),
+                    c.getString(6),watchId)
+            }
         }
+        return null
     }
     fun listVideos(limit: Int = 100): List<Video> {
         val out=ArrayList<Video>()
