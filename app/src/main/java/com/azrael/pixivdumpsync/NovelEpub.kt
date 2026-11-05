@@ -64,11 +64,18 @@ object NovelEpubParser {
     }
     fun nextIndex(doc:Document,source:String,visited:Set<String>):String?{
         val root=URI(source)
+        fun resolveLink(href:String):URI {
+            // java.net.URI.resolve("?page=2") drops the final path segment,
+            // incorrectly turning /novel/book into /novel/?page=2.
+            val base=URI(doc.location())
+            return if(href.startsWith("?"))URI(base.toString().substringBefore('?')+href)
+                else base.resolve(href)
+        }
         val candidates=doc.select("a[rel=next][href],.chapter-list a.next[href],"+
             ".pagination a.next[href],a.page-numbers.next[href],"+
             ".chapter-pagination a.next[href]")
         for(a in candidates) {
-            val url=runCatching{URI(doc.location()).resolve(a.attr("href"))}.getOrNull()
+            val url=runCatching{resolveLink(a.attr("href"))}.getOrNull()
                 ?:continue
             if(url.scheme=="https" && url.host.equals(root.host,true) &&
                 url.path.trimEnd('/')==root.path.trimEnd('/') &&
@@ -80,7 +87,7 @@ object NovelEpubParser {
             .find(URI(doc.location()).rawQuery?.let{"?"+it}.orEmpty())
             ?.groupValues?.get(1)?.toIntOrNull()?:1
         val links=doc.select("a[href]").mapNotNull{a->
-            val next=runCatching{URI(doc.location()).resolve(a.attr("href"))}
+            val next=runCatching{resolveLink(a.attr("href"))}
                 .getOrNull()?:return@mapNotNull null
             if(next.scheme!="https" || !next.host.equals(root.host,true) ||
                 next.path.trimEnd('/')!=root.path.trimEnd('/') ||
