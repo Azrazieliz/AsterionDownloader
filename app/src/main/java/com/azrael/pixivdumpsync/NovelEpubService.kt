@@ -91,7 +91,6 @@ object NovelEpubService {
         val found=LinkedHashMap<String,NovelChapter>()
         var current:String?=url
         var title="Novel"
-        var expected=0
         while(current!=null && seen.size<500 && !stop()){
             if(!seen.add(current))break
             val doc=page(context,current,url)
@@ -99,19 +98,13 @@ object NovelEpubService {
                 ?.takeIf{it.isNotBlank()}?:doc.title().take(180)
             val onPage=NovelEpubParser.chapters(doc,url)
             for(item in onPage)found.putIfAbsent(item.url,item)
-            // Latest-chapter links can expose hundreds of unseen chapters even
-            // if the catalogue renders only its first 40. Never export 40/1318.
-            expected=maxOf(expected,NovelEpubParser.chapterCountHint(doc),
-                onPage.maxOfOrNull{it.number.toInt()}?:0)
+            // Index links identify observed chapters, not a definitive total.
             current=NovelEpubParser.nextIndex(doc,url,seen)
         }
-        // FreeWebNovel can render only the first 40 index links while showing
-        // the latest chapter at 1318. Its actual reader pages expose a Next
-        // Chapter link even when the index has no usable pagination URL.
-        // Follow these explicit links and cache text as we go, avoiding a
-        // second fetch for hundreds of chapters when the ZIP is assembled.
+        // Follow the provider's observed reader links without inferring a
+        // published chapter total from numerically encoded URLs or labels.
         if(URI(url).host.orEmpty().removePrefix("www.")=="freewebnovel.com" &&
-            found.size<expected && !stop()){
+            !stop()){
             val first=found.values.minByOrNull{it.number}
                 ?:error("Cannot find starting chapter for complete archive")
             val walked=HashSet<String>()
@@ -133,20 +126,6 @@ object NovelEpubService {
         val chapters=found.values.sortedWith(compareBy<NovelChapter>{it.number}
             .thenBy{it.url})
         require(chapters.isNotEmpty()){"No accessible numbered chapters discovered"}
-        require(expected<=chapters.size){
-            "Novel index listed at least "+expected+" chapters, but only "+
-                chapters.size+" were found; refusing incomplete EPUB"
-        }
-        // The indexed chapter numbers must not have unexplained whole-number
-        // gaps; decimal interludes (e.g., 10.5) remain legal.
-        val whole=chapters.map{it.number}
-            .filter{it==kotlin.math.floor(it)}.map{it.toInt()}.distinct().sorted()
-        if(whole.size>1) {
-            val missing=(whole.first()..whole.last()).count{it !in whole}
-            require(missing==0){
-                "Missing "+missing+" numbered chapters; refusing incomplete EPUB"
-            }
-        }
         return title to chapters
     }
     private fun cacheDir(context:Context,url:String):File{
@@ -229,8 +208,7 @@ object NovelEpubService {
     private fun generate(context:Context,task:NovelEpubTask,stop:()->Boolean):String{
         val (title,chapters)=discover(context,task.url,stop)
         val cache=cacheDir(context,task.url)
-        val asZip=NovelEpubParser.readableZipSeries(task.url)
-        val part=File(cache,if(asZip)"complete.zip.part" else "complete.epub.part")
+        val part=File(cache,"novel.epub.part")
         try{
             FileOutputStream(part).use{output->
                 // Build only after ALL chapter texts are acquired, so a failed
@@ -240,15 +218,13 @@ object NovelEpubService {
                     check(!stop()){"EPUB chapter retrieval was interrupted"}
                     contents+=chapterText(context,task.url,chapter,cache)
                 }
-                if(asZip)NovelEpubParser.writeReadableZip(output,title,task.url,contents)
-                else NovelEpubParser.writeEpub(output,title,task.url,contents)
+                NovelEpubParser.writeEpub(output,title,task.url,contents)
             }
             require(part.length()>2000){"Book archive content unexpectedly empty"}
-            val saved=commit(context,part,title,asZip)
+            val saved=commit(context,part,title,false)
             if(NduSettings.configured(context)){
                 NduCloudQueue(context).use{cloud->
-                    cloud.enqueue("books",safeName(title)+
-                        (if(asZip)".zip" else ".epub"),Uri.parse(saved))
+                    cloud.enqueue("books",safeName(title)+".epub",Uri.parse(saved))
                 }
                 NduUploadService.launch(context)
             }
