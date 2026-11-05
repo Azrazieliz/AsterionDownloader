@@ -35,7 +35,10 @@ object ChapterArchives {
             .setContentTitle("Asterion Downloader · Chapters")
             .setContentText(message.take(95))
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentIntent(open).setOngoing(true).build()
+            .setContentIntent(open).setOngoing(true)
+            .addAction(Notification.Action.Builder(null,"STOP ALL BACKFILL",
+                EmergencyBackfillStopReceiver.action(context)).build())
+            .build()
     }
     fun run(context:Context,onStatus:(String)->Unit)=executor.submit{
         if(!AppPower.enabled(context))return@submit
