@@ -145,8 +145,9 @@ object NovelEpubParser {
                 <meta charset="utf-8"><meta name="viewport" content="width=device-width">
                 <title>"""+quote(bookTitle)+"""</title></head><body>
                 <h1>"""+quote(bookTitle)+"""</h1><p>"""+chapters.size+
-                """ chapters. Offline readable archive. Source: <a href=""""+
-                quote(source)+"""">Original series</a>.</p><ol>"""+toc+
+                """ chapters. Offline readable archive. Source: """+
+                "<a href=\""+quote(source)+"\">Original series</a>"+
+                ".</p><ol>"+toc+
                 "</ol></body></html>")
             for((i,chapter) in chapters.withIndex()){
                 val id=(i+1).toString().padStart(5,'0')
