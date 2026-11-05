@@ -39,7 +39,9 @@ object WebDiscovery {
         }
     } catch(_:Exception){null}
     fun isVideoPage(address:String):Boolean =
-        mediaFiles.containsMatchIn(address) || videoPaths.any { it.containsMatchIn(address) }
+        mediaFiles.containsMatchIn(address) ||
+        videoPaths.any { it.containsMatchIn(address) } ||
+        VideoSiteProfiles.isVideoPage(address)
     private fun open(url:String):Document=Jsoup.connect(url)
         .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
         .timeout(18000).followRedirects(true).maxBodySize(2500000)
@@ -109,8 +111,8 @@ object WebDiscovery {
         val rootPath=URI(root).path.trimEnd('/')
         val explicit=doc.selectFirst("a[rel=next][href],.pagination a.next[href],"+
             "a.next[href],link[rel=next][href]")?.absUrl("href")
-        val next=(explicit?:com.azrael.pixivdumpsync.SourceIndexParser
-            .next(doc,root,address))
+        val next=(explicit?:VideoSiteProfiles.next(doc,root,address)
+            ?:com.azrael.pixivdumpsync.SourceIndexParser.next(doc,root,address))
             ?.let(::normalize)?.takeIf{candidate->
                 val u=URI(candidate)
                 val h=u.host.lowercase().removePrefix("www.")
