@@ -44,6 +44,45 @@ class NovelEpubTest {
         assertEquals(2,chapter.paragraphs.size)
         assertFalse(chapter.paragraphs.joinToString().contains("buy this"))
     }
+    @Test fun freewebnovelUsesChapterDisplayNumbersNotOpaqueUrlIds(){
+        val doc=Jsoup.parse("""<main class="chapter-list">
+            <a href="/novel/my-favorite-book/chapter-1596">Chapter 1314: The Agreement</a>
+            <a href="/novel/my-favorite-book/chapter-1">Chapter 1: Beginning</a>
+            </main>""",source)
+        assertEquals(listOf(1.0,1314.0),
+            NovelEpubParser.chapters(doc,source).map{it.number})
+    }
+    @Test fun explicitPageLinksAreFollowedWithoutInventingUnverifiedEndpoints(){
+        val doc=Jsoup.parse("""<div class="chapter-list">
+            <a href="?page=4">4</a><a href="?page=2">2</a>
+            <a href="/novel/other-book?page=3">Unrelated</a>
+            </div>""",source)
+        assertEquals(source+"?page=2",
+            NovelEpubParser.nextIndex(doc,source,setOf(source)))
+    }
+    @Test fun readableZipHasOfflineIndexOrderedHtmlAndEpub(){
+        val buffer=ByteArrayOutputStream()
+        NovelEpubParser.writeReadableZip(buffer,"Title & More",source,listOf(
+            NovelText("Chapter 1",listOf("First & <second> paragraph")),
+            NovelText("Chapter 2",listOf("Final chapter text"))))
+        val entries=LinkedHashMap<String,ByteArray>()
+        ZipInputStream(ByteArrayInputStream(buffer.toByteArray())).use{zip->
+            while(true){
+                val entry=zip.nextEntry?:break
+                entries[entry.name]=zip.readBytes()
+                zip.closeEntry()
+            }
+        }
+        assertEquals(listOf("index.html","chapters/chapter-00001.html",
+            "chapters/chapter-00002.html","book.epub"),entries.keys.toList())
+        assertTrue(entries["index.html"]!!.toString(Charsets.UTF_8)
+            .contains("chapters/chapter-00002.html"))
+        assertTrue(entries["chapters/chapter-00001.html"]!!
+            .toString(Charsets.UTF_8).contains("&amp; &lt;second&gt;"))
+        ZipInputStream(ByteArrayInputStream(entries["book.epub"]!!)).use{
+            assertEquals("mimetype",it.nextEntry.name)
+        }
+    }
     @Test fun epubContainsMimeFirstAllSpineEntriesAndEscapedText(){
         val buffer=ByteArrayOutputStream()
         NovelEpubParser.writeEpub(buffer,"Title & More",source,listOf(

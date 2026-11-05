@@ -3,6 +3,7 @@ package com.azrael.pixivdumpsync
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.io.OutputStream
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -52,7 +53,9 @@ object NovelEpubParser {
             if(url.scheme!="https" || !url.host.equals(root.host,true) ||
                 url.userInfo!=null || url.fragment!=null ||
                 !url.path.startsWith(home+"/"))continue
-            val n=parseChapterNumber(url.path)?:parseChapterNumber(a.text())?:continue
+            // The displayed chapter number may differ from the provider's URL ID.
+            // FreeWebNovel uses chapter-1596 for a displayed Chapter 1314.
+            val n=parseChapterNumber(a.text())?:parseChapterNumber(url.path)?:continue
             if(n<0.0 || n>100000.0 || !n.isFinite())continue
             val title=a.text().trim().ifBlank{"Chapter "+n}
             found.putIfAbsent(url.toString(),NovelChapter(n,title.take(180),url.toString()))
@@ -71,7 +74,23 @@ object NovelEpubParser {
                 url.path.trimEnd('/')==root.path.trimEnd('/') &&
                 url.toString() !in visited)return url.toString()
         }
-        return null
+        // Some providers expose page links without a rel=next class. Follow
+        // only explicit same-series pagination URLs; never synthesize endpoints.
+        val currentPage=Regex("""(?:^|[?&])page=(\d+)""")
+            .find(URI(doc.location()).rawQuery?.let{"?"+it}.orEmpty())
+            ?.groupValues?.get(1)?.toIntOrNull()?:1
+        val links=doc.select("a[href]").mapNotNull{a->
+            val next=runCatching{URI(doc.location()).resolve(a.attr("href"))}
+                .getOrNull()?:return@mapNotNull null
+            if(next.scheme!="https" || !next.host.equals(root.host,true) ||
+                next.path.trimEnd('/')!=root.path.trimEnd('/') ||
+                next.toString() in visited)return@mapNotNull null
+            val page=Regex("""(?:^|[?&])page=(\d+)""")
+                .find(next.rawQuery?.let{"?"+it}.orEmpty())
+                ?.groupValues?.get(1)?.toIntOrNull()?:return@mapNotNull null
+            if(page>currentPage)page to next.toString() else null
+        }
+        return links.minByOrNull{it.first}?.second
     }
     fun chapterText(doc:Document):NovelText {
         val content=doc.selectFirst("#chapter-content,.chapter-content,"+
@@ -98,6 +117,59 @@ object NovelEpubParser {
     private fun quote(raw:String):String=raw.replace("&","&amp;")
         .replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;")
         .replace("'","&apos;")
+
+    /**
+     * Single portable reader archive: an offline HTML table of contents,
+     * individually ordered chapter pages, and a standard EPUB for readers.
+     * Call only after the entire chapter list and every text are complete.
+     */
+    fun writeReadableZip(output:OutputStream,bookTitle:String,source:String,
+                         chapters:List<NovelText>){
+        require(chapters.isNotEmpty() && chapters.size<=10000)
+        ZipOutputStream(output.buffered()).use{zip->
+            fun add(name:String,bytes:ByteArray){
+                val entry=ZipEntry(name)
+                zip.putNextEntry(entry)
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+            fun addText(name:String,content:String)=add(
+                name,content.toByteArray(StandardCharsets.UTF_8))
+            val toc=StringBuilder()
+            for((i,chapter) in chapters.withIndex()){
+                val path="chapters/chapter-"+(i+1).toString().padStart(5,'0')+".html"
+                toc.append("<li><a href=\"").append(path).append("\">")
+                    .append(quote(chapter.title)).append("</a></li>")
+            }
+            addText("index.html", """<!doctype html><html lang="en"><head>
+                <meta charset="utf-8"><meta name="viewport" content="width=device-width">
+                <title>"""+quote(bookTitle)+"""</title></head><body>
+                <h1>"""+quote(bookTitle)+"""</h1><p>"""+chapters.size+
+                """ chapters. Offline readable archive. Source: <a href=""""+
+                quote(source)+"""">Original series</a>.</p><ol>"""+toc+
+                "</ol></body></html>")
+            for((i,chapter) in chapters.withIndex()){
+                val id=(i+1).toString().padStart(5,'0')
+                val path="chapters/chapter-"+id+".html"
+                val next=if(i+1<chapters.size)
+                    "<a href=\"chapter-"+(i+2).toString().padStart(5,'0')+
+                    ".html\">Next chapter</a>" else ""
+                val previous=if(i>0)
+                    "<a href=\"chapter-"+i.toString().padStart(5,'0')+
+                    ".html\">Previous chapter</a> " else ""
+                val body=chapter.paragraphs.joinToString(""){"<p>"+quote(it)+"</p>"}
+                addText(path,"""<!doctype html><html lang="en"><head>
+                    <meta charset="utf-8"><meta name="viewport" content="width=device-width">
+                    <title>"""+quote(chapter.title)+"""</title></head><body>
+                    <nav><a href="../index.html">Contents</a></nav><h1>"""+
+                    quote(chapter.title)+"</h1>"+body+"<nav>"+previous+next+
+                    "</nav></body></html>")
+            }
+            val epub=ByteArrayOutputStream()
+            writeEpub(epub,bookTitle,source,chapters)
+            add("book.epub",epub.toByteArray())
+        }
+    }
 
     /** Standard EPUB3: STORED mimetype first, XHTML chapters, nav and OPF/spine.
      * Caller commits this output to MediaStore only after all chapters succeeded.

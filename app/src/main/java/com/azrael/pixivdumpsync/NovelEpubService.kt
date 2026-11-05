@@ -94,9 +94,12 @@ object NovelEpubService {
             val doc=page(context,current,url)
             if(seen.size==1)title=doc.selectFirst("h1")?.text()?.take(180)
                 ?.takeIf{it.isNotBlank()}?:doc.title().take(180)
-            for(item in NovelEpubParser.chapters(doc,url))
-                found.putIfAbsent(item.url,item)
-            expected=maxOf(expected,NovelEpubParser.chapterCountHint(doc))
+            val onPage=NovelEpubParser.chapters(doc,url)
+            for(item in onPage)found.putIfAbsent(item.url,item)
+            // Latest-chapter links can expose hundreds of unseen chapters even
+            // if the catalogue renders only its first 40. Never export 40/1318.
+            expected=maxOf(expected,NovelEpubParser.chapterCountHint(doc),
+                onPage.maxOfOrNull{it.number.toInt()}?:0)
             current=NovelEpubParser.nextIndex(doc,url,seen)
         }
         check(!stop()){"EPUB job stopped before chapter discovery ended"}
@@ -154,10 +157,12 @@ object NovelEpubService {
     private fun safeName(raw:String):String=raw
         .replace(Regex("[^\\p{L}\\p{N} ._-]"),"_").trim().take(85)
         .ifBlank{"Novel"}
-    private fun commit(context:Context,file:File,title:String):String {
+    private fun commit(context:Context,file:File,title:String,asZip:Boolean):String {
+        val extension=if(asZip)".zip" else ".epub"
         val values=ContentValues().apply{
-            put(MediaStore.Downloads.DISPLAY_NAME,safeName(title)+".epub")
-            put(MediaStore.Downloads.MIME_TYPE,"application/epub+zip")
+            put(MediaStore.Downloads.DISPLAY_NAME,safeName(title)+extension)
+            put(MediaStore.Downloads.MIME_TYPE,
+                if(asZip)"application/zip" else "application/epub+zip")
             put(MediaStore.Downloads.RELATIVE_PATH,
                 Environment.DIRECTORY_DOWNLOADS+"/AsterionDownloader/Books/")
             put(MediaStore.Downloads.IS_PENDING,1)
@@ -184,7 +189,8 @@ object NovelEpubService {
     private fun generate(context:Context,task:NovelEpubTask,stop:()->Boolean):String{
         val (title,chapters)=discover(context,task.url,stop)
         val cache=cacheDir(context,task.url)
-        val part=File(cache,"complete.epub.part")
+        val asZip=URI(task.url).host.orEmpty().removePrefix("www.")=="freewebnovel.com"
+        val part=File(cache,if(asZip)"complete.zip.part" else "complete.epub.part")
         try{
             FileOutputStream(part).use{output->
                 // Build only after ALL chapter texts are acquired, so a failed
@@ -194,13 +200,15 @@ object NovelEpubService {
                     check(!stop()){"EPUB chapter retrieval was interrupted"}
                     contents+=chapterText(context,task.url,chapter,cache)
                 }
-                NovelEpubParser.writeEpub(output,title,task.url,contents)
+                if(asZip)NovelEpubParser.writeReadableZip(output,title,task.url,contents)
+                else NovelEpubParser.writeEpub(output,title,task.url,contents)
             }
-            require(part.length()>2000){"EPUB content unexpectedly empty"}
-            val saved=commit(context,part,title)
+            require(part.length()>2000){"Book archive content unexpectedly empty"}
+            val saved=commit(context,part,title,asZip)
             if(NduSettings.configured(context)){
                 NduCloudQueue(context).use{cloud->
-                    cloud.enqueue("books",safeName(title)+".epub",Uri.parse(saved))
+                    cloud.enqueue("books",safeName(title)+
+                        (if(asZip)".zip" else ".epub"),Uri.parse(saved))
                 }
                 NduUploadService.launch(context)
             }
