@@ -186,7 +186,8 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             while(c.moveToNext()){
                 val id=c.getLong(0)
                 val attempts=c.getInt(1)
-                val age=now-c.getLong(2)
+                val age=now-(runCatching{c.getString(2)?.toLongOrNull() ?: 0L}
+                    .getOrDefault(0L))
                 val error=c.getString(3).orEmpty()
                 if(Regex("(?i)\\b(?:401|402|403|404|410)\\b|unauthorized|not found")
                     .containsMatchIn(error))continue
@@ -209,8 +210,15 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         val out=ArrayList<XPhotoTask>()
         readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error,updated
             FROM photos ORDER BY id DESC LIMIT ${limit.coerceIn(1,1000)}""",null).use{c->
-            while(c.moveToNext())out.add(XPhotoTask(c.getLong(0),c.getString(1),
-                c.getString(2),c.getString(3),c.getString(4),c.getInt(5),c.getString(6),c.getLong(7)))
+            while(c.moveToNext()){
+                // Older database rows may have NULL / text timestamps. Android
+                // CursorWindow.getLong can throw here and crash the entire X screen.
+                val updated=runCatching { c.getString(7)?.toLongOrNull() ?: 0L }
+                    .getOrDefault(0L)
+                out.add(XPhotoTask(c.getLong(0),c.getString(1),
+                    c.getString(2),c.getString(3),c.getString(4),c.getInt(5),
+                    c.getString(6),updated))
+            }
         }
         return out
     }

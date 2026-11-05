@@ -40,12 +40,14 @@ class AsterionHomeActivity:Activity(){
     private var countsLabel:TextView?=null
     private var providerLabel:TextView?=null
     private lateinit var emergencyLabel:TextView
-    private lateinit var stopControl:TextView
+    private lateinit var backControl:TextView
+    private lateinit var pageContext:TextView
+    private val history=java.util.ArrayDeque<String>()
 
     private fun stopBackgroundNow(){
         AppPower.set(this,false)
         emergencyLabel.text="PAUSED"
-        stopControl.text="BACKFILL & SYNC STOPPED · OPEN SETTINGS"
+        render()
         toast("Backfill and sync stopped; all queues and files preserved")
     }
 
@@ -223,10 +225,20 @@ class AsterionHomeActivity:Activity(){
             .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
         val head=theme.row(this).apply{setPadding(dp(14),dp(12),dp(14),dp(12))}
+        backControl=text("‹",29f,theme.white,true).apply {
+            gravity=Gravity.CENTER
+            visibility=View.GONE
+            contentDescription="Go back"
+            isClickable=true
+            isFocusable=true
+            setOnClickListener{navigateBack()}
+        }
+        head.addView(backControl,LinearLayout.LayoutParams(dp(38),dp(48)))
         head.addView(theme.brandMark(this,47),LinearLayout.LayoutParams(dp(47),dp(47)))
         val label=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(11),0,0,0)}
         label.addView(text("ASTERION DOWNLOADER",19f,theme.white,true))
-        label.addView(text("Discover · Follow · Download",11f,theme.secondary))
+        pageContext=text("Discover · Follow · Download",11f,theme.secondary)
+        label.addView(pageContext)
         head.addView(label,LinearLayout.LayoutParams(0,-2,1f))
         root.addView(head)
         val settings=text("SETTINGS",12f,theme.secondary,true).apply{
@@ -250,27 +262,6 @@ class AsterionHomeActivity:Activity(){
             }
         }
         head.addView(emergencyLabel)
-        // Always visible even when a provider has thousands of records.
-        // Do not bury the emergency stop inside a long scrolling panel.
-        stopControl=text(
-            if(AppPower.enabled(this))"STOP BACKFILL & SYNC NOW"
-            else "BACKFILL & SYNC STOPPED · OPEN SETTINGS",
-            12f,theme.white,true).apply{
-            gravity=Gravity.CENTER
-            minimumHeight=dp(42)
-            setPadding(dp(10),dp(8),dp(10),dp(8))
-            background=theme.touch(this@AsterionHomeActivity,theme.danger,12)
-            isClickable=true
-            isFocusable=true
-            contentDescription="Emergency stop of all background backfill and synchronization"
-            setOnClickListener{
-                if(AppPower.enabled(this@AsterionHomeActivity))stopBackgroundNow()
-                else open("Settings")
-            }
-        }
-        root.addView(stopControl,LinearLayout.LayoutParams(-1,dp(44)).apply{
-            leftMargin=dp(14);rightMargin=dp(14);bottomMargin=dp(5)
-        })
         scroller=ScrollView(this).apply{isFillViewport=true}
         body=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
@@ -383,28 +374,40 @@ class AsterionHomeActivity:Activity(){
     }
     @Suppress("DEPRECATION")
     override fun onBackPressed(){
-        if(page!="Home")open("Home") else super.onBackPressed()
+        if(history.isNotEmpty() || page!="Home")navigateBack() else super.onBackPressed()
+    }
+    private fun navigateBack(){
+        val previous=if(history.isNotEmpty())history.removeLast() else "Home"
+        if(::scroller.isInitialized)pageScroll[page]=scroller.scrollY
+        page=previous
+        render()
+        scroller.post{scroller.scrollTo(0,pageScroll[previous]?:0)}
     }
     private fun open(target:String){
+        if(target==page){
+            if(::scroller.isInitialized)scroller.smoothScrollTo(0,0)
+            return
+        }
         if(::scroller.isInitialized)pageScroll[page]=scroller.scrollY
-        val previous=page
+        if(target in pages)history.clear() else history.addLast(page)
         page=target
         if(::body.isInitialized){
             render()
             if(target=="Home")updateOverview()
-            val where=if(target==previous)0 else pageScroll[target]?:0
-            scroller.post{scroller.scrollTo(0,where)}
+            scroller.post{scroller.scrollTo(0,pageScroll[target]?:0)}
         }
     }
     private fun render(){
-        val pending=overview.pending
-        navButtons["Queue"]?.text=if(pending>0)"Downloads ($pending)" else "Downloads"
+        navButtons["Queue"]?.text="Downloads"
         if(::emergencyLabel.isInitialized)
             emergencyLabel.text=if(AppPower.enabled(this))"STOP" else "PAUSED"
-        if(::stopControl.isInitialized)
-            stopControl.text=if(AppPower.enabled(this))"STOP BACKFILL & SYNC NOW"
-                else "BACKFILL & SYNC STOPPED · OPEN SETTINGS"
-        val selectedTab=if(page in pages)page else "Home"
+        backControl.visibility=if(page in pages && history.isEmpty())View.GONE else View.VISIBLE
+        pageContext.text=if(page in pages)"Discover · Follow · Download"
+            else "‹ Back  /  "+when(page){
+                "Queue"->"Downloads";"Recommend"->"For You";else->page
+            }
+        val selectedTab=if(page in pages)page
+            else history.lastOrNull{it in pages} ?: "Home"
         navButtons.forEach{(tab,view)->
             val selected=tab==selectedTab
             view.setTextColor(if(selected)theme.primary else theme.secondary)
@@ -575,13 +578,6 @@ class AsterionHomeActivity:Activity(){
                 }
             }
         },7)
-        put(summary,button(if(AppPower.enabled(this))"STOP ALL BACKFILL & SYNC"
-            else "SYNC STOPPED · OPEN SETTINGS"){
-            if(AppPower.enabled(this)){
-                stopBackgroundNow()
-            }else open("Settings")
-        },5)
-        put(summary,button("OPEN DOWNLOADED FILES"){open("Library")},7)
         put(body,summary,12)
     }
     private fun renderBooks(){
@@ -669,18 +665,6 @@ class AsterionHomeActivity:Activity(){
                 }
                 put(body,archive,12)
                 Mp4SeriesPanel.render(this,body){render()}
-                put(body,button("LINK ROUNDER / TERABOX COLLECTION TREE"){
-                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                    },5221)
-                },8)
-                put(body,button("IMPORT ROUNDER VERIFIED INVENTORY"){
-                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
-                        type="application/json"
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                    },5220)
-                },8)
                 SourceIndexPanel.render(this,body,"BOOKS")
                 put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
             }
@@ -1177,6 +1161,26 @@ class AsterionHomeActivity:Activity(){
                 }.setNegativeButton("Cancel",null).show()
         },9)
         put(body,visual,10)
+        section("Storage & cloud backup","TeraBox uploads, destinations and Rounder verification.")
+        RounderDispatch.render(this,body)
+        val inventory=card()
+        put(inventory,text("ROUNDER INVENTORY",14f,theme.white,true),0)
+        val tree=RounderTreeScanner.status(this)
+        put(inventory,text("${tree.files} indexed files · ${tree.pendingDirectories} folders remaining"+
+            (tree.lastError?.let{" · "+it}?:""),12f,theme.secondary),6)
+        put(inventory,button("CONNECT ROUNDER COLLECTION FOLDER"){
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            },5221)
+        },8)
+        put(inventory,button("IMPORT VERIFIED ROUNDER INVENTORY"){
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+                type="application/json"
+                addCategory(Intent.CATEGORY_OPENABLE)
+            },5220)
+        },6)
+        put(body,inventory,10)
         val netPrefs=getSharedPreferences("video_options",MODE_PRIVATE)
         val tor=Switch(this).apply{
             text="Use Orbot / Tor for hidden (.onion) sites"
@@ -1230,7 +1234,6 @@ class AsterionHomeActivity:Activity(){
             },6)
             put(body,settings,10)
         }
-        AlohaSources.render(this,body,listOf(AlohaArea.STUDY),"RELATED SAVED REFERENCE")
         put(body,text("Cloud uploads are not marked verified without confirmation from the destination. Originals are retained.",12f,theme.secondary))
     }
 }

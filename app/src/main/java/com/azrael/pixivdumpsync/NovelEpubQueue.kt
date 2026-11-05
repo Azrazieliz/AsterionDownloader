@@ -109,6 +109,14 @@ class NovelEpubQueue(context:Context):
             put("sync_enabled",if(enabled)1 else 0)
         },"url=?",arrayOf(url))
     }
+    /** Manual retry must clear backoff without deleting cached chapters. */
+    @Synchronized fun retryNow(url:String):Boolean=
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","PENDING");put("retry_after",0L)
+            put("last_update",System.currentTimeMillis())
+            putNull("last_error")
+        },"url=? AND state IN ('RETRY','ERROR','DONE')",arrayOf(url))>0
+
     fun requestedRefresh(url:String):Boolean =
         writableDatabase.update("novels",ContentValues().apply{
             put("state","PENDING");put("retry_after",0L)

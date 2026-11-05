@@ -165,7 +165,7 @@ class NduTeraboxClient(private val ndus: String,
      * When a remote whole-file hash is available, require it to match as well.
      */
     private fun confirmRemote(path:String,size:Long,localMd5:String,
-                              requireRemoteHash:Boolean=false):Boolean {
+                              requireRemoteHash:Boolean=false):NduRemoteReceipt? {
         repeat(4){attempt->
             val response=request("/api/filemetas","GET",mapOf(
                 "target" to JSONArray(listOf(path)).toString(),"dlink" to "0"))
@@ -173,23 +173,44 @@ class NduTeraboxClient(private val ndus: String,
             val files=response.optJSONArray("info")?:JSONArray()
             for(i in 0 until files.length()){
                 val item=files.optJSONObject(i)?:continue
-                if(item.optString("path")!=path ||
-                    item.optLong("size",-1L)!=size ||
-                    item.optLong("fs_id",0L)<=0L)continue
+                val remotePath=item.optString("path")
+                val remoteSize=item.optLong("size",-1L)
+                val fsId=item.optLong("fs_id",0L)
                 val remoteMd5=item.optString("md5").trim()
-                if(requireRemoteHash && remoteMd5.isBlank())continue
-                if(remoteMd5.isNotBlank() &&
-                    !remoteMd5.equals(localMd5,true))
-                    throw java.io.IOException("TeraBox whole-file integrity mismatch")
-                return true
+                if(remotePath!=path || remoteSize!=size || fsId<=0L)continue
+                if(remoteMd5.isNotBlank() && !remoteMd5.equals(localMd5,true))
+                    throw java.io.IOException("TeraBox remote hash does not match the local file")
+                if(!NduRemoteProof.matches(path,size,localMd5,remotePath,
+                    remoteSize,fsId,remoteMd5,requireRemoteHash))continue
+                return NduRemoteReceipt(path,size,fsId,
+                    remoteMd5.ifBlank{null},System.currentTimeMillis())
             }
             if(attempt<3)Thread.sleep(1200L*(attempt+1))
         }
-        return false
+        return null
+    }
+    /** Recheck historical completed records before crediting them as verified. */
+    fun verifyExisting(context:Context,uri:Uri,fileName:String,
+                       categoryPath:String,cancelled:()->Boolean={false}):NduRemoteReceipt?{
+        val path=NduSettings.validateDirectory(categoryPath)+"/"+safeFileName(fileName)
+        val size=context.contentResolver.openFileDescriptor(uri,"r")?.use{it.statSize}?:-1L
+        if(size<=0L)return null
+        val digest=MessageDigest.getInstance("MD5")
+        context.contentResolver.openInputStream(uri)?.use{stream->
+            val buffer=ByteArray(128*1024)
+            while(true){
+                if(cancelled())throw InterruptedException("Cloud verification cancelled")
+                val n=stream.read(buffer)
+                if(n<0)break
+                digest.update(buffer,0,n)
+            }
+        }?:return null
+        val md5=digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+        return confirmRemote(path,size,md5)
     }
     fun upload(context: Context, uri: Uri, fileName: String, categoryPath: String,
                cancelled: () -> Boolean = { false },
-               progress: (Long,Long) -> Unit = { _,_ -> }) {
+               progress: (Long,Long) -> Unit = { _,_ -> }):NduRemoteReceipt {
         val name=safeFileName(fileName)
         val folder=NduSettings.validateDirectory(categoryPath)
         val path="$folder/$name"
@@ -220,10 +241,10 @@ class NduTeraboxClient(private val ndus: String,
                 }
             }?:throw java.io.IOException("Cannot read rapid-upload source")
             val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
-            if(!confirmRemote(path,size,md5,requireRemoteHash=true))
-                throw java.io.IOException("Rapid-upload response did not prove identical remote content")
+            val proof=confirmRemote(path,size,md5,requireRemoteHash=true)
+                ?: throw java.io.IOException("Rapid upload not independently verified")
             progress(size,size)
-            return
+            return proof
         }
         val uploadId=pre.optString("uploadid").takeIf { it.isNotBlank() }
             ?: throw java.io.IOException("TeraBox did not return upload ID")
@@ -274,8 +295,8 @@ class NduTeraboxClient(private val ndus: String,
                 "local_mtime" to (System.currentTimeMillis()/1000).toString()))
         ok(finalized,"Finalize upload")
         val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
-        if(!confirmRemote(path,size,md5))
-            throw java.io.IOException("TeraBox has not confirmed the uploaded file")
+        return confirmRemote(path,size,md5)
+            ?: throw java.io.IOException("TeraBox has not confirmed the uploaded file")
     }
 
     private fun uploadChunk(host:String, path:String, uploadId:String, part:Int,

@@ -21,15 +21,26 @@ import kotlin.concurrent.thread
 
 data class RounderState(val queued:Int,val requested:Int,val lastError:String?,val uploaded:Int=0)
 class RounderOutbox(context:Context):
-    SQLiteOpenHelper(context,"asterion_rounder_outbox.sqlite",null,1){
+    SQLiteOpenHelper(context,"asterion_rounder_outbox.sqlite",null,2){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE files(
             content_uri TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,
             state TEXT NOT NULL DEFAULT 'PENDING',observed INTEGER NOT NULL,
-            last_request INTEGER NOT NULL DEFAULT 0,error TEXT)""")
+            last_request INTEGER NOT NULL DEFAULT 0,error TEXT,
+            remote_path TEXT,remote_size INTEGER,remote_fs_id INTEGER,
+            verified_at INTEGER)""")
         db.execSQL("CREATE INDEX rounder_file_status ON files(state,observed)")
     }
-    override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){}
+    override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
+        if(a<2){
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_path TEXT")
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_size INTEGER")
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_fs_id INTEGER")
+            db.execSQL("ALTER TABLE files ADD COLUMN verified_at INTEGER")
+            // No receipt survived in legacy rows: never advertise their handoff as verified.
+            db.execSQL("UPDATE files SET state='DIRECT_PENDING' WHERE state='UPLOADED'")
+        }
+    }
     @Synchronized fun enqueue(uri:Uri,name:String,category:String){
         if(uri.scheme!="content")return
         val cv=ContentValues().apply{
@@ -77,14 +88,21 @@ class RounderOutbox(context:Context):
         writableDatabase.update("files",v,"content_uri=? AND state='PENDING'",
             arrayOf(uri.toString()))
     }
-    fun ack(uri:Uri){
+    @Synchronized fun ack(uri:Uri,proof:NduRemoteReceipt):Boolean{
+        require(proof.path.startsWith("/") && proof.fsId>0L &&
+            proof.size>0L && proof.verifiedAt>0L){"Unverified remote receipt"}
         val v=ContentValues().apply{
             put("state","UPLOADED")
             put("last_request",System.currentTimeMillis())
             putNull("error")
+            put("remote_path",proof.path)
+            put("remote_size",proof.size)
+            put("remote_fs_id",proof.fsId)
+            put("verified_at",proof.verifiedAt)
         }
-        writableDatabase.update("files",v,"content_uri=? AND state='DIRECT_PENDING'",
-            arrayOf(uri.toString()))
+        return writableDatabase.update("files",v,
+            "content_uri=? AND state='DIRECT_PENDING'",
+            arrayOf(uri.toString()))>0
     }
     fun awaitingDirect(limit:Int=500):List<Uri>{
         val list=ArrayList<Uri>()
@@ -246,8 +264,11 @@ object RounderDispatch {
                                 accepted++
                             }.onFailure{outbox.markError(it.message?:"Cloud queue failed")}
                         }
-                        for(uri in outbox.awaitingDirect())
-                            if(cloud.uploadedFor(uri.toString()))outbox.ack(uri)
+                        for(uri in outbox.awaitingDirect()){
+                            cloud.receiptFor(uri.toString())?.let{receipt->
+                                outbox.ack(uri,receipt)
+                            }
+                        }
                     }
                 }
                 if(accepted>0 && !manual)runCatching{NduUploadService.launch(context)}
@@ -288,15 +309,37 @@ object RounderDispatch {
         val direct=NduSettings.configured(a)
         val round=RoundSyncBridge.enabled(a) && RoundSyncBridge.taskId(a)>=0
         card.addView(ui.text(a,
-            summary.uploaded.toString()+" confirmed uploads · "+
-            directState.pending+" queued · "+
-            summary.queued+" awaiting inventory scan · "+
-            when {
-                direct->"Direct TeraBox account connected"
-                round->"Rounder connected · cloud confirmation pending"
-                else->"Connect TeraBox or Rounder to transfer files"
-            },
+            directState.completed.toString()+" remote verified · "+
+            summary.uploaded+" matched in Rounder · "+
+            directState.pending+" awaiting transfer / verification · "+
+            summary.requested+" handoffs not yet verified",
             12f,ui.secondary),ui.lp(a,5))
+        card.addView(ui.text(a,when{
+            direct->"TeraBox direct: files are counted only after remote path, size and ID checks."
+            round->"Round Sync requests are not completion proof. Connect direct TeraBox to verify remote copies."
+            else->"Connect a TeraBox account or a Round Sync task."
+        },12f,ui.secondary),ui.lp(a,5))
+        directState.lastVerifiedPath?.let{path->
+            card.addView(ui.text(a,"Latest verified destination: "+path.take(180),
+                12f,ui.primary),ui.lp(a,6))
+        }
+        if(directState.verificationPending>0)
+            card.addView(ui.text(a,
+                directState.verificationPending.toString()+
+                    " older uploads await remote recheck before being counted",
+                12f,ui.secondary),ui.lp(a,4))
+        val destinations=listOf("kuroha","kyora","videos","x","comics","books",
+            "assets","koikatsu","games","torrents","creators","images")
+        card.addView(ui.action(a,"VIEW CLOUD DESTINATIONS",false){
+            android.app.AlertDialog.Builder(a)
+                .setTitle("TeraBox destination folders")
+                .setItems(destinations.map{
+                    it.replaceFirstChar{ch->ch.uppercase()}+"  ·  "+
+                        NduSettings.destination(a,it)
+                }.toTypedArray()){_,_->}
+                .setPositiveButton("Close",null)
+                .show()
+        },ui.lp(a,7))
         if(!summary.lastError.isNullOrBlank())
             card.addView(ui.text(a,summary.lastError,12f,ui.danger),ui.lp(a,4))
         if(!directState.lastError.isNullOrBlank())

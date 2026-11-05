@@ -24,7 +24,7 @@ class TeraboxUploader(private val context: Context) {
     private data class LocalFile(val uri: Uri, val size: Long)
     private val TARGET_CHUNK = 8 * 1024 * 1024
 
-    fun uploadArtwork(filename: String): String {
+    fun uploadArtwork(filename: String): NduRemoteReceipt {
         if (!filename.matches(Regex("[0-9]+_p[0-9]+\\.(jpg|jpeg|png|gif|webp)"))) {
             throw IOException("Invalid artwork filename")
         }
@@ -75,11 +75,75 @@ class TeraboxUploader(private val context: Context) {
             )
         )
         val actualSize = created.optLong("size", -1L)
-        if (created.optString("path").isBlank() ||
-            created.optString("fs_id").isBlank() ||
-            actualSize != size
-        ) throw IOException("TeraBox did not confirm matching cloud file and size")
-        return created.getString("path")
+        val createdPath = created.optString("path", "")
+        if (!createdPath.startsWith(remoteDir.trimEnd('/') + "/") ||
+            created.optLong("fs_id", 0L) <= 0L || actualSize != size
+        ) throw IOException("TeraBox did not confirm the expected cloud folder and size")
+        // A successful create is a handoff response, not evidence that the
+        // object remains visible in the destination. Require a fresh metadata read.
+        return verifyRemote(domains.api,token,uri,createdPath,size)
+    }
+
+    /** Recheck legacy cloud records; never create a second copy merely because
+     * an old request was recorded as successful.
+     */
+    fun verifyHistoricalArtwork(filename:String,previousPath:String?):NduRemoteReceipt{
+        require(filename.matches(Regex("[0-9]+_p[0-9]+\\.(jpg|jpeg|png|gif|webp)")))
+        val path=previousPath?.takeIf{it.isNotBlank()}
+            ?: throw IOException("Historical remote path is unknown")
+        val folder=TeraboxSettings.remoteDirectory(context).trimEnd('/')+"/"
+        require(path.startsWith(folder)){"Historic remote destination differs from configured TeraBox folder"}
+        val token=TeraboxSettings.accessToken(context)
+            ?:throw IOException("TeraBox access token not configured")
+        val uri=FileStore.findUri(context,filename)
+            ?:throw IOException("Original artwork unavailable for remote verification")
+        val size=contentSize(uri)
+        require(size>0L){"Original file is empty"}
+        return verifyRemote(lookupDomains(token).api,token,uri,path,size)
+    }
+
+    private fun verifyRemote(domain:String,token:String,local:Uri,
+                             path:String,size:Long):NduRemoteReceipt{
+        var lastError:Exception?=null
+        repeat(4){attempt->
+            try{
+                val conn=openConnection(buildUrl(domain,"/openapi/api/filemetas",
+                    mapOf("access_tokens" to token,
+                        "target" to JSONArray(listOf(path)).toString(),
+                        "dlink" to "0")))
+                val response=try{parseResponse(conn)}finally{
+                    NetworkRequestRegistry.unregister(conn)
+                    conn.disconnect()
+                }
+                val files=response.optJSONArray("info")?:JSONArray()
+                for(i in 0 until files.length()){
+                    val item=files.optJSONObject(i)?:continue
+                    if(item.optString("path")!=path || item.optLong("size",-1L)!=size ||
+                        item.optLong("fs_id",0L)<=0L)continue
+                    val remoteHash=item.optString("md5").trim()
+                    if(remoteHash.isNotBlank()){
+                        val md5=java.security.MessageDigest.getInstance("MD5")
+                        context.contentResolver.openInputStream(local)?.use{stream->
+                            val buffer=ByteArray(131072)
+                            while(true){
+                                val count=stream.read(buffer)
+                                if(count<0)break
+                                md5.update(buffer,0,count)
+                            }
+                        }?:throw IOException("Local file unavailable for remote hash comparison")
+                        val digest=md5.digest().joinToString(""){
+                            "%02x".format(it.toInt() and 255)
+                        }
+                        if(!remoteHash.equals(digest,true))
+                            throw IOException("TeraBox remote file hash mismatch")
+                    }
+                    return NduRemoteReceipt(path,size,item.optLong("fs_id"),
+                        remoteHash.ifBlank{null},System.currentTimeMillis())
+                }
+            }catch(e:Exception){lastError=e}
+            if(attempt<3)Thread.sleep(900L*(attempt+1))
+        }
+        throw IOException("TeraBox metadata did not independently verify remote copy",lastError)
     }
 
     private fun contentSize(uri: Uri): Long =
