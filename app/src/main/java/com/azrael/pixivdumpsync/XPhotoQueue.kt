@@ -150,7 +150,12 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
     }
     fun next():XPhotoTask? {
         readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error,updated
-            FROM photos WHERE status='queued' ORDER BY id LIMIT 1""",null).use{c->
+            FROM photos WHERE status='queued'
+              AND EXISTS(SELECT 1 FROM sources
+                  WHERE sources.url=photos.source
+                  AND sources.state!='disabled'
+                  AND (sources.live_enabled=1 OR sources.backfill_enabled=1))
+            ORDER BY id LIMIT 1""",null).use{c->
             if(!c.moveToFirst())return null
             return XPhotoTask(c.getLong(0),c.getString(1),c.getString(2),
                 c.getString(3),c.getString(4),c.getInt(5),c.getString(6))
