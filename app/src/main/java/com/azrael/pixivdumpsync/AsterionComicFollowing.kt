@@ -64,6 +64,21 @@ object AsterionComicFollowing {
                 info.addView(ui.text(a,task.error.take(135),11f,ui.danger),ui.lp(a,5))
             row.addView(info,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(row)
+            val live=Switch(a).apply{
+                text="Sync new chapters";textSize=12f
+                setTextColor(ui.white)
+                isChecked=task.syncEnabled
+                setOnCheckedChangeListener{_,enabled->
+                    ChapterQueue(a).use{it.setSync(task.id,enabled)}
+                    if(enabled)ChapterRecovery.ensure(a)
+                }
+            }
+            card.addView(live,ui.lp(a,5))
+            if(task.lastCheck>0L)card.addView(ui.text(a,
+                "Last chapter-list check: "+
+                java.text.DateFormat.getDateTimeInstance()
+                    .format(java.util.Date(task.lastCheck)),
+                11f,ui.secondary),ui.lp(a,3))
             val left=ui.action(a,if(task.state=="done")"BACKFILL AGAIN"
                 else if(task.state=="error")"RETRY ZIP" else "CHECK / RESUME",false){
                 if(task.state=="done"||task.state=="error")
