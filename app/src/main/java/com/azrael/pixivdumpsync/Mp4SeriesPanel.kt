@@ -112,9 +112,19 @@ object Mp4SeriesPanel {
             },ui.lp(a,3))
             val candidates=Mp4SeriesStore(a).use{it.items(work.id,8)}
             for(hit in candidates){
-                card.addView(ui.text(a,hit.title.take(110)+
+                val label=ui.text(a,hit.title.take(110)+
                     " · "+(hit.volume?.let{"v$it"}?:"volume unverified")+
-                    " · "+hit.state,11f,ui.secondary),ui.lp(a,5))
+                    " · "+hit.state,11f,ui.secondary)
+                label.isClickable=true
+                label.setOnClickListener{
+                    a.startActivity(Intent(a,
+                        com.azrael.galleryflow.ProviderWebActivity::class.java)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
+                            hit.url)
+                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,
+                            if(work.type=="ZIP")"Comics" else "Books"))
+                }
+                card.addView(label,ui.lp(a,5))
             }
             card.addView(ui.action(a,"CHECK THIS SERIES",false){
                 Mp4SeriesSync.scanNow(a)
