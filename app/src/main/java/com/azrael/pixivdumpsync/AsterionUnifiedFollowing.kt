@@ -189,14 +189,21 @@ object AsterionUnifiedFollowing {
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
         // Latest gallery thumbnails are embedded within each followed creator card.
         val summary=ui.card(a)
-        action(a,summary,"SYNC & BACKFILL FOLLOWING",true){
-            val service=Intent(a,GalleryService::class.java).apply{
-                action=GalleryService.ACTION_START
-                putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name)
-            }
-            runCatching{a.startForegroundService(service)}
-                .onFailure{notice(a,it.message?:"Kyora could not start")}
-        }
+        pair(a,summary,"SYNC NEW","BACKFILL",{
+            if(!AppPower.enabled(a))notice(a,"Background work is paused")
+            else runCatching{
+                a.startForegroundService(Intent(a,GalleryService::class.java)
+                    .setAction(GalleryService.ACTION_START)
+                    .putExtra(GalleryService.EXTRA_MODE,SyncMode.LIVE.name))
+            }.onFailure{notice(a,it.message?:"Sync did not start")}
+        },{
+            if(!AppPower.enabled(a))notice(a,"Background work is paused")
+            else runCatching{
+                a.startForegroundService(Intent(a,GalleryService::class.java)
+                    .setAction(GalleryService.ACTION_START)
+                    .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name))
+            }.onFailure{notice(a,it.message?:"Backfill did not start")}
+        })
         put(a,p,summary,10)
         for(entity in followed.take(currentLimit(a,"kyora"))){
             val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5)}
@@ -250,24 +257,45 @@ object AsterionUnifiedFollowing {
             c.addView(holder)
             if(!entity.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,entity.lastError.take(130),12f,ui.danger),5)
-            toggle(a,c,"Include in sync",entity.selected){enabled->
-                GalleryDb(a).use{db->db.setSelected(entity.source,entity.entityId,enabled)}
-            }
-            toggle(a,c,"Live updates",entity.liveEnabled){enabled->
-                GalleryDb(a).use{db->db.setLiveEnabled(entity.source,entity.entityId,enabled)}
-            }
-            pair(a,c,"BACKFILL",if(SiteSession.bound(a,entity.canonicalUrl))"ACCOUNT" else "SIGN IN",{
-                val service=Intent(a,GalleryService::class.java).apply{
-                    action=GalleryService.ACTION_START
-                    putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name)
-                    putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId)
+            val currentSync=SiteControls.sync(a,entity.canonicalUrl,
+                entity.selected && entity.liveEnabled)
+            val currentBackfill=SiteControls.backfill(a,entity.canonicalUrl,
+                entity.selected)
+            toggle(a,c,"Sync new",currentSync){enabled->
+                SiteControls.setSync(a,entity.canonicalUrl,enabled)
+                GalleryDb(a).use{db->
+                    db.setLiveEnabled(entity.source,entity.entityId,enabled)
+                    db.setSelected(entity.source,entity.entityId,
+                        enabled || SiteControls.backfill(a,entity.canonicalUrl))
                 }
-                runCatching{a.startForegroundService(service)}
-                    .onFailure{notice(a,it.message?:"Kyora could not start")}
+            }
+            toggle(a,c,"Backfill history",currentBackfill){enabled->
+                SiteControls.setBackfill(a,entity.canonicalUrl,enabled)
+                GalleryDb(a).use{db->db.setSelected(entity.source,entity.entityId,
+                    enabled || SiteControls.sync(a,entity.canonicalUrl))}
+            }
+            pair(a,c,"CHECK NEW","BACKFILL",{
+                if(!AppPower.enabled(a))notice(a,"Background work is paused")
+                else runCatching{
+                    a.startForegroundService(Intent(a,GalleryService::class.java)
+                        .setAction(GalleryService.ACTION_START)
+                        .putExtra(GalleryService.EXTRA_MODE,SyncMode.LIVE.name)
+                        .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId))
+                }.onFailure{notice(a,it.message?:"Sync did not start")}
             },{
+                if(!AppPower.enabled(a))notice(a,"Background work is paused")
+                else runCatching{
+                    a.startForegroundService(Intent(a,GalleryService::class.java)
+                        .setAction(GalleryService.ACTION_START)
+                        .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name)
+                        .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId))
+                }.onFailure{notice(a,it.message?:"Backfill did not start")}
+            })
+            action(a,c,if(SiteSession.bound(a,entity.canonicalUrl))
+                "ACCOUNT" else "SIGN IN",false){
                 a.startActivity(Intent(a,SiteLoginActivity::class.java)
                     .putExtra(SiteLoginActivity.EXTRA_URL,entity.canonicalUrl))
-            })
+            }
             put(a,p,c,10)
         }
         more(a,p,"kyora",followed.size,refresh)
