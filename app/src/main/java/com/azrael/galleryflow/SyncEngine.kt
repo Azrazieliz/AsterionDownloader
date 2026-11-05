@@ -66,7 +66,9 @@ class SyncEngine(private val context: Context) {
         targetEntityId: String? = null
     ) {
         val entities = db.listEntities().filter {
-            it.selected && it.liveEnabled && (targetEntityId == null || it.entityId == targetEntityId)
+            it.selected && it.liveEnabled &&
+                com.azrael.pixivdumpsync.SiteControls.sync(context,it.canonicalUrl,it.liveEnabled) &&
+                (targetEntityId == null || it.entityId == targetEntityId)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
@@ -114,7 +116,9 @@ class SyncEngine(private val context: Context) {
         targetEntityId: String? = null
     ) {
         val entities = db.listEntities().filter {
-            it.selected && (targetEntityId == null || it.entityId == targetEntityId)
+            it.selected &&
+                com.azrael.pixivdumpsync.SiteControls.backfill(context,it.canonicalUrl,it.selected) &&
+                (targetEntityId == null || it.entityId == targetEntityId)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
