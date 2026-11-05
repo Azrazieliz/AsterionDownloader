@@ -114,9 +114,17 @@ class SiteLoginActivity:Activity() {
                 if(authenticated){
                     CookieManager.getInstance().flush()
                     SiteSession.save(this,address)
+                    // Resume only books paused because THIS website previously
+                    // required login/interactive verification. Cached chapters
+                    // survive and are never discarded by account switching.
+                    val resumed=com.azrael.pixivdumpsync.NovelEpubQueue(this).use{
+                        it.resumeForSite(address)
+                    }
+                    if(resumed>0)
+                        com.azrael.pixivdumpsync.NovelEpubService.schedule(this)
                 }
                 Toast.makeText(this,if(authenticated)
-                    "Accessible website session saved."
+                    "Browser session saved. Access to restricted media still depends on account entitlement."
                     else "Website verification is incomplete. Connection not saved.",
                     Toast.LENGTH_LONG).show()
                 if(authenticated){
