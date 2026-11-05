@@ -88,5 +88,61 @@ object TorrentSearchUi {
         },ui.lp(a,7))
         body.addView(card,ui.lp(a,12))
         body.addView(results,ui.lp(a,8))
+        if(area==TorrentArea.GAMES || area==TorrentArea.ADULT) {
+            val sources=ui.card(a)
+            sources.addView(ui.text(a,
+                "ONEJAV & SUKEBEI · historical torrent discovery",
+                17f,ui.white,true),ui.lp(a,4))
+            sources.addView(ui.action(a,"SYNC NEW & BACKFILL HISTORY",false){
+                thread(name="asterion-torrent-backfill-user"){
+                    TorrentSourceBackfill.scan(a.applicationContext)
+                    a.runOnUiThread {
+                        Toast.makeText(a,"Torrent history scan finished; refresh for results",
+                            Toast.LENGTH_LONG).show()
+                    }
+                }
+            },ui.lp(a,5))
+            val feeds=TorrentFeedDb(a).use{db->
+                db.status() to
+                    (db.discovered("ONEJAV",20)+db.discovered("SUKEBEI",20))
+                        .sortedByDescending{it.discovered}
+            }
+            for(feed in feeds.first){
+                sources.addView(ui.text(a,feed.source+" · "+feed.count+
+                    " indexed entries · "+(if(feed.cursor==null)"no saved history cursor"
+                    else "history cursor stored")+
+                    (feed.error?.let{" · "+it.take(130)}?:""),
+                    11f,if(feed.error!=null)ui.danger else ui.secondary),
+                    ui.lp(a,5))
+            }
+            for(item in feeds.second.take(30)){
+                val row=ui.card(a)
+                row.addView(ui.text(a,item.title,13f,ui.white,true),
+                    ui.lp(a,3))
+                row.addView(ui.text(a,item.source+" · Torrent metadata, not downloaded",
+                    11f,ui.secondary),ui.lp(a,3))
+                row.addView(ui.action(a,"SELECT TORRENT FILES",false){
+                    status.text="Resolving torrent metadata…"
+                    thread(name="asterion-torrent-detail"){
+                        val target=runCatching{
+                            item.download ?: TorrentSourceBackfill.resolve(
+                                a.applicationContext,item.page)
+                        }
+                        a.runOnUiThread{
+                            target.onSuccess{url->
+                                if(url!=null){
+                                    ResourceDownloads.route(a,url,
+                                        if(area==TorrentArea.ADULT)"Videos" else "Games")
+                                    status.text="Opening native file selection"
+                                }else status.text="No accessible torrent/magnet at this entry"
+                            }.onFailure{status.text=
+                                "Torrent detail unavailable: "+it.message}
+                        }
+                    }
+                },ui.lp(a,5))
+                sources.addView(row,ui.lp(a,6))
+            }
+            body.addView(sources,ui.lp(a,12))
+        }
     }
 }
