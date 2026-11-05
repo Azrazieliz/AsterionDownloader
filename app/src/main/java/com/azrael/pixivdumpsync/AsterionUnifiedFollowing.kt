@@ -152,13 +152,13 @@ object AsterionUnifiedFollowing {
             }
             drawPreviews(profile?.photos.orEmpty())
             c.addView(previewHolder)
-            val profileLimit=currentLimit(a,"x")
-            if(sources.indexOf(source)<minOf(profileLimit,15))
-                XCreatorProfiles.load(a,source.handle){info->
-                    if(info.avatar!=null)RemoteImageLoader.load(a,avatar,info.avatar,
-                        "https://x.com/"+source.handle)
-                    drawPreviews(info.photos)
-                }
+            // Every currently displayed account gets a cached/TTL-limited
+            // profile lookup. The former first-15 cap left later accounts blank.
+            XCreatorProfiles.load(a,source.handle){info->
+                if(info.avatar!=null)RemoteImageLoader.load(a,avatar,info.avatar,
+                    "https://x.com/"+source.handle)
+                drawPreviews(info.photos)
+            }
             if(!source.error.isNullOrBlank())
                 put(a,c,ui.text(a,source.error.take(160),12f,ui.danger),5)
             toggle(a,c,"Include in sync",source.enabled){enabled->
@@ -238,13 +238,14 @@ object AsterionUnifiedFollowing {
             if(nativePreviews.isNotEmpty())images(a,holder,nativePreviews,true)
             else{
                 drawSite(cached)
-                if(followed.indexOf(entity)<12)
-                    KyoraCreatorPreviews.load(a,entity.canonicalUrl){snapshot->
-                        snapshot.entries.firstOrNull()?.cover?.let{src->
-                            RemoteImageLoader.load(a,avatar,src,entity.canonicalUrl)
-                        }
-                        drawSite(snapshot)
+                // Fetch only cards rendered by the current "Show more" page;
+                // existing per-site TTL and shared two-thread pool limit requests.
+                KyoraCreatorPreviews.load(a,entity.canonicalUrl){snapshot->
+                    snapshot.entries.firstOrNull()?.cover?.let{src->
+                        RemoteImageLoader.load(a,avatar,src,entity.canonicalUrl)
                     }
+                    drawSite(snapshot)
+                }
             }
             c.addView(holder)
             if(!entity.lastError.isNullOrBlank())
