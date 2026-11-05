@@ -767,24 +767,23 @@ object SourceIndex {
             }}
             // Pending post details and original enqueue retries must keep
             // running even when no listing provider is currently active.
-            val offsetKey=if(area==null)"offset" else "offset_"+area
-            val offset=if(all.isEmpty())0
-                else pref.getInt(offsetKey,0).coerceAtLeast(0)%all.size
-            val batch=if(all.isEmpty())emptyList()
-                else all.drop(offset).take(if(area==null)5 else 20)
-            for(source in batch){
-                if(stop()||!AppPower.enabled(context))break
-                runCatching{scanOne(context,source)}.onFailure{
-                    SourceIndexDb(context).use{db->
-                        db.failure(source.url,it.message?:"Source unavailable")
-                    }
+            // Each enabled website is an independent agent with a durable
+            // cursor. No first-five/first-twenty provider truncation.
+            val tasks=all.map{source->
+                BackfillAgents.submit(context,"source:"+source.url){
+                    if(!stop() && AppPower.enabled(context))
+                        runCatching{scanOne(context,source)}.onFailure{
+                            SourceIndexDb(context).use{db->
+                                db.failure(source.url,
+                                    it.message?:"Source unavailable")
+                            }
+                        }
                 }
             }
-            if(!stop() && all.isNotEmpty()){
-                val advanced=(offset+batch.size)%all.size
-                val edit=pref.edit().putInt(offsetKey,advanced)
-                if(area==null)edit.putBoolean("initial",advanced==0)
-                edit.apply()
+            // Waiting happens on an existing background worker, never UI.
+            for(task in tasks){
+                if(stop() || !AppPower.enabled(context))break
+                runCatching{task.get()}
             }
             // Persist every discovered original, but bound actual Android
             // DownloadManager submissions in one scheduler pass. The remaining
