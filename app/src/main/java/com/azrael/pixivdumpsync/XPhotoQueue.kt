@@ -91,6 +91,12 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             "UPDATE sources SET backfill_enabled=1,history_complete=0,state='queued',last_error=NULL,updated=? WHERE url=?",
             arrayOf(System.currentTimeMillis(),url))
     }
+    fun markSourceError(url:String,message:String){
+        writableDatabase.update("sources",ContentValues().apply{
+            put("last_error",message.take(300))
+            put("updated",System.currentTimeMillis())
+        },"url=?",arrayOf(url))
+    }
     fun clearError(url:String) {
         writableDatabase.execSQL(
             "UPDATE sources SET last_error=NULL, updated=? WHERE url=?",
