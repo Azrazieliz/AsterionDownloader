@@ -43,6 +43,9 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android 17 requires foreground promotion before paused, disabled,
+        // reentrant or STOP return paths.
+        startForeground(NOTIFICATION_ID, notification())
         when (intent?.action) {
             ACTION_PAUSE -> {
                 SyncControl.pause()
@@ -66,8 +69,11 @@ class SyncForegroundService : Service() {
             }
         }
 
-        if(!AppPower.enabled(this)) { stopSelf();return START_NOT_STICKY }
-        if(!AppPower.enabled(this)){stopSelf();return START_NOT_STICKY}
+        if(!AppPower.enabled(this)){
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         val mode = runCatching {
             SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE) ?: SyncMode.LIVE.name)
         }.getOrDefault(SyncMode.LIVE)
@@ -80,8 +86,6 @@ class SyncForegroundService : Service() {
         if (currentRun?.isDone == false) {
             return START_NOT_STICKY
         }
-
-        startForeground(NOTIFICATION_ID, notification())
 
         currentRun = executor.submit {
             try {
@@ -179,12 +183,7 @@ class SyncForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopIntent = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, SyncForegroundService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopIntent = EmergencyBackfillStopReceiver.action(this)
 
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
