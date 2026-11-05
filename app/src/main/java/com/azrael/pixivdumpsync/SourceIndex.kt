@@ -386,6 +386,8 @@ internal object SourceIndexParser {
         // navigation links. Generic indexing remains for other providers.
         val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
         if(!dedicated.isNullOrEmpty())return dedicated
+        val creatorPosts=CreatorSiteBackfill.entries(doc,base,area,clock)
+        if(!creatorPosts.isNullOrEmpty())return creatorPosts
         val out=LinkedHashMap<String,IndexedItem>()
         val scoped=doc.select("article a[href],main a[href],.post a[href],.posts a[href],"+
             ".gallery a[href],.entry a[href],.item a[href],.content a[href],"+
