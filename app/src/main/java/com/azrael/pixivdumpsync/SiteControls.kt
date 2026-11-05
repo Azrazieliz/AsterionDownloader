@@ -19,17 +19,17 @@ object SiteControls {
             .removePrefix("fr.").removePrefix("en.")
         return host
     }
-    fun sync(context:Context,url:String):Boolean {
+    fun sync(context:Context,url:String,default:Boolean=true):Boolean {
         val host=key(url)
         if(host.isBlank())return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-            .getBoolean("sync:$host",true)
+            .getBoolean("sync:$host",default)
     }
-    fun backfill(context:Context,url:String):Boolean {
+    fun backfill(context:Context,url:String,default:Boolean=true):Boolean {
         val host=key(url)
         if(host.isBlank())return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-            .getBoolean("backfill:$host",true)
+            .getBoolean("backfill:$host",default)
     }
     fun setSync(context:Context,url:String,enabled:Boolean){
         val host=key(url)
