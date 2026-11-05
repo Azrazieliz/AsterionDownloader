@@ -51,7 +51,7 @@ internal object SiteBackfillProfiles {
             "cosplay"),
         Profile("celeb.st","COSPLAY",
             cosplay+",.feed a[href],.media-list a[href]",
-            Regex("^/(?:p|post|posts|gallery|photos|media)/[^/?#]+/?$"),
+            Regex("^/(?:(?:p|post|posts|gallery|photos|media)/[^/?#]+|creator/[^/?#]+/(?:images|videos|posts))/?$"),
             "cosplay")
     ).associateBy{it.host}
 
