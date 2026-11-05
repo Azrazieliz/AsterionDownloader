@@ -28,6 +28,11 @@
         android:theme="@android:style/Theme.Material.NoActionBar">
         <!-- Receiver authenticates OS caller UID and installed signing certificate,
              then requires per-peer user approval for independent Asterion keys. -->
+        <!-- Dedicated, non-exported process keeps STOP responsive during a
+             main-process ANR. It cancels only this application's backfill. -->
+        <receiver android:name=".EmergencyBackfillStopReceiver"
+            android:exported="false"
+            android:process=":emergency"/>
         <receiver android:name=".RounderDownloadCompleteReceiver"
             android:exported="false">
             <intent-filter>
