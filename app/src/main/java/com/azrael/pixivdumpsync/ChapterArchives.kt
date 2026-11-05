@@ -7,6 +7,7 @@ import android.os.*
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,12 +49,27 @@ object ChapterArchives {
                     db.attempt(job.id)
                     db.update(job.id,"working",job.progress)
                     try{
-                        val uri=build(context,job){pct->
-                            db.update(job.id,"working",pct)
-                            onStatus("${job.title}: $pct%")
-                        }
-                        db.update(job.id,"done",100,savedUri=uri)
-                        if(NduSettings.configured(context)) {
+                        val chapters=ChapterScraper.chapters(job.url,context)
+                        val signature=MessageDigest.getInstance("SHA-256")
+                            .digest(chapters.joinToString("\n"){
+                                it.url+"\t"+it.title
+                            }.toByteArray(Charsets.UTF_8))
+                            .joinToString(""){"%02x".format(it.toInt() and 255)}
+                        val earlier=db.savedSignature(job.id)
+                        val preserved=earlier!=null && earlier.second==signature &&
+                            runCatching{
+                                context.contentResolver.openAssetFileDescriptor(
+                                    Uri.parse(earlier.first),"r")?.use{
+                                    it.length!=0L
+                                }?:false
+                            }.getOrDefault(false)
+                        val uri=if(preserved)earlier!!.first else
+                            build(context,job,chapters){pct->
+                                db.update(job.id,"working",pct)
+                                onStatus("${job.title}: $pct%")
+                            }
+                        db.completeCheck(job.id,uri,signature)
+                        if(!preserved && NduSettings.configured(context)) {
                             NduCloudQueue(context).use { queue->
                                 queue.enqueue("comics",safeName(job.title)+".zip",Uri.parse(uri))
                             }
@@ -135,12 +151,12 @@ object ChapterArchives {
         }
         throw cause?:IllegalStateException("Unable to retrieve image")
     }
-    private fun build(context:Context,task:ChapterTask,onProgress:(Int)->Unit):String{
+    private fun build(context:Context,task:ChapterTask,chapters:List<ChapterLink>,
+                      onProgress:(Int)->Unit):String{
         val base=context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?:error("External app storage is unavailable")
         val cache=File(base,"chapter-cache/${task.id}")
         require(cache.isDirectory||cache.mkdirs()){"Unable to create page cache"}
-        val chapters=ChapterScraper.chapters(task.url,context)
         require(chapters.isNotEmpty()){"No chapters discovered"}
         val out=File(cache,"complete.zip.part")
         try{
