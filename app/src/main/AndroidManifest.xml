@@ -28,6 +28,12 @@
         android:theme="@android:style/Theme.Material.NoActionBar">
         <!-- Receiver authenticates OS caller UID and installed signing certificate,
              then requires per-peer user approval for independent Asterion keys. -->
+        <receiver android:name=".RounderDownloadCompleteReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE"/>
+            </intent-filter>
+        </receiver>
         <receiver android:name=".AsterionDownloadRequestReceiver"
             android:exported="true">
             <intent-filter>
