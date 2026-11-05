@@ -18,12 +18,16 @@ class SyncForegroundService : Service() {
         const val ACTION_STOP = "com.azrael.galleryflow.STOP"
         const val EXTRA_MODE = "sync_mode"
         const val EXTRA_SITE_ID = "target_site_id"
+        const val EXTRA_SITE_HOST = "target_site_host"
         private const val CHANNEL_ID = "galleryflow_sync"
         private const val NOTIFICATION_ID = 91
     }
 
     private val executor = Executors.newSingleThreadExecutor()
     @Volatile private var currentRun: Future<*>? = null
+    private data class Request(val mode:SyncMode,val entityId:String?,
+                               val siteHost:String?)
+    private val pending=ArrayDeque<Request>()
 
     override fun onCreate() {
         super.onCreate()
@@ -33,47 +37,76 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Android requires every startForegroundService() request to reach
-        // startForeground() promptly, even when sync is disabled, already
-        // running, or paused. Returning early previously crashed Android 17.
+        // Promote before returning from ANY path, including paused and busy.
         startForeground(NOTIFICATION_ID, notification())
-        when (intent?.action) {
-            ACTION_PAUSE -> { SyncControl.pause(); notifyNow(); return START_NOT_STICKY }
-            ACTION_RESUME -> { SyncControl.resume(); notifyNow(); return START_NOT_STICKY }
-            ACTION_STOP -> {
+        when(intent?.action){
+            ACTION_PAUSE->{SyncControl.pause();notifyNow();return START_NOT_STICKY}
+            ACTION_RESUME->{SyncControl.resume();notifyNow();return START_NOT_STICKY}
+            ACTION_STOP->{
+                synchronized(pending){pending.clear()}
                 SyncControl.stop()
                 currentRun?.cancel(true)
-                notifyNow()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
                 return START_NOT_STICKY
             }
         }
-
-        if(!com.azrael.pixivdumpsync.AppPower.enabled(this)) {
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(this)){
+            synchronized(pending){pending.clear()}
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             return START_NOT_STICKY
         }
-        val mode = runCatching { SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE) ?: SyncMode.LIVE.name) }
-            .getOrDefault(SyncMode.LIVE)
-        if (currentRun?.isDone == false) {
-            if (mode == SyncMode.LIVE) SyncControl.tryStart(SyncMode.LIVE, queueLiveIfBusy = true)
-            return START_NOT_STICKY
-        }
 
-        currentRun = executor.submit {
-            try {
-                SyncEngine(applicationContext).run(
-                    mode, targetEntityId = intent?.getStringExtra(EXTRA_SITE_ID)
-                ) { notifyNow() }
-            } finally {
+        val mode=runCatching{
+            SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE)?:SyncMode.LIVE.name)
+        }.getOrDefault(SyncMode.LIVE)
+        val requested=Request(mode,intent?.getStringExtra(EXTRA_SITE_ID),
+            intent?.getStringExtra(EXTRA_SITE_HOST))
+        synchronized(pending){
+            // A second site's BACKFILL previously disappeared here.
+            // Deduplicate active requests and execute the rest serially.
+            if(currentRun?.isDone==false){
+                if(requested !in pending)pending.addLast(requested)
                 notifyNow()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
-                currentRun = null
-                stopSelf()
+                return START_NOT_STICKY
+            }
+            currentRun=executor.submit{
+                try{
+                    var next:Request?=requested
+                    while(next!=null &&
+                        com.azrael.pixivdumpsync.AppPower.enabled(applicationContext)){
+                        val job=next
+                        if(job!=null){
+                            SyncEngine(applicationContext).run(job.mode,
+                                targetEntityId=job.entityId,
+                                targetSiteHost=job.siteHost){notifyNow()}
+                        }
+                        next=synchronized(pending){
+                            if(pending.isEmpty())null else pending.removeFirst()
+                        }
+                    }
+                }finally{
+                    synchronized(pending){
+                        pending.clear()
+                        currentRun=null
+                    }
+                    runCatching{notifyNow()}
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    getSystemService(NotificationManager::class.java)
+                        .cancel(NOTIFICATION_ID)
+                    stopSelf()
+                }
             }
         }
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy(){
+        synchronized(pending){pending.clear()}
+        currentRun?.cancel(true)
+        executor.shutdownNow()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
