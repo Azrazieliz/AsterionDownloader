@@ -33,6 +33,8 @@ object RemoteImageLoader {
     ) {
         if (url.isNullOrBlank()) return
         imageView.tag = url
+        val app=context.applicationContext
+        val target=java.lang.ref.WeakReference(imageView)
 
         memory.get(url)?.let {
             imageView.setImageBitmap(it)
@@ -41,11 +43,11 @@ object RemoteImageLoader {
 
         executor.execute {
             val bitmap = runCatching {
-                val dir = File(context.cacheDir, "kuroha_images").apply { mkdirs() }
+                val dir = File(app.cacheDir, "kuroha_images").apply { mkdirs() }
                 val file = File(dir, sha256(url))
 
                 if (!file.exists() || file.length() <= 0L) {
-                    NetworkCookies.install(context)
+                    NetworkCookies.install(app)
                     val conn = URL(url).openConnection() as HttpURLConnection
                     try {
                         conn.instanceFollowRedirects = true
@@ -86,9 +88,11 @@ object RemoteImageLoader {
 
             if (bitmap != null) {
                 memory.put(url, bitmap)
-                imageView.post {
-                    if (imageView.tag == url) {
-                        imageView.setImageBitmap(bitmap)
+                target.get()?.post {
+                    val current=target.get()
+                    if(current!=null && current.tag==url &&
+                        current.isAttachedToWindow){
+                        current.setImageBitmap(bitmap)
                     }
                 }
             }
