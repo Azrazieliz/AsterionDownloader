@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.net.Uri
 
 data class Watch(val id: Long, val address: String, val label: String, val enabled: Boolean, val lastCheck: Long, val error: String?, val cursor: String? = null, val backfillComplete:Boolean=false)
-data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long)
+data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long, val updated: Long = 0L)
 
 class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 3) {
     private val appContext = context.applicationContext
@@ -94,8 +94,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     }
     fun listVideos(limit: Int = 100): List<Video> {
         val out=ArrayList<Video>()
-        readableDatabase.rawQuery("SELECT id,url,title,state,progress,saved_uri,error,watch_id FROM videos ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, updated DESC LIMIT ${limit.coerceIn(1,1000)}", null).use { c ->
-            while(c.moveToNext()) out += Video(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getString(5),c.getString(6),c.getLong(7))
+        readableDatabase.rawQuery("SELECT id,url,title,state,progress,saved_uri,error,watch_id,updated FROM videos ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, updated DESC LIMIT ${limit.coerceIn(1,1000)}", null).use { c ->
+            while(c.moveToNext()) out += Video(c.getLong(0),c.getString(1),c.getString(2),c.getString(3),c.getInt(4),c.getString(5),c.getString(6),c.getLong(7),c.getLong(8))
         }
         return out
     }
