@@ -169,8 +169,9 @@ object RounderDispatch {
     /** Only completed, visible files in application-owned source folders are scanned.
      * Scan cursor is (date_added,MediaStore ID), so a large history is not lost at a batch edge.
      */
-    fun scan(context:Context):Int{
-        if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return 0
+    fun scan(context:Context,manual:Boolean=false):Int{
+        if((!manual && !AppPower.enabled(context)) ||
+            !busy.compareAndSet(false,true))return 0
         try{
             val prefs=context.getSharedPreferences(PREF,0)
             var stamp=prefs.getLong("stamp",0L)
@@ -249,7 +250,7 @@ object RounderDispatch {
                             if(cloud.uploadedFor(uri.toString()))outbox.ack(uri)
                     }
                 }
-                if(accepted>0)runCatching{NduUploadService.launch(context)}
+                if(accepted>0 && !manual)runCatching{NduUploadService.launch(context)}
             }else if(RoundSyncBridge.enabled(context)){
                 RounderOutbox(context).use{outbox->
                     if(outbox.pending()>0){
