@@ -68,6 +68,11 @@ class Mp4SeriesStore(context:Context):
             put("sync",if(sync)1 else 0)
         },"id=?",arrayOf(id.toString()))
     }
+    fun setAliases(id:Long,aliases:String){
+        writableDatabase.update("subscriptions",ContentValues().apply{
+            put("aliases",aliases.take(600))
+        },"id=?",arrayOf(id.toString()))
+    }
     fun startAt(id:Long,firstVolume:Int){
         require(firstVolume in 1..999)
         writableDatabase.update("subscriptions",ContentValues().apply{
