@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import com.azrael.galleryflow.SiteSession
+import com.azrael.galleryflow.HttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -60,8 +61,7 @@ object NovelEpubService {
                 SourceIndexParser.sameSite(source,url)){
                 "A novel source tried to fetch an untrusted address"
             }
-            val response=Jsoup.connect(url).userAgent(
-                "Mozilla/5.0 (Linux; Android 17; Mobile) AsterionDownloader/1.3")
+            val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
                 .timeout(24000).maxBodySize(6_000_000)
                 .followRedirects(false).ignoreHttpErrors(true)
                 .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
@@ -71,12 +71,15 @@ object NovelEpubService {
                     ?.takeIf{it.isNotBlank()}?:error("Chapter redirect has no target")
                 url=URI(url).resolve(destination).toString()
             }else{
+                if(response.statusCode() in setOf(401,403))
+                    error("Novel source HTTP "+response.statusCode()+
+                        ": connect your eligible website account in the browser")
                 require(response.statusCode() in 200..299){
                     "Novel source unavailable: HTTP "+response.statusCode()
                 }
                 val result=response.parse()
                 if(result.title().contains("Just a moment",true))
-                    error("Novel source requires an authenticated site session")
+                    error("Novel source requires interactive browser verification")
                 return result
             }
         }
