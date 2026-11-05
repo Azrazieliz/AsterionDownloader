@@ -13,6 +13,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.azrael.galleryflow.SiteSession
+import com.azrael.galleryflow.HttpClient
 import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -93,28 +94,32 @@ object DirectDownloadRetry {
         DirectRetryVault.remember(ctx,DirectRetryVault.Request(id,url,folder,name,referer,0,0))
     }
     fun retryNow(ctx:Context,id:Long):Boolean{
+        if(!AppPower.enabled(ctx))return false
         val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}?:return false
         DirectRetryVault.remember(ctx,record.copy(attempts=0,after=0))
         thread(name="asterion-manual-direct-retry"){
-            retry(ctx.applicationContext)
+            retrySelected(ctx.applicationContext,id)
         }
         return true
     }
-    fun retry(ctx:Context):Int{
+    fun retry(ctx:Context):Int=retrySelected(ctx,null)
+    private fun retrySelected(ctx:Context,forceId:Long?):Int{
         if(!AppPower.enabled(ctx))return 0
         val manager=ctx.getSystemService(DownloadManager::class.java)
-        val status=DirectDownloadTracker.states(ctx,200).associateBy{it.job.id}
+        val status=DirectDownloadTracker.states(ctx,250).associateBy{it.job.id}
         val now=System.currentTimeMillis()
         var count=0
         for(record in DirectRetryVault.all(ctx)){
+            if(forceId!=null && record.id!=forceId)continue
             val state=status[record.id]?:continue
             if(state.status==DownloadManager.STATUS_SUCCESSFUL){
                 DirectRetryVault.remove(ctx,record.id)
                 CrossSourceDedup(ctx).use{it.completeById(record.id)}
                 continue
             }
-            if(state.status!=DownloadManager.STATUS_FAILED || record.attempts>=5 ||
-                now<record.after || state.reason in setOf(401,402,403,404,410))continue
+            if(!DirectRetryPolicy.shouldAttempt(
+                state.status==DownloadManager.STATUS_FAILED,state.reason,
+                record.attempts,record.after,now,forceId==record.id))continue
             try{
                 val request=DownloadManager.Request(Uri.parse(record.url)).apply{
                     setTitle(record.name)
@@ -122,6 +127,7 @@ object DirectDownloadRetry {
                         DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
                         "AsterionDownloader/"+record.folder+"/"+record.name)
+                    addRequestHeader("User-Agent",HttpClient.USER_AGENT)
                     SiteSession.cookie(record.url)?.let{addRequestHeader("Cookie",it)}
                     record.referer?.let{
                         ResourceDownloads.privacyReferer(record.url,it)?.let{header->
@@ -129,17 +135,27 @@ object DirectDownloadRetry {
                         }
                     }
                 }
-                manager.remove(record.id)
-                CrossSourceDedup(ctx).use{it.releaseById(record.id)}
+                // Do not destroy the failed transfer until the replacement is queued,
+                // tracked, encrypted and bound to its existing deduplication claim.
                 val id=manager.enqueue(request)
-                CrossSourceDedup(ctx).use{
-                    it.reserve(record.url);it.attach(record.url,id)
+                val committed=runCatching{
+                    DirectDownloadTracker.record(ctx,id,record.name,record.folder,record.url)
+                    DirectRetryVault.remember(ctx,record.copy(id=id,
+                        attempts=record.attempts+1,
+                        after=now+DirectRetryPolicy.backoffMs(record.attempts)))
+                    check(CrossSourceDedup(ctx).use{
+                        it.replaceDownloadId(record.url,record.id,id)
+                    }){"This original is already claimed by another transfer"}
+                }.isSuccess
+                if(!committed){
+                    manager.remove(id)
+                    DirectDownloadTracker.forget(ctx,id)
+                    DirectRetryVault.remove(ctx,id)
+                    continue
                 }
+                manager.remove(record.id)
                 DirectDownloadTracker.forget(ctx,record.id)
-                DirectDownloadTracker.record(ctx,id,record.name,record.folder,record.url)
                 DirectRetryVault.remove(ctx,record.id)
-                DirectRetryVault.remember(ctx,record.copy(id=id,attempts=record.attempts+1,
-                    after=now+(30_000L shl record.attempts.coerceIn(0,6))))
                 count++
             }catch(_:Exception){
                 // Preserve the prior encrypted record and retry status for investigation.
