@@ -95,43 +95,52 @@ object KoikatsuCards {
     fun download(a:Activity,url:String,title:String):String{
         require(safe(url)){"Untrusted host"}
         val conn=URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout=18000;conn.readTimeout=40000
+        conn.connectTimeout=18000
+        conn.readTimeout=40000
         conn.instanceFollowRedirects=false
         conn.setRequestProperty("User-Agent","Mozilla/5.0 (Android 17)")
         SiteSession.cookie(url)?.let{conn.setRequestProperty("Cookie",it)}
         try{
             require(conn.responseCode==200){"HTTP "+conn.responseCode}
-            val output=ByteArrayOutputStream()
-            conn.inputStream.use{input->
-                val buf=ByteArray(65536)
-                while(true){
-                    val n=input.read(buf);if(n<0)break
-                    output.write(buf,0,n)
-                    require(output.size()<=64*1024*1024){"Card exceeds 64 MiB"}
-                }
-            }
-            val data=output.toByteArray()
-            require(data.size>256 && data.take(8)==listOf(137,80,78,71,13,10,26,10)
-                .map{it.toByte()}){"Not an original PNG card"}
             val name=title.replace(Regex("[^A-Za-z0-9_. -]"),"_").take(65)
                 .ifBlank{"Koikatsu"}+".png"
-            val v=ContentValues().apply {
+            val values=ContentValues().apply{
                 put(MediaStore.Downloads.DISPLAY_NAME,name)
                 put(MediaStore.Downloads.MIME_TYPE,"image/png")
-                put(MediaStore.Downloads.RELATIVE_PATH,"Download/AsterionDownloader/Koikatsu/Cards/")
+                put(MediaStore.Downloads.RELATIVE_PATH,
+                    "Download/AsterionDownloader/Koikatsu/Cards/")
                 put(MediaStore.Downloads.IS_PENDING,1)
             }
-            val uri=a.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,v)
-                ?:error("Unable to create PNG in Downloads")
-            try{
-                a.contentResolver.openOutputStream(uri,"w")!!.use{it.write(data)}
-                a.contentResolver.update(uri,ContentValues().apply{
-                    put(MediaStore.Downloads.IS_PENDING,0)
-                },null,null)
-            }catch(e:Throwable){a.contentResolver.delete(uri,null,null);throw e}
-            val saved=CrossSourceDedup(a).use{it.registerFile(a,uri)}
-            RounderDispatch.saved(a,saved,name,"Koikatsu")
-            return saved.toString()
+            // Stream original PNG directly to MediaStore. Large modded cards
+            // must not allocate their entire content in Android's Java heap.
+            java.io.DataInputStream(
+                BufferedInputStream(conn.inputStream,65536)).use{source->
+                val magic=ByteArray(8)
+                source.readFully(magic)
+                require(magic.contentEquals(byteArrayOf(
+                    -119,80,78,71,13,10,26,10))){
+                    "Downloaded response is not an original PNG card"
+                }
+                val uri=a.contentResolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,values)
+                    ?:error("Cannot create Koikatsu PNG in Downloads")
+                try{
+                    val bytes=a.contentResolver.openOutputStream(uri,"w")!!.use{output->
+                        output.write(magic)
+                        8L+source.copyTo(output,65536)
+                    }
+                    require(bytes>256){"Downloaded PNG is incomplete"}
+                    a.contentResolver.update(uri,ContentValues().apply{
+                        put(MediaStore.Downloads.IS_PENDING,0)
+                    },null,null)
+                    val saved=CrossSourceDedup(a).use{it.registerFile(a,uri)}
+                    RounderDispatch.saved(a,saved,name,"Koikatsu")
+                    return saved.toString()
+                }catch(t:Throwable){
+                    a.contentResolver.delete(uri,null,null)
+                    throw t
+                }
+            }
         }finally{conn.disconnect()}
     }
 }
