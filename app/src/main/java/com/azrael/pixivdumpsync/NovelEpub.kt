@@ -110,7 +110,8 @@ object NovelEpubParser {
         val home=URI(source)
         for(a in doc.select("a[href]")){
             val label=a.text().trim()
-            val next=label.matches(Regex("""(?i)^next\s*(chapter)?\s*[→»›]?$""")) ||
+            val next=a.id()=="next_url" ||
+                label.matches(Regex("""(?i)^next\s*(chapter)?\s*[→»›]?$""")) ||
                 a.attr("rel").equals("next",true) ||
                 a.classNames().any{it.contains("next",true)}
             if(!next)continue
@@ -135,7 +136,9 @@ object NovelEpubParser {
         return NovelChapter(number,heading.take(180),address)
     }
     fun chapterText(doc:Document):NovelText {
-        val content=doc.selectFirst("#chapter-content,.chapter-content,"+
+        // FreeWebNovel's live reader wraps its text in #article, with the
+        // numbered heading inside h4. Generic readers use the other selectors.
+        val content=doc.selectFirst("#article,#chapter-content,.chapter-content,"+
             "#chapterContent,.reading-content,.read-content,.novel-content,"+
             "#chapter-body,#chapter-body-content,.txtnav,.text-left")
             ?:throw IllegalStateException("No novel chapter reader was found")
