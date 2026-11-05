@@ -8,17 +8,22 @@ import java.net.URI
 
 data class XSourceRecord(
     val url:String,val handle:String,val cursor:String?,val enabled:Boolean,
-    val state:String,val error:String?,val updated:Long
+    val state:String,val error:String?,val updated:Long,
+    val liveEnabled:Boolean=true,val backfillEnabled:Boolean=true,
+    val historyComplete:Boolean=false
 )
 data class XPhotoTask(val id:Long,val source:String,val photo:String,val state:String,
     val saved:String?,val attempts:Int,val error:String?,val updated:Long=0L)
 
-class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.sqlite",null,1) {
+class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.sqlite",null,2) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY, handle TEXT, cursor TEXT,
             state TEXT NOT NULL DEFAULT 'queued', last_error TEXT,
-            updated INTEGER NOT NULL DEFAULT 0)""")
+            updated INTEGER NOT NULL DEFAULT 0,
+            live_enabled INTEGER NOT NULL DEFAULT 1,
+            backfill_enabled INTEGER NOT NULL DEFAULT 1,
+            history_complete INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("""CREATE TABLE photos(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source TEXT NOT NULL, post_id TEXT NOT NULL,
@@ -28,7 +33,13 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             error TEXT, updated INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("CREATE INDEX photo_queue_idx ON photos(status,id)")
     }
-    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){}
+    override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){
+        if(oldVersion<2){
+            db.execSQL("ALTER TABLE sources ADD COLUMN live_enabled INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE sources ADD COLUMN backfill_enabled INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE sources ADD COLUMN history_complete INTEGER NOT NULL DEFAULT 0")
+        }
+    }
     fun addSource(value:String):Boolean {
         val uri=runCatching{URI(value.trim())}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -45,13 +56,26 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
     fun allSources():List<XSourceRecord> {
         val out=ArrayList<XSourceRecord>()
         readableDatabase.rawQuery(
-            "SELECT url,handle,cursor,state,last_error,updated FROM sources ORDER BY updated DESC",null
+            "SELECT url,handle,cursor,state,last_error,updated,live_enabled,backfill_enabled,history_complete FROM sources ORDER BY updated DESC",null
         ).use{c->while(c.moveToNext()){
             val state=c.getString(3)
             out.add(XSourceRecord(c.getString(0),c.getString(1).orEmpty(),c.getString(2),
-                state!="disabled",state,c.getString(4),c.getLong(5)))
+                state!="disabled",state,c.getString(4),c.getLong(5),
+                c.getInt(6)==1,c.getInt(7)==1,c.getInt(8)==1))
         }}
         return out
+    }
+    /** Mode toggles persist independently and never erase the history cursor. */
+    fun setMode(url:String,mode:String,enabled:Boolean){
+        require(mode in setOf("live_enabled","backfill_enabled"))
+        val v=ContentValues().apply{put(mode,if(enabled)1 else 0)}
+        writableDatabase.update("sources",v,"url=?",arrayOf(url))
+        writableDatabase.execSQL("""
+            UPDATE sources SET
+              state=CASE WHEN live_enabled=1 OR backfill_enabled=1
+                         THEN 'queued' ELSE 'disabled' END,
+              updated=? WHERE url=?
+        """.trimIndent(),arrayOf(System.currentTimeMillis(),url))
     }
     fun setAllEnabled(enabled:Boolean){
         writableDatabase.execSQL(
@@ -64,7 +88,7 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
     }
     fun backfill(url:String){
         writableDatabase.execSQL(
-            "UPDATE sources SET cursor=NULL,state='queued',last_error=NULL,updated=? WHERE url=?",
+            "UPDATE sources SET backfill_enabled=1,history_complete=0,state='queued',last_error=NULL,updated=? WHERE url=?",
             arrayOf(System.currentTimeMillis(),url))
     }
     fun clearError(url:String) {
@@ -96,7 +120,10 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         val cv=ContentValues().apply{
             put("handle",handle);put("updated",System.currentTimeMillis())
             if(next==null)putNull("cursor")else put("cursor",next)
-            if(error==null)putNull("last_error") else put("last_error",error.take(300))
+            if(error==null){
+                putNull("last_error")
+                put("history_complete",if(next==null)1 else 0)
+            }else put("last_error",error.take(300))
         }
         writableDatabase.update("sources",cv,"url=?",arrayOf(source))
     }
