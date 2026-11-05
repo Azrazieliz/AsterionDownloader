@@ -90,7 +90,12 @@ internal object SiteBackfillProfiles {
             }
             found.putIfAbsent(destination,IndexedItem(destination,title,image,
                 base,area,profile.kind,now,false))
-            if(found.size>=500)break
+            require(found.size<2500){
+                "Site-specific listing has too many records for one page; cursor not advanced"
+            }
+        }
+        require(doc.select(profile.selector).size<=6000){
+            "Site-specific listing exceeds safe anchor capacity; backfill paused"
         }
         return found.values.toList()
     }
