@@ -973,8 +973,9 @@ object SourceIndex {
             // on the following page must resume here instead of restarting history.
             if(historyEnabled && !source.historyComplete)
                 cursor=if(index==1 && saved!=null)saved else next
-            val complete=historyEnabled &&
-                (source.historyComplete || (next==null && (saved==null || index>1)))
+            val complete:Boolean?=if(historyEnabled)
+                source.historyComplete || (next==null && (saved==null || index>1))
+                else null
             SourceIndexDb(context).use{db->
                 db.update(source.url,cursor,null,source.discovered+fresh,complete)
             }
