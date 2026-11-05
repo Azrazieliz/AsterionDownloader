@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 data class ChapterTask(val id:Long,val url:String,val title:String,val state:String,
-    val progress:Int,val error:String?,val savedUri:String?,val attempts:Int)
+    val progress:Int,val error:String?,val savedUri:String?,val attempts:Int,val updated:Long=0L)
 
 class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_queue.sqlite",null,1){
     override fun onCreate(db:SQLiteDatabase){
@@ -32,12 +32,12 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
     }
     fun list():List<ChapterTask>{
         val result=ArrayList<ChapterTask>()
-        readableDatabase.rawQuery("""SELECT id,url,title,state,progress,error,saved_uri,attempts
+        readableDatabase.rawQuery("""SELECT id,url,title,state,progress,error,saved_uri,attempts,updated
             FROM tasks ORDER BY updated DESC LIMIT 1000""",null).use{c->
             while(c.moveToNext()){
                 result.add(ChapterTask(c.getLong(0),c.getString(1),c.getString(2),
                     c.getString(3),c.getInt(4),c.getString(5),c.getString(6),
-                    c.getInt(7)))
+                    c.getInt(7),c.getLong(8)))
             }
         }
         return result
