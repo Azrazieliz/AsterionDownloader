@@ -145,10 +145,38 @@ object NovelEpubService {
             val onPage=NovelEpubParser.chapters(doc,url)
             if(seen.size==1){
                 visible=fingerprint(onPage)
-                // Fast live checks: if current visible chapter links are unchanged,
-                // reuse the previously verified and cached chapter catalogue.
-                existingCatalog(context,url,visible)?.let{cached->
-                    return Discovery(title,cached,visible,true)
+                // FreeWebNovel's first catalogue page may remain unchanged
+                // while new chapters are added at the end. Probe the actual
+                // last reader link, not only the first-page fingerprint.
+                if(URI(url).host.orEmpty().removePrefix("www.")==
+                        "freewebnovel.com"){
+                    existingCatalog(context,url,visible)?.let{cached->
+                        val last=cached.maxWithOrNull(
+                            compareBy<NovelChapter>{it.number}.thenBy{it.url})
+                            ?:error("Cached chapter catalogue is empty")
+                        val tail=page(context,last.url,url)
+                        var next=NovelEpubParser.nextReader(tail,url,last.url)
+                        if(next==null)return Discovery(title,cached,visible,true)
+                        val expanded=LinkedHashMap<String,NovelChapter>()
+                        cached.forEach{expanded[it.url]=it}
+                        val walked=HashSet<String>(expanded.keys)
+                        val dir=cacheDir(context,url)
+                        while(next!=null && walked.size<10000 && !stop()){
+                            val address=next
+                            if(!walked.add(address))break
+                            val reader=page(context,address,url)
+                            val chapter=NovelEpubParser.readerChapter(reader,address)
+                            expanded[address]=chapter
+                            storeChapterText(chapter,NovelEpubParser.chapterText(reader),dir)
+                            next=NovelEpubParser.nextReader(reader,url,address)
+                        }
+                        require(next==null && !stop()){
+                            "Reader backfill stopped before reaching the last accessible link"
+                        }
+                        return Discovery(title,expanded.values.sortedWith(
+                            compareBy<NovelChapter>{it.number}.thenBy{it.url}),
+                            visible,false)
+                    }
                 }
             }
             for(item in onPage)found.putIfAbsent(item.url,item)
