@@ -38,14 +38,24 @@ class NduUploadService : Service() {
                 NotificationManager.IMPORTANCE_LOW))
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
+        // Every startForegroundService launch must promote before any early
+        // return, including paused sync and an already active uploader.
+        startForeground(ID,notification("Preparing direct TeraBox uploads"))
         if(intent?.action==ACTION_STOP) {
             stop=true;currentStatus="Upload stopping";running?.cancel(true)
+            if(running?.isDone!=false) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+            }
             return START_NOT_STICKY
         }
-        if(!AppPower.enabled(this)){stopSelf();return START_NOT_STICKY}
+        if(!AppPower.enabled(this)){
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         if(running?.isDone==false) return START_NOT_STICKY
         stop=false
-        startForeground(ID,notification("Preparing direct TeraBox uploads"))
         running=executor.submit {
             try {
                 if(!NduSettings.configured(this)) return@submit
