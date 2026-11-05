@@ -40,6 +40,14 @@ class AsterionHomeActivity:Activity(){
     private var countsLabel:TextView?=null
     private var providerLabel:TextView?=null
     private lateinit var emergencyLabel:TextView
+    private lateinit var stopControl:TextView
+
+    private fun stopBackgroundNow(){
+        AppPower.set(this,false)
+        emergencyLabel.text="PAUSED"
+        stopControl.text="BACKFILL & SYNC STOPPED · OPEN SETTINGS"
+        toast("Backfill and sync stopped; all queues and files preserved")
+    }
 
     private fun updateOverview(){
         if(!overviewBusy.compareAndSet(false,true))return
@@ -236,13 +244,32 @@ class AsterionHomeActivity:Activity(){
             setPadding(dp(10),dp(11),dp(10),dp(11))
             setOnClickListener{
                 if(AppPower.enabled(this@AsterionHomeActivity)){
-                    AppPower.set(this@AsterionHomeActivity,false)
-                    toast("Background backfill and sync stopped; queues preserved")
-                    render()
+                    stopBackgroundNow()
                 }else open("Settings")
             }
         }
         head.addView(emergencyLabel)
+        // Always visible even when a provider has thousands of records.
+        // Do not bury the emergency stop inside a long scrolling panel.
+        stopControl=text(
+            if(AppPower.enabled(this))"STOP BACKFILL & SYNC NOW"
+            else "BACKFILL & SYNC STOPPED · OPEN SETTINGS",
+            12f,theme.white,true).apply{
+            gravity=Gravity.CENTER
+            minimumHeight=dp(42)
+            setPadding(dp(10),dp(8),dp(10),dp(8))
+            background=theme.touch(this@AsterionHomeActivity,theme.danger,12)
+            isClickable=true
+            isFocusable=true
+            contentDescription="Emergency stop of all background backfill and synchronization"
+            setOnClickListener{
+                if(AppPower.enabled(this@AsterionHomeActivity))stopBackgroundNow()
+                else open("Settings")
+            }
+        }
+        root.addView(stopControl,LinearLayout.LayoutParams(-1,dp(44)).apply{
+            leftMargin=dp(14);rightMargin=dp(14);bottomMargin=dp(5)
+        })
         scroller=ScrollView(this).apply{isFillViewport=true}
         body=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
@@ -316,6 +343,11 @@ class AsterionHomeActivity:Activity(){
         // scans while constructing the first frame. Existing jobs stay persisted.
         root.postDelayed({
             kotlin.concurrent.thread(name="asterion-background-bootstrap"){
+                // Pausing sync must also pause catalogue seeding and source
+                // initialization; otherwise opening the app is still laggy.
+                if(!AppPower.enabled(applicationContext))return@thread
+                android.os.Process.setThreadPriority(
+                    android.os.Process.THREAD_PRIORITY_BACKGROUND)
                 runCatching{
                     GalleryDb(applicationContext).use{it.seedCatalogOnce(applicationContext)}
                 }
@@ -367,6 +399,9 @@ class AsterionHomeActivity:Activity(){
         navButtons["Queue"]?.text=if(pending>0)"Downloads ($pending)" else "Downloads"
         if(::emergencyLabel.isInitialized)
             emergencyLabel.text=if(AppPower.enabled(this))"STOP" else "PAUSED"
+        if(::stopControl.isInitialized)
+            stopControl.text=if(AppPower.enabled(this))"STOP BACKFILL & SYNC NOW"
+                else "BACKFILL & SYNC STOPPED · OPEN SETTINGS"
         val selectedTab=if(page in pages)page else "Home"
         navButtons.forEach{(tab,view)->
             val selected=tab==selectedTab
@@ -541,9 +576,7 @@ class AsterionHomeActivity:Activity(){
         put(summary,button(if(AppPower.enabled(this))"STOP ALL BACKFILL & SYNC"
             else "SYNC STOPPED · OPEN SETTINGS"){
             if(AppPower.enabled(this)){
-                AppPower.set(this,false)
-                toast("All scheduled backfill stopped; downloads preserved")
-                render()
+                stopBackgroundNow()
             }else open("Settings")
         },5)
         put(summary,button("OPEN DOWNLOADED FILES"){open("Library")},7)
