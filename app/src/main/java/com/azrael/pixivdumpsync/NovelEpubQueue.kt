@@ -8,6 +8,8 @@ import java.net.URI
 import java.util.Locale
 
 data class NovelEpubTask(val url:String,val title:String,val attempts:Int)
+data class NovelArchiveStatus(val url:String,val title:String,val state:String,
+    val attempts:Int,val error:String?,val savedUri:String?,val updated:Long)
 
 /** Separate EPUB collection queue; no PDF/CBZ and no changes to manga ZIP jobs. */
 class NovelEpubQueue(context:Context):
@@ -62,6 +64,21 @@ class NovelEpubQueue(context:Context):
         return Snapshot(counts.getOrDefault("PENDING",0)+
             counts.getOrDefault("RETRY",0),counts.getOrDefault("WORKING",0),
             counts.getOrDefault("DONE",0),error)
+    }
+    fun list(limit:Int=50):List<NovelArchiveStatus>{
+        val results=ArrayList<NovelArchiveStatus>()
+        readableDatabase.rawQuery(
+            """SELECT url,title,state,attempts,last_error,saved_uri,last_update
+               FROM novels ORDER BY last_update DESC
+               LIMIT ${limit.coerceIn(1,300)}""",null).use{cursor->
+            while(cursor.moveToNext()){
+                results+=NovelArchiveStatus(
+                    cursor.getString(0),cursor.getString(1),cursor.getString(2),
+                    cursor.getInt(3),cursor.getString(4),cursor.getString(5),
+                    cursor.getLong(6))
+            }
+        }
+        return results
     }
     fun hasDue():Boolean=readableDatabase.rawQuery(
         "SELECT 1 FROM novels WHERE state IN ('PENDING','RETRY') AND retry_after<=? LIMIT 1",
