@@ -751,6 +751,7 @@ object SourceIndex {
     }
     fun scan(context:Context,area:String?=null,stop:()->Boolean={false}) {
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
+        BackfillPerformance.backgroundWorker()
         try {
             val pref=context.getSharedPreferences(STATE,0)
             val all=SourceIndexDb(context).use{it.sources().filter{source->
