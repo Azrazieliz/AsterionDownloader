@@ -96,6 +96,15 @@ object Mp4SeriesPanel {
                 }
             })
             card.addView(actions,ui.lp(a,6))
+            val aliases=entry(a,"Alternate titles (comma-separated)")
+            aliases.setText(work.aliases)
+            card.addView(aliases,ui.lp(a,6))
+            card.addView(ui.action(a,"SAVE ALTERNATE TITLES",false){
+                Mp4SeriesStore(a).use{it.setAliases(work.id,
+                    aliases.text.toString().trim())}
+                Mp4SeriesSync.scanNow(a)
+                refresh()
+            },ui.lp(a,3))
             val alias=entry(a,"Related novel, side story or image-based spin-off")
             card.addView(alias,ui.lp(a,5))
             card.addView(ui.action(a,"ADD RELATED WORK",false){
