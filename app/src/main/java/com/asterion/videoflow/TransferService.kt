@@ -62,7 +62,9 @@ object VideoEngine {
                 com.azrael.pixivdumpsync.NameCrawler.scan(context,onStatus)
                 val settings=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
                 val max=settings.getInt("max_new",3).coerceIn(1,20)
-                for(watch in db.listWatches().filter { it.enabled }) {
+                for(watch in db.listWatches().filter {
+                    it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address)
+                }) {
                     if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                         Thread.currentThread().isInterrupted)break
                     try {
@@ -77,7 +79,8 @@ object VideoEngine {
                                 watch.address,watch.address)
                             val collected=linkedMapOf<String,VideoHit>()
                             for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
-                            val backfill=!watch.backfillComplete
+                            val backfill=!watch.backfillComplete &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
                             var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=hashSetOf(watch.address)
                             var pages=0
@@ -100,7 +103,7 @@ object VideoEngine {
                             // Every scan checks latest posts. A durable cursor then resumes
                             // older pages, instead of always resetting at the homepage.
                             val backfill=!watch.backfillComplete
-                            var cursor=if(backfill)watch.cursor?:latest.next else latest.next
+                            var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=HashSet<String>()
                             var pages=0
                             while(cursor!=null && pages<(if(backfill)8 else 1) &&
@@ -117,6 +120,7 @@ object VideoEngine {
                         }
                         if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                             Thread.currentThread().isInterrupted)break
+                        if(!com.azrael.pixivdumpsync.SiteControls.any(context,watch.address))continue
                         if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
                         var added=0
                         for(hit in hits) {
