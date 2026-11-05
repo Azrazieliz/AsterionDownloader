@@ -47,7 +47,7 @@ object ProviderBackfillActions {
                 a.startForegroundService(Intent(a,GallerySync::class.java)
                     .setAction(GallerySync.ACTION_START)
                     .putExtra(GallerySync.EXTRA_MODE,GalleryMode.BACKFILL.name)
-                    .putExtra(GallerySync.EXTRA_SITE_ID,entity.stableId))
+                    .putExtra(GallerySync.EXTRA_SITE_ID,entity.entityId))
             }
             return "Gallery backfill requested for "+entities.size+" included sources"
         }
