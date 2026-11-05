@@ -216,6 +216,7 @@ class AsterionHomeActivity:Activity(){
     private fun toast(s:String)=Toast.makeText(this,s,Toast.LENGTH_LONG).show()
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        CrashDiagnostics.install(this)
         window.statusBarColor=theme.background
         window.navigationBarColor=theme.background
         page=getSharedPreferences("asterion_display",MODE_PRIVATE)
