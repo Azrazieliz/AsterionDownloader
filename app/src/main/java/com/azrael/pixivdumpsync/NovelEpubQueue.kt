@@ -13,17 +13,26 @@ data class NovelArchiveStatus(val url:String,val title:String,val state:String,
 
 /** Separate EPUB collection queue; no PDF/CBZ and no changes to manga ZIP jobs. */
 class NovelEpubQueue(context:Context):
-    SQLiteOpenHelper(context,"asterion_novel_epub.sqlite",null,1) {
+    SQLiteOpenHelper(context,"asterion_novel_epub.sqlite",null,2) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE novels(
             url TEXT PRIMARY KEY,title TEXT NOT NULL,
             state TEXT NOT NULL DEFAULT 'PENDING',
             attempts INTEGER NOT NULL DEFAULT 0,retry_after INTEGER NOT NULL DEFAULT 0,
             last_update INTEGER NOT NULL DEFAULT 0,last_error TEXT,
-            saved_uri TEXT)""")
+            saved_uri TEXT,
+            sync_enabled INTEGER NOT NULL DEFAULT 1,
+            last_check INTEGER NOT NULL DEFAULT 0,
+            fingerprint TEXT)""")
         db.execSQL("CREATE INDEX novel_epub_queue ON novels(state,retry_after)")
     }
-    override fun onUpgrade(db:SQLiteDatabase,old:Int,next:Int){}
+    override fun onUpgrade(db:SQLiteDatabase,old:Int,next:Int){
+        if(old<2){
+            db.execSQL("ALTER TABLE novels ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE novels ADD COLUMN last_check INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE novels ADD COLUMN fingerprint TEXT")
+        }
+    }
     @Synchronized fun enqueue(url:String,title:String):Boolean{
         require(NovelEpubParser.supportedSeries(url)){
             "Supported chapter-based novel series URL required"
@@ -83,14 +92,41 @@ class NovelEpubQueue(context:Context):
     fun hasDue():Boolean=readableDatabase.rawQuery(
         "SELECT 1 FROM novels WHERE state IN ('PENDING','RETRY') AND retry_after<=? LIMIT 1",
         arrayOf(System.currentTimeMillis().toString())).use{it.moveToFirst()}
+    /** Live-sync completed books without touching account-blocked or paused jobs.
+     * Historical chapters remain cached; a repeat scan does not publish again
+     * if the provider's observed chapter catalogue has not changed.
+     */
+    @Synchronized fun refreshDue(now:Long=System.currentTimeMillis()):Int =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","PENDING");put("retry_after",0L)
+        },"state='DONE' AND sync_enabled=1 AND last_check<=?",
+            arrayOf((now-6L*60*60_000L).toString()))
+
+    fun setSync(url:String,enabled:Boolean){
+        writableDatabase.update("novels",ContentValues().apply{
+            put("sync_enabled",if(enabled)1 else 0)
+        },"url=?",arrayOf(url))
+    }
+    fun requestedRefresh(url:String):Boolean =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","PENDING");put("retry_after",0L)
+        },"url=? AND state='DONE'",arrayOf(url))>0
+
+    fun previous(url:String):Pair<String,String>?=readableDatabase.rawQuery(
+        "SELECT saved_uri,fingerprint FROM novels WHERE url=? AND state='WORKING'",
+        arrayOf(url)).use{c->
+        if(c.moveToFirst() && !c.isNull(0) && !c.isNull(1))
+            c.getString(0) to c.getString(1) else null
+    }
     fun started(url:String){
         writableDatabase.update("novels",ContentValues().apply{
             put("state","WORKING");put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(url))
     }
-    fun completed(url:String,uri:String){
+    fun completed(url:String,uri:String,fingerprint:String){
         writableDatabase.update("novels",ContentValues().apply{
             put("state","DONE");put("saved_uri",uri)
+            put("fingerprint",fingerprint);put("last_check",System.currentTimeMillis())
             put("retry_after",0);putNull("last_error")
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(url))
