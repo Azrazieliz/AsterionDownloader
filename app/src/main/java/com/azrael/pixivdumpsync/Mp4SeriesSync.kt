@@ -172,11 +172,17 @@ object Mp4SeriesSync {
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
         try{
             Mp4SeriesStore(context).use{db->
-                for(work in db.list()){
-                    if(stop()||!AppPower.enabled(context))break
-                    runCatching{scanWork(context,db,work)}.onFailure{
-                        db.checked(work.id,work.cursor,
-                            it.message?:it.javaClass.simpleName)
+                val visited=HashSet<Long>()
+                // A first pass can discover related work subscriptions. The
+                // second pass begins their independent historical scan now.
+                repeat(2){
+                    for(work in db.list()){
+                        if(stop()||!AppPower.enabled(context))break
+                        if(!visited.add(work.id))continue
+                        runCatching{scanWork(context,db,work)}.onFailure{
+                            db.checked(work.id,work.cursor,
+                                it.message?:it.javaClass.simpleName)
+                        }
                     }
                 }
             }
