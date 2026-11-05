@@ -13,6 +13,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.net.Uri
 import android.os.Environment
 import com.azrael.galleryflow.SiteSession
+import com.azrael.galleryflow.HttpClient
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import org.jsoup.Jsoup
@@ -743,7 +744,7 @@ object SourceIndex {
                         SourceIndexParser.sameSite(source.url,item.url)){
                         "Detail is outside its approved source"
                     }
-                    val doc=fetchPage(source,item.url)
+                    val doc=fetchPage(context,source,item.url)
                     val files=SourceIndexParser.detailOriginals(
                         doc,item,System.currentTimeMillis())
                     val videoPage=item.area in setOf("VIDEOS","ADULT","HENTAI","CREATORS") &&
@@ -805,37 +806,48 @@ object SourceIndex {
     /** Follow only validated same-site redirects, re-evaluating the cookie vault for
      * each destination instead of forwarding a manually supplied Cookie off-site.
      */
-    private fun fetchPage(source:IndexedSource,address:String):Document{
-        var current=address
-        repeat(4){
-            require(SourceIndexParser.safe(current) &&
-                SourceIndexParser.sameSite(source.url,current)){
-                "Source redirected outside its approved provider domain"
-            }
-            val response=Jsoup.connect(current).timeout(16000).maxBodySize(3_000_000)
-                .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
-                .header("Accept","text/html,application/xhtml+xml")
-                .followRedirects(false).ignoreHttpErrors(true)
-                .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
-                .execute()
-            if(response.statusCode() in 300..399){
-                val location=response.header("Location")
-                    ?.takeIf{it.isNotBlank()}
-                    ?:error("Redirect omitted its destination")
-                val next=URI(current).resolve(location).toString()
-                require(SourceIndexParser.safe(next) &&
-                    SourceIndexParser.sameSite(source.url,next)){
-                    "Provider redirected to an untrusted host"
+    private fun fetchPage(context:Context,source:IndexedSource,address:String):Document {
+        try{
+            var current=address
+            repeat(4){
+                require(SourceIndexParser.safe(current) &&
+                    SourceIndexParser.sameSite(source.url,current)){
+                    "Source redirected outside its approved provider domain"
                 }
-                current=next
-            }else{
-                require(response.statusCode() in 200..299){
-                    "Provider HTTP "+response.statusCode()+"; account or source unavailable"
+                val response=Jsoup.connect(current).timeout(16000)
+                    .maxBodySize(3_000_000)
+                    .userAgent(HttpClient.USER_AGENT)
+                    .header("Accept","text/html,application/xhtml+xml")
+                    .followRedirects(false).ignoreHttpErrors(true)
+                    .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                    .execute()
+                if(response.statusCode() in 300..399){
+                    val location=response.header("Location")
+                        ?.takeIf{it.isNotBlank()}
+                        ?:error("Redirect omitted its destination")
+                    val next=URI(current).resolve(location).toString()
+                    require(SourceIndexParser.safe(next) &&
+                        SourceIndexParser.sameSite(source.url,next)){
+                        "Provider redirected to an untrusted host"
+                    }
+                    current=next
+                }else{
+                    require(response.statusCode() in 200..299){
+                        "Provider HTTP "+response.statusCode()+
+                            "; account or source unavailable"
+                    }
+                    return response.parse()
                 }
-                return response.parse()
             }
+            error("Provider exceeded safe redirect limit")
+        }catch(error:Exception){
+            // Some sites deliver provider-authorized content only in their
+            // browser session. Use the existing safe WebView content parser
+            // after the user has actually connected that account.
+            if(!SiteSession.bound(context,address))throw error
+            val browser=BrowserPageFetch.html(context,address)
+            return Jsoup.parse(browser,address)
         }
-        error("Provider exceeded safe redirect limit")
     }
     private fun scanOne(context:Context,source:IndexedSource){
         var cursor=source.cursor
@@ -852,7 +864,7 @@ object SourceIndex {
         while(index<pages.size && index<4){
             val address=pages[index++]
             if(!visited.add(address))continue
-            val doc=fetchPage(source,address)
+            val doc=fetchPage(context,source,address)
             val landing=doc.location()
             require(SourceIndexParser.safe(landing) &&
                 SourceIndexParser.sameSite(source.url,landing)){
