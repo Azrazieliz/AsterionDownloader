@@ -705,6 +705,29 @@ object SourceIndex {
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true)
             .setMinimumLatency(delay).setOverrideDeadline(delay+4L*60_000L).build())
     }
+    /** The user may backfill one registered site without resetting unrelated
+     * cursors or changing other providers' include/live preferences.
+     */
+    fun scanSourceNow(context:Context,address:String) {
+        if(!AppPower.enabled(context))return
+        thread(name="asterion-source-specific-backfill"){
+            if(!busy.compareAndSet(false,true))return@thread
+            try {
+                val source=SourceIndexDb(context).use{db->
+                    db.sources().firstOrNull{it.url==address}
+                }?:return@thread
+                if(!source.enabled || source.adapter!="generic")return@thread
+                runCatching{scanOne(context,source)}.onFailure{error->
+                    SourceIndexDb(context).use{db->
+                        db.failure(address,error.message?:"Source-specific backfill failed")
+                    }
+                }
+            }finally{
+                busy.set(false)
+                if(AppPower.enabled(context))scheduleCatchup(context,force=true)
+            }
+        }
+    }
     fun scanNow(context:Context,area:String?=null){
         if(!AppPower.enabled(context))return
         thread(name="asterion-source-index"){scan(context,area)}
