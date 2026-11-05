@@ -23,7 +23,7 @@ internal abstract class DirectGalleryAdapter(
     }.getOrDefault(false)
 
     override fun defaultEntities(): List<SourceEntity> = listOf(
-        SourceEntity(source, "site:all", "$entityName — entire site", rootUrl, "site")
+        SourceEntity(source, "site:all", entityName, rootUrl, "site")
     )
 
     override fun resolveEntity(inputUrl: String): SourceEntity = defaultEntities().first()
