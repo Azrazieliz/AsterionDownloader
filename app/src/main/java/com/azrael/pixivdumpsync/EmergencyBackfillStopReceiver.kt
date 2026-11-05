@@ -35,6 +35,7 @@ class EmergencyBackfillStopReceiver:BroadcastReceiver(){
                 // even if the main renderer or download engine is blocked.
                 app.getSharedPreferences("asterion_master_power",Context.MODE_PRIVATE)
                     .edit().putBoolean("enabled",false).commit()
+                BackfillStatusNotification.hide(app)
                 runCatching{
                     app.getSystemService(JobScheduler::class.java).cancelAll()
                 }
