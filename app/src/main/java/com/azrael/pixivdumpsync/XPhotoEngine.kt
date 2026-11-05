@@ -56,7 +56,7 @@ object XPhotoEngine {
         }
         return total
     }
-    private fun scan(db:XPhotoQueue,source:String,handle:String,
+    private fun scan(context:Context,db:XPhotoQueue,source:String,handle:String,
                      initialCursor:String?,live:Boolean,backfill:Boolean,
                      historyComplete:Boolean){
         val path=runCatching{URI(source).path.orEmpty()}.getOrDefault("")
@@ -105,7 +105,8 @@ object XPhotoEngine {
             db.cursor(source,handle,null)
             return
         }
-        while(!Thread.currentThread().isInterrupted){
+        while(AppPower.enabled(context) &&
+            !Thread.currentThread().isInterrupted){
             if(cursor.isNullOrBlank()||!visited.add(cursor))break
             val root=getPage(cursor)
             val list=root.optJSONArray("results")?:error("X media list missing")
@@ -158,7 +159,7 @@ object XPhotoEngine {
                         if(AppPower.enabled(context)){
                             XPhotoQueue(context).use{worker->
                                 onStatus("Scanning X @"+source.handle)
-                                runCatching{scan(worker,source.url,source.handle,
+                                runCatching{scan(context,worker,source.url,source.handle,
                                     source.cursor,source.liveEnabled,
                                     source.backfillEnabled,source.historyComplete)}
                                     .onFailure{worker.markSourceError(source.url,
