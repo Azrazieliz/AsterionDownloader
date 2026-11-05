@@ -177,7 +177,7 @@ class ProviderWebActivity : Activity() {
             };
             const container=document.querySelector('main')||document.body;
             if(!container)return JSON.stringify([]);
-            const fileExt=/\\.(?:jpg|jpeg|png|gif|webp|avif|mp4|m4v|mov|webm|mp3|flac|m4a|wav|ogg|opus|zip|7z|rar|epub|apk|blend|fbx|glb|gltf|stl|pmx|pmd)(?:$|[?#])/i;
+            const fileExt=/\.(?:jpg|jpeg|png|gif|webp|avif|mp4|m4v|mov|webm|mp3|flac|m4a|wav|ogg|opus|zip|7z|rar|epub|apk|blend|fbx|glb|gltf|stl|pmx|pmd)(?:$|[?#])/i;
             for(const a of container.querySelectorAll('a[href]')){
                 if(a.hasAttribute('download')||fileExt.test(a.href))
                     add(a.href,'file',a.getAttribute('download')||'');

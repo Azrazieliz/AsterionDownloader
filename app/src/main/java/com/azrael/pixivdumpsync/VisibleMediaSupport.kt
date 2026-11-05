@@ -16,8 +16,8 @@ internal data class VisibleMedia(val url:String,val kind:String,val filename:Str
 internal data class VisibleMediaResult(val queued:Int,val already:Int,val failed:Int)
 
 internal object VisibleMediaSupport {
-    private val privateIp=Regex("""^(?:localhost|127(?:\\.[0-9]+){3}|10(?:\\.[0-9]+){3}|192\\.168(?:\\.[0-9]+){2}|169\\.254(?:\\.[0-9]+){2}|0\\.0\\.0\\.0)$""")
-    private val extensions=Regex("""(?i)\\.(?:jpg|jpeg|png|gif|webp|avif|mp4|m4v|mov|webm|mp3|flac|m4a|wav|ogg|opus|zip|7z|rar|epub|apk|blend|fbx|glb|gltf|stl|pmx|pmd)(?:$|[?#])""")
+    private val privateIp=Regex("""^(?:localhost|127(?:\.[0-9]+){3}|10(?:\.[0-9]+){3}|192\.168(?:\.[0-9]+){2}|169\.254(?:\.[0-9]+){2}|0\.0\.0\.0)$""")
+    private val extensions=Regex("""(?i)\.(?:jpg|jpeg|png|gif|webp|avif|mp4|m4v|mov|webm|mp3|flac|m4a|wav|ogg|opus|zip|7z|rar|epub|apk|blend|fbx|glb|gltf|stl|pmx|pmd)(?:$|[?#])""")
     fun accepted(page:String,media:VisibleMedia):Boolean=runCatching{
         val from=URI(page)
         val target=URI(media.url)
@@ -25,7 +25,7 @@ internal object VisibleMediaSupport {
         from.scheme.equals("https",true) && target.scheme.equals("https",true) &&
             from.host!=null && host.isNotBlank() && target.userInfo==null &&
             !privateIp.matches(host) && !host.endsWith(".local") &&
-            !host.endsWith(".internal") && !media.url.contains('\\n') &&
+            !host.endsWith(".internal") && !media.url.contains('\n') &&
             media.kind in setOf("image","video","file") &&
             (media.kind!="file" || extensions.containsMatchIn(media.url) ||
                 extensions.containsMatchIn(media.filename))
