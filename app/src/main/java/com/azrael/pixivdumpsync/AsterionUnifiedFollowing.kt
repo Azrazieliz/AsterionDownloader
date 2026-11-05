@@ -167,10 +167,6 @@ object AsterionUnifiedFollowing {
                     .putBoolean(source.url,enabled).apply()
                 XPhotoScheduler.ensure(a)
             }
-            toggle(a,c,"Backfill history",source.enabled && source.backfillEnabled){enabled->
-                XPhotoQueue(a).use{it.setMode(source.url,"backfill_enabled",enabled)}
-                XPhotoScheduler.ensure(a)
-            }
             pair(a,c,"CHECK NEW","BACKFILL",{
                 XPhotoQueue(a).use{it.clearError(source.url)}
                 XPhotoEngine.start(a,false,source.url)
@@ -189,23 +185,6 @@ object AsterionUnifiedFollowing {
         put(a,p,ui.text(a,"Cosplay · Following",22f,ui.white,true),8)
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
         // Latest gallery thumbnails are embedded within each followed creator card.
-        val summary=ui.card(a)
-        pair(a,summary,"SYNC NEW","BACKFILL",{
-            if(!AppPower.enabled(a))notice(a,"Background work is paused")
-            else runCatching{
-                a.startForegroundService(Intent(a,GalleryService::class.java)
-                    .setAction(GalleryService.ACTION_START)
-                    .putExtra(GalleryService.EXTRA_MODE,SyncMode.LIVE.name))
-            }.onFailure{notice(a,it.message?:"Sync did not start")}
-        },{
-            if(!AppPower.enabled(a))notice(a,"Background work is paused")
-            else runCatching{
-                a.startForegroundService(Intent(a,GalleryService::class.java)
-                    .setAction(GalleryService.ACTION_START)
-                    .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name))
-            }.onFailure{notice(a,it.message?:"Backfill did not start")}
-        })
-        put(a,p,summary,10)
         for(entity in followed.take(currentLimit(a,"kyora"))){
             val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5)}
             val c=ui.card(a)

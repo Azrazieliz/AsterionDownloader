@@ -15,8 +15,6 @@ import java.net.URI
 object ProviderBackfillActions {
     fun request(a:Activity,site:IndexedSource):String{
         if(!AppPower.enabled(a))return "App is paused in Settings"
-        if(!SiteControls.any(a,site.url))
-            return "Enable Sync or Backfill for this site"
         val host=SiteControls.key(site.url)
         if(host in setOf("onejav.com","sukebei.nyaa.si")){
             TorrentSourceBackfill.scanAsync(a)

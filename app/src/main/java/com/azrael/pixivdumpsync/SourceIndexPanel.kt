@@ -36,31 +36,9 @@ object SourceIndexPanel {
                 " errors · "+items.size+" previews"+
                 " · native coverage not assumed",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
-        val toolbar=ui.row(a)
-        toolbar.addView(ui.action(a,"RUN ENABLED SOURCES",false){
-            thread(name="asterion-module-backfill"){
-                for(area in areas)SourceIndex.scan(a,area)
-            }
-            if(areas.any{it=="ADULT"||it=="HENTAI"})VideoEngine.launch(a,true)
-            if(areas.any{it=="CREATORS"||it=="ASSETS"})CreatorArchiveScheduler.scanNow(a)
-            if("COMICS" in areas)ChapterArchives.start(a)
-            if("COSPLAY" in areas)runCatching{
-                for(mode in listOf(com.azrael.galleryflow.SyncMode.LIVE,
-                    com.azrael.galleryflow.SyncMode.BACKFILL)){
-                    a.startForegroundService(Intent(a,
-                        com.azrael.galleryflow.SyncForegroundService::class.java)
-                        .setAction(com.azrael.galleryflow.SyncForegroundService.ACTION_START)
-                        .putExtra(com.azrael.galleryflow.SyncForegroundService.EXTRA_MODE,
-                            mode.name))
-                }
-            }
-            Toast.makeText(a,"Source sync requested · new previews appear here",
-                Toast.LENGTH_SHORT).show()
-        },LinearLayout.LayoutParams(0,-2,1f))
-        toolbar.addView(ui.action(a,"SITES · SYNC / BACKFILL",false){
+        card.addView(ui.action(a,"SOURCES · SYNC & BACKFILL",false){
             showStatus(a,areas,label)
-        },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
-        card.addView(toolbar,ui.lp(a,9))
+        },ui.lp(a,8))
         if("BOOKS" in areas){
             val epub=NovelEpubQueue(a).use{it.snapshot()}
             card.addView(ui.text(a,"EPUB collections · "+epub.complete+
@@ -170,35 +148,21 @@ object SourceIndexPanel {
                         }
                     }
                 }
-                val backfill=Switch(a).apply{
-                    text="Backfill"
-                    textSize=12f
-                    setTextColor(ui.white)
-                    isChecked=SiteControls.backfill(a,site.url,
-                        group.any{it.enabled})
-                    contentDescription="Backfill older items on "+name
-                    setOnCheckedChangeListener{_,enabled->
-                        SiteControls.setBackfill(a,site.url,enabled)
-                        thread(name="asterion-site-backfill-pref"){
-                            SiteControls.applyToEngines(a.applicationContext,site.url)
-                        }
-                    }
-                }
                 flags.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
-                flags.addView(backfill,LinearLayout.LayoutParams(0,-2,1f))
                 root.addView(flags,ui.lp(a,3))
                 val commands=ui.row(a)
-                commands.addView(ui.action(a,"CHECK NOW",false){
+                commands.addView(ui.action(a,"BACKFILL",false){
                     if(!AppPower.enabled(a)){
                         Toast.makeText(a,"App is paused in Settings",
-                            Toast.LENGTH_SHORT).show()
-                    }else if(!SiteControls.any(a,site.url)){
-                        Toast.makeText(a,"Enable Sync or Backfill for "+name,
                             Toast.LENGTH_SHORT).show()
                     }else thread(name="asterion-check-provider"){
                         SiteControls.applyToEngines(a.applicationContext,site.url)
                         val result=runCatching{
-                            ProviderBackfillActions.request(a,site)
+                            if(site.adapter=="generic"){
+                                if(SiteRunControl.start(a,site.url,site.area))
+                                    "Backfill started for "+name
+                                else "Already checking "+name
+                            }else ProviderBackfillActions.request(a,site)
                         }.getOrElse{it.message?:"Source request failed"}
                         a.runOnUiThread{
                             if(!a.isFinishing)Toast.makeText(a,result,

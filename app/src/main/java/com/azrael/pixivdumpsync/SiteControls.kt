@@ -30,12 +30,9 @@ object SiteControls {
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("sync:$host",default)
     }
-    fun backfill(context:Context,url:String,default:Boolean=true):Boolean {
-        val host=key(url)
-        if(host.isBlank())return false
-        return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-            .getBoolean("backfill:$host",default)
-    }
+    fun backfill(context:Context,url:String,default:Boolean=true):Boolean =
+        sync(context,url,default)
+
     fun setSync(context:Context,url:String,enabled:Boolean){
         val host=key(url)
         require(host.isNotBlank())

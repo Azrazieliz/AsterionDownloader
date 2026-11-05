@@ -551,19 +551,6 @@ class AsterionHomeActivity:Activity(){
             else "${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors",
             11f,theme.secondary)
         put(summary,providerLabel!!,5)
-        put(summary,button("SYNC & BACKFILL FOLLOWED SOURCES"){
-            if(!AppPower.enabled(this)){
-                toast("Background sync is paused; enable it in Settings")
-            }else kotlin.concurrent.thread(name="asterion-user-backfill"){
-                val result=runCatching{UniversalBackfill.start(this)}
-                runOnUiThread{
-                    if(!isFinishing&&!isDestroyed)
-                        toast(result.fold(
-                            {"${it.requested} source engines requested · ${it.errors.size} errors"},
-                            {"Backfill could not start: "+it.message}))
-                }
-            }
-        },7)
         put(body,summary,12)
         AsterionSuggestedUi.render(this,body)
     }
