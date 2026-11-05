@@ -152,6 +152,14 @@ object SourceIndexPanel {
                 row.addView(toggle)
             }
             body.addView(row,ui.lp(a,8))
+            body.addView(ui.action(a,"BACKFILL THIS SITE",false){
+                val result=runCatching{
+                    ProviderBackfillActions.request(a,source)
+                }
+                Toast.makeText(a,result.getOrElse{
+                    "Source could not start: "+(it.message?:"Unavailable")
+                },Toast.LENGTH_LONG).show()
+            },ui.lp(a,4))
         }
         body.addView(ui.action(a,"CONNECT AN ACCOUNT",false){
             val accounts=list.filter{SourceIndexParser.safe(it.url)}
