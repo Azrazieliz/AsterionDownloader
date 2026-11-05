@@ -14,10 +14,10 @@ import java.net.URI
  */
 object ProviderBackfillActions {
     fun request(a:Activity,site:IndexedSource):String{
-        if(!site.enabled)return "This source is paused. Enable it before backfill."
-        val host=runCatching{URI(site.url).host.orEmpty().lowercase()
-            .removePrefix("www.").removePrefix("m.").removePrefix("fr.")}
-            .getOrDefault("")
+        if(!AppPower.enabled(a))return "App is paused in Settings"
+        if(!SiteControls.any(a,site.url))
+            return "Enable Sync or Backfill for this site"
+        val host=SiteControls.key(site.url)
         if(host in setOf("onejav.com","sukebei.nyaa.si")){
             TorrentSourceBackfill.scanAsync(a)
             return "Torrent historical metadata check requested"
@@ -36,20 +36,22 @@ object ProviderBackfillActions {
             return "VideoFlow watch scan requested; existing source filters preserved"
         }
         if(site.area=="COSPLAY"){
-            val entities=GalleryDb(a).use{db->
-                db.listEntities().filter{e->
-                    e.selected &&
-                    SourceIndexParser.sameSite(site.url,e.canonicalUrl)
+            val selected=GalleryDb(a).use{db->
+                db.listEntities().count{e->
+                    e.selected && SiteControls.key(e.canonicalUrl)==host
                 }
             }
-            if(entities.isEmpty())return "No included gallery profile for this site"
-            for(entity in entities){
-                a.startForegroundService(Intent(a,GallerySync::class.java)
-                    .setAction(GallerySync.ACTION_START)
-                    .putExtra(GallerySync.EXTRA_MODE,GalleryMode.BACKFILL.name)
-                    .putExtra(GallerySync.EXTRA_SITE_ID,entity.entityId))
-            }
-            return "Gallery backfill requested for "+entities.size+" included sources"
+            if(selected==0)return "No enabled gallery profiles for this site"
+            // One site-scoped request processes all its categories in order.
+            // The service queues concurrent site requests instead of dropping them.
+            val mode=if(SiteControls.backfill(a,site.url))GalleryMode.BACKFILL
+                else GalleryMode.LIVE
+            a.startForegroundService(Intent(a,GallerySync::class.java)
+                .setAction(GallerySync.ACTION_START)
+                .putExtra(GallerySync.EXTRA_MODE,mode.name)
+                .putExtra(GallerySync.EXTRA_SITE_HOST,host))
+            return "Scheduled "+host+" · "+mode.name.lowercase()+" · "+
+                selected+" included profiles"
         }
         if(site.area=="BOOKS" && NovelEpubParser.supportedSeries(site.url)){
             NovelEpubService.enqueue(a,site.url,site.name)
