@@ -20,6 +20,18 @@ class VisibleMediaSupportTest {
         assertTrue(VisibleMediaSupport.accepted("https://fansly.com/example",
             VisibleMedia("https://example.net/download/opaque?id=1","file","artwork.zip")))
     }
+    @Test fun booksAcceptOnlyExplicitOriginalEpubFiles() {
+        assertTrue(VisibleMediaSupport.isEpubOriginal(
+            VisibleMedia("https://mp4directs.com/attachments/book.epub?token=abc","file")))
+        assertTrue(VisibleMediaSupport.isEpubOriginal(
+            VisibleMedia("https://cdn.example.net/get?id=4","file","Volume 1.epub")))
+        assertFalse(VisibleMediaSupport.isEpubOriginal(
+            VisibleMedia("https://mp4directs.com/threads/book.123","file")))
+        assertFalse(VisibleMediaSupport.isEpubOriginal(
+            VisibleMedia("https://cdn.example.net/vol1.pdf","file")))
+        assertFalse(VisibleMediaSupport.isEpubOriginal(
+            VisibleMedia("https://cdn.example.net/cover.jpg","image")))
+    }
     @Test fun safeFileNamesForSignedMedia() {
         val filename=VisibleMediaSupport.fileName(
             VisibleMedia("https://cdn.example.net/files/opaque?sig=secret","image"))
