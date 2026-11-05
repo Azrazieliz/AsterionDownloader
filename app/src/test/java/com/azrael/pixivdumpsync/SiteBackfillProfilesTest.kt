@@ -1,0 +1,84 @@
+package com.azrael.pixivdumpsync
+
+import org.jsoup.Jsoup
+import org.junit.Assert.*
+import org.junit.Test
+
+class SiteBackfillProfilesTest {
+    private fun titles(html:String,base:String,area:String):List<IndexedItem> =
+        SiteBackfillProfiles.entries(Jsoup.parse(html,base),base,area,1234L).orEmpty()
+
+    @Test fun freewebnovelOnlyEnqueuesSeriesNotIndividualChapters(){
+        val base="https://freewebnovel.com/"
+        val records=titles("""<main>
+          <a href="/novel/i-am-the-fated-villain">I Am The Fated Villain</a>
+          <a href="/novel/i-am-the-fated-villain/chapter-1">Chapter 1</a>
+          <a href="/login">Login</a>
+        </main>""",base,"BOOKS")
+        assertEquals(1,records.size)
+        assertEquals("books",records.single().kind)
+        assertTrue(NovelEpubParser.supportedSeries(records.single().url))
+    }
+    @Test fun novelbuddyAndReadnovelfullGetIndependentBookListings(){
+        val buddy="https://novelbuddy.com/home"
+        val b=titles("""<div class="novel-item"><a href="/novel/shadow-slave">
+          <img alt="Shadow Slave"/> </a></div>""",buddy,"BOOKS")
+        assertEquals("https://novelbuddy.com/novel/shadow-slave",b.single().url)
+        val full="https://readnovelfull.com/"
+        val f=titles("""<div class="book-item">
+           <a href="/book/a-novel">A Novel</a>
+           <a href="/account">Log in</a></div>""",full,"BOOKS")
+        assertEquals(1,f.size)
+        assertEquals("books",f.single().kind)
+    }
+    @Test fun sushiscanFindsSeriesWithoutMistakingChapterPageAsSeries(){
+        val base="https://sushiscan.net/catalogue/"
+        val result=titles("""<main>
+          <a href="/catalogue/black-clover/">Black Clover</a>
+          <a href="/black-clover-chapitre-392/">Chapter 392</a>
+        </main>""",base,"COMICS")
+        assertEquals(1,result.size)
+        assertTrue(SushiScanChapters.isSeries(result.single().url))
+    }
+    @Test fun bothNhentaiSitesKeepCorrectGalleryIds(){
+        for(host in listOf("nhentai.net","nhentai.xxx")){
+            val base="https://$host/language/english/"
+            val records=titles("""<div id="gallery">
+              <a href="/g/12345/"><img alt="Collection"/></a>
+              <a href="/g/12345/1/"><img alt="Page one"/></a>
+            </div>""",base,"COMICS")
+            assertEquals(host,1,records.size)
+            assertEquals(host,true,NhentaiChapters.isGallery(records.single().url))
+        }
+    }
+    @Test fun kiutakuRecognizesNumericGalleryPostsAndOriginalMedia(){
+        val home="https://kiutaku.com/"
+        val records=titles("""<main><a href="/4495">
+            <img alt="Alina Becker Tracer"/></a></main>""",home,"COSPLAY")
+        assertEquals(1,records.size)
+        val page="https://kiutaku.com/4495/"
+        val doc=Jsoup.parse("""<main><article><div class="content">
+           <a href="https://static.kiutaku.com/photos/01.jpg"><img src="/assets/thumb01.jpg"/></a>
+           <img data-original="https://static.kiutaku.com/photos/02.jpg"/>
+           <aside><img src="/static/avatar.jpg"/></aside>
+        </div></article></main>""",page)
+        val originals=SiteBackfillProfiles.galleryOriginals(doc,records.single(),0L)
+        assertEquals(2,originals.size)
+        assertTrue(originals.all{it.kind=="original"})
+    }
+    @Test fun cosplayteleWordpressPostAndPaginatorRecognized(){
+        val base="https://cosplaytele.com/"
+        val doc=Jsoup.parse("""<article>
+            <h2><a href="/chen-hai/">Hualing Chen Hai</a></h2>
+          </article><nav class="pagination">
+            <a class="next" href="/page/2/">Older Posts</a>
+          </nav>""",base)
+        assertEquals(1,SiteBackfillProfiles.entries(doc,base,"COSPLAY",0L)!!.size)
+        assertEquals(base+"page/2/",SiteBackfillProfiles.next(doc,base,base))
+    }
+    @Test fun otherProvidersStillUseOriginalGenericPath(){
+        assertNull(SiteBackfillProfiles.entries(
+            Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),
+            "https://other.example/","ASSETS",0L))
+    }
+}
