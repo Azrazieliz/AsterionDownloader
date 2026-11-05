@@ -16,7 +16,9 @@ class SyncEngine(private val context: Context) {
 
     private val http = HttpClient()
 
-    fun run(mode: SyncMode, targetEntityId: String? = null, progress: (String) -> Unit = {}): Stats {
+    fun run(mode: SyncMode, targetEntityId: String? = null,
+            targetSiteHost: String? = null,
+            progress: (String) -> Unit = {}): Stats {
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
         if (!SyncControl.tryStart(mode, queueLiveIfBusy = true)) return stats
@@ -26,8 +28,8 @@ class SyncEngine(private val context: Context) {
         try {
             SyncControl.setMode(mode)
             when (mode) {
-                SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId)
-                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId)
+                SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
+                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
             }
             while (!SyncControl.isStopping() && SyncControl.takePendingLive()) {
                 SyncControl.setMode(SyncMode.LIVE)
@@ -63,12 +65,14 @@ class SyncEngine(private val context: Context) {
         flow: FlowLinkEmitter,
         stats: Stats,
         progress: (String) -> Unit,
-        targetEntityId: String? = null
+        targetEntityId: String? = null,
+        targetSiteHost: String? = null
     ) {
         val entities = db.listEntities().filter {
             it.selected && it.liveEnabled &&
                 com.azrael.pixivdumpsync.SiteControls.sync(context,it.canonicalUrl,it.liveEnabled) &&
-                (targetEntityId == null || it.entityId == targetEntityId)
+                (targetEntityId == null || it.entityId == targetEntityId) &&
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
@@ -113,12 +117,14 @@ class SyncEngine(private val context: Context) {
         flow: FlowLinkEmitter,
         stats: Stats,
         progress: (String) -> Unit,
-        targetEntityId: String? = null
+        targetEntityId: String? = null,
+        targetSiteHost: String? = null
     ) {
         val entities = db.listEntities().filter {
             it.selected &&
                 com.azrael.pixivdumpsync.SiteControls.backfill(context,it.canonicalUrl,it.selected) &&
-                (targetEntityId == null || it.entityId == targetEntityId)
+                (targetEntityId == null || it.entityId == targetEntityId) &&
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
