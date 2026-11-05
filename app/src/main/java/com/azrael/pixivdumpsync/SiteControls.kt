@@ -17,7 +17,12 @@ object SiteControls {
         val host=runCatching { URI(url).host.orEmpty().lowercase(Locale.ROOT) }
             .getOrDefault("").removePrefix("www.").removePrefix("m.")
             .removePrefix("fr.").removePrefix("en.")
-        return host
+        // Both BuonDua domains refer to the same native provider. Keep
+        // historical subscriptions but never show independent site switches.
+        return when(host){
+            "buondua.com"->"buondua.net"
+            else->host
+        }
     }
     fun sync(context:Context,url:String,default:Boolean=true):Boolean {
         val host=key(url)
