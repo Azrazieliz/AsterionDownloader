@@ -3,7 +3,7 @@ package com.asterion.videoflow
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Direct URL only. Do not regress to hidden-service or keyword search support. */
+/** URL validation only; transport for non-public hosts is configured separately. */
 class WebDiscoveryTest {
     @Test fun validWebVideoUrl() {
         assertTrue(WebDiscovery.isUrl("https://www.example.com/videos/123456"))
@@ -13,9 +13,9 @@ class WebDiscoveryTest {
         val url="https://www.example.com/watch/Video%20Name?token=a%2Bb&signature=987"
         assertEquals(url,WebDiscovery.normalize(url))
     }
-    @Test fun keywordAndTorLinksNotSupported(){
+    @Test fun keywordStringsRejectedAndHiddenUrlsRequireTransport(){
         assertFalse(WebDiscovery.isUrl("search:performer example"))
-        assertFalse(WebDiscovery.isUrl("http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion"))
+        assertTrue(WebDiscovery.isUrl("http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion"))
         assertNull(WebDiscovery.normalize("performer example videos"))
     }
     @Test fun rejectLocalNetworkAddresses(){

@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private var siteFilter: String? = null
     private val thumbnailPool = Executors.newFixedThreadPool(2)
     private lateinit var addressInput: EditText
+    private var requestedSiteLayout: String = "auto"
     private lateinit var status: TextView
     private lateinit var entityList: LinearLayout
     private val handler = Handler(Looper.getMainLooper())
@@ -47,6 +48,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = NocturneDesign.background
         window.navigationBarColor = NocturneDesign.background
+        GalleryDb(this).use{it.seedCatalogOnce(this)}
         siteFilter = intent.getStringExtra(EXTRA_SITE_ID)
         setContentView(buildUi())
         if (intent.getBooleanExtra(EXTRA_ADD_SITE, false)) {
@@ -102,7 +104,7 @@ class MainActivity : Activity() {
         words.addView(ui.text(this@MainActivity, "ASTERION", 17f, ui.white, true).apply {
             letterSpacing = .16f
         })
-        words.addView(ui.text(this@MainActivity, "KYORA / COSPLAY", 10f, ui.secondary, true).apply {
+        words.addView(ui.text(this@MainActivity, "IMAGES / GALLERIES", 10f, ui.secondary, true).apply {
             letterSpacing = .12f
         })
         head.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
@@ -164,7 +166,7 @@ class MainActivity : Activity() {
     }
 
     private fun heading(title: String, description: String) {
-        panel.addView(ui.eyebrow(this@MainActivity, "NOCTURNE COLLECTION"))
+        panel.addView(ui.eyebrow(this@MainActivity, "ASTERION / KYORA"))
         panel.addView(ui.text(this@MainActivity, title, 30f, ui.white, true), ui.lp(this@MainActivity, 5))
         panel.addView(ui.text(this@MainActivity, description, 13f, ui.secondary),
             ui.lp(this@MainActivity, 3, 22))
@@ -208,7 +210,7 @@ class MainActivity : Activity() {
             return
         }
         siteFilter = null
-        heading("Kyora library", "Cosplay sites and galleries that you choose to add.")
+        heading("Kyora · Sites & galleries", "Original supported sites and your saved creators, managed together.")
         val hero = ui.card(this@MainActivity, 21).apply {
             background = ui.shape(this@MainActivity, ui.soft, 23)
             addView(ui.eyebrow(this@MainActivity, "CONNECTED SOURCES"))
@@ -222,6 +224,10 @@ class MainActivity : Activity() {
                 { go(Page.DISCOVER) }, { go(Page.TRANSFERS) }))
         }
         panel.addView(hero)
+        panel.addView(buttonPair("Enable all sources","Disable all sources",
+            { GalleryDb(this).use{it.setAllSelected(true);it.setAllLiveEnabled(true)}; renderCurrent() },
+            { GalleryDb(this).use{it.setAllSelected(false);it.setAllLiveEnabled(false)}; renderCurrent() }),
+            ui.lp(this,13))
         section("Saved websites", entities.size.toString() + " SOURCES")
         if (entities.isEmpty()) {
             panel.addView(message("Your library is empty",
@@ -384,6 +390,24 @@ class MainActivity : Activity() {
         entry.addView(addressInput, LinearLayout.LayoutParams(-1, dp(54)).apply {
             topMargin = dp(14)
         })
+        entry.addView(ui.text(this@MainActivity,
+            "Website structure", 14f, ui.secondary), ui.lp(this@MainActivity, 12, 7))
+        val layoutChoices = android.widget.RadioGroup(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            for ((title, mode) in listOf("Auto" to "auto", "Gallery" to "gallery_only", "Albums" to "site")) {
+                val choice = android.widget.RadioButton(this@MainActivity).apply {
+                    id = View.generateViewId()
+                    text = title
+                    textSize = 13f
+                    setTextColor(ui.white)
+                    buttonTintList = android.content.res.ColorStateList.valueOf(ui.primary)
+                    isChecked = requestedSiteLayout == mode
+                    setOnClickListener { requestedSiteLayout = mode }
+                }
+                addView(choice, LinearLayout.LayoutParams(0, dp(48), 1f))
+            }
+        }
+        entry.addView(layoutChoices, ui.lp(this@MainActivity, 5, 2))
         entry.addView(ui.action(this@MainActivity, "Add website to Kyora", true) {
             addSite()
         }, ui.lp(this@MainActivity, 12))
@@ -391,7 +415,7 @@ class MainActivity : Activity() {
 
         section("How it works")
         panel.addView(message("Your sites, your choice",
-            "No website catalog is preloaded. Paste a public website, gallery or album URL above to add it as a separate source."))
+            "Select Gallery for a flat image feed, Albums for multi-gallery websites, or Auto to detect the page structure. Each source remembers its mode. Original Kyora adapters are recognized automatically."))
         panel.addView(ui.text(this@MainActivity,
             "For example, paste a PornPics gallery URL when you choose to add that site.",
             12f, ui.subdued), ui.lp(this@MainActivity, 12))
@@ -408,12 +432,19 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this, "Checking source...", Toast.LENGTH_SHORT).show()
+        val layout = requestedSiteLayout
         Thread {
             val result = runCatching {
                 val adapter = AdapterRegistry.forUrl(raw)
                 if (!adapter.enabled) throw AdapterException(adapter.statusLabel)
-                adapter.resolveEntity(raw).also {
-                    GalleryDb(this).use { db -> db.addEntity(it) }
+                adapter.resolveEntity(raw).let { discovered ->
+                    // Keep each canonical site-specific adapter's own source semantics.
+                    // The saved kind controls GenericSiteAdapter enumeration on future syncs.
+                    val configured = if (adapter.source == SourceId.GENERIC)
+                        discovered.copy(kind = if (layout == "auto") discovered.kind else layout)
+                    else discovered
+                    GalleryDb(this).use { db -> db.addEntity(configured) }
+                    configured
                 }
             }
             runOnUiThread {
@@ -631,10 +662,10 @@ class MainActivity : Activity() {
     companion object {
         const val EXTRA_SITE_ID = "extra_site_id"
         const val EXTRA_ADD_SITE = "extra_add_site"
-        private val BG = Color.rgb(17, 18, 22)
-        private val SURFACE = Color.rgb(31, 33, 40)
-        private val MUTED = Color.rgb(166, 171, 184)
-        private val ACCENT = Color.rgb(116, 196, 255)
-        private val ERROR = Color.rgb(255, 125, 125)
+        private val BG = com.azrael.pixivdumpsync.NocturneDesign.background
+        private val SURFACE = com.azrael.pixivdumpsync.NocturneDesign.surface
+        private val MUTED = com.azrael.pixivdumpsync.NocturneDesign.secondary
+        private val ACCENT = com.azrael.pixivdumpsync.NocturneDesign.primary
+        private val ERROR = com.azrael.pixivdumpsync.NocturneDesign.danger
     }
 }

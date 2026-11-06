@@ -6,7 +6,7 @@ import android.content.Intent
 
 class SyncJobService : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
-        if (!Prefs.autoSync(this)) return false
+        if (!com.azrael.pixivdumpsync.AppPower.enabled(this) || !Prefs.autoSync(this)) return false
         startForegroundService(
             Intent(this, SyncForegroundService::class.java)
                 .setAction(SyncForegroundService.ACTION_START)

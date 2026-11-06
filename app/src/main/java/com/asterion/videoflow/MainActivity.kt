@@ -18,16 +18,16 @@ import java.util.Date
 
 /** URL-based archiver only: no keyword search, performer indexing, or Tor. */
 class MainActivity:Activity() {
-    private val bg=Color.rgb(10,14,24)
-    private val surface=Color.rgb(20,27,42)
-    private val elevated=Color.rgb(30,38,55)
-    private val outline=Color.rgb(48,59,79)
-    private val primary=Color.rgb(156,146,249)
-    private val mint=Color.rgb(105,220,180)
-    private val amber=Color.rgb(249,193,111)
-    private val bad=Color.rgb(252,126,144)
-    private val white=Color.rgb(242,245,254)
-    private val grey=Color.rgb(162,174,194)
+    private val bg=com.azrael.pixivdumpsync.NocturneDesign.background
+    private val surface=com.azrael.pixivdumpsync.NocturneDesign.surface
+    private val elevated=com.azrael.pixivdumpsync.NocturneDesign.raised
+    private val outline=com.azrael.pixivdumpsync.NocturneDesign.border
+    private val primary=com.azrael.pixivdumpsync.NocturneDesign.primary
+    private val mint=Color.rgb(179,195,184)
+    private val amber=Color.rgb(206,190,169)
+    private val bad=com.azrael.pixivdumpsync.NocturneDesign.danger
+    private val white=com.azrael.pixivdumpsync.NocturneDesign.white
+    private val grey=com.azrael.pixivdumpsync.NocturneDesign.secondary
     private lateinit var db:VideoDb
     private lateinit var root:LinearLayout
     private lateinit var content:LinearLayout
@@ -96,7 +96,7 @@ class MainActivity:Activity() {
         },LinearLayout.LayoutParams(dp(43),dp(43)))
         val appTitle=col().apply{setPadding(dp(10),0,0,0)}
         appTitle.addView(text("ASTERION DOWNLOADER",16f,white,true).apply{letterSpacing=0.04f})
-        appTitle.addView(text("VIDEOFLOW  /  VIDEO",10f,grey,true).apply{letterSpacing=0.08f})
+        appTitle.addView(text("VIDEOS / MEDIA",10f,grey,true).apply{letterSpacing=0.08f})
         top.addView(appTitle,LinearLayout.LayoutParams(0,-2,1f))
         top.addView(text("HUB",11f,primary,true).apply{
             gravity=Gravity.CENTER
@@ -154,7 +154,7 @@ class MainActivity:Activity() {
     private fun home(){
         val hero=col().apply{
             background=GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(46,43,93),Color.rgb(23,51,72))).apply{
+                intArrayOf(Color.rgb(35,36,40),Color.rgb(18,19,22))).apply{
                 cornerRadius=dp(24).toFloat()
             };pad(this,21,24)
         }
@@ -162,7 +162,7 @@ class MainActivity:Activity() {
         hero.addView(gap(9))
         hero.addView(text("Paste a video link.\nSave it locally.",26f,white,true))
         hero.addView(gap(8))
-        hero.addView(text("No keyword search, no Tor. Paste the exact video page or media URL.",13f,grey))
+        hero.addView(text("Video page URLs are downloaded here. Keyword discovery and optional proxy settings are in Asterion.",13f,grey))
         add(content,hero)
         val box=card()
         box.addView(text("VIDEO URL",12f,primary,true))
@@ -227,7 +227,7 @@ class MainActivity:Activity() {
     private fun downloads(){
         add(content,title("Downloads","Active transfers, saved videos and failures"))
         val tabs=row()
-        listOf("All","Active","Saved","Failed").forEach{label->
+        listOf("All","Active","Saved","Held","Failed").forEach{label->
             tabs.addView(pill(label,label==filter){filter=label;draw()},
                 LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(5)})
         }
@@ -236,6 +236,7 @@ class MainActivity:Activity() {
             when(filter){
                 "Active"->it.status in setOf("queued","running")
                 "Saved"->it.status=="done"
+                "Held"->it.status=="full_only_hold"
                 "Failed"->it.status=="error"
                 else->true
             }
@@ -251,7 +252,11 @@ class MainActivity:Activity() {
     }
     private fun videoCard(v:Video,compact:Boolean):View{
         val box=card()
-        val label=when(v.status){"done"->"SAVED";"error"->"FAILED";"running"->"DOWNLOADING";else->"QUEUED"}
+        val label=when(v.status){
+            "done"->"SAVED";"error"->"FAILED";"running"->"DOWNLOADING"
+            "full_only_hold"->"AWAITING VERIFIED FULL VERSION"
+            else->"QUEUED"
+        }
         val color=when(v.status){"done"->mint;"error"->bad;"running"->primary;else->amber}
         box.addView(text(label,11f,color,true))
         add(box,text(v.title,14f,white,true),7)
@@ -268,13 +273,23 @@ class MainActivity:Activity() {
             add(box,text(SourceDiagnostics.summary(v.error),12f,bad),9)
             add(box,text(SourceDiagnostics.retryAdvice(v.error),11f,grey),5)
         }
+        if(v.status=="full_only_hold")
+            add(box,text(v.error.orEmpty().ifBlank{
+                "No verified full-runtime comparison; automatic download skipped."
+            },12f,amber),9)
         if(!compact){
             val actions=row()
-            val labelAction=when(v.status){"done"->"OPEN";"error"->"RETRY";else->"START"}
+            val labelAction=when(v.status){
+                "done"->"OPEN";"error"->"RETRY"
+                "full_only_hold"->"RECHECK FULL VERSION"
+                else->"START"
+            }
             actions.addView(button(labelAction,false){
                 when(v.status){
                     "done"->openSaved(v)
-                    "error"->{db.retry(v.id);requestTransfer(false);draw()}
+                    "error","full_only_hold"->{
+                        db.retry(v.id);requestTransfer(false);draw()
+                    }
                     else->requestTransfer(false)
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
@@ -336,6 +351,13 @@ class MainActivity:Activity() {
                 DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(w.lastCheck)),
                 11f,grey),7)
             if(w.error!=null)add(c,text("Issue: "+w.error,12f,amber),7)
+            if(w.address.startsWith("https://watchporn.to/models/")){
+                add(c,button("BACKFILL ALL PERFORMER VIDEOS",false){
+                    db.resetWatchBackfill(w.id)
+                    requestTransfer(true)
+                    toast("Full performer archive scan requested")
+                },11)
+            }
             add(c,button("REMOVE PAGE",false){
                 AlertDialog.Builder(this).setTitle("Remove page?")
                     .setNegativeButton("Cancel",null)

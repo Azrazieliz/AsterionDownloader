@@ -21,8 +21,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.2.1"
+        versionCode = 68
+        versionName = "1.3.39"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
@@ -64,11 +64,18 @@ android {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {
     implementation("org.jsoup:jsoup:1.18.1")
+    implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
+    implementation("com.github.junrar:junrar:8.1.1")
     implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

@@ -14,7 +14,7 @@ object NduCloudScheduler {
     private const val JOB_ID=9321
     fun configure(ctx:Context, enabled:Boolean) {
         val scheduler=ctx.getSystemService(JobScheduler::class.java)
-        if(!enabled) {
+        if(!enabled || !AppPower.enabled(ctx)) {
             scheduler.cancel(JOB_ID)
             return
         }
