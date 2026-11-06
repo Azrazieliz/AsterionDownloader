@@ -2,6 +2,12 @@ name: Android Unified UI Runtime Smoke Test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ "feature/asterion-unified-downloads-20261030" ]
+    paths:
+      - '.github/workflows/android-runtime-smoke.yml'
+      - 'app/src/main/**'
+      - 'app/build.gradle.kts'
 
 jobs:
   launch-smoke:
@@ -45,10 +51,14 @@ jobs:
             # Launch them only through app UI; an ADB shell start is a security error,
             # not an application regression.
             adb shell uiautomator dump /sdcard/asterion-ui.xml >/dev/null
-            adb shell cat /sdcard/asterion-ui.xml | grep -q 'Porn &amp; Hentai'
-            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.31-preview' 
+            adb shell cat /sdcard/asterion-ui.xml | grep -q 'Your library'
+            adb shell cat /sdcard/asterion-ui.xml | grep -q 'Porn'
+            adb shell cat /sdcard/asterion-ui.xml | grep -q 'Hentai'
+            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.39-preview'
             adb shell pidof -s com.azrael.pixivdumpsync.nocturne | grep -Eq '[0-9]+'
-            adb logcat -b crash -d
+            CRASHES=$(adb logcat -b crash -d)
+            echo "$CRASHES"
+            if echo "$CRASHES" | grep -q 'FATAL EXCEPTION'; then exit 1; fi
 
       - name: Upload launcher screenshot
         uses: actions/upload-artifact@v4

@@ -37,6 +37,7 @@ object AppPower {
                 runCatching{com.azrael.galleryflow.Scheduler.ensure(app)}
                 runCatching{com.asterion.videoflow.Scheduling.ensure(app)}
                 runCatching{SourceIndex.ensure(app)}
+                runCatching{SiteRunControl.scheduleIfPending(app)}
                 runCatching{CreatorArchiveScheduler.ensure(app)}
                 runCatching{KoikatsuFollowing.ensure(app)}
                 runCatching{RounderDispatch.ensure(app)}

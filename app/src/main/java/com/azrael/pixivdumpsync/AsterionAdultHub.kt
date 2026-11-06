@@ -8,6 +8,8 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import com.azrael.galleryflow.SiteLoginActivity
+import com.asterion.videoflow.VideoDb
+import com.asterion.videoflow.VideoEngine
 import kotlin.concurrent.thread
 
 /** Compact site-row module. A provider row owns its controls and its media.
@@ -26,7 +28,7 @@ object AsterionAdultHub {
         for(site in approved){
             val host=SiteControls.key(site.url)
             if(host.isNotBlank())results[host]=Site(site.name,site.url,
-                existing.firstOrNull{SiteControls.key(it.url)==host})
+                SiteRunControl.matchingSource(site.url,area,existing))
         }
         for(site in existing){
             val host=SiteControls.key(site.url)
@@ -40,10 +42,14 @@ object AsterionAdultHub {
         if(running.state=="RUNNING")return "Backfilling"
         if(running.state=="STOPPING")return "Stopping"
         if(running.state=="STOPPED")return "Stopped"
+        if(running.state=="QUEUED")return "History queued; cursor retained"
+        if(running.state=="INTERRUPTED")return "Interrupted; retry available"
         if(running.state=="ERROR")return "Check failed"
         val s=site.source
         if(s!=null && !s.error.isNullOrBlank())return "Source error"
         if(s==null||s.lastCheck<=0L)return "Not checked"
+        if(!s.historyComplete && !s.cursor.isNullOrBlank())
+            return "Older pages pending · "+s.discovered+" indexed"
         return if(s.discovered>0)"Indexed "+s.discovered else "Checked · no items"
     }
     private fun error(site:Site,a:Activity):String?{
@@ -128,7 +134,7 @@ object AsterionAdultHub {
             val status=sourceState(a,site)
             val issue=error(site,a)
             val operation=SiteRunControl.status(a,site.url)
-            val active=operation.state in setOf("RUNNING","STOPPING")
+            val active=operation.state in setOf("RUNNING","STOPPING","QUEUED")
             val expanded=focus==site.host
             val card=ui.card(a,9)
             val heading=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
@@ -153,12 +159,25 @@ object AsterionAdultHub {
             val sync=Switch(a).apply{
                 text="Sync"
                 textSize=12f;setTextColor(ui.secondary)
-                isChecked=SiteControls.sync(a,site.url,site.source?.enabled?:true)
+                // Built-in available sites are not subscribed until chosen.
+                isChecked=SiteControls.sync(a,site.url,
+                    site.source?.enabled?:false)
                 contentDescription="Automatically sync "+site.name
                 setOnCheckedChangeListener{_,value->
                     SiteControls.setSync(a,site.url,value)
                     thread(name="asterion-site-toggle"){
+                        if(value){
+                            val address=site.source?.url?:site.url
+                            SourceIndexDb(a.applicationContext).use{db->
+                                db.add(address,site.name,area,"native")
+                                db.enable(address,true)
+                            }
+                            VideoDb(a.applicationContext).use{db->
+                                db.addWatch(address,site.name)
+                            }
+                        }
                         SiteControls.applyToEngines(a.applicationContext,site.url)
+                        if(value)VideoEngine.launch(a.applicationContext,true)
                     }
                 }
             }
@@ -180,7 +199,7 @@ object AsterionAdultHub {
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
             val extraLabel=when{
-                active->"STOPPING"
+                active && operation.state=="STOPPING"->"STOPPING"
                 issue?.contains("403")==true ||
                     issue?.contains("login",true)==true ->"SIGN IN"
                 expanded->"HIDE MEDIA"
@@ -190,7 +209,7 @@ object AsterionAdultHub {
                 if(extraLabel=="SIGN IN"){
                     a.startActivity(Intent(a,SiteLoginActivity::class.java)
                         .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
-                }else if(active)SiteRunControl.stop(a,site.url)
+                }else if(operation.state=="STOPPING")refresh()
                 else{
                     selectedPrefs.edit().putString(area,if(expanded)"" else site.host).apply()
                     refresh()
