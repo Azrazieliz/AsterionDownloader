@@ -5,16 +5,18 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Switch
 import kotlin.concurrent.thread
 
 /** One visible, category-specific native torrent workflow across the main app. */
 object TorrentSearchUi {
-    fun render(a:Activity,body:LinearLayout,area:TorrentArea){
+    fun render(a:Activity,body:LinearLayout,area:TorrentArea,
+               refresh:()->Unit){
         val ui=NocturneDesign
         val name=when(area){TorrentArea.GAMES->"GAMES";TorrentArea.BOOKS->"BOOKS";TorrentArea.ADULT->"ADULT VIDEO"}
         val card=ui.card(a)
         card.addView(ui.text(a,"TORRENT DOWNLOADS · "+name,18f,ui.white,true),ui.lp(a,3))
-        card.addView(ui.text(a,"Search by title or creator. Select a result, choose the files to transfer, then use the torrent queue below. Western index results come from Bitsearch and Pirate Bay; Sukebei covers Asian adult media.",12f,ui.secondary),ui.lp(a,7))
+        card.addView(ui.text(a,"Search releases, inspect their files, and start a transfer.",12f,ui.secondary),ui.lp(a,7))
         val pref=a.getSharedPreferences("asterion_torrent_search",0)
         val field=EditText(a).apply{
             hint="Name / title / keywords"
@@ -83,66 +85,117 @@ object TorrentSearchUi {
             }
         },ui.lp(a,9))
         card.addView(status,ui.lp(a,8))
-        card.addView(ui.action(a,"TORRENT QUEUE · PROGRESS / PAUSE / RESUME",false){
+        card.addView(ui.action(a,"OPEN TORRENT TRANSFERS",false){
             TorrentTransfers.showQueue(a)
         },ui.lp(a,7))
         body.addView(card,ui.lp(a,12))
         body.addView(results,ui.lp(a,8))
-        if(area==TorrentArea.GAMES || area==TorrentArea.ADULT) {
-            val sources=ui.card(a)
-            sources.addView(ui.text(a,
-                "ONEJAV & SUKEBEI · historical torrent discovery",
-                17f,ui.white,true),ui.lp(a,4))
-            sources.addView(ui.action(a,"SYNC NEW & BACKFILL HISTORY",false){
-                thread(name="asterion-torrent-backfill-user"){
-                    TorrentSourceBackfill.scan(a.applicationContext)
-                    a.runOnUiThread {
-                        Toast.makeText(a,"Torrent history scan finished; refresh for results",
-                            Toast.LENGTH_LONG).show()
-                    }
+        val registered=TorrentFeedDb(a).use{it.status()}
+        val shown=when(area){
+            TorrentArea.GAMES->registered.filter{it.source=="NYAA_MIRROR"}
+            TorrentArea.ADULT->registered.filter{it.source in setOf("ONEJAV","SUKEBEI")}
+            TorrentArea.BOOKS->emptyList()
+        }
+        if(shown.isNotEmpty()){
+            body.addView(ui.text(a,"Torrent sources",18f,ui.white,true),ui.lp(a,11))
+        }
+        val settings=a.getSharedPreferences("asterion_torrent_source_ui",0)
+        for(feed in shown){
+            val home=TorrentFeedParser.home(feed.source)
+            val friendly=when(feed.source){
+                "SUKEBEI"->"Sukebei"
+                "ONEJAV"->"OneJAV"
+                else->"Nyaa"
+            }
+            val busy=TorrentSourceBackfill.isRunning(feed.source)
+            val shell=ui.card(a,11)
+            val heading=ui.row(a)
+            val names=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            names.addView(ui.text(a,friendly,15f,ui.white,true))
+            names.addView(ui.text(a,
+                feed.count.toString()+" indexed releases · "+
+                    when{
+                        busy->"Backfill running"
+                        !feed.error.isNullOrBlank()->"Source error"
+                        feed.lastCheck==0L->"Not checked"
+                        feed.cursor!=null->"History available"
+                        else->"History checked"
+                    },11f,if(feed.error!=null)ui.danger else ui.secondary),
+                ui.lp(a,3))
+            heading.addView(names,LinearLayout.LayoutParams(0,-2,1f))
+            heading.addView(Switch(a).apply{
+                text="Sync"
+                setTextColor(ui.white);textSize=12f
+                isChecked=SiteControls.sync(a,home)
+                setOnCheckedChangeListener{_,enabled->
+                    SiteControls.setSync(a,home,enabled)
+                    if(enabled)TorrentSourceBackfill.ensure(a.applicationContext)
                 }
-            },ui.lp(a,5))
-            val feeds=TorrentFeedDb(a).use{db->
-                db.status() to
-                    (db.discovered("ONEJAV",20)+db.discovered("SUKEBEI",20))
-                        .sortedByDescending{it.discovered}
-            }
-            for(feed in feeds.first){
-                sources.addView(ui.text(a,feed.source+" · "+feed.count+
-                    " indexed entries · "+(if(feed.cursor==null)"no saved history cursor"
-                    else "history cursor stored")+
-                    (feed.error?.let{" · "+it.take(130)}?:""),
-                    11f,if(feed.error!=null)ui.danger else ui.secondary),
-                    ui.lp(a,5))
-            }
-            for(item in feeds.second.take(30)){
-                val row=ui.card(a)
-                row.addView(ui.text(a,item.title,13f,ui.white,true),
-                    ui.lp(a,3))
-                row.addView(ui.text(a,item.source+" · Torrent metadata, not downloaded",
-                    11f,ui.secondary),ui.lp(a,3))
-                row.addView(ui.action(a,"SELECT TORRENT FILES",false){
-                    status.text="Resolving torrent metadata…"
-                    thread(name="asterion-torrent-detail"){
-                        val target=runCatching{
-                            item.download ?: TorrentSourceBackfill.resolve(
-                                a.applicationContext,item.page)
-                        }
-                        a.runOnUiThread{
-                            target.onSuccess{url->
-                                if(url!=null){
-                                    ResourceDownloads.route(a,url,
-                                        if(area==TorrentArea.ADULT)"Videos" else "Games")
-                                    status.text="Opening native file selection"
-                                }else status.text="No accessible torrent/magnet at this entry"
-                            }.onFailure{status.text=
-                                "Torrent detail unavailable: "+it.message}
-                        }
+            })
+            shell.addView(heading)
+            val commands=ui.row(a)
+            commands.addView(ui.action(a,if(busy)"STOP" else "BACKFILL",!busy){
+                if(busy)TorrentSourceBackfill.stopSite(feed.source)
+                else if(!AppPower.enabled(a))Toast.makeText(a,
+                    "Resume downloads first",Toast.LENGTH_SHORT).show()
+                else TorrentSourceBackfill.startSite(a.applicationContext,feed.source)
+                Toast.makeText(a,if(busy)"Stopping after current request"
+                    else "History check requested",Toast.LENGTH_SHORT).show()
+            },LinearLayout.LayoutParams(0,-2,1f))
+            val expanded=settings.getBoolean("open_"+feed.source,false)
+            commands.addView(ui.action(a,if(expanded)"HIDE RESULTS" else "RESULTS",false){
+                settings.edit().putBoolean("open_"+feed.source,!expanded).apply()
+                // Only this pane changes, no global or duplicated module.
+                refresh()
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=ui.px(a,7)
+            })
+            shell.addView(commands,ui.lp(a,7))
+            if(!feed.error.isNullOrBlank())
+                shell.addView(ui.text(a,
+                    "Last source error: "+feed.error.take(120),11f,ui.danger),
+                    ui.lp(a,6))
+            if(expanded){
+                val indexed=TorrentFeedDb(a).use{it.discovered(feed.source,30)}
+                if(indexed.isEmpty()){
+                    shell.addView(ui.text(a,"No torrent releases indexed from this source yet.",
+                        12f,ui.secondary),ui.lp(a,8))
+                }
+                for(item in indexed){
+                    val result=ui.row(a).apply{
+                        gravity=android.view.Gravity.CENTER_VERTICAL
                     }
-                },ui.lp(a,5))
-                sources.addView(row,ui.lp(a,6))
+                    val details=LinearLayout(a).apply{
+                        orientation=LinearLayout.VERTICAL
+                    }
+                    details.addView(ui.text(a,item.title.take(100),12f,ui.white,true)
+                        .apply{maxLines=2})
+                    details.addView(ui.text(a,
+                        "Indexed only · select files to download",
+                        10f,ui.secondary),ui.lp(a,3))
+                    result.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+                    result.addView(ui.action(a,"FILES",false){
+                        status.text="Resolving torrent file metadata"
+                        thread(name="asterion-torrent-select"){
+                            val target=runCatching{
+                                item.download?:TorrentSourceBackfill.resolve(
+                                    a.applicationContext,item.page)
+                            }
+                            a.runOnUiThread{
+                                if(a.isDestroyed||a.isFinishing)return@runOnUiThread
+                                target.onSuccess{link->
+                                    if(link.isNullOrBlank())
+                                        status.text="No accessible torrent file in this release"
+                                    else ResourceDownloads.route(a,link,
+                                        if(area==TorrentArea.ADULT)"Videos" else "Games")
+                                }.onFailure{status.text="Torrent unavailable: "+it.message}
+                            }
+                        }
+                    },LinearLayout.LayoutParams(-2,-2).apply{leftMargin=ui.px(a,5)})
+                    shell.addView(result,ui.lp(a,7))
+                }
             }
-            body.addView(sources,ui.lp(a,12))
+            body.addView(shell,ui.lp(a,8))
         }
     }
 }

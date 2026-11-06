@@ -25,7 +25,7 @@ object AsterionSuggestedUi {
                     .getString("interests","").orEmpty().split('\n',',',';')
                 val following=NameWatchDb(a).use{it.list().take(40).map{w->w.name}}
                 val terms=(prefs+following).filter{it.length>=3}.distinct()
-                SourceIndex.items(a,null,380)
+                SourceIndex.items(a,null,1500)
                     .filter{AsterionAdultHub.realMedia(it)}
                     .map{item->
                         val relevance=AsterionContentSuggestions.relevance(
@@ -35,16 +35,23 @@ object AsterionSuggestedUi {
                     .sortedWith(compareByDescending<Pair<IndexedItem,Int>>{it.second}
                         .thenByDescending{it.first.discoveredAt})
                     .distinctBy{SearchRanking.canonicalKey(it.first.url)}
-                    .take(12)
+                    .let{list->
+                        val seen=HashMap<String,Int>()
+                        list.filter{entry->
+                            val source=SiteControls.key(entry.first.source)
+                            val count=seen.getOrDefault(source,0)
+                            if(count>=3)false else {seen[source]=count+1;true}
+                        }
+                    }.take(12)
             }
             a.runOnUiThread{
                 if(a.isDestroyed||a.isFinishing||holder.parent!==heading)return@runOnUiThread
                 data.onSuccess{rows->
                     info.text=if(rows.any{it.second>0})
-                        "Relevant items from followed names appear first"
-                    else "Recent media · no personal match yet"
+                        "Media matching followed names appears first; indexed, not downloaded"
+                    else "Recent indexed media · no matching followed items yet"
                     if(rows.isEmpty()){
-                        info.text="No verified media previews indexed yet"
+                        info.text="No eligible media indexed yet"
                         return@onSuccess
                     }
                     val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}

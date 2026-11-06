@@ -54,29 +54,13 @@ object AsterionAdultHub {
     /** Do not recommend site menus, language directories, tags or category pages
      * as if they were individual media. Never invent missing thumbnails.
      */
-    internal fun realMedia(item:IndexedItem):Boolean{
-        if(item.preview.isNullOrBlank()||!SearchRanking.validUrl(item.preview))
-            return false
-        if(item.title.isBlank() || item.title.length<4)return false
-        val name=item.title.trim().lowercase()
-        if(name.matches(Regex("(?i)^(portugu[eê]s|english|espa[nñ]ol|fran[cç]ais|deutsch|italiano|language|category|categories|browse|search|home|next page|previous page|index|login|register|all videos|trending|latest|popular)$")))
-            return false
-        val u=runCatching{Uri.parse(item.url)}.getOrNull()?:return false
-        val path=u.path.orEmpty().trim('/').lowercase()
-        if(path.isBlank())return false
-        val segments=path.split('/')
-        if(segments.firstOrNull() in setOf("tags","tag","category","categories",
-                "language","languages","search","browse","popular","latest",
-                "login","register","privacy","home","contact","page","model",
-                "models","artists","performers","users"))return false
-        if(segments.lastOrNull() in setOf("portugues","espanol","francais",
-                "deutsch","italiano","english","home","popular"))return false
-        return true
-    }
+    internal fun realMedia(item:IndexedItem):Boolean =
+        IndexedMediaQuality.isMedia(item.url,item.title,item.preview,item.area)
     private fun media(a:Activity,parent:LinearLayout,site:Site,
                       cached:List<IndexedItem>){
-        val chosen=cached.filter{SiteControls.key(it.source)==site.host && realMedia(it)}
-            .take(24)
+        val chosen=SourceIndexDb(a).use{
+            it.forSource(site.source?.url?:site.url,60)
+        }.filter{realMedia(it)}.take(24)
         val holder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         if(chosen.isEmpty()){
             holder.addView(ui.text(a,
@@ -136,7 +120,7 @@ object AsterionAdultHub {
             parent.addView(pause,ui.lp(a,8))
         }
         val sources=sites(a,area)
-        val previews=SourceIndex.items(a,area,280)
+        val previews=emptyList<IndexedItem>()
         val selectedPrefs=a.getSharedPreferences("asterion_adult_site_focus",0)
         val focus=selectedPrefs.getString(area,"").orEmpty()
         val sitePane=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}

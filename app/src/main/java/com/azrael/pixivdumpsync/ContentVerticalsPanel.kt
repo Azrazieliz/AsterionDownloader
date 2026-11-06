@@ -54,12 +54,6 @@ object ContentVerticalsPanel {
                 Provider("itch.io VN mods","https://itch.io/game-mods/genre-visual-novel"),
                 Provider("GameBanana","https://gamebanana.com/"),
                 Provider("F95Zone","https://f95zone.to/"))),
-        Vertical("VOICE","Doujin Voice · ASMR",
-            "Binaural voice works, audio dramas, voice sets and original albums.",
-            Group.ADULT,"VOICE",listOf(
-                Provider("DLsite doujin","https://www.dlsite.com/maniax/"),
-                Provider("BOOTH","https://booth.pm/en"),
-                Provider("Fantia","https://fantia.jp/")))
     )
     // Defer Android graphics initialization until an actual Activity renders.
     private val ui get()=NocturneDesign
@@ -75,89 +69,47 @@ object ContentVerticalsPanel {
         val saved=prefs(a).getString("selected_"+group.name,options.first().id)
         return options.firstOrNull{it.id==saved}?:options.first()
     }
+    /** The module contains its source rows and media, not an overlapping Add
+     * form or a general website browser. Enrollment is shared with Search.
+     */
     fun render(a:Activity,parent:LinearLayout,group:Group,refresh:()->Unit){
         val options=sections.filter{it.group==group}
         if(options.isEmpty())return
-        val title=when(group){
-            Group.ASSETS->"Studio · MMD · Live2D · Animated art"
-            Group.GAMES->"Game mods · Patches · Fan translations"
-            Group.ADULT->"Doujin voice · ASMR archives"
-        }
-        parent.addView(ui.text(a,title,20f,ui.white,true),ui.lp(a,20))
-        parent.addView(ui.text(a,
-            "One downloader library · source sessions · historical scans · original files.",
-            12f,ui.secondary),ui.lp(a,5))
         val active=selected(a,group)
         val chips=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-        for(opt in options)
-            chips.addView(ui.chip(a,opt.id.replace('_',' '),active.id==opt.id){
-                select(a,opt.id);refresh()
+        for(opt in options){
+            chips.addView(ui.chip(a,when(opt.id){
+                "STUDIO"->"Studio"
+                "MMD"->"MMD"
+                "LIVE2D"->"Live2D"
+                "ANIMATION"->"Animation"
+                "MODS"->"Mods"
+                else->opt.id
+            },active.id==opt.id){
+                select(a,opt.id)
+                refresh()
             },LinearLayout.LayoutParams(-2,-2).apply{
                 rightMargin=ui.px(a,7)
             })
+        }
         parent.addView(HorizontalScrollView(a).apply{
             isHorizontalScrollBarEnabled=false
             addView(chips)
         },ui.lp(a,10))
-        val panel=ui.card(a)
-        panel.addView(ui.text(a,active.title,18f,ui.white,true))
-        panel.addView(ui.text(a,active.subtitle,12f,ui.secondary),ui.lp(a,5))
-        val followed=SourceIndex.status(a,active.area)
-        panel.addView(ui.text(a,
-            followed.count{it.enabled}.toString()+" followed source(s) · "+
-            followed.count{!it.error.isNullOrBlank()}+" source issue(s)",
-            12f,ui.secondary),ui.lp(a,8))
-        val input=EditText(a).apply{
-            hint="Creator, collection or downloadable source URL"
-            textSize=14f;setSingleLine(true)
-            setTextColor(ui.white);setHintTextColor(ui.secondary)
-            background=ui.shape(a,ui.raised,12)
-            setPadding(ui.px(a,12),ui.px(a,11),ui.px(a,12),ui.px(a,11))
+        val card=ui.card(a,11)
+        card.addView(ui.text(a,active.title.replace(" · "," / "),
+            17f,ui.white,true))
+        val count=SourceIndex.status(a,active.area)
+        card.addView(ui.text(a,count.size.toString()+" saved sources · "+
+            count.count{!it.error.isNullOrBlank()}+" need attention",
+            12f,ui.secondary),ui.lp(a,6))
+        if(count.isEmpty()){
+            card.addView(ui.text(a,
+                "Use Search to add a creator or source URL to "+active.id+
+                ". Sources will appear here with their own Sync and Backfill controls.",
+                12f,ui.secondary),ui.lp(a,6))
         }
-        panel.addView(input,ui.lp(a,10))
-        panel.addView(ui.action(a,"FOLLOW SOURCE & BACKFILL",true){
-            val url=input.text.toString().trim()
-            if(!SourceIndexParser.safe(url)){
-                Toast.makeText(a,"Use a valid HTTPS creator or collection URL",
-                    Toast.LENGTH_LONG).show()
-                return@action
-            }
-            val domain=runCatching{URI(url).host.orEmpty()}.getOrDefault("")
-            SourceIndex.enroll(a.applicationContext,url,active.area,domain,false)
-            Toast.makeText(a,"Source added to "+active.title+
-                " · originals are resolved during backfill",Toast.LENGTH_LONG).show()
-            refresh()
-        },ui.lp(a,9))
-        parent.addView(panel,ui.lp(a,10))
-        // Account selection is a contextual action. The default module view
-        // remains a single unified media grid, never a vertical list of websites.
-        val providers=active.sources
-        panel.addView(ui.action(a,"SOURCES & ACCOUNTS",false){
-            val titles=providers.map{p->
-                p.name+" · "+(if(SiteSession.bound(a,p.url))
-                    "connected" else "account optional")
-            }.toTypedArray()
-            android.app.AlertDialog.Builder(a).setTitle(active.title)
-                .setItems(titles){_,index->
-                    val provider=providers[index]
-                    android.app.AlertDialog.Builder(a).setTitle(provider.name)
-                        .setItems(arrayOf("Browse content in Asterion",
-                            "Connect / manage account")){_,option->
-                            if(option==0){
-                                a.startActivity(Intent(a,ProviderWebActivity::class.java)
-                                    .putExtra(ProviderWebActivity.EXTRA_URL,provider.url)
-                                    .putExtra(ProviderWebActivity.EXTRA_FOLDER,when(group){
-                                        Group.ASSETS->"Assets"
-                                        Group.GAMES->"Games"
-                                        Group.ADULT->"Videos"
-                                    }))
-                            }else{
-                                a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                                    .putExtra(SiteLoginActivity.EXTRA_URL,provider.url))
-                            }
-                        }.setNegativeButton("Cancel",null).show()
-                }.setNegativeButton("Close",null).show()
-        },ui.lp(a,8))
+        parent.addView(card,ui.lp(a,9))
         SourceIndexPanel.render(a,parent,active.area)
     }
 }

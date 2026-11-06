@@ -131,6 +131,11 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     fun progress(id: Long, percent: Int) {
         writableDatabase.update("videos", ContentValues().apply { put("progress", percent.coerceIn(0,100)) }, "id=?", arrayOf("$id"))
     }
+    fun pause(id:Long){
+        update(id,"paused",error="Paused by user; resume to continue")
+        writableDatabase.execSQL("UPDATE videos SET retry_after=0 WHERE id=?",
+            arrayOf(id))
+    }
     fun retry(id: Long) {
         update(id,"queued")
         writableDatabase.execSQL("UPDATE videos SET attempts=0,retry_after=0 WHERE id=?",arrayOf(id))

@@ -122,7 +122,15 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
     fun attempt(task:Long){
         writableDatabase.execSQL("UPDATE tasks SET attempts=attempts+1 WHERE id=$task")
     }
-    fun retry(task:Long){update(task,"queued",0)}
+    /** Manual retry resets exhausted budget; automatic retries must not. */
+    fun pause(task:Long){
+        update(task,"paused",0,error="Paused by user; cached pages retained")
+    }
+    fun retry(task:Long,manual:Boolean=true){
+        update(task,"queued",0)
+        if(manual)writableDatabase.execSQL(
+            "UPDATE tasks SET attempts=0 WHERE id=?",arrayOf(task))
+    }
     fun retryDueFailures():Int{
         val now=System.currentTimeMillis()
         var queued=0
@@ -134,11 +142,16 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
                 val attempts=c.getInt(1)
                 val last=c.getLong(2)
                 val error=c.getString(3).orEmpty()
-                if(Regex("(?i)\\b(?:401|402|403|404|410)\\b|subscription|not authorized")
-                    .containsMatchIn(error))continue
+                // No unbounded retry loops for invalid HTML, access denial,
+                // no image payload, or a missing image on the remote provider.
+                if(attempts>=4 || Regex(
+                    "(?i)\\b(?:401|402|403|404|410)\\b|subscription|"+
+                    "not authorized|non-image|did not return an image|"+
+                    "invalid image|login|required sign-in|captcha"
+                ).containsMatchIn(error))continue
                 val delay=(30_000L shl attempts.coerceIn(0,6))
                     .coerceAtMost(6L*60L*60L*1000L)
-                if(now-last>=delay){retry(id);queued++}
+                if(now-last>=delay){retry(id,false);queued++}
             }
         }
         return queued

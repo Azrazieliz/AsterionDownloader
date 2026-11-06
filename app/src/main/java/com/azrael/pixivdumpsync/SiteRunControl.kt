@@ -21,7 +21,7 @@ object SiteRunControl {
             .putLong(host+":updated",System.currentTimeMillis()).apply()
     }
     fun status(context:Context,url:String):Status{
-        val host=SiteControls.key(url)
+        val host=url.trimEnd('/').lowercase()
         val p=context.getSharedPreferences(PREFS,0)
         if(active.containsKey(host)){
             val previous=p.getString(host+":state","RUNNING").orEmpty()
@@ -29,12 +29,14 @@ object SiteRunControl {
                 p.getString(host+":message","Checking site history…").orEmpty(),
                 p.getLong(host+":updated",0L))
         }
-        return Status(p.getString(host+":state","IDLE").orEmpty(),
+        val saved=p.getString(host+":state","IDLE").orEmpty()
+        // A killed process has no live worker. Never leave "RUNNING" indefinitely.
+        return Status(if(saved=="RUNNING"||saved=="STOPPING")"INTERRUPTED" else saved,
             p.getString(host+":message","").orEmpty(),
             p.getLong(host+":updated",0L))
     }
     fun stop(context:Context,url:String):Boolean{
-        val host=SiteControls.key(url)
+        val host=url.trimEnd('/').lowercase()
         val run=active[host]?:return false
         run.cancelled.set(true)
         record(context,host,"STOPPING","Stopping after the current network request")
@@ -43,7 +45,7 @@ object SiteRunControl {
     }
     fun start(context:Context,address:String,area:String):Boolean{
         if(!AppPower.enabled(context))return false
-        val host=SiteControls.key(address)
+        val host=address.trimEnd('/').lowercase()
         if(host.isBlank()||active.containsKey(host))return false
         val app=context.applicationContext
         val cancelled=AtomicBoolean(false)
@@ -53,17 +55,22 @@ object SiteRunControl {
                 val source=SourceIndexDb(app).use{db->
                     db.sources().firstOrNull{SiteControls.key(it.url)==host && it.area==area}
                 }
-                if(source?.adapter=="native"){
-                    VideoEngine.scanSite(app,address,area){cancelled.get() ||
+                val resolved=source?.url?:address
+                if(source?.adapter=="native" ||
+                    (source==null && area in setOf("ADULT","HENTAI","VIDEOS"))){
+                    // Known video sites without a SourceIndex row still belong
+                    // to the established VideoFlow provider architecture.
+                    VideoEngine.scanSite(app,resolved,area){cancelled.get() ||
                         Thread.currentThread().isInterrupted}
                 }else{
                     if(source==null)
                         SourceIndexDb(app).use{it.add(address,host,area,"generic")}
-                    SourceIndex.scanSingle(app,address){cancelled.get() ||
+                    SourceIndex.scanSingle(app,resolved){cancelled.get() ||
                         Thread.currentThread().isInterrupted}
                 }
                 if(cancelled.get())record(app,host,"STOPPED","Stopped; cursor and files retained")
-                else record(app,host,"DONE","Source checked; indexed items are not downloaded files")
+                else record(app,host,"CHECKED",
+                    "History checked; originals enqueued only when accessible")
             }catch(e:Exception){
                 if(cancelled.get()||e is InterruptedException)
                     record(app,host,"STOPPED","Stopped; retry remains available")

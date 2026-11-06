@@ -28,15 +28,24 @@ data class TorrentFeedStatus(val source:String,val cursor:String?,
 internal object TorrentFeedParser {
     val onejav="https://onejav.com/"
     val sukebei="https://sukebei.nyaa.si/"
+    val nyaaMirror="https://nyaa.v300.eu.org/"
+    fun home(source:String):String=when(source){
+        "ONEJAV"->onejav
+        "SUKEBEI"->sukebei
+        "NYAA_MIRROR"->nyaaMirror
+        else->error("Unknown torrent feed source")
+    }
+    fun host(source:String):String=URI(home(source)).host
     fun source(url:String):String?=runCatching{
         when(URI(url).host?.lowercase()?.removePrefix("www.")){
             "onejav.com"->"ONEJAV"
             "sukebei.nyaa.si"->"SUKEBEI"
+            "nyaa.v300.eu.org"->"NYAA_MIRROR"
             else->null
         }
     }.getOrNull()
     fun entries(doc:Document,source:String):List<TorrentFeedEntry>{
-        val host=if(source=="ONEJAV")"onejav.com" else "sukebei.nyaa.si"
+        val host=host(source)
         val now=System.currentTimeMillis()
         val found=LinkedHashMap<String,TorrentFeedEntry>()
         val selector=if(source=="ONEJAV")
@@ -74,7 +83,8 @@ internal object TorrentFeedParser {
         val uri=runCatching{URI(raw)}.getOrNull()?:return null
         if(uri.scheme!="https" || uri.userInfo!=null)return null
         val host=uri.host?.lowercase()?.removePrefix("www.")?:return null
-        if(host !in setOf("onejav.com","sukebei.nyaa.si"))return null
+        if(host !in setOf("onejav.com","sukebei.nyaa.si","nyaa.v300.eu.org"))
+            return null
         return raw.takeIf{uri.path.orEmpty().endsWith(".torrent",true) ||
             Regex("""^/download/[0-9]{1,20}(?:\.torrent)?$""")
                 .matches(uri.path.orEmpty())}
@@ -104,7 +114,7 @@ internal object TorrentFeedParser {
             ?.toIntOrNull()?:1
     }
     fun next(doc:Document,source:String,current:String):String? {
-        val host=if(source=="ONEJAV")"onejav.com" else "sukebei.nyaa.si"
+        val host=host(source)
         val currentNumber=pageNumber(current)
         val choices=ArrayList<Pair<Int,String>>()
         val next=doc.select("a[rel=next][href],a.pagination-next[href],"+
@@ -142,9 +152,15 @@ class TorrentFeedDb(ctx:Context):
         db.execSQL("CREATE INDEX torrent_feed_state ON entries(source,state)")
     }
     override fun onUpgrade(db:SQLiteDatabase,old:Int,next:Int){}
+    fun enroll(source:String){
+        require(source in setOf("ONEJAV","SUKEBEI","NYAA_MIRROR"))
+        writableDatabase.insertWithOnConflict("feeds",null,
+            ContentValues().apply{put("source",source)},
+            SQLiteDatabase.CONFLICT_IGNORE)
+    }
     fun status():List<TorrentFeedStatus> {
         val out=ArrayList<TorrentFeedStatus>()
-        for(source in listOf("ONEJAV","SUKEBEI")){
+        for(source in listOf("ONEJAV","SUKEBEI","NYAA_MIRROR")){
             val record=readableDatabase.rawQuery(
                 "SELECT cursor,last_check,error FROM feeds WHERE source=?",
                 arrayOf(source)).use{c->
@@ -253,19 +269,49 @@ object TorrentSourceBackfill {
             TorrentFeedDb(ctx).use{db->db.resolved(page,it)}
         }
     }
-    fun scan(ctx:Context,stop:()->Boolean={false}) {
-        if(!AppPower.enabled(ctx)||!busy.compareAndSet(false,true))return
+    private val active=java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.atomic.AtomicBoolean>()
+    private val starting=java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.atomic.AtomicBoolean>()
+    fun isRunning(source:String):Boolean=
+        active.containsKey(source)||starting.containsKey(source)
+    fun stopSite(source:String):Boolean{
+        val token=active[source]?:starting[source]?:return false
+        token.set(true)
+        starting[source]?.set(true)
+        return true
+    }
+    fun startSite(ctx:Context,source:String):Boolean{
+        if(!AppPower.enabled(ctx) || TorrentFeedParser.source(
+            TorrentFeedParser.home(source))!=source)return false
+        val token=java.util.concurrent.atomic.AtomicBoolean(false)
+        if(active.containsKey(source) ||
+            starting.putIfAbsent(source,token)!=null)return false
+        thread(name="asterion-torrent-"+source.lowercase()){
+            try{
+                scan(ctx.applicationContext,stop={token.get()},onlySource=source)
+            }finally{starting.remove(source,token)}
+        }
+        return true
+    }
+    fun scan(ctx:Context,stop:()->Boolean={false},onlySource:String?=null) {
+        if(!AppPower.enabled(ctx))return
+        val sources=listOf("ONEJAV","SUKEBEI","NYAA_MIRROR")
+            .filter{onlySource==null||it==onlySource}
         try{TorrentFeedDb(ctx).use{db->
-            for(site in listOf("ONEJAV","SUKEBEI")){
+            for(site in sources){
+                if(onlySource==null && !SiteControls.sync(ctx,
+                        TorrentFeedParser.home(site)))continue
+                val token=java.util.concurrent.atomic.AtomicBoolean(false)
+                if(active.putIfAbsent(site,token)!=null)continue
+                try{
                 val state=db.status().first{it.source==site}
-                val home=if(site=="ONEJAV")TorrentFeedParser.onejav
-                    else TorrentFeedParser.sukebei
+                val home=TorrentFeedParser.home(site)
                 val queue=ArrayDeque<String>()
                 queue.addLast(home)
                 state.cursor?.let{queue.addLast(it)}
                 val seen=HashSet<String>()
                 var budget=if(state.cursor==null)2 else 6
-                while(queue.isNotEmpty() && budget-->0 && !stop()){
+                while(queue.isNotEmpty() && budget-->0 && !stop() &&
+                    !token.get() && AppPower.enabled(ctx)){
                     val current=queue.removeFirst()
                     if(!seen.add(current))continue
                     try{
@@ -279,10 +325,10 @@ object TorrentSourceBackfill {
                         break
                     }
                 }
+                }finally{active.remove(site)}
             }
         }}finally{
-            busy.set(false)
-            if(!stop() && AppPower.enabled(ctx) &&
+            if(onlySource==null && !stop() && AppPower.enabled(ctx) &&
                 TorrentFeedDb(ctx).use{db->db.status().any{it.cursor!=null}})
                 scheduleCatchup(ctx)
         }
@@ -293,7 +339,7 @@ class TorrentFeedJob:JobService(){
     override fun onStartJob(params:JobParameters):Boolean{
         stopped.set(false)
         thread(name="asterion-torrent-history"){
-            try{TorrentSourceBackfill.scan(applicationContext){stopped.get()}}
+            try{TorrentSourceBackfill.scan(applicationContext,stop={stopped.get()})}
             finally{jobFinished(params,false)}
         }
         return true

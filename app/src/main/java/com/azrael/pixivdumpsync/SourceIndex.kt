@@ -298,6 +298,42 @@ class SourceIndexDb(context:Context):
             writableDatabase.update("entries",cv,"url=?",arrayOf(url))
         }
     }
+    fun forSource(source:String,limit:Int=48):List<IndexedItem>{
+        val out=ArrayList<IndexedItem>()
+        readableDatabase.rawQuery(
+            "SELECT url,title,preview,source,area,kind,discovered_at,queued "+
+              "FROM entries WHERE source=? ORDER BY discovered_at DESC LIMIT ?",
+            arrayOf(source,limit.coerceIn(1,300).toString())
+        ).use{c->
+            while(c.moveToNext())out+=IndexedItem(c.getString(0),c.getString(1),
+                c.getString(2),c.getString(3),c.getString(4),c.getString(5),
+                c.getLong(6),c.getInt(7)==1)
+        }
+        return out
+    }
+    fun pendingForSource(source:String,details:Boolean,limit:Int=30):List<IndexedItem>{
+        val sql=if(details)
+            "SELECT url,title,preview,source,area,kind,discovered_at,queued "+
+                "FROM entries WHERE source=? AND detail_checked=0 AND detail_retry_after<=? "+
+                "AND kind NOT IN ('epub','archive','apk','model','video','image',"+
+                "'torrent','original','creative','mod','audio') "+
+                "ORDER BY discovered_at ASC LIMIT ?"
+        else
+            "SELECT url,title,preview,source,area,kind,discovered_at,queued "+
+                "FROM entries WHERE source=? AND queued=0 AND retry_after<=? "+
+                "AND kind IN ('epub','archive','apk','model','video',"+
+                "'torrent','original','creative','mod','audio','books','comics') "+
+                "ORDER BY discovered_at ASC LIMIT ?"
+        val out=ArrayList<IndexedItem>()
+        readableDatabase.rawQuery(sql,
+            arrayOf(source,System.currentTimeMillis().toString(),
+                limit.coerceIn(1,60).toString())).use{c->
+            while(c.moveToNext())out+=IndexedItem(c.getString(0),c.getString(1),
+                c.getString(2),c.getString(3),c.getString(4),c.getString(5),
+                c.getLong(6),c.getInt(7)==1)
+        }
+        return out
+    }
     fun items(area:String?=null,limit:Int=60):List<IndexedItem>{
         val out=ArrayList<IndexedItem>()
         val sql="""SELECT url,title,preview,source,area,kind,discovered_at,queued
@@ -400,9 +436,13 @@ internal object SourceIndexParser {
         // Prefer a validated source-specific listing path over arbitrary
         // navigation links. Generic indexing remains for other providers.
         val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
-        if(!dedicated.isNullOrEmpty())return dedicated
+        if(!dedicated.isNullOrEmpty())return dedicated.filter{
+            IndexedMediaQuality.isMedia(it.url,it.title,it.preview,area)
+        }
         val creatorPosts=CreatorSiteBackfill.entries(doc,base,area,clock)
-        if(!creatorPosts.isNullOrEmpty())return creatorPosts
+        if(!creatorPosts.isNullOrEmpty())return creatorPosts.filter{
+            IndexedMediaQuality.isMedia(it.url,it.title,it.preview,area)
+        }
         val out=LinkedHashMap<String,IndexedItem>()
         val scoped=doc.select("article a[href],main a[href],.post a[href],.posts a[href],"+
             ".gallery a[href],.entry a[href],.item a[href],.content a[href],"+
@@ -426,6 +466,7 @@ internal object SourceIndexParser {
             }.trim().take(180)
             if(title.length<3 || title.equals("next",true) || title.equals("previous",true))continue
             val image=preview(link)
+            if(!IndexedMediaQuality.isMedia(url,title,image,area))continue
             out.putIfAbsent(url,IndexedItem(url,title,image,base,area,type,clock,false))
             require(out.size<5000){
                 "Provider page exceeds 5000 discovered originals; cursor is not advanced"
@@ -923,6 +964,66 @@ object SourceIndex {
         require(source.adapter=="generic"){"This provider uses a native scanner"}
         try{
             scanOne(context,source,stop,true)
+            if(stop())return
+            // Follow the source's actual detail links and queue originals,
+            // rather than treating a count of HTML pages as a completed backfill.
+            var enqueued=0
+            val details=SourceIndexDb(context).use{
+                it.pendingForSource(address,true,24)
+            }
+            for(item in details){
+                if(stop() || !AppPower.enabled(context))return
+                try{
+                    val doc=fetchPage(context,source,item.url)
+                    val clock=System.currentTimeMillis()
+                    val originals=(SiteBackfillProfiles.galleryOriginals(doc,item,clock)+
+                        SourceIndexParser.detailOriginals(doc,item,clock))
+                        .distinctBy{it.url}
+                        .filter{file->
+                            IndexedMediaQuality.isMedia(
+                                file.url,file.title,file.preview,file.area) ||
+                            (file.kind in setOf("original","epub","archive",
+                                "model","video","image","torrent") &&
+                                SourceIndexParser.safe(file.url) &&
+                                SourceIndexParser.autoOriginal(file))
+                        }
+                    if(originals.isEmpty() &&
+                        item.area in setOf("ADULT","HENTAI","VIDEOS") &&
+                        com.asterion.videoflow.WebDiscovery.isVideoPage(item.url)){
+                        val added=VideoDb(context).use{
+                            it.addVideo(item.url,item.title)
+                        }
+                        if(added)enqueued++
+                    }
+                    SourceIndexDb(context).use{db->
+                        for(file in originals){
+                            db.upsert(file)
+                            if(SourceIndexParser.autoOriginal(file) &&
+                                queueDirect(context,file)){
+                                db.markQueued(file.url)
+                                enqueued++
+                            }
+                        }
+                        if(originals.isNotEmpty())db.detailsFinished(item.url)
+                        else db.detailsFailed(item.url,
+                            "No accessible original; provider parser or sign-in required")
+                    }
+                }catch(t:Exception){
+                    SourceIndexDb(context).use{it.detailsFailed(item.url,
+                        t.message?:"Unable to inspect original")}
+                }
+            }
+            // Direct-file originals do not need another detail fetch.
+            for(item in SourceIndexDb(context).use{
+                it.pendingForSource(address,false,40)
+            }){
+                if(stop() || !AppPower.enabled(context))return
+                if(SourceIndexParser.autoOriginal(item) && queueDirect(context,item)){
+                    SourceIndexDb(context).use{it.markQueued(item.url)}
+                    enqueued++
+                }
+            }
+            if(enqueued>0)VideoEngine.launch(context,false)
         }catch(e:Exception){
             if(!stop())SourceIndexDb(context).use{it.failure(address,
                 e.message?:"Site check failed")}
@@ -943,7 +1044,9 @@ object SourceIndex {
         if(saved!=null && historyEnabled && !source.historyComplete)pages+=saved
         var index=0
         val visited=HashSet<String>()
-        while(index<pages.size && (historyEnabled && !source.historyComplete || index==0)){
+        val pageBudget=if(manual)8 else 5
+        while(index<pages.size && index<pageBudget &&
+            (historyEnabled && !source.historyComplete || index==0)){
             if(stop()||Thread.currentThread().isInterrupted) return
             if(!AppPower.enabled(context) ||
                 (!manual && !SiteControls.sync(context,source.url)))break

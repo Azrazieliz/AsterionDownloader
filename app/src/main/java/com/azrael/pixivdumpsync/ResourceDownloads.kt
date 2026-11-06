@@ -57,7 +57,7 @@ object ResourceDownloads {
             else listOf(AlohaArea.BOOKS),"BOOKMARKED "+(if(games)"GAMES & DATABASES" else "NOVEL LIBRARIES"))
         CreatorArchiveUi.render(a,body,if(games)ArchiveSection.GAMES else ArchiveSection.BOOKS)
         if(!games){
-            TorrentSearchUi.render(a,body,TorrentArea.BOOKS)
+            TorrentSearchUi.render(a,body,TorrentArea.BOOKS){a.recreate()}
             val libraries=ui.card(a)
             libraries.addView(ui.text(a,"BOOK LIBRARIES · EPUB ONLY",16f,ui.white,true),ui.lp(a,3))
             libraries.addView(ui.text(a,"Standard Ebooks and Wikisource are searchable above with direct EPUB downloads. ManyBooks and Feedbooks have browseable libraries; only verified accessible EPUBs can be downloaded.",12f,ui.secondary),ui.lp(a,8))

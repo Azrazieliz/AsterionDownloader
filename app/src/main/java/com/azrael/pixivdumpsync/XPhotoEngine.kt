@@ -16,6 +16,29 @@ import java.util.concurrent.atomic.AtomicBoolean
 object XPhotoEngine {
     private val working=AtomicBoolean(false)
     private val executor=Executors.newSingleThreadExecutor()
+    private val pausedPhotos=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val stoppedSources=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val scanningSources=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun pause(context:Context,id:Long){
+        pausedPhotos.add(id)
+        XPhotoQueue(context).use{it.change(id,"paused")}
+    }
+    fun resume(context:Context,id:Long){
+        pausedPhotos.remove(id)
+        XPhotoQueue(context).use{it.retry(id)}
+        start(context)
+    }
+    fun isScanning(source:String)=source in scanningSources
+    fun stopSource(context:Context,source:String){
+        stoppedSources.add(source)
+        // Stops historical pagination only. Existing live Sync stays unchanged.
+        XPhotoQueue(context).use{it.setMode(source,"backfill_enabled",false)}
+    }
+    fun startSourceBackfill(context:Context,source:String){
+        stoppedSources.remove(source)
+        XPhotoQueue(context).use{it.backfill(source)}
+        start(context,false,source)
+    }
     private const val CHANNEL="asterion_x_images"
     private fun json(url:String):JSONObject {
         var last:Exception?=null
@@ -59,6 +82,9 @@ object XPhotoEngine {
     private fun scan(context:Context,db:XPhotoQueue,source:String,handle:String,
                      initialCursor:String?,live:Boolean,backfill:Boolean,
                      historyComplete:Boolean){
+        scanningSources.add(source)
+        try{
+        if(stoppedSources.contains(source))return
         val path=runCatching{URI(source).path.orEmpty()}.getOrDefault("")
         val id=Regex("/status/([0-9]+)").find(path)?.groupValues?.get(1)
         if(id!=null){
@@ -105,7 +131,7 @@ object XPhotoEngine {
             db.cursor(source,handle,null)
             return
         }
-        while(AppPower.enabled(context) &&
+        while(AppPower.enabled(context) && !stoppedSources.contains(source) &&
             db.wantsBackfill(source) &&
             !Thread.currentThread().isInterrupted){
             if(cursor.isNullOrBlank()||!visited.add(cursor))break
@@ -120,6 +146,7 @@ object XPhotoEngine {
             db.cursor(source,handle,next)
             cursor=next
         }
+        }finally{scanningSources.remove(source)}
     }
     fun notice(context:Context,description:String):Notification {
         context.getSystemService(NotificationManager::class.java)
@@ -168,7 +195,12 @@ object XPhotoEngine {
                         val photo=db.next()?:break
                         db.change(photo.id,"running")
                         try{
-                            val saved=fetchPhoto(context,photo.photo)
+                            val saved=fetchPhoto(context,photo.photo){
+                                pausedPhotos.contains(photo.id) ||
+                                !AppPower.enabled(context)
+                            }
+                            if(pausedPhotos.contains(photo.id))
+                                throw java.util.concurrent.CancellationException("Photo paused")
                             db.change(photo.id,"done",saved)
                             if(NduSettings.configured(context)){
                                 NduCloudQueue(context).use{it.enqueue("x",
@@ -178,13 +210,21 @@ object XPhotoEngine {
                             }
                             onStatus("Saved X image "+(processed+1))
                         }catch(t:Exception){
-                            db.change(photo.id,"error",error=t.message)
-                            onStatus("X download failed: "+(t.message?:"unknown").take(80))
+                            if(pausedPhotos.remove(photo.id) ||
+                                t is java.util.concurrent.CancellationException){
+                                db.change(photo.id,"paused",
+                                    error="Paused; restart this file from Downloads")
+                                onStatus("Paused X image")
+                            }else{
+                                db.change(photo.id,"error",error=t.message)
+                                onStatus("X download failed: "+
+                                    (t.message?:"unknown").take(80))
+                            }
                         }
                         processed++
                     }
                 }
-                drainQueued(30)
+                if(targetSource==null)drainQueued(30)
                 val watchers=db.allSources().filter{source->
                     val liveAllowed=source.liveEnabled &&
                         (!automatic || context.getSharedPreferences("asterion_x_live",0)
@@ -224,7 +264,8 @@ object XPhotoEngine {
             }
         }finally{working.set(false)}
     }
-    private fun fetchPhoto(context:Context,source:String):String {
+    private fun fetchPhoto(context:Context,source:String,
+                           stop:()->Boolean={false}):String {
         val remote=URI(source)
         require(remote.scheme=="https" && remote.host=="pbs.twimg.com" &&
             remote.path.startsWith("/media/")){"Only X original photo CDN links can be downloaded"}
@@ -239,6 +280,7 @@ object XPhotoEngine {
                 .lowercase().takeIf{it in listOf("jpg","jpeg","png","webp")}?: "jpg"
         var last:Exception?=null
         repeat(4){attempt->
+            if(stop())throw java.util.concurrent.CancellationException("Photo paused")
             try{
                 val preferred=if(attempt>=2 && source.contains("name=orig"))
                     source.replace("name=orig","name=large") else source
@@ -263,8 +305,13 @@ object XPhotoEngine {
                     connection.getInputStream().buffered().use{input->
                         context.contentResolver.openOutputStream(dest,"w")!!.use{output->
                             val buffer=ByteArray(65536)
-                            while(true){val n=input.read(buffer);if(n<0)break
-                                output.write(buffer,0,n);bytes+=n}
+                            while(true){
+                                if(stop())throw java.util.concurrent.CancellationException(
+                                    "Photo paused")
+                                val n=input.read(buffer)
+                                if(n<0)break
+                                output.write(buffer,0,n);bytes+=n
+                            }
                         }
                     }
                     require(bytes>128 && (connection.contentLengthLong<=0 ||
@@ -280,6 +327,7 @@ object XPhotoEngine {
                     context.contentResolver.delete(dest,null,null);throw t
                 }
             }catch(t:Exception){
+                if(t is java.util.concurrent.CancellationException)throw t
                 last=t;if(attempt<3)Thread.sleep(1000L*(attempt+1))
             }
         }

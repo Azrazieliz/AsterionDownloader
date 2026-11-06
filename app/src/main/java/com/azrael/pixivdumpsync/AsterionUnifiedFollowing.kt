@@ -43,7 +43,10 @@ object AsterionUnifiedFollowing {
                           remote:Boolean=false):ImageView{
         val line=ui.row(a)
         val image=ImageView(a).apply{
-            setImageResource(R.drawable.ic_source_site)
+            // A recognizable source icon is preferable to a fake globe
+            // "preview" for creators without a fetched thumbnail.
+            setImageResource(if(subtitle.startsWith("@"))R.drawable.ic_source_x
+                else R.drawable.ic_source_kyora)
             scaleType=ImageView.ScaleType.CENTER_CROP
         }
         line.addView(image,LinearLayout.LayoutParams(ui.px(a,60),ui.px(a,60)))
@@ -167,14 +170,20 @@ object AsterionUnifiedFollowing {
                     .putBoolean(source.url,enabled).apply()
                 XPhotoScheduler.ensure(a)
             }
-            pair(a,c,"CHECK NEW","BACKFILL",{
+            pair(a,c,"CHECK NEW",
+                if(XPhotoEngine.isScanning(source.url))"STOP" else "BACKFILL",{
                 XPhotoQueue(a).use{it.clearError(source.url)}
                 XPhotoEngine.start(a,false,source.url)
                 notice(a,"Checking X @"+source.handle)
             },{
-                XPhotoQueue(a).use{it.backfill(source.url)}
-                XPhotoEngine.start(a,false,source.url)
-                notice(a,"Resuming X history @"+source.handle)
+                if(XPhotoEngine.isScanning(source.url)){
+                    XPhotoEngine.stopSource(a,source.url)
+                    notice(a,"Stopping X historical scan @"+source.handle)
+                }else{
+                    XPhotoEngine.startSourceBackfill(a,source.url)
+                    notice(a,"Requested X history @"+source.handle)
+                }
+                refresh()
             })
             put(a,p,c,10)
         }

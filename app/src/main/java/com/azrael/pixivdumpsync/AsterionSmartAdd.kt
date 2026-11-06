@@ -22,7 +22,12 @@ object AsterionSmartAdd {
         PIXIV("Pixiv artist"), X("X account"), COSPLAY("Cosplay / image gallery"),
         VIDEO("Video / performer"), COMICS("Manga / comics"),
         BOOKS("EPUB / novels"), TORRENTS("Games / torrents"),
-        ASSETS("3D assets / Koikatsu")
+        ASSETS("3D assets / Koikatsu"),
+        STUDIO("Koikatsu Studio scenes"),
+        MMD("MMD models and motions"),
+        LIVE2D("Live2D source files"),
+        ANIMATION("Animation project files"),
+        MODS("Game mods and patches")
     }
     private fun guess(address:String):Kind? {
         val host=runCatching{URI(address).host.orEmpty().lowercase().removePrefix("www.")}
@@ -32,8 +37,11 @@ object AsterionSmartAdd {
         if(host in listOf("toonily.com","mangaread.org","sushiscan.net","nhentai.net","nhentai.xxx"))
             return Kind.COMICS
         if(host in listOf("koikatsucards.com","db.bepis.moe","gumroad.com"))return Kind.ASSETS
+        if(host=="gamebanana.com")return Kind.MODS
+        if(host=="bowlroll.net")return Kind.MMD
+        if(host=="nizima.com")return Kind.LIVE2D
         if(host in listOf("sukebei.nyaa.si","nyaa.si","ggbases.com",
-                "onejav.com","f95zone.to"))
+                "onejav.com","f95zone.to","nyaa.v300.eu.org"))
             return Kind.TORRENTS
         if(host in listOf("freewebnovel.com","novelbuddy.com","readnovelfull.com",
                 "mp4directs.com","shionlib.com","annas-archive.org"))
@@ -71,6 +79,11 @@ object AsterionSmartAdd {
             Kind.BOOKS->"BOOKS"
             Kind.TORRENTS->"GAMES"
             Kind.ASSETS->"ASSETS"
+            Kind.STUDIO->"STUDIO"
+            Kind.MMD->"MMD"
+            Kind.LIVE2D->"LIVE2D"
+            Kind.ANIMATION->"ANIMATION"
+            Kind.MODS->"MODS"
         }
         val native=when(kind){
             Kind.PIXIV,Kind.X,Kind.COSPLAY,Kind.VIDEO->true
@@ -78,12 +91,14 @@ object AsterionSmartAdd {
             Kind.BOOKS->address.substringBefore('?').endsWith(".epub",true) ||
                 NovelEpubParser.supportedSeries(address)
             Kind.TORRENTS->address.startsWith("magnet:",true) ||
-                address.substringBefore('?').endsWith(".torrent",true)
+                address.substringBefore('?').endsWith(".torrent",true) ||
+                TorrentFeedParser.source(address)!=null
             Kind.ASSETS->{
                 val host=runCatching{URI(address).host.orEmpty().removePrefix("www.")}.getOrDefault("")
                 host=="db.bepis.moe" || host=="koikatsucards.com" ||
                     CreatorArchives.parseCreatorUrl(address)!=null
             }
+            Kind.STUDIO,Kind.MMD,Kind.LIVE2D,Kind.ANIMATION,Kind.MODS->false
         }
         SourceIndex.enroll(a.applicationContext,address,area,
             URI(address).host.orEmpty(),native)
@@ -149,7 +164,7 @@ object AsterionSmartAdd {
                 val saved=VideoDb(a).use{db->
                     val added=db.addWatch(address,Uri.parse(address).host.orEmpty())
                     val w=db.listWatches().firstOrNull{it.address==address}
-                    if(w!=null){db.enableWatch(w.id,true);db.resetWatchBackfill(w.id)}
+                    if(w!=null)db.enableWatch(w.id,true)
                     added||w!=null
                 }
                 if(saved){
@@ -186,7 +201,7 @@ object AsterionSmartAdd {
                     val series=Uri.parse(address).path.orEmpty().trim('/')
                         .substringAfterLast('/').replace('-', ' ').ifBlank{"Novel"}
                     NovelEpubService.enqueue(a,address,series)
-                    record(a,kind,address,"Complete novel readable ZIP queued")
+                    record(a,kind,address,"Complete EPUB novel queued")
                     status.text="Novel chapters queued for EPUB assembly"
                     done()
                 }else{
@@ -206,10 +221,24 @@ object AsterionSmartAdd {
                             done()
                         }.setNegativeButton("Cancel",null).show()
                 }else{
-                    status.text="Index saved · dedicated search adapter pending"
-                    record(a,kind,address,status.text.toString())
+                    val feed=TorrentFeedParser.source(address)
+                    if(feed!=null){
+                        TorrentFeedDb(a).use{it.enroll(feed)}
+                        record(a,kind,address,"Registered torrent feed; history requested")
+                        TorrentSourceBackfill.startSite(a.applicationContext,feed)
+                        status.text="Torrent feed added to native discovery; checking history"
+                    }else {
+                        record(a,kind,address,"Saved as torrent source; adapter unsupported")
+                        status.text="Source saved, but this provider has no supported torrent parser"
+                    }
                     done()
                 }
+            }
+            Kind.STUDIO,Kind.MMD,Kind.LIVE2D,Kind.ANIMATION,Kind.MODS->{
+                record(a,kind,address,"Enrolled in native source index; check source status")
+                status.text="Saved under "+kind.label+
+                    "; manage its Sync and Backfill in that category"
+                done()
             }
             Kind.ASSETS->{
                 val archive=CreatorArchives.parseCreatorUrl(address)
@@ -255,6 +284,35 @@ object AsterionSmartAdd {
         CreatorNames.remember(a,parsed.first.substringAfterLast('/'),"CREATORS",true)
         onDone("Creator profile enrolled; originals and access checked by SourceIndex")
     }
+    /** The Search input is also the sole Add input. No second tab or form. */
+    fun enrollFromSearch(a:Activity,raw:String,status:TextView,done:()->Unit){
+            val url=raw.trim()
+            if(url.startsWith("magnet:?xt=urn:btih:",true)){
+                AlertDialog.Builder(a).setTitle("Select torrent content type")
+                    .setItems(arrayOf("Game / visual novel","Video","EPUB book")){_,type->
+                        val folder=arrayOf("Games","Videos","Books")[type]
+                        ResourceDownloads.route(a,url,folder)
+                        status.text="Torrent queued under "+folder+" · file selection"
+                        done()
+                    }.setNegativeButton("Cancel",null).show()
+                return
+            }
+            val mediaFile=Regex("(?i)\\.(?:mp4|webm|mkv|zip|epub|torrent|png|jpg|jpeg|webp|apk)(?:[?#]|$)")
+                .containsMatchIn(url)
+            if(mediaFile){
+                ResourceDownloads.route(a,url,"Files")
+                status.text="File transfer requested · see Downloads for results"
+                return
+            }
+            val proposed=guess(url)
+            if(proposed!=null)register(a,url,proposed,status,done)
+            else if(SearchRanking.validUrl(url)){
+                AlertDialog.Builder(a).setTitle("Choose content type")
+                    .setItems(Kind.values().map{it.label}.toTypedArray()){_,which->
+                        register(a,url,Kind.values()[which],status,done)
+                    }.setNegativeButton("Cancel",null).show()
+            }else status.text="Enter a valid site or profile URL"
+    }
     fun render(a:Activity,p:LinearLayout,done:()->Unit){
         p.addView(ui.text(a,"Add a source",23f,ui.white,true),ui.lp(a,14))
         p.addView(ui.text(a,"Enter a creator or site URL. It stays in its category and syncs with that module.",
@@ -267,32 +325,7 @@ object AsterionSmartAdd {
         box.addView(field,ui.lp(a,0))
         val status=ui.text(a,"",12f,ui.secondary)
         box.addView(ui.action(a,"SAVE SOURCE & SYNC",true){
-            val url=field.text.toString().trim()
-            if(url.startsWith("magnet:?xt=urn:btih:",true)){
-                AlertDialog.Builder(a).setTitle("Select torrent content type")
-                    .setItems(arrayOf("Game / visual novel","Video","EPUB book")){_,type->
-                        val folder=arrayOf("Games","Videos","Books")[type]
-                        ResourceDownloads.route(a,url,folder)
-                        status.text="Torrent queued under "+folder+" · file selection"
-                        done()
-                    }.setNegativeButton("Cancel",null).show()
-                return@action
-            }
-            val mediaFile=Regex("(?i)\\.(?:mp4|webm|mkv|zip|epub|torrent|png|jpg|jpeg|webp|apk)(?:[?#]|$)")
-                .containsMatchIn(url)
-            if(mediaFile){
-                ResourceDownloads.route(a,url,"Files")
-                status.text="File transfer requested · see Downloads for results"
-                return@action
-            }
-            val proposed=guess(url)
-            if(proposed!=null)register(a,url,proposed,status,done)
-            else if(SearchRanking.validUrl(url)){
-                AlertDialog.Builder(a).setTitle("Choose content type")
-                    .setItems(Kind.values().map{it.label}.toTypedArray()){_,which->
-                        register(a,url,Kind.values()[which],status,done)
-                    }.setNegativeButton("Cancel",null).show()
-            }else status.text="Enter a valid site or profile URL"
+            enrollFromSearch(a,field.text.toString().trim(),status,done)
         },ui.lp(a,8))
         box.addView(status,ui.lp(a,8))
         p.addView(box,ui.lp(a,11))

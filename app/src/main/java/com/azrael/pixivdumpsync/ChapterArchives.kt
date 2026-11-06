@@ -18,12 +18,39 @@ import java.util.zip.ZipOutputStream
 object ChapterArchives {
     private val executor=Executors.newSingleThreadExecutor()
     private val busy=AtomicBoolean(false)
+    private val pauses=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    fun pause(context:Context,id:Long){
+        pauses.add(id)
+        ChapterQueue(context).use{it.pause(id)}
+    }
+    fun resume(context:Context,id:Long){
+        pauses.remove(id)
+        ChapterQueue(context).use{it.retry(id)}
+        start(context)
+    }
     private const val CHANNEL="asterion_chapter_transfers"
     fun start(context:Context){
         if(!AppPower.enabled(context))return
         val intent=Intent(context,ChapterArchiveService::class.java)
-        if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
-        else context.startService(intent)
+        try{
+            if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
+            else context.startService(intent)
+        }catch(_:Exception){
+            schedule(context)
+        }
+    }
+    /** The OS may prohibit foreground-service starts from backfill callbacks.
+     * Keep the already-persisted chapter queue alive through JobScheduler.
+     */
+    fun schedule(context:Context):Boolean{
+        if(!AppPower.enabled(context))return false
+        val scheduler=context.getSystemService(android.app.job.JobScheduler::class.java)
+        val job=android.app.job.JobInfo.Builder(26482,
+            android.content.ComponentName(context,ChapterArchiveJobService::class.java))
+            .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(1500L).setOverrideDeadline(15000L)
+            .build()
+        return scheduler.schedule(job)>0
     }
     fun notification(context:Context,message:String):Notification{
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -47,7 +74,13 @@ object ChapterArchives {
             ChapterQueue(context).use{db->
                 db.recover()
                 db.retryDueFailures()
-                while(AppPower.enabled(context)){
+                var completedThisPass=0
+                val deadline=android.os.SystemClock.elapsedRealtime()+5L*60_000L
+                while(AppPower.enabled(context) &&
+                    !Thread.currentThread().isInterrupted &&
+                    completedThisPass<3 &&
+                    android.os.SystemClock.elapsedRealtime()<deadline){
+                    completedThisPass++
                     val job=db.next()?:break
                     db.attempt(job.id)
                     db.update(job.id,"working",job.progress)
@@ -71,6 +104,8 @@ object ChapterArchives {
                                 db.update(job.id,"working",pct)
                                 onStatus("${job.title}: $pct%")
                             }
+                        if(pauses.contains(job.id))
+                            throw java.util.concurrent.CancellationException("Archive paused")
                         db.completeCheck(job.id,uri,signature)
                         if(!preserved && NduSettings.configured(context)) {
                             NduCloudQueue(context).use { queue->
@@ -80,8 +115,15 @@ object ChapterArchives {
                         }
                         onStatus("Saved ${job.title}")
                     }catch(t:Exception){
-                        db.update(job.id,"error",job.progress,t.message?:"Unknown failure")
-                        onStatus("Failed ${job.title}")
+                        if(pauses.remove(job.id) ||
+                            t is java.util.concurrent.CancellationException){
+                            db.pause(job.id)
+                            onStatus("Paused archive "+job.title)
+                        }else{
+                            db.update(job.id,"error",job.progress,
+                                t.message?:"Unknown failure")
+                            onStatus("Failed "+job.title)
+                        }
                     }
                 }
             }
@@ -89,10 +131,12 @@ object ChapterArchives {
     }
     private fun safeName(value:String):String=value.replace(
         Regex("[^\\p{L}\\p{N} ._-]"),"_").take(85).ifBlank{"Archive"}
-    private fun download(context:Context,url:String,referer:String,target:File){
+    private fun download(context:Context,url:String,referer:String,target:File,
+                         stop:()->Boolean){
         val partial=File(target.parentFile,target.name+".part")
         var cause:Exception?=null
-        repeat(4){attempt->
+        for(attempt in 0 until 4){
+            if(stop())throw java.util.concurrent.CancellationException("Archive paused")
             try{
                 val conn=URL(url).openConnection().apply{
                     connectTimeout=25000;readTimeout=45000
@@ -105,14 +149,33 @@ object ChapterArchives {
                         setRequestProperty("Cookie",it)
                     }
                 }
-                if(conn is java.net.HttpURLConnection && conn.responseCode==403)
-                    throw IllegalStateException("Image host HTTP 403: open the chapter in its site browser and save your session before retrying.")
+                if(conn is java.net.HttpURLConnection){
+                    when(conn.responseCode){
+                        401,403->throw IllegalStateException(
+                            "Image host HTTP "+conn.responseCode+
+                                ": authorized account session or native parser required")
+                        404,410->throw IllegalStateException(
+                            "Image unavailable HTTP "+conn.responseCode+
+                                ": missing chapter image")
+                        429->throw IllegalStateException(
+                            "Image host HTTP 429: temporarily rate-limited")
+                    }
+                }
                 val mediaType=conn.contentType.orEmpty().substringBefore(';').lowercase()
                 require(mediaType.startsWith("image/") ||
                     mediaType=="application/octet-stream"){
                     "Image URL did not return an image: ${conn.contentType}"}
                 conn.getInputStream().buffered().use{input->
-                    FileOutputStream(partial).use{output->input.copyTo(output,128*1024)}
+                    FileOutputStream(partial).use{output->
+                        val buffer=ByteArray(128*1024)
+                        while(true){
+                            if(stop())throw java.util.concurrent.CancellationException(
+                                "Archive paused")
+                            val n=input.read(buffer)
+                            if(n<0)break
+                            output.write(buffer,0,n)
+                        }
+                    }
                 }
                 require(partial.length()>128){"Image response was empty or truncated"}
                 val expected=conn.contentLengthLong
@@ -127,6 +190,7 @@ object ChapterArchives {
                 require(partial.renameTo(target)){"Cannot commit cached page"}
                 return
             }catch(t:Exception){
+                if(t is java.util.concurrent.CancellationException)throw t
                 cause=t;partial.delete()
                 if(t.message.orEmpty().contains("403") &&
                     com.azrael.galleryflow.SiteSession.bound(context,referer)){
@@ -149,6 +213,12 @@ object ChapterArchives {
                             "Browser image retrieval failed: "+browserError.message,browserError)
                     }
                 }
+                val terminal=t.message.orEmpty().let{message->
+                    Regex("(?i)\\b(?:401|403|404|410|429)\\b|"+
+                        "did not return an image|non-image|invalid image")
+                        .containsMatchIn(message)
+                }
+                if(terminal)break
                 if(attempt<3)Thread.sleep((attempt+1)*750L)
             }
         }
@@ -165,12 +235,19 @@ object ChapterArchives {
         try{
             ZipOutputStream(FileOutputStream(out)).use{zip->
                 for((chapterIndex,chapter) in chapters.withIndex()){
+                    if(pauses.contains(task.id))
+                        throw java.util.concurrent.CancellationException("Archive paused")
                     val images=ChapterScraper.pageImages(chapter.url,context)
                     for((pageIndex,image) in images.withIndex()){
+                        if(pauses.contains(task.id))
+                            throw java.util.concurrent.CancellationException("Archive paused")
                         val ext=Regex("(?i)\\.(jpe?g|png|webp|gif|avif)([?#]|$)")
                             .find(image)?.groupValues?.get(1)?.lowercase()?:"jpg"
                         val page=File(cache,"%05d_%05d.%s".format(chapterIndex+1,pageIndex+1,ext))
-                        if(!page.isFile||page.length()<128)download(context,image,chapter.url,page)
+                        if(!page.isFile||page.length()<128)
+                            download(context,image,chapter.url,page){
+                                pauses.contains(task.id)||!AppPower.enabled(context)
+                            }
                         // One ZIP with flat page entries; keep chapter/page numbering in filenames.
                         val name="%05d_%s_%05d.%s".format(chapterIndex+1,
                             safeName(chapter.title),pageIndex+1,ext)

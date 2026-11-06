@@ -5,9 +5,10 @@ import org.junit.Test
 
 class ContentVerticalsTest {
     @Test fun allApprovedSystemsAreOneExistingAppContentRegistry(){
-        assertEquals(6,ContentVerticalsPanel.sections.size)
-        assertEquals(6,ContentVerticalsPanel.sections.map{it.id}.toSet().size)
-        assertEquals(setOf("STUDIO","MMD","LIVE2D","ANIMATION","MODS","VOICE"),
+        // Voice archives were expressly removed from the approved modules.
+        assertEquals(5,ContentVerticalsPanel.sections.size)
+        assertEquals(5,ContentVerticalsPanel.sections.map{it.id}.toSet().size)
+        assertEquals(setOf("STUDIO","MMD","LIVE2D","ANIMATION","MODS"),
             ContentVerticalsPanel.sections.map{it.area}.toSet())
     }
     @Test fun characterCreationIsLimitedToKoikatsuAfterParty(){

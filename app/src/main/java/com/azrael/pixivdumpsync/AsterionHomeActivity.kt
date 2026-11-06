@@ -452,11 +452,19 @@ class AsterionHomeActivity:Activity(){
             "Torrents"->renderTorrents()
             "Assets"->{
                 AssetsPanel.render(this,body){render()}
-                ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.ASSETS){render()}
                 SourceIndexPanel.render(this,body,"ASSETS")
+                val expanded=getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
+                    .getBoolean("asset_families",false)
+                put(body,button(if(expanded)"HIDE STUDIO / MMD / LIVE2D"
+                    else "STUDIO / MMD / LIVE2D / ANIMATION"){
+                    getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
+                        .edit().putBoolean("asset_families",!expanded).apply()
+                    render()
+                },10)
+                if(expanded)ContentVerticalsPanel.render(
+                    this,body,ContentVerticalsPanel.Group.ASSETS){render()}
             }
-            "Add"->AsterionSmartAdd.render(this,body){render()}
-            "Search"->AsterionSearchHub.render(this,body,{render()},{open("Add")})
+            "Search"->AsterionSearchHub.render(this,body,{render()})
             "Recommend"->AsterionSuggestedUi.render(this,body)
             "CreatorDiscovery"->AsterionRecommendations.render(this,body){render()}
             "Queue"->UnifiedDownloadsUi.render(this,body){render()}
@@ -579,7 +587,11 @@ class AsterionHomeActivity:Activity(){
                         toast("Enter a supported novel series page; forum and individual chapter links are not complete books")
                         return@button
                     }
-                    ResourceDownloads.route(this,raw,"Books")
+                    val title=Uri.parse(raw).path.orEmpty().trim('/')
+                        .substringAfterLast('/').replace('-',' ').ifBlank{"Novel"}
+                    val added=NovelEpubService.enqueue(this,raw,title)
+                    toast(if(added)"Novel EPUB queued" else
+                        "Series already followed; use its existing Sync controls")
                     render()
                 },9)
                 val recent=NovelEpubQueue(this).use{it.list(12)}
@@ -640,7 +652,7 @@ class AsterionHomeActivity:Activity(){
                 put(body,archive,12)
                 Mp4SeriesPanel.render(this,body){render()}
                 SourceIndexPanel.render(this,body,"BOOKS")
-                put(body,button("SEARCH EPUB LIBRARY"){open("Search")},11)
+
             }
             else->{
                 AsterionComicFollowing.render(this,body){render()}
@@ -660,16 +672,17 @@ class AsterionHomeActivity:Activity(){
             },LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(6)})
         }
         put(body,line,9)
-        TorrentSearchUi.render(this,body,torrentMode)
-        if(torrentMode==TorrentArea.GAMES){
-            put(body,button("PLAY / PORT A GAME TO ANDROID"){
-                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
-                    type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
-                },5210)
-            },11)
-        }
-        ContentVerticalsPanel.render(this,body,ContentVerticalsPanel.Group.GAMES){render()}
-        SourceIndexPanel.render(this,body,"GAMES")
+        TorrentSearchUi.render(this,body,torrentMode){render()}
+        val showingMods=getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
+            .getBoolean("mods",false)
+        put(body,button(if(showingMods)"HIDE GAME MODS"
+            else "GAME MODS & PATCHES"){
+            getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
+                .edit().putBoolean("mods",!showingMods).apply()
+            render()
+        },8)
+        if(showingMods)ContentVerticalsPanel.render(
+            this,body,ContentVerticalsPanel.Group.GAMES){render()}
     }
     private fun renderToonily(){
         section("Comics · Toonily / MangaRead",
@@ -692,18 +705,6 @@ class AsterionHomeActivity:Activity(){
             if(added)ChapterArchives.start(this)
             toast(if(added)"Series ZIP queued" else "Series is already in downloads")
             render()
-        })
-        put(inputCard,button("OPEN SOURCE IN BROWSER / SAVE SESSION"){
-            val raw=input.text.toString().trim()
-            val address=if(raw.isBlank())"https://toonily.com/" else raw
-            if(!com.azrael.galleryflow.SiteSession.validLoginUrl(address)){
-                toast("Enter a valid HTTPS source");return@button
-            }
-            startActivity(Intent(this,com.azrael.galleryflow.SiteLoginActivity::class.java)
-                .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,address))
-        })
-        put(inputCard,button("OPEN MANGAREAD"){
-            startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://www.mangaread.org/")))
         })
         put(body,inputCard,12)
         section("Series downloads","Progress and site-specific access errors are shown here.")
@@ -780,7 +781,7 @@ class AsterionHomeActivity:Activity(){
         section("Porn & Hentai","Adult site libraries, performer tracking, creator video archives and torrent search.")
         WatchPornPanel.render(this,body)
         CreatorArchiveUi.render(this,body,ArchiveSection.VIDEOS)
-        TorrentSearchUi.render(this,body,TorrentArea.ADULT)
+        TorrentSearchUi.render(this,body,TorrentArea.ADULT){render()}
         val byName=card()
         put(byName,text("Search videos by name",18f,theme.white,true),0)
         put(byName,text("Search anime videos, adult videos or torrent indexes; torrent results can open in a BitTorrent client.",
@@ -1123,11 +1124,11 @@ class AsterionHomeActivity:Activity(){
         appearanceSwitch("Show image and video previews","previews",true)
         appearanceSwitch("Larger preview covers","large_covers",false)
         val start=appearance.getString("start_page","Home").orEmpty()
-        put(visual,button("START TAB: "+when(start){
-            "Queue"->"Downloads";"Recommend"->"For You";else->"Home"
+        put(visual,button("START PAGE: "+when(start){
+            "Queue"->"Downloads";"Search"->"Search";else->"Home"
         }){
-            val choices=arrayOf("Home","Downloads","For You")
-            val keys=arrayOf("Home","Queue","Recommend")
+            val choices=arrayOf("Home","Search","Downloads")
+            val keys=arrayOf("Home","Search","Queue")
             AlertDialog.Builder(this).setTitle("Open Asterion on")
                 .setSingleChoiceItems(choices,keys.indexOf(start).coerceAtLeast(0)){dialog,index->
                     appearance.edit().putString("start_page",keys[index]).apply()

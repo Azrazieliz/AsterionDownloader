@@ -106,6 +106,9 @@
             android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
         <service android:name=".XPhotoService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".XPhotoJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".ChapterArchiveJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name=".ChapterArchiveService"
             android:exported="false" android:foregroundServiceType="dataSync"
             android:stopWithTask="false"/>

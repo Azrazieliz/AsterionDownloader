@@ -78,8 +78,10 @@ object AsterionSearchHub {
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
         val all=if(mode==0)ranked+peertube(term) else ranked
-        val unique=all.filter{SearchExactness.matches(term,it.title)}
-            .distinctBy{SearchRanking.canonicalKey(it.url)}
+        val unique=all.filter{
+            SearchExactness.matches(term,it.title) &&
+                !IndexedMediaQuality.navigationTitle(it.title)
+        }.distinctBy{SearchRanking.canonicalKey(it.url)}
         SearchResultsDb(ctx).use{db->
             db.save("SEARCH:"+mode+":"+term,items)
         }
@@ -90,8 +92,7 @@ object AsterionSearchHub {
         p.addView(ui.text(a,"Search",23f,ui.white,true),ui.lp(a,14))
         p.addView(ui.text(a,"Find original media across connected sites.",
             12f,ui.secondary),ui.lp(a,4))
-        p.addView(ui.action(a,"Add source or follow creator",false){addSource()},
-            ui.lp(a,8))
+
         val prefs=preferences(a)
         var selected=prefs.getInt("mode",0).coerceIn(0,modes.lastIndex)
         val picker=Spinner(a)
@@ -99,12 +100,20 @@ object AsterionSearchHub {
         picker.setSelection(selected)
         p.addView(picker,ui.lp(a,9))
         val box=ui.card(a)
-        val field=CreatorNames.input(a,"Specific title, artist or keywords","ALL")
+        val field=CreatorNames.input(a,
+            "Title, artist, creator URL, or site URL","ALL")
         field.setText(prefs.getString("query_"+selected,""))
         box.addView(field,ui.lp(a,0))
         val status=ui.text(a,"",12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         val siteFilters=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+        val searchVersion=java.util.concurrent.atomic.AtomicLong()
+        var searchWorker:Thread?=null
+        val cancelSearch=ui.action(a,"STOP SEARCH",false){
+            searchVersion.incrementAndGet()
+            searchWorker?.interrupt()
+            status.text="Search stopped · previous results retained"
+        }.apply{visibility=android.view.View.GONE}
         fun draw(found:List<Found>){
             results.removeAllViews()
             siteFilters.removeAllViews()
@@ -123,33 +132,96 @@ object AsterionSearchHub {
                     })
                 }
             }
-            for(hit in found.filter{chosen=="ALL"||it.source==chosen}.take(75)){
-                val c=ui.card(a)
-                if(SearchRanking.validUrl(hit.thumbnail)){
-                    val preview=ImageView(a).apply{scaleType=ImageView.ScaleType.CENTER_CROP}
-                    c.addView(preview,LinearLayout.LayoutParams(-1,ui.px(a,132)))
-                    VideoSearchPreviews.display(a,preview,hit.thumbnail)
+            val filtered=found.filter{chosen=="ALL" || it.source==chosen}
+                .filter{!IndexedMediaQuality.navigationTitle(it.title)}
+                .take(75)
+            fun saveHit(hit:Found){
+                when(selected){
+                    3->ResourceDownloads.route(a,hit.url,"Games")
+                    4->ResourceDownloads.downloadFile(a,hit.url,"Books",
+                        hit.filename.ifBlank{
+                            CatalogDiscovery.safeFilename(hit.title,"epub")
+                        })
+                    else->{
+                        val added=VideoDb(a).use{it.addVideo(hit.url,hit.title)}
+                        if(added)VideoEngine.launch(a,false)
+                        Toast.makeText(a,
+                            if(added)"Queued in Downloads" else
+                                "Already in Downloads · check its status",
+                            Toast.LENGTH_LONG).show()
+                    }
                 }
-                c.addView(ui.text(a,hit.title.take(160),15f,ui.white,true),ui.lp(a,0))
-                c.addView(ui.text(a,hit.source,12f,ui.secondary),ui.lp(a,5))
-                if(hit.detail.isNotBlank())c.addView(
-                    ui.text(a,hit.detail.take(110),11f,ui.secondary),ui.lp(a,4))
-                c.addView(ui.action(a,if(selected==4)"DOWNLOAD EPUB"
-                    else if(selected==3)"VIEW GAME FILES"
-                    else "DOWNLOAD VIDEO",true){
-                    when(selected){
-                        3->ResourceDownloads.route(a,hit.url,"Games")
-                        4->ResourceDownloads.downloadFile(a,hit.url,"Books",
-                            hit.filename.ifBlank{CatalogDiscovery.safeFilename(hit.title,"epub")})
-                        else->{
-                            if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
-                                VideoEngine.launch(a,false)
-                            Toast.makeText(a,"Video queued or already downloaded",Toast.LENGTH_SHORT).show()
+            }
+            val withPreviews=filtered.filter{SearchRanking.validUrl(it.thumbnail)}
+            val withoutPreviews=filtered.filterNot{SearchRanking.validUrl(it.thumbnail)}
+            for(chunk in withPreviews.chunked(2)){
+                val row=ui.row(a).apply{gravity=android.view.Gravity.TOP}
+                for(hit in chunk){
+                    val tile=ui.card(a,7).apply{
+                        background=ui.touch(a,ui.surface,14)
+                        isClickable=true
+                        isFocusable=true
+                        contentDescription="Download "+hit.title
+                        setOnClickListener{
+                            android.app.AlertDialog.Builder(a)
+                                .setTitle(hit.title.take(130))
+                                .setMessage("Source: "+hit.source+
+                                    "\nThis result is indexed; its original has not yet been saved.")
+                                .setPositiveButton("DOWNLOAD"){_,_->saveHit(hit)}
+                                .setNegativeButton("Cancel",null).show()
                         }
                     }
-                },ui.lp(a,8))
-                results.addView(c,ui.lp(a,8))
+                    val preview=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        contentDescription="Preview for "+hit.title
+                    }
+                    tile.addView(preview,LinearLayout.LayoutParams(
+                        -1,ui.px(a,170)))
+                    VideoSearchPreviews.display(a,preview,hit.thumbnail)
+                    tile.addView(ui.text(a,hit.title.take(100),12f,ui.white,true)
+                        .apply{
+                            maxLines=2
+                            ellipsize=android.text.TextUtils.TruncateAt.END
+                        },ui.lp(a,7))
+                    tile.addView(ui.text(a,hit.source.take(42),
+                        11f,ui.secondary).apply{maxLines=1},ui.lp(a,4))
+                    row.addView(tile,LinearLayout.LayoutParams(0,-2,1f)
+                        .apply{rightMargin=ui.px(a,7)})
+                }
+                if(chunk.size==1)row.addView(android.view.View(a),
+                    LinearLayout.LayoutParams(0,1,1f))
+                results.addView(row,ui.lp(a,7))
             }
+            // No fake globe/card thumbnails: clearly identify unpreviewed
+            // candidates as text-only results with a separate file action.
+            for(hit in withoutPreviews.take(30)){
+                val row=ui.row(a).apply{
+                    background=ui.touch(a,ui.surface,13)
+                    setPadding(ui.px(a,10),ui.px(a,10),
+                        ui.px(a,10),ui.px(a,10))
+                }
+                val content=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                }
+                content.addView(ui.text(a,hit.title.take(110),13f,ui.white,true)
+                    .apply{
+                        maxLines=2
+                        ellipsize=android.text.TextUtils.TruncateAt.END
+                    })
+                content.addView(ui.text(a,
+                    hit.source.take(50)+" · No preview available",
+                    11f,ui.secondary),ui.lp(a,3))
+                row.addView(content,LinearLayout.LayoutParams(0,-2,1f))
+                row.addView(ui.action(a,"DOWNLOAD",false){saveHit(hit)},
+                    LinearLayout.LayoutParams(-2,-2).apply{
+                        leftMargin=ui.px(a,8)
+                    })
+                results.addView(row,ui.lp(a,6))
+            }
+            if(filtered.isEmpty())
+                results.addView(ui.text(a,
+                    "No matching originals indexed. Try another title or provider.",
+                    13f,ui.secondary),ui.lp(a,13))
         }
         picker.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener{
             override fun onNothingSelected(parent:android.widget.AdapterView<*>?){}
@@ -161,16 +233,27 @@ object AsterionSearchHub {
                 status.text=""
             }
         }
-        box.addView(ui.action(a,"SEARCH",true){
+        val submit=ui.action(a,"SEARCH",true){
             val term=field.text.toString().trim()
+            if(SearchRanking.validUrl(term) ||
+                term.startsWith("magnet:?xt=urn:",true)){
+                AsterionSmartAdd.enrollFromSearch(a,term,status){
+                    status.text="Source saved to its module · select that module to manage Sync"
+                }
+                return@action
+            }
             val selectedAtStart=selected
             if(term.length<2){status.text="Enter a specific title or name";return@action}
-            status.text="Searching "+modes[selectedAtStart]+"…"
-            results.removeAllViews()
-            thread(name="asterion-federated-search"){
+            val version=searchVersion.incrementAndGet()
+            status.text="Searching "+modes[selectedAtStart]+
+                " · previous results remain visible"
+            cancelSearch.visibility=android.view.View.VISIBLE
+            searchWorker=thread(name="asterion-federated-search"){
                 val found=runCatching{search(a,term,selectedAtStart)}
                 a.runOnUiThread{
-                    if(a.isFinishing||a.isDestroyed)return@runOnUiThread
+                    if(a.isFinishing||a.isDestroyed ||
+                        searchVersion.get()!=version)return@runOnUiThread
+                    cancelSearch.visibility=android.view.View.GONE
                     found.onSuccess{reply->
                         save(a,selectedAtStart,term,reply.results)
                         if(selected!=selectedAtStart)return@onSuccess
@@ -182,7 +265,18 @@ object AsterionSearchHub {
                     }.onFailure{status.text=it.message?:"Search failed"}
                 }
             }
-        },ui.lp(a,8))
+        }
+        field.addTextChangedListener(object:android.text.TextWatcher{
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
+                submit.text=if(SearchRanking.validUrl(s.toString()) ||
+                    s.toString().startsWith("magnet:?xt=urn:",true))
+                    "ADD SOURCE" else "SEARCH"
+            }
+            override fun afterTextChanged(s:android.text.Editable?){}
+        })
+        box.addView(submit,ui.lp(a,8))
+        box.addView(cancelSearch,ui.lp(a,4))
         box.addView(status,ui.lp(a,7))
         p.addView(box,ui.lp(a,9))
         p.addView(HorizontalScrollView(a).apply{

@@ -26,6 +26,35 @@ object Mp4SeriesSync {
     private const val PERIODIC=49896
     private const val IMMEDIATE=49897
     private val busy=AtomicBoolean(false)
+    private val running=java.util.concurrent.ConcurrentHashMap<Long,AtomicBoolean>()
+    fun isBackfilling(id:Long):Boolean=running.containsKey(id)
+    fun stopBackfill(id:Long):Boolean{
+        val token=running[id]?:return false
+        token.set(true)
+        return true
+    }
+    fun startBackfill(context:Context,id:Long):Boolean{
+        if(!AppPower.enabled(context))return false
+        val cancelled=AtomicBoolean(false)
+        if(running.putIfAbsent(id,cancelled)!=null)return false
+        thread(name="asterion-mp4-series-"+id){
+            try{
+                Mp4SeriesStore(context.applicationContext).use{db->
+                    val work=db.list().firstOrNull{it.id==id}
+                        ?:return@use
+                    runCatching{
+                        scanWork(context.applicationContext,db,work,
+                            manual=true,stop={cancelled.get() ||
+                                !AppPower.enabled(context)})
+                    }.onFailure{
+                        if(!cancelled.get())db.checked(id,work.cursor,
+                            it.message?:it.javaClass.simpleName)
+                    }
+                }
+            }finally{running.remove(id)}
+        }
+        return true
+    }
     private val catalogLn="https://mp4directs.com/forums/ln.178/"
     private val catalogManga="https://mp4directs.com/threads/manga-download-links-index.2623/"
     private val alternateManga="https://mp4directs.com/forums/manga-download-list.199/"
@@ -50,21 +79,47 @@ object Mp4SeriesSync {
     private fun page(context:Context,url:String):Document{
         require(SourceIndexParser.safe(url) &&
             URI(url).host.orEmpty().removePrefix("www.")=="mp4directs.com")
+        var current=url
+        val visited=HashSet<String>()
         try{
-            val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
-                .timeout(24000).maxBodySize(10_000_000)
-                .followRedirects(false).ignoreHttpErrors(true)
-                .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
-                .execute()
-            if(response.statusCode() in setOf(401,403))
-                error("MP4Directs account session required (HTTP ${response.statusCode()})")
-            require(response.statusCode() in 200..299){
-                "MP4Directs HTTP ${response.statusCode()}"
+            repeat(5){
+                if(!visited.add(current))
+                    error("MP4Directs redirected in a loop")
+                val response=Jsoup.connect(current).userAgent(HttpClient.USER_AGENT)
+                    .timeout(24000).maxBodySize(10_000_000)
+                    .followRedirects(false).ignoreHttpErrors(true)
+                    .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                    .execute()
+                val status=response.statusCode()
+                if(status in 300..399){
+                    val location=response.header("Location")
+                        ?.takeIf{it.isNotBlank()}
+                        ?:error("MP4Directs redirect omitted its destination")
+                    val target=URI(current).resolve(location)
+                    // Accept the site's www/canonical redirects, but do not
+                    // forward an authenticated session to another provider.
+                    require(target.scheme=="https" &&
+                        target.host.orEmpty().lowercase().removePrefix("www.")==
+                            "mp4directs.com" &&
+                        SourceIndexParser.safe(target.toString())){
+                        "MP4Directs redirected outside its authorized domain"
+                    }
+                    current=target.toString()
+                }else{
+                    if(status in setOf(401,403))
+                        error("MP4Directs account sign-in required (HTTP "+status+")")
+                    if(status==429)
+                        error("MP4Directs HTTP 429: rate-limited, wait before retrying")
+                    require(status in 200..299){
+                        "MP4Directs HTTP "+status
+                    }
+                    return response.parse()
+                }
             }
-            return response.parse()
-        }catch(error:Exception){
-            if(!SiteSession.bound(context,url))throw error
-            return Jsoup.parse(BrowserPageFetch.html(context,url),url)
+            error("MP4Directs exceeded 5 safe canonical redirects")
+        }catch(problem:Exception){
+            if(!SiteSession.bound(context,current))throw problem
+            return Jsoup.parse(BrowserPageFetch.html(context,current),current)
         }
     }
     private fun nameFor(url:String,work:Mp4Follow):String{
@@ -113,8 +168,9 @@ object Mp4SeriesSync {
             false
         }
     }
-    private fun scanWork(context:Context,db:Mp4SeriesStore,work:Mp4Follow){
-        if(!work.sync&&!work.backfill)return
+    private fun scanWork(context:Context,db:Mp4SeriesStore,work:Mp4Follow,
+                         manual:Boolean=false,stop:()->Boolean={false}){
+        if(!manual && !work.sync)return
         val seed=if(work.type=="ZIP")
             listOf(catalogManga,alternateManga)
         else listOf(catalogLn)
@@ -129,8 +185,9 @@ object Mp4SeriesSync {
             queue.addLast(catalogManga to 0)
         val visited=HashSet<String>()
         var scanned=0
-        val budget=if(work.backfill)32 else 4
-        while(queue.isNotEmpty() && scanned<budget){
+        val budget=if(manual)32 else 4
+        while(queue.isNotEmpty() && scanned<budget && !stop() &&
+            AppPower.enabled(context)){
             val (address,depth)=queue.removeFirst()
             if(!visited.add(address))continue
             val doc=page(context,address)
@@ -153,7 +210,7 @@ object Mp4SeriesSync {
                     db.mark(link.url,"QUEUED")
                 }
             }
-            if(address.contains("/threads/")){
+            if(address.contains("/threads/") && !stop()){
                 for(original in Mp4SeriesRules.threadOriginals(
                         doc,address,work.type).take(100)){
                     db.observe(work,original)
@@ -161,12 +218,13 @@ object Mp4SeriesSync {
                         db.mark(original.url,"QUEUED")
                 }
             }
-            if(work.backfill && depth<4){
+            if(manual && depth<4){
                 val next=SourceIndexParser.next(doc,address,address)
                 if(next!=null && next !in visited &&
                     SourceIndexParser.sameSite(address,next))
                     queue.addLast(next to depth+1)
             }
+            db.checked(work.id,queue.firstOrNull()?.first,null)
         }
         // A non-null cursor means historical discovery still has work to do.
         // Null only means no more pagination was observed in this pass,

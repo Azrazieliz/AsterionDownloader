@@ -34,7 +34,7 @@ object Mp4SeriesPanel {
         next.setText("1")
         form.addView(name,ui.lp(a,9))
         form.addView(next,ui.lp(a,5))
-        form.addView(ui.action(a,"FOLLOW · BACKFILL & SYNC",true){
+        form.addView(ui.action(a,"FOLLOW SERIES",true){
             val title=name.text.toString().trim()
             val floor=next.text.toString().trim().toIntOrNull()
             if(title.length<3 || floor==null || floor !in 1..999){
@@ -42,9 +42,9 @@ object Mp4SeriesPanel {
                     Toast.LENGTH_LONG).show()
                 return@action
             }
-            Mp4SeriesStore(a).use{it.add(title,title,floor)}
+            val id=Mp4SeriesStore(a).use{it.add(title,title,floor)}
             Mp4SeriesSync.ensure(a)
-            Mp4SeriesSync.scanNow(a)
+            Mp4SeriesSync.startBackfill(a,id)
             refresh()
         },ui.lp(a,9))
         form.addView(ui.action(a,"SIGN IN TO MP4DIRECTS",false){
@@ -64,23 +64,14 @@ object Mp4SeriesPanel {
             if(!work.error.isNullOrBlank())
                 card.addView(ui.text(a,work.error.take(180),11f,ui.danger),ui.lp(a,4))
             val controls=ui.row(a)
-            val backfill=Switch(a).apply{
-                text="Backfill";setTextColor(ui.white)
-                isChecked=work.backfill
-            }
             val sync=Switch(a).apply{
-                text="Sync";setTextColor(ui.white)
+                text="Sync new volumes";setTextColor(ui.white)
                 isChecked=work.sync
+                setOnCheckedChangeListener{_,enabled->
+                    Mp4SeriesStore(a).use{it.toggle(work.id,false,enabled)}
+                    if(enabled)Mp4SeriesSync.scanNow(a)
+                }
             }
-            backfill.setOnCheckedChangeListener{_,v->
-                Mp4SeriesStore(a).use{it.toggle(work.id,v,sync.isChecked)}
-                if(v)Mp4SeriesSync.scanNow(a)
-            }
-            sync.setOnCheckedChangeListener{_,v->
-                Mp4SeriesStore(a).use{it.toggle(work.id,backfill.isChecked,v)}
-                if(v)Mp4SeriesSync.scanNow(a)
-            }
-            controls.addView(backfill)
             controls.addView(sync)
             card.addView(controls,ui.lp(a,5))
             val actions=ui.row(a)
@@ -119,41 +110,24 @@ object Mp4SeriesPanel {
                         }.setNegativeButton("Cancel",null).show()
                 }
             },ui.lp(a,3))
-            val candidates=Mp4SeriesStore(a).use{it.items(work.id,8)}
+            val candidates=Mp4SeriesStore(a).use{it.items(work.id,35)}
+                .filter{it.type==work.type && it.volume!=null &&
+                    it.state!="REVIEW"}.take(8)
             for(hit in candidates){
                 val label=ui.text(a,hit.title.take(110)+
                     " · "+(hit.volume?.let{"v$it"}?:"volume unverified")+
                     " · "+hit.state,11f,ui.secondary)
-                label.isClickable=true
-                label.setOnClickListener{
-                    a.startActivity(Intent(a,
-                        com.azrael.galleryflow.ProviderWebActivity::class.java)
-                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
-                            hit.url)
-                        .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_FOLDER,
-                            if(work.type=="ZIP")"Comics" else "Books"))
-                }
                 card.addView(label,ui.lp(a,5))
             }
-            card.addView(ui.action(a,"CHECK THIS SERIES",false){
-                Mp4SeriesSync.scanNow(a)
-                Toast.makeText(a,"Subscription scan requested",
-                    Toast.LENGTH_SHORT).show()
+            val active=Mp4SeriesSync.isBackfilling(work.id)
+            card.addView(ui.action(a,if(active)"STOP BACKFILL" else "BACKFILL",false){
+                if(active)Mp4SeriesSync.stopBackfill(work.id)
+                else if(!AppPower.enabled(a))Toast.makeText(a,
+                    "Resume transfers before backfilling",Toast.LENGTH_LONG).show()
+                else Mp4SeriesSync.startBackfill(a,work.id)
+                refresh()
             },ui.lp(a,7))
             parent.addView(card,ui.lp(a,10))
         }
-        val inventory=RounderInventoryIndex.confirmedCount(a)
-        val tree=RounderTreeScanner.status(a)
-        parent.addView(ui.text(a,"Rounder collection · "+tree.files+
-            " raw files indexed · "+tree.pendingDirectories+
-            " folders awaiting scan · "+inventory+" confirmed volume records.",
-            12f,ui.secondary),ui.lp(a,8))
-        tree.lastError?.let{
-            parent.addView(ui.text(a,"Rounder index: "+it.take(170),
-                11f,ui.danger),ui.lp(a,5))
-        }
-        parent.addView(ui.text(a,
-            "Raw folder visibility is not proof of an existing volume. Verified volume records are needed before automatic cloud duplicate suppression.",
-            11f,ui.secondary),ui.lp(a,5))
     }
 }

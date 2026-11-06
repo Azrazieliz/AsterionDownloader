@@ -21,9 +21,10 @@ import java.util.concurrent.Executors
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
     private val thumbnails=Executors.newFixedThreadPool(2)
-    private enum class State { ACTIVE, HELD, FAILED, DONE }
+    private enum class State { ACTIVE, QUEUED, PAUSED, HELD, FAILED, DONE }
     private enum class Filter(val label:String) {
-        ALL("All"),ACTIVE("In progress"),FAILED("Failed"),DONE("Saved")
+        ALL("All"),ACTIVE("Transferring"),QUEUED("Queued"),PAUSED("Paused"),
+        HELD("Needs action"),FAILED("Failed"),DONE("Saved")
     }
     private data class Row(
         val source:String,val filename:String,val info:String,val state:State,
@@ -74,38 +75,54 @@ object UnifiedDownloadsUi {
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
                     item.status in setOf("full_only_hold","retry_wait")->State.HELD
-                    else->State.ACTIVE
+                    item.status=="paused"->State.PAUSED
+                    item.status=="running"->State.ACTIVE
+                    else->State.QUEUED
                 }
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
                     State.HELD->if(item.status=="retry_wait")
-                        "Video · Automatic retry pending: "+item.error.orEmpty().take(110)
+                        "Video · Retry scheduled: "+item.error.orEmpty().take(110)
                         else "Video · Full-length original requires verification"
-                    else->"Video · "+when(item.status){
-                        "running"->if(item.progress>0)"Downloading" else "Inspecting source"
-                        else->"Queued"
-                    }
+                    State.PAUSED->"Video · Paused by user; original and progress retained"
+                    State.QUEUED->"Video · Waiting for transfer worker"
+                    State.ACTIVE->"Video · "+if(item.progress>0)"Transferring"
+                        else "Inspecting / preparing original"
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
                     info,state,if(item.status=="running")item.progress else null,item.updated,{
                         when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED->{VideoDb(a).use{it.retry(item.id)};VideoEngine.launch(a,false)}
+                            State.ACTIVE,State.QUEUED->VideoEngine.pauseVideo(a,item.id)
+                            State.PAUSED->VideoEngine.resumeVideo(a,item.id)
                             State.HELD->if(item.status=="retry_wait"){
                                 VideoDb(a).use{it.retry(item.id)}
                                 VideoEngine.launch(a,false)
                             }else{
-                                a.startActivity(Intent(a,
-                                    com.azrael.galleryflow.ProviderWebActivity::class.java)
-                                    .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
-                                        item.url))
+                                android.app.AlertDialog.Builder(a)
+                                    .setTitle("Full original not accessible")
+                                    .setMessage("The indexed preview is not proof of an "+
+                                        "accessible full-length video. Connect an "+
+                                        "authorized session or try a different source.")
+                                    .setPositiveButton("CONNECT ACCOUNT"){_,_->
+                                        a.startActivity(Intent(a,
+                                            com.azrael.galleryflow.SiteLoginActivity::class.java)
+                                            .putExtra(
+                                                com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,
+                                                item.url))
+                                    }.setNegativeButton("Close",null).show()
                             }
                             else->{}
                         }
                     },if(present)item.savedUri else null,mime="video/*",
-                    actionText=if(item.status=="retry_wait")"RETRY"
-                        else if(item.status=="full_only_hold")"SOURCE" else null)
+                    actionText=when(state){
+                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.PAUSED->"RESUME"
+                        State.HELD->if(item.status=="retry_wait")"RETRY" else "SOURCE"
+                        else->null
+                    })
             }
         }
         ChapterQueue(a).use{db->
@@ -114,20 +131,31 @@ object UnifiedDownloadsUi {
                 val state=when{
                     item.state=="done" && present->State.DONE
                     item.state=="done" || item.state=="error"->State.FAILED
-                    else->State.ACTIVE
+                    item.state=="paused"->State.PAUSED
+                    item.state=="working"->State.ACTIVE
+                    else->State.QUEUED
                 }
                 rows+=Row("Comic ZIP",fileName(a,if(present)item.savedUri else null,
                     item.title+".zip"),"Comic ZIP · "+when(state){
                         State.DONE->"Saved on device"
                         State.FAILED->item.error?:"Saved archive is missing"
-                        else->if(item.state=="working")"Downloading" else "Queued"
+                        State.PAUSED->"Archive paused; cached chapter pages retained"
+                        State.ACTIVE->"Downloading ordered chapter images"
+                        else->"Waiting for chapter downloader"
                     },state,if(item.state=="working")item.progress else null,item.updated,{
                     when(state){
                         State.DONE->item.savedUri?.let{open(a,it,"application/zip")}
                         State.FAILED->{ChapterQueue(a).use{it.retry(item.id)};ChapterArchives.start(a)}
+                        State.ACTIVE,State.QUEUED->ChapterArchives.pause(a,item.id)
+                        State.PAUSED->ChapterArchives.resume(a,item.id)
                         else->{}
                     }
-                },if(present)item.savedUri else null,mime="application/zip")
+                },if(present)item.savedUri else null,mime="application/zip",
+                    actionText=when(state){
+                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.PAUSED->"RESUME"
+                        else->null
+                    })
             }
         }
         NovelEpubQueue(a).use{db->
@@ -140,7 +168,8 @@ object UnifiedDownloadsUi {
                     item.state=="WAIT_LOGIN"->State.HELD
                     item.state=="DONE" && !present->State.FAILED
                     item.state=="RETRY" || item.state=="ERROR"->State.FAILED
-                    else->State.ACTIVE
+                    item.state=="WORKING"->State.ACTIVE
+                    else->State.QUEUED
                 }
                 val type=if(zip)"Novel ZIP" else "EPUB"
                 val name=fileName(a,if(present)item.savedUri else null,
@@ -151,7 +180,8 @@ object UnifiedDownloadsUi {
                         State.DONE->"Saved on device"
                         State.FAILED->item.error?:"Saved archive is missing"
                         State.HELD->"Account sign-in required"
-                        else->"$cached chapters cached"
+                        State.ACTIVE->"$cached chapters cached · Assembling"
+                        else->"$cached chapters cached · Queued"
                     },state,null,item.updated,{
                     when(state){
                         State.DONE->item.savedUri?.let{open(a,it,mime)}
@@ -173,21 +203,32 @@ object UnifiedDownloadsUi {
                 val state=when{
                     item.state=="done" && present->State.DONE
                     item.state=="done" || item.state=="error"->State.FAILED
-                    else->State.ACTIVE
+                    item.state=="paused"->State.PAUSED
+                    item.state=="running"->State.ACTIVE
+                    else->State.QUEUED
                 }
                 val name=fileName(a,if(present)item.saved else null,
                     item.photo.substringBefore('?').substringAfterLast('/').ifBlank{"X image"})
                 rows+=Row("X",name,"X image · "+when(state){
                     State.DONE->"Saved on device"
                     State.FAILED->item.error?:"Saved image is missing"
-                    else->if(item.state=="running")"Downloading" else "Queued"
+                    State.PAUSED->"Photo paused by user"
+                    State.ACTIVE->"Transferring X image"
+                    else->"Waiting for photo worker"
                 },state,null,item.updated,{
                     when(state){
                         State.DONE->item.saved?.let{open(a,it,"image/*")}
                         State.FAILED->{XPhotoQueue(a).use{it.retry(item.id)};XPhotoEngine.start(a)}
+                        State.ACTIVE,State.QUEUED->XPhotoEngine.pause(a,item.id)
+                        State.PAUSED->XPhotoEngine.resume(a,item.id)
                         else->{}
                     }
-                },if(present)item.saved else null,image=item.photo,mime="image/*")
+                },if(present)item.saved else null,image=item.photo,mime="image/*",
+                    actionText=when(state){
+                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.PAUSED->"RESUME"
+                        else->null
+                    })
             }
         }
         // Pixiv and Kyora store successful originals in MediaStore rather
@@ -242,7 +283,8 @@ object UnifiedDownloadsUi {
                 item.status==DownloadManager.STATUS_FAILED -> State.FAILED
                 item.status==DownloadManager.STATUS_SUCCESSFUL && present -> State.DONE
                 item.status==DownloadManager.STATUS_SUCCESSFUL -> State.FAILED
-                else -> State.ACTIVE
+                item.status==DownloadManager.STATUS_RUNNING->State.ACTIVE
+                else->State.QUEUED
             }
             val percent=if(state==State.ACTIVE && item.total>0)
                 (item.bytes*100L/item.total).toInt().coerceIn(0,100) else null
@@ -251,11 +293,10 @@ object UnifiedDownloadsUi {
                     State.DONE->"Saved on device"
                     State.FAILED->if(present)"Download error "+item.reason
                         else "Failed or local file unavailable"
-                    else->when(item.status){
-                        DownloadManager.STATUS_PAUSED->"Paused by Android"
-                        DownloadManager.STATUS_RUNNING->"Downloading"
-                        else->"Queued"
-                    }
+                    State.ACTIVE->"Android DownloadManager transferring"
+                    else->if(item.status==DownloadManager.STATUS_PAUSED)
+                        "Waiting for Android network / retry"
+                        else "Queued with Android DownloadManager"
                 },state,percent,item.job.created,{
                     when(state){
                         State.DONE->original?.let{open(a,it,a.contentResolver.getType(Uri.parse(it))?:"*/*")}
@@ -270,7 +311,10 @@ object UnifiedDownloadsUi {
                 },if(present)original else null)
         }
         return rows.sortedWith(compareBy<Row>{
-            when(it.state){State.ACTIVE->0;State.HELD->1;State.FAILED->2;State.DONE->3}
+            when(it.state){
+                State.ACTIVE->0;State.FAILED->1;State.HELD->2
+                State.QUEUED->3;State.PAUSED->4;State.DONE->5
+            }
         }.thenByDescending{it.updated})
     }
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
@@ -307,8 +351,10 @@ object UnifiedDownloadsUi {
         }
     }
     private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,rows:List<Row>){
-        val inProgress=rows.count{it.state==State.ACTIVE}
-        val waiting=rows.count{it.state==State.HELD}
+        val transferring=rows.count{it.state==State.ACTIVE}
+        val queued=rows.count{it.state==State.QUEUED}
+        val paused=rows.count{it.state==State.PAUSED}
+        val attention=rows.count{it.state==State.HELD}
         val failed=rows.count{it.state==State.FAILED}
         val saved=rows.count{it.state==State.DONE}
         parent.addView(ui.text(a,"Downloads",24f,ui.white,true),ui.lp(a,15))
@@ -330,8 +376,8 @@ object UnifiedDownloadsUi {
             parent.addView(notice,ui.lp(a,9))
         }
         parent.addView(ui.text(a,
-            "Recent files · $inProgress active · $waiting need attention · "+
-                "$failed failed · $saved saved",
+            "$transferring transferring · $queued queued · $paused paused · "+
+                "$attention need action · $failed failed · $saved saved (recent)",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
         val shortcuts=ui.row(a)
         shortcuts.addView(ui.action(a,"Start queued transfers",true){
@@ -372,9 +418,7 @@ object UnifiedDownloadsUi {
             addView(chips)
         },ui.lp(a,13))
         val filtered=rows.filter{
-            filter==Filter.ALL ||
-                (filter==Filter.ACTIVE && it.state in setOf(State.ACTIVE,State.HELD)) ||
-                it.state.name==filter.name
+            filter==Filter.ALL || it.state.name==filter.name
         }
         val size=pref.getInt("page",20).coerceIn(10,160)
         for(item in filtered.take(size)){
@@ -405,13 +449,11 @@ object UnifiedDownloadsUi {
                 State.FAILED->"Failed"
                 State.HELD->if(item.actionText=="RETRY")"Retry scheduled"
                     else "Action needed"
-                State.ACTIVE->when{
-                    item.info.contains("paused",true)->"Paused"
-                    item.info.contains("queued",true)->"Queued"
-                    item.info.contains("retry",true)->"Waiting to retry"
-                    item.percent!=null->"Downloading · "+item.percent+"%"
-                    else->"Working"
-                }
+                State.PAUSED->"Paused"
+                State.QUEUED->"Queued"
+                State.ACTIVE->if(item.percent!=null && item.percent>0)
+                    "Transferring · "+item.percent+"%"
+                    else "Preparing / connecting"
             }
             main.addView(ui.text(a,label,12f,if(item.state==State.FAILED)
                 ui.danger else ui.primary,true),ui.lp(a,4))
@@ -425,15 +467,16 @@ object UnifiedDownloadsUi {
                 },LinearLayout.LayoutParams(-1,ui.px(a,3)).apply{topMargin=ui.px(a,7)})
             }
             card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
-            if(item.state!=State.ACTIVE){
+            if(item.state in setOf(State.DONE,State.FAILED,State.HELD,
+                    State.PAUSED) || item.actionText!=null){
                 val command=when(item.state){
                     State.DONE->"OPEN";State.FAILED->"RETRY"
                     State.HELD->item.actionText?:"SIGN IN"
-                    else->""
+                    State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText.orEmpty()
                 }
                 card.addView(ui.action(a,command,false){
                     item.action()
-                    if(item.state==State.FAILED || item.state==State.HELD)refresh()
+                    if(item.state!=State.DONE)refresh()
                 },LinearLayout.LayoutParams(ui.px(a,82),-2).apply{
                     leftMargin=ui.px(a,6)
                 })

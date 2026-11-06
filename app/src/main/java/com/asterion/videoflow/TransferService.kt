@@ -19,6 +19,22 @@ class FullVersionUnavailable(message:String):Exception(message)
 object VideoEngine {
     private val busy=AtomicBoolean(false)
     private val executor=Executors.newSingleThreadExecutor()
+    private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
+        java.util.concurrent.Future<dev.ffmpegkit_maintained.ytdlp.YtDlpResponse>>()
+    /** Cancels an individual video without deleting its source, metadata or cache.
+     * A stopped transfer can be explicitly resumed in Downloads.
+     */
+    fun pauseVideo(context:Context,id:Long){
+        stopRequests.add(id)
+        VideoDb(context).use{it.pause(id)}
+        extractionJobs[id]?.cancel(true)
+    }
+    fun resumeVideo(context:Context,id:Long){
+        stopRequests.remove(id)
+        VideoDb(context).use{it.retry(id)}
+        launch(context,false)
+    }
     const val CHANNEL="videoflow-transfers"
     fun makeChannel(context: Context) {
         val channel=NotificationChannel(CHANNEL, "Video downloads", NotificationManager.IMPORTANCE_LOW)
@@ -66,16 +82,68 @@ object VideoEngine {
                 onStatus("Video engine initialization failed")
                 return
             }
+            fun drainQueued(maxItems:Int) {
+                var transferred=0
+                val deadline=android.os.SystemClock.elapsedRealtime()+6L*60_000
+                while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                      !Thread.currentThread().isInterrupted && transferred<maxItems &&
+                      android.os.SystemClock.elapsedRealtime()<deadline) {
+                val next=db.next() ?: break
+                transferred++
+                onStatus("Downloading ${next.title}")
+                db.update(next.id,"running")
+                try {
+                    val uri=downloadOne(context,db,next) { percent ->
+                        onStatus("${next.title}: $percent%")
+                    }
+                    if(stopRequests.contains(next.id))
+                        throw java.util.concurrent.CancellationException("Paused")
+                    db.update(next.id,"done",100,uri)
+                    if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
+                        com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
+                            queue.enqueue("videos",
+                                android.net.Uri.parse(uri).lastPathSegment.orEmpty()
+                                    .ifBlank{"video_"+next.id+".mp4"},
+                                android.net.Uri.parse(uri))
+                        }
+                        com.azrael.pixivdumpsync.NduUploadService.launch(context)
+                    }
+                    onStatus("Saved ${next.title}")
+                } catch(t:Exception) {
+                    if(stopRequests.remove(next.id) ||
+                        t is java.util.concurrent.CancellationException){
+                        db.pause(next.id)
+                        onStatus("Paused video: "+next.title)
+                    }else if(t is FullVersionUnavailable) {
+                        db.update(next.id,"full_only_hold",error=t.message)
+                        onStatus("Full version unverified: ${next.title}")
+                    }else{
+                        db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
+                        onStatus("Failed ${next.title}")
+                    }
+                }
+            }
+            }
+
+            // Transfer queued media before any potentially slow provider scan.
+            drainQueued(if(scan)6 else 12)
             if(scan) {
-                if(targetHost==null)
-                    com.azrael.pixivdumpsync.NameCrawler.scan(context,onStatus)
+                // Independent name crawlers keep their own scheduling and do
+                // not block the foreground download queue in this worker.
                 // Independent per-provider discovery agents run concurrently.
                 // Downloads still use their durable shared queue to avoid OOM.
-                val scans=db.listWatches().filter {
+                val eligible=db.listWatches().filter {
                     it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address) &&
                     (targetHost==null ||
                         com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost)
-                }.map{selected->
+                }
+                val selectedWatches=if(targetHost!=null || eligible.size<=6)eligible else {
+                    val progress=context.getSharedPreferences("asterion_video_scan_rotation",0)
+                    val index=progress.getInt("cursor",0).coerceAtLeast(0)%eligible.size
+                    progress.edit().putInt("cursor",(index+6)%eligible.size).apply()
+                    (0 until 6).map{eligible[(index+it)%eligible.size]}
+                }
+                val scans=selectedWatches.map{selected->
                     com.azrael.pixivdumpsync.BackfillAgents.submit(
                         context,"videoflow:"+selected.address){
                         for(watch in listOf(selected)){
@@ -170,35 +238,8 @@ object VideoEngine {
                     runCatching{scan.get()}
                 }
             }
-            while(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
-                val next=db.next() ?: break
-                onStatus("Downloading ${next.title}")
-                db.update(next.id,"running")
-                try {
-                    val uri=downloadOne(context,db,next) { percent ->
-                        onStatus("${next.title}: $percent%")
-                    }
-                    db.update(next.id,"done",100,uri)
-                    if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
-                        com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
-                            queue.enqueue("videos",
-                                android.net.Uri.parse(uri).lastPathSegment.orEmpty()
-                                    .ifBlank{"video_"+next.id+".mp4"},
-                                android.net.Uri.parse(uri))
-                        }
-                        com.azrael.pixivdumpsync.NduUploadService.launch(context)
-                    }
-                    onStatus("Saved ${next.title}")
-                } catch(t:Exception) {
-                    if(t is FullVersionUnavailable) {
-                        db.update(next.id,"full_only_hold",error=t.message)
-                        onStatus("Full version unverified: ${next.title}")
-                    }else{
-                        db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
-                        onStatus("Failed ${next.title}")
-                    }
-                }
-            }
+            if(scan)drainQueued(4)
+            if(db.next()!=null)onStatus("Queued downloads remain; next worker pass scheduled")
             if(context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getBoolean("cloud_after",false)) {
                 val id=context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getInt("cloud_task",-1)
                 if(id>=0) runCatching {
@@ -209,7 +250,14 @@ object VideoEngine {
                     context.startForegroundService(intent)
                 }
             }
-        } finally { busy.set(false) }
+        } finally {
+            busy.set(false)
+            if(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
+                val pending=runCatching { VideoDb(context).use{it.next()!=null} }
+                    .getOrDefault(false)
+                if(pending)Scheduling.requestImmediate(context,false)
+            }
+        }
     }
     /** Manual per-provider discovery, independent of the busy transfer engine.
      * Save actual preview metadata and a durable cursor, NOT thousands of
@@ -240,6 +288,10 @@ object VideoEngine {
                 pages+=cursor
             val seen=HashSet<String>()
             var count=0
+            var enqueued=0
+            val existing=com.azrael.pixivdumpsync.SourceIndexDb(context).use{db->
+                db.sources().firstOrNull{it.url==address}
+            }
             var pageIndex=0
             while(pageIndex<pages.size && pageIndex<8 && !stop() &&
                 com.azrael.pixivdumpsync.AppPower.enabled(context)){
@@ -263,13 +315,27 @@ object VideoEngine {
                         val thumb=hit.preview?.takeIf{
                             com.azrael.pixivdumpsync.SearchRanking.validUrl(it)
                         }
+                        val genuine=com.azrael.pixivdumpsync.IndexedMediaQuality.isMedia(
+                            hit.url,hit.title,thumb,area) ||
+                            (WebDiscovery.isVideoPage(hit.url) &&
+                                !com.azrael.pixivdumpsync.IndexedMediaQuality.navigationTitle(
+                                    hit.title))
+                        if(!genuine)continue
                         if(index.upsert(com.azrael.pixivdumpsync.IndexedItem(
                             hit.url,hit.title,thumb,address,area,"video",clock,false)))
                             count++
+                        // Explicit Backfill means obtaining originals, not simply
+                        // indexing them; preserve each file's own transfer status.
+                        // Manual Backfill is independent of automatic Sync.
+                        // Attach explicit user-requested files to watch_id=0;
+                        // otherwise a disabled Sync switch would silently block
+                        // the videos that Backfill itself discovered.
+                        if(db.addVideo(hit.url,hit.title,0L))enqueued++
                     }
-                    // A checked page is evidence of discovery only.
-                    index.update(address,response.next,null,count,
-                        response.next==null)
+                    if(stop())throw InterruptedException("Provider backfill stopped")
+                    // A checked page is discovery evidence, not download success.
+                    index.update(address,response.next,null,
+                        (existing?.discovered?:0)+count,response.next==null)
                 }
                 cursor=response.next
                 db.setBackfill(selected.id,cursor,cursor==null)
@@ -280,6 +346,7 @@ object VideoEngine {
                     pages+=cursor
             }
             if(stop())throw InterruptedException("Stopped by user")
+            if(enqueued>0)launch(context,false)
         }finally{db.close()}
     }
     fun submit(context: Context, scan: Boolean, targetHost:String?=null,
@@ -300,6 +367,7 @@ object VideoEngine {
         // is read-only. chdir prevents the confirmed EROFS error even if the
         // underlying yt-dlp wrapper drops a path override.
         AsterionCwd.enter(parent)
+        try {
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
         val viaProxy=prefs.getBoolean("tor_proxy",false)
         val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
@@ -307,6 +375,22 @@ object VideoEngine {
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
+        fun executeControlled(
+            request:YtDlpRequest,
+            onProgress:dev.ffmpegkit_maintained.ytdlp.DownloadProgressCallback
+        ):dev.ffmpegkit_maintained.ytdlp.YtDlpResponse{
+            if(stopRequests.contains(item.id))
+                throw java.util.concurrent.CancellationException("Video paused")
+            val future=YtDlp.executeAsync(request,onProgress)
+            extractionJobs[item.id]=future
+            return try{
+                future.get()
+            }catch(e:java.util.concurrent.ExecutionException){
+                throw e.cause as? Exception ?: Exception(e.cause)
+            }finally{
+                extractionJobs.remove(item.id,future)
+            }
+        }
         fun request(link:String, referer:String?=null)=
             YtDlpRequest(link).setOutputTemplate(template)
                 // An explicit output path overrides the wrapper's relative default.
@@ -349,7 +433,10 @@ object VideoEngine {
                         ?:cookie.takeIf{it.isFile&&it.length()>0}
                     if(selected!=null)addOption("--cookies",selected.absolutePath)
                 }
-            val response=YtDlp.execute(request){_,_,_->}
+            val response=executeControlled(request){_,_,_->
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
+            }
             if(!response.isSuccess)error("Cannot inspect complete-video metadata")
             val text=response.output.lineSequence().map{it.trim()}
                 .firstOrNull{it.startsWith("{")&&it.endsWith("}")}
@@ -382,7 +469,9 @@ object VideoEngine {
             return (duration?:0L) to decision
         }
         fun execute(link:String,referer:String?=null) {
-            val response=YtDlp.execute(request(link,referer)){progress,_,_->
+            val response=executeControlled(request(link,referer)){progress,_,_->
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
                 val percent=progress.toInt().coerceIn(0,100)
                 db.progress(item.id,percent)
                 if(percent%5==0) status(percent)
@@ -434,6 +523,8 @@ object VideoEngine {
             // Do not keep browser authentication in the file system after transfer.
             connectedCookies?.delete()
         }
+        if(stopRequests.contains(item.id))
+            throw java.util.concurrent.CancellationException("Video paused")
         if(!downloaded){
             if(heldReason!=null)throw FullVersionUnavailable(heldReason!!)
             throw (last?:IllegalStateException("No video extractor succeeded"))
@@ -485,6 +576,9 @@ object VideoEngine {
         } catch(t:Exception) {
             context.contentResolver.delete(uri,null,null)
             throw t
+        }
+        } finally {
+            runCatching { AsterionCwd.enter(context.filesDir) }
         }
     }
 }
