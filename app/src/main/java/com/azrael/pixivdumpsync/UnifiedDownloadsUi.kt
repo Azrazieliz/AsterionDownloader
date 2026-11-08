@@ -118,7 +118,8 @@ object UnifiedDownloadsUi {
                         }
                     },if(present)item.savedUri else null,mime="video/*",
                     actionText=when(state){
-                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.ACTIVE->"PAUSE"
+                        State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         State.HELD->if(item.status=="retry_wait")"RETRY" else "SOURCE"
                         else->null
@@ -152,7 +153,8 @@ object UnifiedDownloadsUi {
                     }
                 },if(present)item.savedUri else null,mime="application/zip",
                     actionText=when(state){
-                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.ACTIVE->"PAUSE"
+                        State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         else->null
                     })
@@ -225,7 +227,8 @@ object UnifiedDownloadsUi {
                     }
                 },if(present)item.saved else null,image=item.photo,mime="image/*",
                     actionText=when(state){
-                        State.ACTIVE,State.QUEUED->"PAUSE"
+                        State.ACTIVE->"PAUSE"
+                        State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         else->null
                     })
