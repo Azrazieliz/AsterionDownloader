@@ -40,36 +40,21 @@ object KoikatsuInlineSearch {
                                     isClickable=true
                                     isFocusable=true
                                     contentDescription=item.name+" · "+item.source+
-                                        " · card actions"
+                                        " · download original PNG"
                                     setOnClickListener{
-                                        android.app.AlertDialog.Builder(a)
-                                            .setTitle(item.name)
-                                            .setItems(arrayOf("Download original PNG",
-                                                "Open source page")){_,option->
-                                                if(option==0){
-                                                    status.text="Saving "+item.name+"…"
-                                                    thread(name="asterion-koikatsu-inline-save"){
-                                                        val output=runCatching{
-                                                            KoikatsuCards.download(a,
-                                                                KoikatsuCards.resolve(item),
-                                                                item.name)
-                                                        }
-                                                        a.runOnUiThread{
-                                                            if(!a.isFinishing){
-                                                                status.text=output.fold(
-                                                                    {"Saved "+item.name},
-                                                                    {"Download failed: "+it.message})
-                                                            }
-                                                        }
-                                                    }
-                                                }else{
-                                                    a.startActivity(android.content.Intent(a,
-                                                        com.azrael.galleryflow.ProviderWebActivity::class.java)
-                                                        .putExtra(
-                                                            com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,
-                                                            item.page))
-                                                }
-                                            }.setNegativeButton("Close",null).show()
+                                        status.text="Downloading original PNG for "+item.name+"…"
+                                        thread(name="asterion-koikatsu-inline-save"){
+                                            val result=runCatching{
+                                                KoikatsuCards.download(a,
+                                                    KoikatsuCards.resolve(item),item.name)
+                                            }
+                                            a.runOnUiThread{
+                                                if(!a.isFinishing && !a.isDestroyed)
+                                                    status.text=result.fold(
+                                                        {"Saved original PNG · "+item.name},
+                                                        {"PNG download failed: "+it.message})
+                                            }
+                                        }
                                     }
                                 }
                                 val image=ImageView(a).apply{
@@ -82,12 +67,14 @@ object KoikatsuInlineSearch {
                                     ?:item.download.takeIf{item.source=="BepisDB"}
                                 if(!cover.isNullOrBlank())
                                     RemoteImageLoader.load(a,image,cover,item.page)
-                                tile.addView(ui.text(a,item.source,10f,ui.secondary),
-                                    ui.lp(a,6))
                                 tile.addView(ui.text(a,item.name,13f,ui.white,true).apply{
                                     maxLines=2
                                     ellipsize=android.text.TextUtils.TruncateAt.END
-                                },ui.lp(a,4))
+                                },ui.lp(a,6))
+                                tile.addView(ui.text(a,
+                                    item.source+if(item.author.isNotBlank())
+                                        " · "+item.author else "",
+                                    10f,ui.secondary).apply{maxLines=1},ui.lp(a,4))
                                 line.addView(tile,LinearLayout.LayoutParams(0,-2,1f)
                                     .apply{rightMargin=ui.px(a,7)})
                             }
