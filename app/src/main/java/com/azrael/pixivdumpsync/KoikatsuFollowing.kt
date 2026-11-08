@@ -170,18 +170,18 @@ object KoikatsuFollowing {
                         setImageResource(R.drawable.ic_source_koikatsu)
                         contentDescription=item.name+" original PNG"
                         setOnClickListener{
-                            AlertDialog.Builder(a).setTitle(item.name)
-                                .setMessage(item.source+" · "+item.author)
-                                .setPositiveButton("DOWNLOAD ORIGINAL PNG"){_,_->
-                                    thread(name="asterion-koi-download"){
-                                        val res=runCatching{KoikatsuCards.download(a,
-                                            KoikatsuCards.resolve(item),item.name)}
-                                        a.runOnUiThread{Toast.makeText(a,
-                                            res.fold({"Saved original card"},
-                                                {"Download error: "+it.message}),
-                                            Toast.LENGTH_LONG).show()}
-                                    }
-                                }.setNegativeButton("Cancel",null).show()
+                            thread(name="asterion-koi-download"){
+                                val res=runCatching{
+                                    KoikatsuCards.download(a,
+                                        KoikatsuCards.resolve(item),item.name)
+                                }
+                                a.runOnUiThread{
+                                    if(!a.isFinishing)Toast.makeText(a,
+                                        res.fold({"Saved original PNG · "+item.name},
+                                            {"PNG download failed: "+it.message}),
+                                        Toast.LENGTH_LONG).show()
+                                }
+                            }
                         }
                     }
                     gallery.addView(image,LinearLayout.LayoutParams(ui.px(a,108),ui.px(a,108))
