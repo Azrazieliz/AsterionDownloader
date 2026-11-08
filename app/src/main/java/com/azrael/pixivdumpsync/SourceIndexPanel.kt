@@ -16,8 +16,10 @@ object SourceIndexPanel {
     fun render(a:Activity,parent:LinearLayout,area:String)=render(a,parent,listOf(area),area)
     fun render(a:Activity,parent:LinearLayout,areas:List<String>,label:String){
         val sources=areas.flatMap{SourceIndex.status(a,it)}.distinctBy{it.url}
-        val items=areas.flatMap{SourceIndex.items(a,it,35)}
-            .distinctBy{it.url}.sortedByDescending{it.discoveredAt}.take(35)
+        val items=areas.flatMap{SourceIndex.items(a,it,500)}
+            .filter{AsterionAdultHub.realMedia(it)}
+            .distinctBy{SearchRanking.canonicalKey(it.url)}
+            .sortedByDescending{it.discoveredAt}.take(500)
         if(sources.isEmpty())return
         val card=ui.card(a)
         // A native adapter being installed does not establish a successful
@@ -28,12 +30,12 @@ object SourceIndexPanel {
         val problems=sources.count{!it.error.isNullOrEmpty()}
         val accounts=sources.count{it.enabled &&
             com.azrael.galleryflow.SiteSession.bound(a,it.url)}
-        card.addView(ui.text(a,"Latest · "+label.lowercase().replaceFirstChar{it.uppercase()},
+        card.addView(ui.text(a,"By website · "+label.lowercase().replaceFirstChar{it.uppercase()},
             17f,ui.white,true))
         card.addView(ui.text(a,
             sources.distinctBy{SiteControls.key(it.url)}.size.toString()+
                 " sites · "+checked+" index-checked · "+problems+
-                " errors · "+items.size+" previews"+
+                " errors · "+items.size+" indexed items"+
                 " · native coverage not assumed",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         card.addView(ui.action(a,"SOURCES · SYNC & BACKFILL",false){
@@ -57,34 +59,102 @@ object SourceIndexPanel {
             }
         }
         if(items.isNotEmpty()){
-            UnifiedMediaGrid.render(a,card,items,areas,label){item->
-                details(a,item)
+            val groups=items.groupBy{SiteControls.key(it.source)}
+                .filterKeys{it.isNotBlank()}
+                .toList().sortedBy{(host,_) ->
+                    AlohaSources.all.firstOrNull{SiteControls.key(it.url)==host}
+                        ?.name?.lowercase()?:"zz"+host
+                }
+            val prefs=a.getSharedPreferences("asterion_grouped_media",0)
+            val key="limit_"+areas.sorted().joinToString("_")
+            val limit=prefs.getInt(key,10).coerceIn(5,80)
+            for((host,owned) in groups.take(limit)){
+                val group=ui.card(a,8)
+                val display=AlohaSources.all.firstOrNull{
+                    SiteControls.key(it.url)==host
+                }?.name ?: sources.firstOrNull{
+                    SiteControls.key(it.url)==host
+                }?.name?:host
+                val header=ui.row(a).apply{gravity=android.view.Gravity.CENTER_VERTICAL}
+                val textBlock=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+                textBlock.addView(ui.text(a,display,15f,ui.white,true).apply{
+                    maxLines=1
+                })
+                textBlock.addView(ui.text(a,
+                    owned.size.toString()+" indexed items · not verified downloads",
+                    11f,ui.secondary),ui.lp(a,3))
+                header.addView(textBlock,LinearLayout.LayoutParams(0,-2,1f))
+                group.addView(header)
+                val images=owned.filter{
+                    !it.preview.isNullOrBlank() && SearchRanking.validUrl(it.preview)
+                }.take(6)
+                if(images.isNotEmpty()){
+                    val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                    for(item in images){
+                        val image=ImageView(a).apply{
+                            scaleType=ImageView.ScaleType.CENTER_CROP
+                            setBackgroundColor(ui.surface)
+                            isClickable=true
+                            contentDescription=item.title+" · download original"
+                            setOnClickListener{details(a,item)}
+                        }
+                        strip.addView(image,LinearLayout.LayoutParams(
+                            ui.px(a,108),ui.px(a,112)).apply{
+                                rightMargin=ui.px(a,7)
+                        })
+                        item.preview?.let{
+                            RemoteImageLoader.load(a,image,it,item.source)
+                        }
+                    }
+                    group.addView(HorizontalScrollView(a).apply{
+                        isHorizontalScrollBarEnabled=false
+                        addView(strip)
+                    },ui.lp(a,9))
+                }
+                val without=owned.filter{
+                    it.preview.isNullOrBlank() ||
+                        !SearchRanking.validUrl(it.preview)
+                }
+                for(item in without.take(2)){
+                    group.addView(ui.action(a,
+                        "DOWNLOAD · "+item.title.take(48),false){
+                        details(a,item)
+                    },ui.lp(a,5))
+                }
+                card.addView(group,ui.lp(a,7))
+            }
+            if(groups.size>limit){
+                card.addView(ui.action(a,
+                    "SHOW MORE WEBSITES · "+(groups.size-limit),false){
+                    prefs.edit().putInt(key,(limit+10).coerceAtMost(80)).apply()
+                    // Update just the provider section without asking the user
+                    // to navigate through another browser or destination.
+                    a.recreate()
+                },ui.lp(a,8))
             }
         }else{
             card.addView(ui.text(a,
-                "No indexed previews yet. Native creator galleries remain accessible above.",
+                "No site-owned media indexed here. Select Sources to manage "+
+                    "individual Sync and Backfill; previews are never invented.",
                 12f,ui.secondary),ui.lp(a,8))
         }
         parent.addView(card,ui.lp(a,10))
     }
+    /** A media tap initiates the original-file path; it does not open
+     * a website or an intermediary source-page dialog.
+     */
     internal fun details(a:Activity,item:IndexedItem){
-        val host=runCatching{Uri.parse(item.source).host.orEmpty()}
-            .getOrDefault("")
-        AlertDialog.Builder(a).setTitle(item.title)
-            .setMessage(host+" · "+if(item.queued)
-                "Transfer previously requested" else
-                "Indexed media · not yet saved")
-            .setPositiveButton("DOWNLOAD ORIGINAL"){_,_->
-                if(item.area=="BOOKS" &&
-                    NovelEpubParser.supportedSeries(item.url)){
-                    NovelEpubService.enqueue(a,item.url,item.title)
-                }else AuthenticatedItemDownloader.download(a,item)
-            }
-            .setNeutralButton("SIGN IN"){_,_->
-                a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                    .putExtra(SiteLoginActivity.EXTRA_URL,item.source))
-            }
-            .setNegativeButton("CANCEL",null).show()
+        if(item.queued){
+            Toast.makeText(a,"Already queued · check Downloads",
+                Toast.LENGTH_SHORT).show()
+            return
+        }
+        if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
+            val created=NovelEpubService.enqueue(a,item.url,item.title)
+            Toast.makeText(a,
+                if(created)"EPUB queued in Downloads" else
+                    "Series already followed",Toast.LENGTH_SHORT).show()
+        }else AuthenticatedItemDownloader.download(a,item)
     }
     private fun showStatus(a:Activity,areas:List<String>,label:String){
         // Each host appears ONCE. Native categories and old album rows are
