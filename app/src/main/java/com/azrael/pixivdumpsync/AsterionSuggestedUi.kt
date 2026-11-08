@@ -26,12 +26,15 @@ object AsterionSuggestedUi {
                 val following=NameWatchDb(a).use{it.list().take(40).map{w->w.name}}
                 val terms=(prefs+following).filter{it.length>=3}.distinct()
                 SourceIndex.items(a,null,1500)
-                    .filter{AsterionAdultHub.realMedia(it)}
+                    .filter{AsterionAdultHub.realMedia(it) &&
+                        !it.preview.isNullOrBlank() &&
+                        SearchRanking.validUrl(it.preview)}
                     .map{item->
                         val relevance=AsterionContentSuggestions.relevance(
                             terms,item.title).first
                         item to relevance
                     }
+                    .filter{it.second>0}
                     .sortedWith(compareByDescending<Pair<IndexedItem,Int>>{it.second}
                         .thenByDescending{it.first.discoveredAt})
                     .distinctBy{SearchRanking.canonicalKey(it.first.url)}
@@ -47,13 +50,11 @@ object AsterionSuggestedUi {
             a.runOnUiThread{
                 if(a.isDestroyed||a.isFinishing||holder.parent!==heading)return@runOnUiThread
                 data.onSuccess{rows->
-                    info.text=if(rows.any{it.second>0})
-                        "Media matching followed names appears first; indexed, not downloaded"
-                    else "Recent indexed media · no matching followed items yet"
                     if(rows.isEmpty()){
-                        info.text="No eligible media indexed yet"
+                        parent.removeView(heading)
                         return@onSuccess
                     }
+                    info.text="Matched to followed models/interests · indexed, not downloaded"
                     val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
                     for((item,_) in rows){
                         val tile=LinearLayout(a).apply{
