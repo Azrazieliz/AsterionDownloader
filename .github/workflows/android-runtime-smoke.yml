@@ -54,7 +54,7 @@ jobs:
             adb shell cat /sdcard/asterion-ui.xml | grep -q 'Your library'
             adb shell cat /sdcard/asterion-ui.xml | grep -q 'Porn'
             adb shell cat /sdcard/asterion-ui.xml | grep -q 'Hentai'
-            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.39-preview'
+            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.40-preview'
             adb shell pidof -s com.azrael.pixivdumpsync.nocturne | grep -Eq '[0-9]+'
             CRASHES=$(adb logcat -b crash -d)
             echo "$CRASHES"
