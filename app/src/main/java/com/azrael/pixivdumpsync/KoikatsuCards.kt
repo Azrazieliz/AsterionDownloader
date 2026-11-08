@@ -201,14 +201,6 @@ class KoikatsuCardActivity:Activity(){
             }
         },ui.lp(this,9))
         body.addView(status,ui.lp(this,7))
-        val row=ui.row(this)
-        for((name,url) in listOf("BEPISDB" to "https://db.bepis.moe/koikatsu",
-             "KOIKATSUCARDS FILTERS" to "https://koikatsucards.com/search?types=type-character-card")){
-            row.addView(ui.action(this,name,false){
-                startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
-            },LinearLayout.LayoutParams(0,-2,1f))
-        }
-        body.addView(row,ui.lp(this,6))
         results=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
         body.addView(ScrollView(this).apply{addView(results)},LinearLayout.LayoutParams(-1,0,1f))
         setContentView(body)
