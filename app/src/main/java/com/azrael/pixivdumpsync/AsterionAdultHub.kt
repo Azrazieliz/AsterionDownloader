@@ -62,190 +62,163 @@ object AsterionAdultHub {
      */
     internal fun realMedia(item:IndexedItem):Boolean =
         IndexedMediaQuality.isMedia(item.url,item.title,item.preview,item.area)
-    /** Kuroha/Pixiv behavior: actual thumbnails appear immediately when the
-     * category opens. Website management is separate and never gates media.
-     * Every media tile retains its original download action.
+    /** Each preview belongs to its website; performer previews belong to
+     * their followed model. Never mix an unrequested global "Latest" feed.
      */
     fun render(a:Activity,parent:LinearLayout,area:String,refresh:()->Unit){
         require(area in setOf("ADULT","HENTAI"))
-        val title=if(area=="ADULT")"Porn" else "Hentai"
-        val sources=sites(a,area)
+        val isAdult=area=="ADULT"
+        val title=if(isAdult)"Porn" else "Hentai"
         val preferences=a.getSharedPreferences("asterion_gallery_layout",0)
-        val manage=preferences.getBoolean(area+"_websites",false)
-        val performers=preferences.getBoolean("performers",false)
-
-        val heading=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
-        heading.addView(ui.text(a,title,22f,ui.white,true),
+        val showModels=isAdult && preferences.getBoolean("adult_models",false)
+        val expanded=preferences.getBoolean(area+"_other_sites",false)
+        val sources=sites(a,area)
+        val header=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
+        header.addView(ui.text(a,title,22f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
-        heading.addView(ui.chip(a,
-            if(manage)"CLOSE WEBSITES" else "WEBSITES · "+sources.size,
-            manage){
-            preferences.edit().putBoolean(area+"_websites",!manage).apply()
+        if(isAdult)header.addView(ui.chip(a,if(showModels)"WEBSITES" else "MODELS",
+            showModels){
+            preferences.edit().putBoolean("adult_models",!showModels).apply()
             refresh()
         },LinearLayout.LayoutParams(-2,-2))
-        parent.addView(heading,ui.lp(a,7))
-
-        if(manage){
-            val panel=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            val explanation=ui.text(a,
-                "Sync checks for new posts automatically. Backfill checks older " +
-                    "pages only when requested. Indexed does not mean downloaded.",
-                12f,ui.secondary)
-            panel.addView(explanation,ui.lp(a,7))
-            panel.addView(ui.action(a,"REFRESH WEBSITE STATUS",false){
-                refresh()
-            },ui.lp(a,7))
-            for(site in sources){
-                val issue=error(site,a)
-                val state=sourceState(a,site)
-                val operation=SiteRunControl.status(a,site.url)
-                val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
-                val card=ui.card(a,10)
-                val row=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
-                val identity=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-                identity.addView(ui.text(a,site.name,15f,ui.white,true)
-                    .apply{maxLines=1;ellipsize=TextUtils.TruncateAt.END})
-                identity.addView(ui.text(a,state,11f,
-                    if(issue.isNullOrBlank())ui.secondary else ui.danger),
-                    ui.lp(a,3))
-                row.addView(identity,LinearLayout.LayoutParams(0,-2,1f))
-                val sync=Switch(a).apply{
-                    text="Sync";textSize=12f;setTextColor(ui.secondary)
-                    isChecked=SiteControls.sync(a,site.url,
-                        site.source?.enabled?:false)
-                    contentDescription="Sync new items from "+site.name
-                    setOnCheckedChangeListener{_,enabled->
-                        SiteControls.setSync(a,site.url,enabled)
-                        thread(name="asterion-site-toggle"){
-                            val app=a.applicationContext
-                            if(enabled){
-                                val address=site.source?.url?:site.url
-                                SourceIndexDb(app).use{db->
-                                    db.add(address,site.name,area,"native")
-                                    db.enable(address,true)
-                                }
-                                VideoDb(app).use{db->db.addWatch(address,site.name)}
-                            }
-                            SiteControls.applyToEngines(app,site.url)
-                            if(enabled)VideoEngine.launch(app,true)
-                        }
-                    }
-                }
-                row.addView(sync,LinearLayout.LayoutParams(-2,-2))
-                card.addView(row)
-                val actions=ui.row(a)
-                actions.addView(ui.action(a,if(running)"STOP" else
-                    if(operation.state=="ERROR")"RETRY BACKFILL" else "BACKFILL",
-                    !running){
-                    if(running){
-                        SiteRunControl.stop(a,site.url)
-                        refresh()
-                    }else if(!AppPower.enabled(a)){
-                        Toast.makeText(a,"Resume downloads to run backfill",
-                            Toast.LENGTH_SHORT).show()
-                    }else{
-                        if(!SiteRunControl.start(a,site.url,area)){
-                            Toast.makeText(a,"Site check already active",
-                                Toast.LENGTH_SHORT).show()
-                        }
-                        refresh()
-                    }
-                },LinearLayout.LayoutParams(0,-2,1f))
-                val needsLogin=issue?.contains("403")==true ||
-                    issue?.contains("login",true)==true ||
-                    issue?.contains("account",true)==true
-                if(needsLogin){
-                    actions.addView(ui.action(a,"SIGN IN",false){
-                        a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                            .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
-                    },LinearLayout.LayoutParams(0,-2,0.7f).apply{
-                        leftMargin=ui.px(a,8)
-                    })
-                }
-                card.addView(actions,ui.lp(a,7))
-                if(!issue.isNullOrBlank()){
-                    val readable=when{
-                        issue.contains("403")->"Access requires a valid session or a supported provider adapter."
-                        issue.contains("429")->"Rate limited. Try again after the provider's cooldown."
-                        issue.contains("redirect",true)->"Unexpected redirect. Source adapter needs repair."
-                        else->issue.take(120)
-                    }
-                    card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,5))
-                }
-                panel.addView(card,ui.lp(a,6))
-            }
-            parent.addView(panel,ui.lp(a,9))
+        parent.addView(header,ui.lp(a,9))
+        if(showModels){
+            // The original followed-name database owns these model cards,
+            // and searches are never relabelled as a site-wide recommendation.
+            AsterionUnifiedFollowing.adult(a,parent,refresh)
+            return
         }
-
-        // Query the existing cache; no website request and no hidden media button.
-        val indexed=SourceIndex.items(a,area,360)
+        val indexed=SourceIndex.items(a,area,1000)
             .asSequence()
             .filter{realMedia(it) && !it.preview.isNullOrBlank() &&
                 SearchRanking.validUrl(it.preview)}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .sortedByDescending{it.discoveredAt}
-            .take(180).toList()
-        val selectedHost=preferences.getString(area+"_filter","").orEmpty()
-        val available=linkedMapOf<String,String>()
-        for(site in sources){
-            if(indexed.any{SiteControls.key(it.source)==site.host})
-                available[site.host]=site.name
-        }
-        val activeHost=selectedHost.takeIf{it in available}.orEmpty()
-        val selected=if(activeHost.isBlank())indexed
-            else indexed.filter{SiteControls.key(it.source)==activeHost}
-        val galleryHeader=ui.row(a)
-        galleryHeader.addView(ui.text(a,"Latest media",18f,ui.white,true),
-            LinearLayout.LayoutParams(0,-2,1f))
-        galleryHeader.addView(ui.text(a,""+selected.size+" previews",
-            11f,ui.secondary),LinearLayout.LayoutParams(-2,-2))
-        parent.addView(galleryHeader,ui.lp(a,12))
-        if(indexed.isNotEmpty()){
-            val chips=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-            chips.addView(ui.chip(a,"All sites",activeHost.isBlank()){
-                preferences.edit().putString(area+"_filter","").apply()
+            .take(600).toList()
+        val bySite=indexed.groupBy{SiteControls.key(it.source)}
+        val active=sources.filter{bySite[it.host].orEmpty().isNotEmpty()}
+        val inactive=sources.filterNot{it in active}
+        parent.addView(ui.text(a,
+            sources.size.toString()+" websites · "+active.size+
+                " with real thumbnails · "+
+                inactive.count{!error(it,a).isNullOrBlank()}+" needing attention",
+            12f,ui.secondary),ui.lp(a,3))
+        // A selected model's content remains inside that model's card, rather
+        // than appearing under an unrelated "latest" website.
+        fun siteCard(site:Site){
+            val media=bySite[site.host].orEmpty()
+            val issue=error(site,a)
+            val operation=SiteRunControl.status(a,site.url)
+            val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
+            val card=ui.card(a,10)
+            val identity=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
+            val nameBlock=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            nameBlock.addView(ui.text(a,site.name,17f,ui.white,true)
+                .apply{maxLines=1;ellipsize=TextUtils.TruncateAt.END})
+            nameBlock.addView(ui.text(a,
+                (if(media.isNotEmpty())media.size.toString()+" indexed previews · "
+                 else "")+sourceState(a,site),
+                11f,if(issue.isNullOrBlank())ui.secondary else ui.danger),
+                ui.lp(a,4))
+            identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
+            card.addView(identity)
+            if(media.isNotEmpty()){
+                val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                for(item in media.take(5)){
+                    val image=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        setBackgroundColor(ui.surface)
+                        contentDescription=item.title+" · download original from "+site.name
+                        isClickable=true
+                        setOnClickListener{SourceIndexPanel.details(a,item)}
+                    }
+                    strip.addView(image,LinearLayout.LayoutParams(
+                        ui.px(a,108),ui.px(a,112)).apply{
+                            rightMargin=ui.px(a,7)
+                    })
+                    item.preview?.let{RemoteImageLoader.load(a,image,it,item.source)}
+                }
+                card.addView(HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false
+                    addView(strip)
+                },ui.lp(a,10))
+            }
+            val commandRow=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
+            val sync=Switch(a).apply{
+                text="Sync new";textSize=12f;setTextColor(ui.secondary)
+                isChecked=SiteControls.sync(a,site.url,
+                    site.source?.enabled?:false)
+                contentDescription="Sync new videos from "+site.name
+                setOnCheckedChangeListener{_,enabled->
+                    SiteControls.setSync(a,site.url,enabled)
+                    thread(name="asterion-site-sync"){
+                        val app=a.applicationContext
+                        val address=site.source?.url?:site.url
+                        if(enabled){
+                            SourceIndexDb(app).use{
+                                it.add(address,site.name,area,"native")
+                                it.enable(address,true)
+                            }
+                            VideoDb(app).use{it.addWatch(address,site.name)}
+                        }
+                        SiteControls.applyToEngines(app,site.url)
+                        if(enabled)VideoEngine.launch(app,true)
+                    }
+                }
+            }
+            commandRow.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
+            commandRow.addView(ui.action(a,
+                if(running)"STOP" else "BACKFILL",!running){
+                if(running)SiteRunControl.stop(a,site.url)
+                else if(!AppPower.enabled(a)){
+                    Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
+                    return@action
+                }else{
+                    val requested=SiteRunControl.start(a,site.url,area)
+                    Toast.makeText(a,
+                        if(requested)"History queued · "+site.name
+                        else "This provider is already being checked",
+                        Toast.LENGTH_SHORT).show()
+                }
                 refresh()
-            },LinearLayout.LayoutParams(-2,-2).apply{
-                rightMargin=ui.px(a,6)
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=ui.px(a,9)
             })
-            for((host,name) in available){
-                chips.addView(ui.chip(a,name,activeHost==host){
-                    preferences.edit().putString(area+"_filter",host).apply()
-                    refresh()
-                },LinearLayout.LayoutParams(-2,-2).apply{
-                    rightMargin=ui.px(a,6)
-                })
+            card.addView(commandRow,ui.lp(a,9))
+            if(!issue.isNullOrBlank()){
+                val readable=when{
+                    issue.contains("403")->"HTTP 403 · authorization or provider adapter required"
+                    issue.contains("429")->"HTTP 429 · rate limited"
+                    issue.contains("redirect",true)->"Provider redirected unexpectedly · adapter needs repair"
+                    else->issue.take(116)
+                }
+                card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,6))
+                if(issue.contains("403")||issue.contains("login",true)){
+                    card.addView(ui.action(a,"CONNECT ACCOUNT",false){
+                        a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                            .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                    },ui.lp(a,5))
+                }
             }
-            parent.addView(HorizontalScrollView(a).apply{
-                isHorizontalScrollBarEnabled=false
-                addView(chips)
-            },ui.lp(a,8))
-            UnifiedMediaGrid.render(a,parent,selected,listOf(area),title){
-                SourceIndexPanel.details(a,it)
-            }
-            parent.addView(ui.text(a,
-                "Previews are indexed media, not completed downloads.",
-                11f,ui.secondary),ui.lp(a,4))
-        }else{
-            val card=ui.card(a,12)
-            card.addView(ui.text(a,
-                "No genuine thumbnails are indexed yet. Select WEBSITES to check " +
-                    "specific sources; unavailable providers are not shown as fake media.",
-                12f,ui.secondary))
-            parent.addView(card,ui.lp(a,9))
+            parent.addView(card,ui.lp(a,7))
         }
-
-        if(area=="ADULT"){
-            val followRow=ui.row(a)
-            followRow.addView(ui.text(a,"Followed performers",
-                17f,ui.white,true),LinearLayout.LayoutParams(0,-2,1f))
-            followRow.addView(ui.chip(a,
-                if(performers)"HIDE" else "MANAGE",performers){
-                preferences.edit().putBoolean("performers",!performers).apply()
+        // Index-backed sites first. Provider rows never display media from
+        // another website. Other sites remain accessible, not duplicated.
+        for(site in active)siteCard(site)
+        if(inactive.isNotEmpty()){
+            parent.addView(ui.action(a,
+                if(expanded)"HIDE UNINDEXED WEBSITES" else
+                    "OTHER WEBSITES · "+inactive.size,false){
+                preferences.edit().putBoolean(area+"_other_sites",!expanded).apply()
                 refresh()
-            },LinearLayout.LayoutParams(-2,-2))
-            parent.addView(followRow,ui.lp(a,17))
-            if(performers)AsterionUnifiedFollowing.adult(a,parent,refresh)
+            },ui.lp(a,10))
+            if(expanded)for(site in inactive)siteCard(site)
+        }
+        if(active.isEmpty()){
+            parent.addView(ui.text(a,
+                "No site-owned previews are indexed yet. Backfill an individual "+
+                    "provider; inaccessible pages are not counted as downloads.",
+                12f,ui.secondary),ui.lp(a,9))
         }
     }
 }
