@@ -229,9 +229,10 @@ object AsterionUnifiedFollowing {
                 holder.removeAllViews()
                 val previews=site?.entries.orEmpty().map{item->
                     item.cover to {
-                        a.startActivity(Intent(a,
-                            com.azrael.galleryflow.ProviderWebActivity::class.java)
-                            .putExtra(com.azrael.galleryflow.ProviderWebActivity.EXTRA_URL,item.url))
+                        AuthenticatedItemDownloader.download(a,
+                            IndexedItem(item.url,item.title,item.cover,
+                                entity.canonicalUrl,"COSPLAY","image",
+                                System.currentTimeMillis(),false))
                     }
                 }
                 if(previews.isNotEmpty())images(a,holder,previews)
