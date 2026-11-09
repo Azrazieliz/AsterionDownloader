@@ -146,12 +146,16 @@ object SourceIndexPanel {
                 showStatus(a,areas,label)
             },ui.lp(a,9))
         if("COSPLAY" in areas){
-            // The original 4KHD/Buondua/CosplayTele/Kiutaku providers never
-            // disappear just because an index crawler found no preview.
-            card.addView(ui.text(a,"All cosplay websites",16f,ui.white,true),
-                ui.lp(a,12))
+            // Approved sources are always available, but source configuration
+            // never buries real creator/gallery previews.
+            val pref=a.getSharedPreferences("asterion_cosplay_manager",0)
+            val key="websites_expanded"
             val approved=AlohaSources.by(AlohaArea.COSPLAY)
             val registered=sources.groupBy{SiteControls.key(it.url)}
+            val manager=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            fun repaint(){
+                manager.removeAllViews()
+                if(!pref.getBoolean(key,false))return
             for(site in approved){
                 val known=registered[SiteControls.key(site.url)].orEmpty()
                 val record=known.firstOrNull{it.adapter=="native"}
@@ -221,8 +225,23 @@ object SourceIndexPanel {
                     tile.addView(ui.text(a,record?.error.orEmpty().take(125),
                         11f,ui.danger),ui.lp(a,4))
                 }
-                card.addView(tile,ui.lp(a,5))
+                manager.addView(tile,ui.lp(a,5))
             }
+
+            }
+            lateinit var toggle:android.widget.TextView
+            toggle=ui.action(a,
+                if(pref.getBoolean(key,false))"HIDE WEBSITE CONTROLS"
+                else "MANAGE WEBSITES · "+approved.size,false){
+                val next=!pref.getBoolean(key,false)
+                pref.edit().putBoolean(key,next).apply()
+                toggle.text=if(next)"HIDE WEBSITE CONTROLS"
+                    else "MANAGE WEBSITES · "+approved.size
+                repaint()
+            }
+            card.addView(toggle,ui.lp(a,9))
+            card.addView(manager)
+            repaint()
         }
         parent.addView(card,ui.lp(a,10))
     }
