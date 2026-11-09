@@ -57,8 +57,9 @@ object KyoraCreatorPreviews {
         }
         return result.values.toList()
     }
-    fun load(a:Activity,url:String,onReady:(Snapshot)->Unit){
-        cached(a,url)?.let{onReady(it)}
+    fun load(a:Activity,url:String,onReady:(Snapshot)->Unit,
+             force:Boolean=false){
+        if(!force)cached(a,url)?.let{onReady(it)}
         if(!SourceIndexParser.safe(url))return
         val stored=cached(a,url)
         if(stored!=null && System.currentTimeMillis()-stored.updated<
