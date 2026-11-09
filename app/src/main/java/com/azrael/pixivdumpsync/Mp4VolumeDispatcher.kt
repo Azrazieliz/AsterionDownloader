@@ -52,6 +52,7 @@ internal object Mp4VolumeDispatcher {
                 val id=active.downloadId
                 if(id==null || id<=0L){
                     // Historical records with no request ID are unverified.
+                    CrossSourceDedup(context).use{it.release(active.url)}
                     db.mark(active.url,"FAILED")
                     return false
                 }
@@ -68,7 +69,8 @@ internal object Mp4VolumeDispatcher {
                     DownloadManager.STATUS_SUCCESSFUL->{
                         val uri=manager.getUriForDownloadedFile(id)
                         if(uri==null || !verified(context,uri,work.type)){
-                            db.mark(active.url,"FAILED",id)
+                            CrossSourceDedup(context).use{it.release(active.url)}
+                        db.mark(active.url,"FAILED",id)
                             return false
                         }
                         db.mark(active.url,"PRESENT",id)
@@ -82,6 +84,7 @@ internal object Mp4VolumeDispatcher {
                         return true
                     }
                     else->{
+                        CrossSourceDedup(context).use{it.release(active.url)}
                         db.mark(active.url,"FAILED",id)
                         return false
                     }
