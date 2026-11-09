@@ -415,22 +415,7 @@ internal object SourceIndexParser {
     }
     private fun preview(link:Element):String?{
         val image=link.selectFirst("img")?:link.parent()?.selectFirst("img")?:return null
-        for(attr in listOf("data-original","data-src","data-lazy-src","src")){
-            val url=image.absUrl(attr)
-            if(safe(url))return url
-        }
-        // Responsive sites frequently publish the real thumbnail only in srcset.
-        for(attr in listOf("data-srcset","srcset")){
-            val raw=image.attr(attr)
-            if(raw.isBlank())continue
-            for(candidate in raw.split(',')){
-                val value=candidate.trim().substringBefore(' ').trim()
-                val url=runCatching{URI(image.baseUri()).resolve(value).toString()}
-                    .getOrDefault("")
-                if(safe(url))return url
-            }
-        }
-        return null
+        return SitePreviewImage.best(image)
     }
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
         // Prefer a validated source-specific listing path over arbitrary
