@@ -871,7 +871,7 @@ object SourceIndex {
                     SourceIndexDb(context).use{db->
                         for(file in files){
                             db.upsert(file)
-                            if(SourceIndexParser.autoOriginal(file) &&
+                            if(automaticallyRequested(context,file) &&
                                 directAttempted<directBudget){
                                 directAttempted++
                                 if(queueDirect(context,file))db.markQueued(file.url)
@@ -891,7 +891,7 @@ object SourceIndex {
                 for(item in db.pendingDirect(minOf(120,directBudget-directAttempted))){
                     if(stop() || !AppPower.enabled(context))break
                     if(area!=null && item.area!=area)continue
-                    if(!SourceIndexParser.autoOriginal(item))continue
+                    if(!automaticallyRequested(context,item))continue
                     directAttempted++
                     if(queueDirect(context,item))db.markQueued(item.url)
                     else db.defer(item.url)
@@ -1104,6 +1104,14 @@ object SourceIndex {
             }
         }
     }
+    /** Discover and index all sources, but never enqueue unrequested
+     * books, comics, games or media from an auto-seeded provider.
+     */
+    private fun automaticallyRequested(context:Context,item:IndexedItem):Boolean =
+        item.area !in setOf("BOOKS","COMICS","GAMES","ASSETS","MODS","VOICE") &&
+        SiteControls.explicitlyEnabled(context,item.source) &&
+        SourceIndexParser.autoOriginal(item)
+
     private fun queueDirect(context:Context,item:IndexedItem):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
         if(item.kind=="video"){
