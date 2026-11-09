@@ -84,6 +84,29 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     }
     fun next(): Video? {
         val now=System.currentTimeMillis().toString()
+        // Enforce explicit episode order inside ONE recognisable series only.
+        // A queued, failed, paused or retry-waiting earlier episode blocks its
+        // own later episode, not unrelated videos or ordinary photo albums.
+        val firstUnfinished=HashMap<String,com.azrael.pixivdumpsync.SequenceOrder.Index>()
+        readableDatabase.rawQuery(
+            """SELECT url,title,watch_id FROM videos
+               WHERE state NOT IN ('done','full_only_hold')
+               ORDER BY updated ASC LIMIT 10000""",null).use{scan->
+            while(scan.moveToNext()){
+                val title=scan.getString(1)
+                val series=com.azrael.pixivdumpsync.SequenceOrder
+                    .episodeSeries(title)?:continue
+                val number=com.azrael.pixivdumpsync.SequenceOrder.index(
+                    com.azrael.pixivdumpsync.SequenceOrder.Kind.EPISODE,
+                    title)?:continue
+                val host=runCatching{java.net.URI(scan.getString(0))
+                    .host.orEmpty().lowercase()}.getOrDefault("")
+                val group=scan.getLong(2).toString()+"|"+host+"|"+series
+                val current=firstUnfinished[group]
+                if(current==null || number<current)
+                    firstUnfinished[group]=number
+            }
+        }
         // Pausing a site's Sync AND Backfill must stop its pending transfers.
         // User-added one-off downloads (watch_id=0) remain independently usable.
         readableDatabase.rawQuery("""SELECT v.id,v.url,v.title,v.state,v.progress,
@@ -102,7 +125,21 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                         !com.azrael.pixivdumpsync.SiteControls.any(appContext,origin))
                         continue
                 }
-                return Video(c.getLong(0),c.getString(1),c.getString(2),
+                val name=c.getString(2)
+                val series=com.azrael.pixivdumpsync.SequenceOrder
+                    .episodeSeries(name)
+                if(series!=null){
+                    val number=com.azrael.pixivdumpsync.SequenceOrder.index(
+                        com.azrael.pixivdumpsync.SequenceOrder.Kind.EPISODE,
+                        name)
+                    val host=runCatching{java.net.URI(c.getString(1))
+                        .host.orEmpty().lowercase()}.getOrDefault("")
+                    val earliest=firstUnfinished[
+                        watchId.toString()+"|"+host+"|"+series]
+                    if(number!=null && earliest!=null && earliest<number)
+                        continue
+                }
+                return Video(c.getLong(0),c.getString(1),name,
                     c.getString(3),c.getInt(4),c.getString(5),
                     c.getString(6),watchId)
             }
