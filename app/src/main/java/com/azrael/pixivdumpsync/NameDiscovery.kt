@@ -48,10 +48,21 @@ class NameWatchDb(context:Context):SQLiteOpenHelper(context,"asterion_name_watch
 }
 /** Searches explicit source pages and public metadata; dedupe is enforced by VideoDb. */
 object NameCrawler {
+    /** Each performer owns an independent background discovery agent.
+     * Slow providers never block downloads or unrelated performers.
+     */
     fun scan(context:Context,onStatus:(String)->Unit={}){
-        NameWatchDb(context).use{watches->
-            VideoDb(context).use{videos->
-                for(watch in watches.list().filter{it.enabled}){
+        val ids=NameWatchDb(context).use{it.list().filter{NameWatch::enabled}.map{NameWatch::id}}
+        for(id in ids)scanCreator(context,id,onStatus)
+    }
+    fun scanCreator(context:Context,id:Long,
+                    onStatus:(String)->Unit={}):Boolean{
+        val watch=NameWatchDb(context).use{it.list().firstOrNull{
+            candidate->candidate.id==id && candidate.enabled
+        }}?:return false
+        BackfillAgents.submit(context,"performer:"+id){
+            NameWatchDb(context).use{watches->
+                VideoDb(context).use{videos->
                     try{
                         onStatus("Discovering videos: ${watch.name}")
                         val errors=ArrayList<String>()
@@ -81,13 +92,18 @@ object NameCrawler {
                             errors.addAll(custom.failures)
                         }
                         val hits=SearchRanking.deduplicate(watch.name,found)
+                            .filter{hit->
+                                hit.score>0 &&
+                                SearchExactness.matches(watch.name,hit.title) &&
+                                !IndexedMediaQuality.navigationTitle(hit.title)
+                            }
                         SearchResultsDb(context).use{results->
                             results.save(watch.name,hits)
                             // Show low-confidence candidates in Results rather than
                             // automatically downloading unrelated search hits.
                             for(hit in hits.filter{it.score>0}.take(100)){
                                 if(!results.wasQueued(watch.name,hit.url) &&
-                                    videos.addVideo(hit.url,hit.title))
+                                    videos.addVideo(hit.url,hit.title,0L,"performer"))
                                     results.markQueued(watch.name,hit.url)
                             }
                         }
@@ -98,9 +114,13 @@ object NameCrawler {
                         onStatus("${watch.name}: ${hits.size} candidates, ${errors.size} source issues")
                     }catch(t:Exception){watches.setResult(watch.id,
                         t.message?:"Discovery failed")}
+
                 }
             }
+            if(AppPower.enabled(context))
+                com.asterion.videoflow.VideoEngine.launch(context,false)
         }
+        return true
     }
     fun publicArchive(name:String):List<Pair<String,String>> {
         val q=URLEncoder.encode("mediatype:movies AND title:(\"$name\")","UTF-8")
