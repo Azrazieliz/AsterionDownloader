@@ -71,7 +71,6 @@ object AsterionAdultHub {
         val title=if(isAdult)"Porn" else "Hentai"
         val preferences=a.getSharedPreferences("asterion_gallery_layout",0)
         val showModels=isAdult && preferences.getBoolean("adult_models",false)
-        val expanded=preferences.getBoolean(area+"_manage_sites_v2",false)
         val sources=sites(a,area)
         val header=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
         header.addView(ui.text(a,title,22f,ui.white,true),
@@ -114,9 +113,9 @@ object AsterionAdultHub {
         // A fresh installation may have sources but no indexed previews.
         // Start a bounded thumbnail-only discovery; never queue originals just
         // to populate this gallery. Throttle automatic retries after failures.
-        if(!hasVisual && AppPower.enabled(a)){
+        if(AppPower.enabled(a)){
             val attempts=a.getSharedPreferences("asterion_gallery_preview_bootstrap",0)
-            val key="last:"+area
+            val key="pixiv-style-probe:"+area
             val now=System.currentTimeMillis()
             if(now-attempts.getLong(key,0L)>15L*60L*1000L){
                 attempts.edit().putLong(key,now).apply()
@@ -128,9 +127,9 @@ object AsterionAdultHub {
             }
         }
         val previewHeader=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
-        previewHeader.addView(ui.text(a,"Media previews",18f,ui.white,true),
+        previewHeader.addView(ui.text(a,"Media library",18f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
-        previewHeader.addView(ui.chip(a,"REFRESH",false){
+        previewHeader.addView(ui.chip(a,"REFRESH PREVIEWS",false){
             if(!AppPower.enabled(a)){
                 Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
             }else{
@@ -174,17 +173,29 @@ object AsterionAdultHub {
             val issue=error(site,a)
             val operation=SiteRunControl.status(a,site.url)
             val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
-            val card=ui.card(a,10)
+            val card=ui.card(a,15)
             val identity=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
-            val nameBlock=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            nameBlock.addView(ui.text(a,site.name,17f,ui.white,true)
-                .apply{maxLines=1;ellipsize=TextUtils.TruncateAt.END})
-            nameBlock.addView(ui.text(a,
-                ((media.size+searches.size).takeIf{it>0}
-                    ?.let{count->count.toString()+" source-owned previews · "}
-                    ?: "")+sourceState(a,site),
-                11f,if(issue.isNullOrBlank())ui.secondary else ui.danger),
-                ui.lp(a,4))
+            val avatar=ImageView(a).apply{
+                setImageResource(R.drawable.ic_source_video)
+                scaleType=ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(ui.raised)
+            }
+            identity.addView(avatar,LinearLayout.LayoutParams(ui.px(a,52),ui.px(a,52)))
+            media.firstOrNull()?.let{item->
+                if(item.kind=="video")VideoSearchPreviews.display(a,avatar,item.preview,item.source)
+                else RemoteImageLoader.load(a,avatar,item.preview,item.source)
+            }
+            if(media.isEmpty())searches.firstOrNull()?.let{hit->
+                VideoSearchPreviews.display(a,avatar,hit.thumbnail,hit.url)
+            }
+            val nameBlock=LinearLayout(a).apply{
+                orientation=LinearLayout.VERTICAL
+                setPadding(ui.px(a,11),0,0,0)
+            }
+            nameBlock.addView(ui.text(a,site.name,17f,ui.white,true).apply{
+                maxLines=1;ellipsize=TextUtils.TruncateAt.END
+            })
+            nameBlock.addView(ui.text(a,site.host,12f,ui.secondary),ui.lp(a,4))
             identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(identity)
             if(media.isNotEmpty()||searches.isNotEmpty()){
@@ -222,11 +233,12 @@ object AsterionAdultHub {
                     }
                 }
             }
-            val commandRow=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
+            card.addView(ui.text(a,
+                (media.size+searches.size).toString()+" discovered media · "+
+                    sourceState(a,site),12f,ui.secondary),ui.lp(a,5))
             val sync=Switch(a).apply{
-                text="Sync new";textSize=12f;setTextColor(ui.secondary)
-                isChecked=SiteControls.sync(a,site.url,
-                    site.source?.enabled?:false)
+                text="Sync new videos";textSize=14f;setTextColor(ui.white)
+                isChecked=SiteControls.sync(a,site.url,site.source?.enabled?:false)
                 contentDescription="Sync new videos from "+site.name
                 setOnCheckedChangeListener{_,enabled->
                     SiteControls.setSync(a,site.url,enabled)
@@ -235,7 +247,7 @@ object AsterionAdultHub {
                         val address=site.source?.url?:site.url
                         if(enabled){
                             SourceIndexDb(app).use{
-                                it.add(address,site.name,area,"native")
+                                it.add(address,site.name,area,site.source?.adapter?:"native")
                                 it.enable(address,true)
                             }
                             VideoDb(app).use{it.addWatch(address,site.name)}
@@ -245,25 +257,38 @@ object AsterionAdultHub {
                     }
                 }
             }
-            commandRow.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
-            commandRow.addView(ui.action(a,
-                if(running)"STOP" else "BACKFILL",!running){
-                if(running)SiteRunControl.stop(a,site.url)
-                else if(!AppPower.enabled(a)){
-                    Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
-                    return@action
-                }else{
-                    val requested=SiteRunControl.start(a,site.url,area)
-                    Toast.makeText(a,
-                        if(requested)"History queued · "+site.name
-                        else "This provider is already being checked",
-                        Toast.LENGTH_SHORT).show()
+            card.addView(sync,ui.lp(a,8))
+            val controls=ui.row(a)
+            controls.addView(ui.action(a,"CHECK NEW",false){
+                if(!AppPower.enabled(a))
+                    Toast.makeText(a,"Resume first",Toast.LENGTH_SHORT).show()
+                else{
+                    SourceIndex.refreshPreviews(a.applicationContext,area){
+                        a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
+                    }
+                    Toast.makeText(a,"Checking real website previews",Toast.LENGTH_SHORT).show()
                 }
-                refresh()
-            },LinearLayout.LayoutParams(0,-2,1f).apply{
-                leftMargin=ui.px(a,9)
-            })
-            card.addView(commandRow,ui.lp(a,9))
+            },LinearLayout.LayoutParams(0,-2,1f))
+            controls.addView(ui.action(a,if(running)"STOP" else "BACKFILL",false){
+                if(running)SiteRunControl.stop(a,site.url)
+                else if(!AppPower.enabled(a))
+                    Toast.makeText(a,"Resume first",Toast.LENGTH_SHORT).show()
+                else thread(name="asterion-site-backfill"){
+                    val result=runCatching{
+                        val src=site.source
+                        if(src!=null && src.adapter=="native")
+                            ProviderBackfillActions.request(a,src)
+                        else if(SiteRunControl.start(a,site.url,area))
+                            "History queued · "+site.name
+                        else "Already checking · "+site.name
+                    }.getOrElse{it.message?:"Source error"}
+                    a.runOnUiThread{
+                        if(!a.isFinishing&&!a.isDestroyed)
+                            Toast.makeText(a,result,Toast.LENGTH_LONG).show()
+                    }
+                }
+            },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,8)})
+            card.addView(controls,ui.lp(a,8))
             if(!issue.isNullOrBlank()){
                 val readable=when{
                     issue.contains("403")->"HTTP 403 · authorization or provider adapter required"
@@ -284,14 +309,8 @@ object AsterionAdultHub {
         // Index-backed sites first. Provider rows never display media from
         // another website. Other sites remain accessible, not duplicated.
         for(site in active)siteCard(site)
-        if(inactive.isNotEmpty()){
-            parent.addView(ui.action(a,
-                if(expanded)"HIDE WEBSITE CONTROLS" else
-                    "MANAGE WEBSITES · "+inactive.size,false){
-                preferences.edit().putBoolean(area+"_manage_sites_v2",!expanded).apply()
-                refresh()
-            },ui.lp(a,10))
-            if(expanded)for(site in inactive)siteCard(site)
-        }
+        parent.addView(ui.action(a,"MANAGE WEBSITES · "+sources.size,false){
+            SourceIndexPanel.showStatus(a,listOf(area),title)
+        },ui.lp(a,11))
     }
 }
