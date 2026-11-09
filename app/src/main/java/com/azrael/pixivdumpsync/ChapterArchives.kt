@@ -233,6 +233,7 @@ object ChapterArchives {
         require(chapters.isNotEmpty()){"No chapters discovered"}
         val out=File(cache,"complete.zip.part")
         try{
+            var expectedPages=0
             ZipOutputStream(FileOutputStream(out)).use{zip->
                 for((chapterIndex,chapter) in chapters.withIndex()){
                     if(pauses.contains(task.id))
@@ -254,11 +255,15 @@ object ChapterArchives {
                         zip.putNextEntry(ZipEntry(name))
                         page.inputStream().buffered().use{it.copyTo(zip,128*1024)}
                         zip.closeEntry()
+                        expectedPages++
                     }
                     onProgress((chapterIndex+1)*90/chapters.size)
                 }
             }
             require(out.length()>100){"Incomplete ZIP archive"}
+            out.inputStream().use{
+                ArchiveIntegrity.inspect(it,"ZIP",expectedImages=expectedPages)
+            }
             val values=ContentValues().apply{
                 put(MediaStore.Downloads.DISPLAY_NAME,safeName(task.title)+".zip")
                 put(MediaStore.Downloads.MIME_TYPE,"application/zip")
