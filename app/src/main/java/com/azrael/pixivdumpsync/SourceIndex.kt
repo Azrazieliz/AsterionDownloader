@@ -1119,8 +1119,8 @@ object SourceIndex {
      * books, comics, games or media from an auto-seeded provider.
      */
     private fun automaticallyRequested(context:Context,item:IndexedItem):Boolean =
-        item.area !in setOf("BOOKS","COMICS","GAMES","ASSETS","MODS","VOICE") &&
-        SiteControls.explicitlyEnabled(context,item.source) &&
+        DownloadConsentPolicy.automaticAllowed(item.area,
+            SiteControls.explicitlyEnabled(context,item.source)) &&
         SourceIndexParser.autoOriginal(item)
 
     private fun queueDirect(context:Context,item:IndexedItem):Boolean=runCatching{
