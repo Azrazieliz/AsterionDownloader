@@ -316,6 +316,7 @@ object NovelEpubService {
                 NovelEpubParser.writeEpub(output,title,task.url,contents)
             }
             require(part.length()>2000){"Book archive content unexpectedly empty"}
+            part.inputStream().use{ArchiveIntegrity.inspect(it,"EPUB")}
             val saved=commit(context,part,title,false)
             if(!scan.cacheReused)saveCatalog(context,task.url,scan)
             if(NduSettings.configured(context)){
