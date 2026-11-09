@@ -35,6 +35,17 @@ class OrderedContentTest {
             "https://cdn.example/c.jpg","https://cdn.example/b.jpg")
         assertEquals(images,SequenceOrder.comicPages(images))
     }
+    @Test fun laterEpisodesWaitForUnfinishedEarlierSameSeries(){
+        assertFalse(SequenceOrder.canDownloadEpisode("My Show S01E03",
+            listOf("My Show S01E01","My Show S01E02",
+                "Unrelated Show S01E02")))
+        assertTrue(SequenceOrder.canDownloadEpisode("My Show S01E01",
+            listOf("My Show S01E01","My Show S01E02")))
+        assertTrue(SequenceOrder.canDownloadEpisode("My Show S01E03",
+            listOf("Another Series S01E01")))
+        assertTrue(SequenceOrder.canDownloadEpisode("Random Photo 3.jpg",
+            listOf("Random Photo 1.jpg")))
+    }
     @Test fun albumNeverInheritsBookSorting(){
         val photos=listOf("photo-25.jpg","photo-1.jpg","photo-10.jpg")
         assertEquals(photos,SequenceOrder.arrange(photos,
