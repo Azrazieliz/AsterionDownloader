@@ -32,7 +32,9 @@ object KyoraCreatorPreviews {
     }.getOrNull()
     internal fun parse(html:String,base:String):List<Preview>{
         val doc=Jsoup.parse(html,base)
-        val host=URI(base).host.lowercase().removePrefix("www.")
+        // www/mobile/locale subdomains are the same approved provider.
+        // Do not reject legitimate links when the site's landing URL redirects
+        // from fr.example.com to www.example.com.
         val result=LinkedHashMap<String,Preview>()
         val sections=doc.select("article a:has(img),.gallery a:has(img),"+
             ".post a:has(img),.posts a:has(img),.album a:has(img),"+
@@ -46,8 +48,8 @@ object KyoraCreatorPreviews {
             val page=anchor.absUrl("href")
             if(!SearchRanking.validUrl(page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
-            if(target.scheme!="https" ||target.host.lowercase().removePrefix("www.")!=host)
-                continue
+            if(target.scheme!="https" ||
+                !SourceIndexParser.sameSite(base,page))continue
             val img=anchor.selectFirst("img")?:continue
             val cover=SitePreviewImage.best(img)?:continue
             val imgPath=URI(cover).path.lowercase()
