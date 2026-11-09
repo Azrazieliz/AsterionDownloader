@@ -261,7 +261,7 @@ object SourceIndexPanel {
                     "Series already followed",Toast.LENGTH_SHORT).show()
         }else AuthenticatedItemDownloader.download(a,item)
     }
-    private fun showStatus(a:Activity,areas:List<String>,label:String){
+    internal fun showStatus(a:Activity,areas:List<String>,label:String){
         // Each host appears ONCE. Native categories and old album rows are
         // implementation details, not separate user-facing subscriptions.
         val sites=areas.flatMap{SourceIndex.status(a,it)}
