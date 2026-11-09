@@ -24,15 +24,22 @@ object SiteControls {
             else->host
         }
     }
-    fun sync(context:Context,url:String,default:Boolean=true):Boolean {
+    fun sync(context:Context,url:String,default:Boolean=false):Boolean {
         val host=key(url)
         if(host.isBlank())return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("sync:$host",default)
     }
-    fun backfill(context:Context,url:String,default:Boolean=true):Boolean =
+    fun backfill(context:Context,url:String,default:Boolean=false):Boolean =
         sync(context,url,default)
 
+    /** Auto-discovery is not permission to download the site's contents. */
+    fun explicitlyEnabled(context:Context,url:String):Boolean {
+        val host=key(url)
+        if(host.isBlank())return false
+        val p=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+        return p.contains("sync:$host") && p.getBoolean("sync:$host",false)
+    }
     fun setSync(context:Context,url:String,enabled:Boolean){
         val host=key(url)
         require(host.isNotBlank())
