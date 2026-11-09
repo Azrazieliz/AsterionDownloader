@@ -52,7 +52,7 @@ object NameCrawler {
      * Slow providers never block downloads or unrelated performers.
      */
     fun scan(context:Context,onStatus:(String)->Unit={}){
-        val ids=NameWatchDb(context).use{it.list().filter{NameWatch::enabled}.map{NameWatch::id}}
+        val ids=NameWatchDb(context).use{it.list().filter{watch->watch.enabled}.map{watch->watch.id}}
         for(id in ids)scanCreator(context,id,onStatus)
     }
     fun scanCreator(context:Context,id:Long,
