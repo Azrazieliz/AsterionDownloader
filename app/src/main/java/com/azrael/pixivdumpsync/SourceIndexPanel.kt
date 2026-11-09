@@ -38,10 +38,6 @@ object SourceIndexPanel {
                 " errors · "+items.size+" indexed items"+
                 " · native coverage not assumed",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
-        if("COSPLAY" !in areas)card.addView(
-            ui.action(a,"SOURCES · SYNC & BACKFILL",false){
-                showStatus(a,areas,label)
-            },ui.lp(a,8))
         if("BOOKS" in areas){
             val epub=NovelEpubQueue(a).use{it.snapshot()}
             card.addView(ui.text(a,"EPUB collections · "+epub.complete+
@@ -86,41 +82,47 @@ object SourceIndexPanel {
                     11f,ui.secondary),ui.lp(a,3))
                 header.addView(textBlock,LinearLayout.LayoutParams(0,-2,1f))
                 group.addView(header)
-                val images=owned.filter{
-                    !it.preview.isNullOrBlank() && SearchRanking.validUrl(it.preview)
-                }.take(6)
-                if(images.isNotEmpty()){
-                    val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-                    for(item in images){
-                        val image=ImageView(a).apply{
-                            scaleType=ImageView.ScaleType.CENTER_CROP
-                            setBackgroundColor(ui.surface)
-                            isClickable=true
-                            contentDescription=item.title+" · download original"
-                            setOnClickListener{details(a,item)}
-                        }
-                        strip.addView(image,LinearLayout.LayoutParams(
-                            ui.px(a,108),ui.px(a,112)).apply{
-                                rightMargin=ui.px(a,7)
-                        })
-                        item.preview?.let{
-                            RemoteImageLoader.load(a,image,it,item.source)
-                        }
+                val visual=owned.filter{
+                    !it.preview.isNullOrBlank() &&
+                        SearchRanking.validUrl(it.preview)
+                }
+                if(visual.isNotEmpty()){
+                    KurohaMediaPreview.render(a,group,
+                        "source:"+areas.joinToString("_")+":"+host,
+                        visual.map{item->KurohaMediaPreview.Tile(
+                            url=item.url,title=item.title,
+                            thumbnail=item.preview.orEmpty(),
+                            attribution=display,referer=item.source,
+                            video=item.kind=="video"
+                        )}){tile->
+                        visual.firstOrNull{it.url==tile.url}
+                            ?.let{details(a,it)}
                     }
-                    group.addView(HorizontalScrollView(a).apply{
-                        isHorizontalScrollBarEnabled=false
-                        addView(strip)
-                    },ui.lp(a,9))
+                }else{
+                    group.addView(ui.text(a,
+                        "No actual image previews indexed for this website.",
+                        12f,ui.secondary),ui.lp(a,7))
                 }
                 val without=owned.filter{
                     it.preview.isNullOrBlank() ||
                         !SearchRanking.validUrl(it.preview)
                 }
-                for(item in without.take(2)){
-                    group.addView(ui.action(a,
-                        "DOWNLOAD · "+item.title.take(48),false){
-                        details(a,item)
-                    },ui.lp(a,5))
+                if(without.isNotEmpty()){
+                    val hidden=LinearLayout(a).apply{
+                        orientation=LinearLayout.VERTICAL
+                    }
+                    val button=ui.action(a,
+                        "ITEMS WITHOUT PREVIEWS · "+without.size,false){
+                        if(hidden.childCount>0)hidden.removeAllViews()
+                        else for(item in without.take(12)){
+                            hidden.addView(ui.action(a,
+                                "DOWNLOAD · "+item.title.take(44),false){
+                                details(a,item)
+                            },ui.lp(a,5))
+                        }
+                    }
+                    group.addView(button,ui.lp(a,7))
+                    group.addView(hidden)
                 }
                 card.addView(group,ui.lp(a,7))
             }
@@ -139,6 +141,10 @@ object SourceIndexPanel {
                     "individual Sync and Backfill; previews are never invented.",
                 12f,ui.secondary),ui.lp(a,8))
         }
+        if("COSPLAY" !in areas)card.addView(
+            ui.action(a,"MANAGE WEBSITES · SYNC & BACKFILL",false){
+                showStatus(a,areas,label)
+            },ui.lp(a,9))
         if("COSPLAY" in areas){
             // The original 4KHD/Buondua/CosplayTele/Kiutaku providers never
             // disappear just because an index crawler found no preview.
