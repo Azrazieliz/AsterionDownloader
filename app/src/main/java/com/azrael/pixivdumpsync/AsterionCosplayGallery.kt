@@ -130,8 +130,7 @@ object AsterionCosplayGallery {
                 url=item.url,title=item.title,thumbnail=item.cover,
                 attribution=site.name,referer=site.url)}
             val visual=KurohaMediaPreview.usable(nativeTiles+indexedTiles+publicTiles)
-            if(visual.isEmpty())continue
-            shown++
+            if(visual.isNotEmpty())shown++
             val card=ui.card(a,15)
             val head=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
             val avatar=ImageView(a).apply{
@@ -183,17 +182,29 @@ object AsterionCosplayGallery {
                     }
                 }
             }
-            val checked=when {
-                !source?.error.isNullOrBlank()->"Check failed"
-                source?.lastCheck?:0L>0L->"Checked · not a completed download"
-                else->"Catalog preview · history not verified"
+            val previewStatus=snapshots[host]
+            val checked=when{
+                !previewStatus?.error.isNullOrBlank() && visual.isEmpty()->
+                    "Preview check failed"
+                !source?.error.isNullOrBlank() && visual.isEmpty()->
+                    "Source check failed"
+                (source?.lastCheck?:0L)>0L->
+                    "Catalog checked · original download not verified"
+                visual.isNotEmpty()->"Public media covers · originals not verified"
+                else->"Not checked"
             }
             card.addView(ui.text(a,
                 visual.size.toString()+" authentic gallery covers · "+checked,
                 12f,ui.secondary),ui.lp(a,5))
-            if(!source?.error.isNullOrBlank())
-                card.addView(ui.text(a,source?.error.orEmpty().take(130),
+            val issue=source?.error?:previewStatus?.error
+            if(!issue.isNullOrBlank())
+                card.addView(ui.text(a,issue.take(130),
                     11f,ui.danger),ui.lp(a,5))
+            if(visual.isEmpty())
+                card.addView(ui.text(a,
+                    "No source-owned media covers yet. CHECK NEW retries this "+
+                        "provider; login may be required.",
+                    12f,ui.secondary),ui.lp(a,5))
 
             val sync=Switch(a).apply{
                 text="Sync new galleries"
@@ -213,10 +224,13 @@ object AsterionCosplayGallery {
                 if(!AppPower.enabled(a)){
                     toast(a,"Resume the application first")
                 }else{
-                    SourceIndex.refreshPreviews(a.applicationContext,area){
+                    SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
                         a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
                     }
-                    toast(a,"Checking new previews · "+site.name)
+                    KyoraCreatorPreviews.load(a,site.url,force=true){
+                        if(!a.isFinishing&&!a.isDestroyed)refresh()
+                    }
+                    toast(a,"Checking "+site.name+" only")
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
             commands.addView(ui.action(a,"BACKFILL",false){
@@ -251,8 +265,6 @@ object AsterionCosplayGallery {
                 "inspect provider and sign-in status in Manage websites. "+
                 "Unverified website logos are not media thumbnails.",
             12f,ui.secondary),ui.lp(a,9))
-        parent.addView(ui.action(a,"MANAGE WEBSITES · "+approved.size,false){
-            SourceIndexPanel.showStatus(a,listOf(area),"Cosplay")
-        },ui.lp(a,9))
+
     }
 }
