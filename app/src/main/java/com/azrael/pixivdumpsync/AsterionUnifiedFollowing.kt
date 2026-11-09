@@ -255,6 +255,7 @@ object AsterionUnifiedFollowing {
                                 .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId))
                             notice(a,"Indexing original gallery · "+item.title.take(50))
                         }.onFailure{notice(a,it.message?:"Gallery parser unavailable")}
+                        Unit
                     }
                 }
                 if(previews.isNotEmpty())images(a,holder,previews,
