@@ -31,8 +31,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 73
-        versionName = "1.3.44"
+        versionCode = 74
+        versionName = "1.3.45"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
