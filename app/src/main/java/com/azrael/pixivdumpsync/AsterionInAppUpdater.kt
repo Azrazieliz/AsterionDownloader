@@ -8,13 +8,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.Toast
 import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -55,7 +53,6 @@ object AsterionInAppUpdater {
 
     @Volatile private var candidate: Update? = null
     @Volatile private var status = "Updates have not been checked."
-    @Volatile private var downloading = false
 
     private fun preferences(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -66,13 +63,13 @@ object AsterionInAppUpdater {
     private fun currentVersion(context: Context): String =
         installed(context).versionName.orEmpty()
 
-    private fun parts(value: String): List<Int>? {
+    internal fun parts(value: String): List<Int>? {
         val match = Regex("""(\d+)\.(\d+)\.(\d+)""").find(value) ?: return null
         return match.groupValues.drop(1).mapNotNull { it.toIntOrNull() }
             .takeIf { it.size == 3 }
     }
 
-    private fun newer(next: List<Int>, old: List<Int>): Boolean {
+    internal fun newer(next: List<Int>, old: List<Int>): Boolean {
         for (i in 0..2) {
             if (next[i] != old[i]) return next[i] > old[i]
         }
@@ -83,12 +80,13 @@ object AsterionInAppUpdater {
      * Redirects must remain in the GitHub release delivery infrastructure.
      * No cookies, app tokens or private application data are transmitted.
      */
-    private fun trusted(url: String): Boolean = runCatching {
+    internal fun trusted(url: String): Boolean = runCatching {
         val uri = URI(url)
         val host = uri.host.orEmpty().lowercase(Locale.ROOT)
         uri.scheme.equals("https", true) && uri.userInfo == null &&
             (host == "github.com" || host == "api.github.com" ||
-                host.endsWith(".githubusercontent.com"))
+                host == "release-assets.githubusercontent.com" ||
+                host == "objects.githubusercontent.com")
     }.getOrDefault(false)
 
     private fun connect(address: String): HttpURLConnection {
@@ -179,17 +177,19 @@ object AsterionInAppUpdater {
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
 
-    private fun expectedHash(update: Update): String {
-        val raw = readBounded(update.checksumUrl, 16_384)
+    internal fun checksumFromRaw(raw: String, filename: String): String {
         val hashes = raw.lineSequence().mapNotNull { line ->
             val matched = hashPattern.matchEntire(line.trim()) ?: return@mapNotNull null
-            if (matched.groupValues[2].trim().substringAfterLast('/') == update.filename)
+            if (matched.groupValues[2].trim().substringAfterLast('/') == filename)
                 matched.groupValues[1].lowercase(Locale.ROOT)
             else null
         }.distinct().toList()
         check(hashes.size == 1) { "Release does not contain one matching APK checksum" }
         return hashes.single()
     }
+
+    private fun expectedHash(update: Update): String =
+        checksumFromRaw(readBounded(update.checksumUrl, 16_384), update.filename)
 
     @Suppress("DEPRECATION")
     private fun validateArchive(context: Context, file: File) {
