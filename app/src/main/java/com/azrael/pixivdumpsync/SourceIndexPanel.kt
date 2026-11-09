@@ -38,9 +38,10 @@ object SourceIndexPanel {
                 " errors · "+items.size+" indexed items"+
                 " · native coverage not assumed",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
-        card.addView(ui.action(a,"SOURCES · SYNC & BACKFILL",false){
-            showStatus(a,areas,label)
-        },ui.lp(a,8))
+        if("COSPLAY" !in areas)card.addView(
+            ui.action(a,"SOURCES · SYNC & BACKFILL",false){
+                showStatus(a,areas,label)
+            },ui.lp(a,8))
         if("BOOKS" in areas){
             val epub=NovelEpubQueue(a).use{it.snapshot()}
             card.addView(ui.text(a,"EPUB collections · "+epub.complete+
@@ -137,6 +138,85 @@ object SourceIndexPanel {
                 "No site-owned media indexed here. Select Sources to manage "+
                     "individual Sync and Backfill; previews are never invented.",
                 12f,ui.secondary),ui.lp(a,8))
+        }
+        if("COSPLAY" in areas){
+            // The original 4KHD/Buondua/CosplayTele/Kiutaku providers never
+            // disappear just because an index crawler found no preview.
+            card.addView(ui.text(a,"All cosplay websites",16f,ui.white,true),
+                ui.lp(a,12))
+            val approved=AlohaSources.by(AlohaArea.COSPLAY)
+            val registered=sources.groupBy{SiteControls.key(it.url)}
+            for(site in approved){
+                val known=registered[SiteControls.key(site.url)].orEmpty()
+                val record=known.firstOrNull{it.adapter=="native"}
+                    ?:known.firstOrNull()
+                val url=record?.url?:site.url
+                val tile=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                    background=ui.shape(a,ui.raised,11)
+                    setPadding(ui.px(a,10),ui.px(a,9),
+                        ui.px(a,10),ui.px(a,9))
+                }
+                val title=ui.row(a)
+                val name=ui.text(a,site.name,14f,ui.white,true)
+                title.addView(name,LinearLayout.LayoutParams(0,-2,1f))
+                val status=when{
+                    record==null->"Not registered"
+                    !record.error.isNullOrBlank()->"Needs repair"
+                    record.lastCheck>0->"Checked · "+record.discovered+" indexed"
+                    record.adapter=="native"->"Native source · not verified"
+                    else->"Not checked yet"
+                }
+                title.addView(ui.text(a,status,11f,
+                    if(record?.error.isNullOrBlank()==false)ui.danger else ui.secondary))
+                tile.addView(title)
+                val actions=ui.row(a).apply{
+                    gravity=android.view.Gravity.CENTER_VERTICAL
+                }
+                val enabled=SiteControls.explicitlyEnabled(a,url)
+                val sync=Switch(a).apply{
+                    text="Sync new";textSize=12f;setTextColor(ui.secondary)
+                    isChecked=enabled
+                    contentDescription="Sync "+site.name
+                    setOnCheckedChangeListener{_,on->
+                        SiteControls.setSync(a,url,on)
+                        thread(name="asterion-cosplay-site-pref"){
+                            SiteControls.applyToEngines(a.applicationContext,url)
+                        }
+                    }
+                }
+                actions.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
+                actions.addView(ui.action(a,"BACKFILL",false){
+                    if(!AppPower.enabled(a)){
+                        Toast.makeText(a,"Resume downloads first",
+                            Toast.LENGTH_SHORT).show()
+                    }else if(record==null){
+                        Toast.makeText(a,
+                            site.name+": provider adapter not registered",
+                            Toast.LENGTH_LONG).show()
+                    }else{
+                        thread(name="asterion-cosplay-"+site.host.take(14)){
+                            val message=runCatching{
+                                if(record.adapter=="generic"){
+                                    if(SiteRunControl.start(a,url,"COSPLAY"))
+                                        "Historical scan started · "+site.name
+                                    else "Already checking · "+site.name
+                                }else ProviderBackfillActions.request(a,record)
+                            }.getOrElse{it.message?:"Backfill failed"}
+                            a.runOnUiThread{
+                                if(!a.isFinishing)Toast.makeText(a,message,
+                                    Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                },LinearLayout.LayoutParams(0,-2,1f))
+                tile.addView(actions,ui.lp(a,6))
+                if(!record?.error.isNullOrBlank()){
+                    tile.addView(ui.text(a,record?.error.orEmpty().take(125),
+                        11f,ui.danger),ui.lp(a,4))
+                }
+                card.addView(tile,ui.lp(a,5))
+            }
         }
         parent.addView(card,ui.lp(a,10))
     }
