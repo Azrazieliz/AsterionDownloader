@@ -6,6 +6,6 @@
         android:name="com.azrael.pixivdumpsync.permission.REQUEST_ASTERION_DOWNLOAD"
         tools:node="remove" />
     <application
-        android:label="Asterion Visual Pilot"
+        android:label="Asterion Downloader Fixed"
         tools:replace="android:label" />
 </manifest>
