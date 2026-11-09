@@ -36,15 +36,22 @@ object ProviderBackfillActions {
         }
         if(site.area=="COSPLAY"){
             val selected=GalleryDb(a).use{db->
-                db.listEntities().count{e->
-                    e.selected && SiteControls.key(e.canonicalUrl)==host
+                val matched=db.listEntities().filter{entity->
+                    SiteControls.key(entity.canonicalUrl)==host
                 }
+                // An explicit BACKFILL is allowed even when automatic Sync
+                // is off. Do not switch automatic Live back on.
+                for(entity in matched){
+                    db.setSelected(entity.source,entity.entityId,true)
+                    db.setLiveEnabled(entity.source,entity.entityId,
+                        SiteControls.explicitlyEnabled(a,site.url))
+                }
+                matched.size
             }
-            if(selected==0)return "No enabled gallery profiles for this site"
-            // One site-scoped request processes all its categories in order.
-            // The service queues concurrent site requests instead of dropping them.
-            val mode=if(SiteControls.backfill(a,site.url))GalleryMode.BACKFILL
-                else GalleryMode.LIVE
+            if(selected==0)return "Site has no native gallery profile; use its dedicated adapter or connect account"
+            // Manual history acquisition is independent of live Sync, never
+            // downgraded to a new-items check due to the Sync switch.
+            val mode=GalleryMode.BACKFILL
             a.startForegroundService(Intent(a,GallerySync::class.java)
                 .setAction(GallerySync.ACTION_START)
                 .putExtra(GallerySync.EXTRA_MODE,mode.name)
