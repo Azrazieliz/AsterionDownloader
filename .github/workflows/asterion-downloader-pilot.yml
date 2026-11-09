@@ -1,4 +1,4 @@
-name: Asterion Downloader — Temporary Functional Pilot
+name: Asterion Downloader — Functional Pre-Merge Fix
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
       - feature/asterion-unified-downloads-20261030
     paths:
       - '.github/workflows/asterion-downloader-pilot.yml'
-      - 'app/src/**'
-      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -35,18 +33,18 @@ jobs:
           APK="app/build/outputs/apk/pilot/app-pilot.apk"
           test -s "$APK"
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.pilotvisual'"
-          "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -F "versionName='1.3.47-pilot'"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.pilotfunctional'"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -F "versionName='1.3.48-pilot'"
           unzip -t "$APK" >/dev/null
           "$BUILD_TOOLS/apksigner" verify "$APK"
-          cp "$APK" Asterion-Downloader-Visual-Pilot-v1.3.47.apk
-          sha256sum Asterion-Downloader-Visual-Pilot-v1.3.47.apk > Asterion-Downloader-Visual-Pilot-v1.3.47.sha256
+          cp "$APK" Asterion-Downloader-Functional-v1.3.48.apk
+          sha256sum Asterion-Downloader-Functional-v1.3.48.apk > Asterion-Downloader-Functional-v1.3.48.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Asterion-Downloader-Visual-Pilot-v1.3.47
+          name: Asterion-Downloader-Functional-v1.3.48
           path: |
-            Asterion-Downloader-Visual-Pilot-v1.3.47.apk
-            Asterion-Downloader-Visual-Pilot-v1.3.47.sha256
+            Asterion-Downloader-Functional-v1.3.48.apk
+            Asterion-Downloader-Functional-v1.3.48.sha256
           if-no-files-found: error
       - name: Publish direct APK for temporary device acceptance
         env:
@@ -54,12 +52,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="asterion-downloader-visual-pilot-v1.3.47-$(git rev-parse --short=10 "$GITHUB_SHA")"
+          TAG="asterion-downloader-functional-v1.3.48-$(git rev-parse --short=10 "$GITHUB_SHA")"
           gh release create "$TAG" \
-            Asterion-Downloader-Visual-Pilot-v1.3.47.apk \
-            Asterion-Downloader-Visual-Pilot-v1.3.47.sha256 \
+            Asterion-Downloader-Functional-v1.3.48.apk \
+            Asterion-Downloader-Functional-v1.3.48.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Asterion Downloader Visual Pilot v1.3.47 — Temporary testing app" \
-            --notes "This is a DISTINCT temporary Android app with package com.azrael.pixivdumpsync.pilotvisual. It does NOT overwrite your Downloader, and it does NOT inherit old private databases or permissions. Built for on-device functional testing before the Asterion Nexus merge. Gallery media requires real indexed source previews. The APK is a one-off debug-signed pilot, not a production in-place update. Keep the existing application and all of its data intact." \
+            --title "Asterion Downloader Functional v1.3.48 — Temporary testing app" \
+            --notes "This is a DISTINCT temporary Android app with package com.azrael.pixivdumpsync.pilotfunctional. It does NOT overwrite your Downloader, and it does NOT inherit old private databases or permissions. Built for on-device functional testing before the Asterion Nexus merge. Gallery media requires real indexed source previews. The APK is a one-off functional pre-merge pilot with a distinct package; it is not an in-place update of a differently signed older installation. Keep the existing application and all of its data intact." \
             --prerelease
