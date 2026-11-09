@@ -110,14 +110,26 @@ object Mp4SeriesPanel {
                         }.setNegativeButton("Cancel",null).show()
                 }
             },ui.lp(a,3))
-            val candidates=Mp4SeriesStore(a).use{it.items(work.id,35)}
+            val candidates=Mp4SeriesStore(a).use{it.items(work.id,300)}
                 .filter{it.type==work.type && it.volume!=null &&
-                    it.state!="REVIEW"}.take(8)
+                    it.state!="REVIEW"}
+                .sortedWith(compareBy<Mp4Candidate>{it.volume?:Int.MAX_VALUE}
+                    .thenBy{it.title}).take(14)
             for(hit in candidates){
-                val label=ui.text(a,hit.title.take(110)+
-                    " · "+(hit.volume?.let{"v$it"}?:"volume unverified")+
-                    " · "+hit.state,11f,ui.secondary)
-                card.addView(label,ui.lp(a,5))
+                val line=ui.row(a)
+                val label=ui.text(a,"v"+hit.volume+" · "+
+                    hit.title.take(75)+" · "+hit.state,11f,
+                    if(hit.state=="FAILED")ui.danger else ui.secondary)
+                line.addView(label,LinearLayout.LayoutParams(0,-2,1f))
+                if(hit.state=="FAILED"){
+                    line.addView(ui.action(a,"RETRY",false){
+                        CrossSourceDedup(a).use{it.release(hit.url)}
+                        Mp4SeriesStore(a).use{it.mark(hit.url,"READY")}
+                        Mp4VolumeDispatcher.advance(a.applicationContext)
+                        refresh()
+                    })
+                }
+                card.addView(line,ui.lp(a,5))
             }
             val active=Mp4SeriesSync.isBackfilling(work.id)
             card.addView(ui.action(a,if(active)"STOP BACKFILL" else "BACKFILL",false){
