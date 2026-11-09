@@ -779,7 +779,8 @@ object SourceIndex {
                 finished(0)
                 return@thread
             }
-            var examined=0
+            var initialPreviews=0
+            var newPreviews=0
             try{
                 ensure(context)
                 val sites=SourceIndexDb(context).use{db->
@@ -789,6 +790,9 @@ object SourceIndex {
                     }
                 }
                 val prefs=context.getSharedPreferences("asterion_preview_probe",0)
+                initialPreviews=SourceIndexDb(context).use{db->
+                    db.items(area,1000).count{!it.preview.isNullOrBlank()}
+                }
                 if(sites.isNotEmpty()){
                     val offset=prefs.getInt("next:"+area,0).coerceAtLeast(0)%sites.size
                     val count=minOf(4,sites.size)
@@ -797,7 +801,6 @@ object SourceIndex {
                         if(!AppPower.enabled(context))break
                         val site=sites[(offset+i)%sites.size]
                         runCatching{scanOne(context,site,previewOnly=true)}
-                            .onSuccess{examined++}
                             .onFailure{error->
                                 SourceIndexDb(context).use{
                                     it.failure(site.url,error.message?:"Preview check failed")
@@ -805,9 +808,12 @@ object SourceIndex {
                             }
                     }
                 }
+                newPreviews=(SourceIndexDb(context).use{db->
+                    db.items(area,1000).count{!it.preview.isNullOrBlank()}
+                }-initialPreviews).coerceAtLeast(0)
             }finally{
                 busy.set(false)
-                finished(examined)
+                finished(newPreviews)
             }
         }
     }
