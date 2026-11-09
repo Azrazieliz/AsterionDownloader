@@ -180,9 +180,10 @@ object AsterionAdultHub {
         },LinearLayout.LayoutParams(-2,-2))
         parent.addView(previewHeader,ui.lp(a,12))
         if(!hasVisual)parent.addView(ui.text(a,
-            "No real media thumbnails indexed yet. An enabled website's " +
-                "preview check can populate this gallery without starting " +
-                "a full backfill; unavailable sources remain unverified.",
+            "No source-owned media previews are available yet. " +
+                "Every approved site is now checked independently. " +
+                "Unavailable providers show their actual failure; " +
+                "refreshing never starts a full download.",
             12f,ui.secondary),ui.lp(a,7))
         val active=sources.filter{
             bySite[it.host].orEmpty().isNotEmpty() ||
