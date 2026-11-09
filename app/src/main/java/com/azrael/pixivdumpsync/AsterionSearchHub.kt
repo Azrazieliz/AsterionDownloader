@@ -154,7 +154,15 @@ object AsterionSearchHub {
             }
             val withPreviews=filtered.filter{SearchRanking.validUrl(it.thumbnail)}
             val withoutPreviews=filtered.filterNot{SearchRanking.validUrl(it.thumbnail)}
-            for(chunk in withPreviews.chunked(2)){
+            // Result ownership is explicit. Never mix random thumbnails from
+            // unrelated websites into a single apparently continuous gallery.
+            val grouped=withPreviews.groupBy{
+                it.source.removePrefix("Aloha · ").trim()
+            }.toSortedMap()
+            for((provider,media) in grouped){
+                results.addView(ui.text(a,provider+" · "+media.size+" results",
+                    14f,ui.white,true),ui.lp(a,9))
+            for(chunk in media.chunked(2)){
                 val row=ui.row(a).apply{gravity=android.view.Gravity.TOP}
                 for(hit in chunk){
                     val tile=ui.card(a,7).apply{
@@ -162,14 +170,7 @@ object AsterionSearchHub {
                         isClickable=true
                         isFocusable=true
                         contentDescription="Download "+hit.title
-                        setOnClickListener{
-                            android.app.AlertDialog.Builder(a)
-                                .setTitle(hit.title.take(130))
-                                .setMessage("Source: "+hit.source+
-                                    "\nThis result is indexed; its original has not yet been saved.")
-                                .setPositiveButton("DOWNLOAD"){_,_->saveHit(hit)}
-                                .setNegativeButton("Cancel",null).show()
-                        }
+                        setOnClickListener{saveHit(hit)}
                     }
                     val preview=ImageView(a).apply{
                         scaleType=ImageView.ScaleType.CENTER_CROP
@@ -192,9 +193,20 @@ object AsterionSearchHub {
                     LinearLayout.LayoutParams(0,1,1f))
                 results.addView(row,ui.lp(a,7))
             }
+            }
             // No fake globe/card thumbnails: clearly identify unpreviewed
             // candidates as text-only results with a separate file action.
-            for(hit in withoutPreviews.take(30)){
+            val showTextOnly=prefs.getBoolean("show_text_results_"+selected,false)
+            if(withoutPreviews.isNotEmpty()){
+                results.addView(ui.action(a,
+                    if(showTextOnly)"HIDE UNPREVIEWED RESULTS" else
+                    "SHOW "+withoutPreviews.size+" UNPREVIEWED FILES",false){
+                    prefs.edit().putBoolean("show_text_results_"+selected,
+                        !showTextOnly).apply()
+                    draw(found)
+                },ui.lp(a,8))
+            }
+            if(showTextOnly)for(hit in withoutPreviews.take(30)){
                 val row=ui.row(a).apply{
                     background=ui.touch(a,ui.surface,13)
                     setPadding(ui.px(a,10),ui.px(a,10),
@@ -209,7 +221,7 @@ object AsterionSearchHub {
                         ellipsize=android.text.TextUtils.TruncateAt.END
                     })
                 content.addView(ui.text(a,
-                    hit.source.take(50)+" · No preview available",
+                    hit.source.removePrefix("Aloha · ").take(45)+" · Preview unavailable",
                     11f,ui.secondary),ui.lp(a,3))
                 row.addView(content,LinearLayout.LayoutParams(0,-2,1f))
                 row.addView(ui.action(a,"DOWNLOAD",false){saveHit(hit)},
