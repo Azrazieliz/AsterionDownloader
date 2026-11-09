@@ -61,8 +61,8 @@ jobs:
             adb shell input tap $PORN_TAP
             sleep 3
             adb shell uiautomator dump /sdcard/asterion-porn.xml >/dev/null
-            adb shell cat /sdcard/asterion-porn.xml | grep -q 'Latest media'
-            adb shell cat /sdcard/asterion-porn.xml | grep -q 'WEBSITES'
+            adb shell cat /sdcard/asterion-porn.xml | grep -q 'websites'
+            adb shell cat /sdcard/asterion-porn.xml | grep -q 'MODELS'
             if adb shell cat /sdcard/asterion-porn.xml | grep -Eq 'text="MEDIA"|text="HIDE MEDIA"'; then exit 1; fi
             adb exec-out screencap -p > asterion-porn-gallery.png
             adb shell input keyevent 4
@@ -73,10 +73,10 @@ jobs:
             adb shell input tap $HENTAI_TAP
             sleep 3
             adb shell uiautomator dump /sdcard/asterion-hentai.xml >/dev/null
-            adb shell cat /sdcard/asterion-hentai.xml | grep -q 'Latest media'
-            adb shell cat /sdcard/asterion-hentai.xml | grep -q 'WEBSITES'
+            adb shell cat /sdcard/asterion-hentai.xml | grep -q 'websites'
+            adb shell cat /sdcard/asterion-hentai.xml | grep -q 'websites'
             adb exec-out screencap -p > asterion-hentai-gallery.png
-            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.40-preview'
+            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.41-preview'
             adb shell pidof -s com.azrael.pixivdumpsync.nocturne | grep -Eq '[0-9]+'
             CRASHES=$(adb logcat -b crash -d)
             echo "$CRASHES"
