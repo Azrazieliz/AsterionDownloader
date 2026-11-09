@@ -30,7 +30,7 @@ object AsterionCosplayGallery {
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
         val area="COSPLAY"
         val prefs=a.getSharedPreferences("asterion_cosplay_visual_v3",0)
-        val following=prefs.getBoolean("following",false)
+        val following=prefs.getBoolean("following",true)
         val title=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
         title.addView(ui.text(a,"Cosplay",22f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
@@ -75,6 +75,8 @@ object AsterionCosplayGallery {
             }
         }
 
+        if(following)AsterionUnifiedFollowing.kyora(
+            a,parent,refresh,creatorsOnly=true)
         val tools=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
         tools.addView(ui.text(a,"Gallery library",18f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
@@ -252,6 +254,5 @@ object AsterionCosplayGallery {
         parent.addView(ui.action(a,"MANAGE WEBSITES · "+approved.size,false){
             SourceIndexPanel.showStatus(a,listOf(area),"Cosplay")
         },ui.lp(a,9))
-        if(following)AsterionUnifiedFollowing.kyora(a,parent,refresh)
     }
 }
