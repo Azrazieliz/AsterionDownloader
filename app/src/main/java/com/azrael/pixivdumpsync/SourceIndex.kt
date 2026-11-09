@@ -767,6 +767,51 @@ object SourceIndex {
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPersisted(true)
             .setMinimumLatency(delay).setOverrideDeadline(delay+4L*60_000L).build())
     }
+    /**
+     * Populate the preview shelf from one listing page per enabled site.
+     * Metadata-only: no full video downloads, detail fetches or cursor updates.
+     * Rotate at most four sources per request to avoid monopolizing the UI.
+     */
+    fun refreshPreviews(context:Context,area:String,finished:(Int)->Unit={}) {
+        if(area !in setOf("ADULT","HENTAI")) { finished(0); return }
+        thread(name="asterion-preview-refresh-"+area.lowercase(Locale.ROOT)){
+            if(!AppPower.enabled(context) || !busy.compareAndSet(false,true)){
+                finished(0)
+                return@thread
+            }
+            var examined=0
+            try{
+                ensure(context)
+                val sites=SourceIndexDb(context).use{db->
+                    db.sources().filter{site->
+                        site.area==area && site.enabled &&
+                            SiteControls.sync(context,site.url,site.enabled)
+                    }
+                }
+                val prefs=context.getSharedPreferences("asterion_preview_probe",0)
+                if(sites.isNotEmpty()){
+                    val offset=prefs.getInt("next:"+area,0).coerceAtLeast(0)%sites.size
+                    val count=minOf(4,sites.size)
+                    prefs.edit().putInt("next:"+area,(offset+count)%sites.size).apply()
+                    for(i in 0 until count){
+                        if(!AppPower.enabled(context))break
+                        val site=sites[(offset+i)%sites.size]
+                        runCatching{scanOne(context,site,previewOnly=true)}
+                            .onSuccess{examined++}
+                            .onFailure{error->
+                                SourceIndexDb(context).use{
+                                    it.failure(site.url,error.message?:"Preview check failed")
+                                }
+                            }
+                    }
+                }
+            }finally{
+                busy.set(false)
+                finished(examined)
+            }
+        }
+    }
+
     /** The user may backfill one registered site without resetting unrelated
      * cursors or changing other providers' include/live preferences.
      */
@@ -1042,7 +1087,8 @@ object SourceIndex {
         }
     }
     private fun scanOne(context:Context,source:IndexedSource,
-                        stop:()->Boolean={false},manual:Boolean=false){
+                        stop:()->Boolean={false},manual:Boolean=false,
+                        previewOnly:Boolean=false){
         var cursor=source.cursor
         var fresh=0
         val pages=ArrayList<String>()
@@ -1055,7 +1101,7 @@ object SourceIndex {
         if(saved!=null && historyEnabled && !source.historyComplete)pages+=saved
         var index=0
         val visited=HashSet<String>()
-        val pageBudget=if(manual)8 else 5
+        val pageBudget=if(previewOnly)1 else if(manual)8 else 5
         while(index<pages.size && index<pageBudget &&
             (historyEnabled && !source.historyComplete || index==0)){
             if(stop()||Thread.currentThread().isInterrupted) return
@@ -1096,6 +1142,8 @@ object SourceIndex {
                 // Do not start thousands of DownloadManager requests while a
                 // single large listing page is still being indexed.
             }
+            // Index only thumbnail evidence; history backfill remains unchanged.
+            if(previewOnly)return
             val next=SourceIndexParser.next(doc,source.url,address)
             if(historyEnabled && index==1 && saved==null && next!=null && next !in visited)
                 pages+=next
