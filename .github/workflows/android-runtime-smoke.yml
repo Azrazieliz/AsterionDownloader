@@ -76,7 +76,7 @@ jobs:
             adb shell cat /sdcard/asterion-hentai.xml | grep -q 'websites'
             adb shell cat /sdcard/asterion-hentai.xml | grep -q 'websites'
             adb exec-out screencap -p > asterion-hentai-gallery.png
-            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.41-preview'
+            adb shell dumpsys package com.azrael.pixivdumpsync.nocturne | grep 'versionName=1.3.43-preview'
             adb shell pidof -s com.azrael.pixivdumpsync.nocturne | grep -Eq '[0-9]+'
             CRASHES=$(adb logcat -b crash -d)
             echo "$CRASHES"
