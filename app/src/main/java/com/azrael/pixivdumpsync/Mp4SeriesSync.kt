@@ -129,17 +129,18 @@ object Mp4SeriesSync {
             .joinToString(""){"%02x".format(it.toInt() and 255)}
         return "mp4directs_"+digest+suffix
     }
-    private fun enqueue(context:Context,work:Mp4Follow,
-                        candidate:Mp4SeriesLink,referer:String):Boolean {
+    internal fun enqueue(context:Context,work:Mp4Follow,
+                        candidate:Mp4SeriesLink,referer:String):Long? {
         if(candidate.isThread || candidate.volume==null ||
            !Mp4SeriesRules.eligible(candidate.volume,work.firstVolume) ||
            (work.type=="EPUB" && !candidate.isEpub) ||
            (work.type=="ZIP" && !candidate.isImageZip) ||
-           !SourceIndexParser.safe(candidate.url))return false
+           !SourceIndexParser.safe(candidate.url))return null
         if(RounderInventoryIndex.isConfirmedPresent(context,work.name,
-                candidate.volume,work.type))return true
+                candidate.volume,work.type))return -1L
+        // A handoff without an actual file receipt is not completion.
         if(!CrossSourceDedup(context).use{it.reserve(candidate.url)})
-            return CrossSourceDedup(context).use{it.alreadyHandled(candidate.url)}
+            return null
         return try {
             val filename=nameFor(candidate.url,work)
             val folder=if(work.type=="EPUB")"Books" else "Comics"
@@ -162,10 +163,10 @@ object Mp4SeriesSync {
             DirectDownloadRetry.remember(context,id,candidate.url,
                 "$folder/MP4Directs",filename,referer)
             RounderDispatch.ensure(context)
-            true
+            id
         }catch(e:Exception){
             CrossSourceDedup(context).use{it.release(candidate.url)}
-            false
+            null
         }
     }
     private fun scanWork(context:Context,db:Mp4SeriesStore,work:Mp4Follow,
@@ -205,17 +206,14 @@ object Mp4SeriesSync {
                 db.observe(work,link)
                 if(link.isThread && depth<3){
                     if(link.url !in visited)queue.addLast(link.url to depth+1)
-                }else if(!link.isThread &&
-                        enqueue(context,work,link,address)){
-                    db.mark(link.url,"QUEUED")
                 }
+                // Store all numbered releases before choosing the next volume.
             }
             if(address.contains("/threads/") && !stop()){
                 for(original in Mp4SeriesRules.threadOriginals(
                         doc,address,work.type).take(100)){
                     db.observe(work,original)
-                    if(enqueue(context,work,original,address))
-                        db.mark(original.url,"QUEUED")
+                    // A historical listing is not itself a completed download.
                 }
             }
             if(manual && depth<4){
@@ -230,6 +228,9 @@ object Mp4SeriesSync {
         // Null only means no more pagination was observed in this pass,
         // NOT that all published volumes or spin-offs necessarily exist here.
         db.checked(work.id,queue.firstOrNull()?.first,null)
+        // No out-of-order launches while earlier catalogue pages remain.
+        if(queue.isEmpty() && !stop() && AppPower.enabled(context))
+            Mp4VolumeDispatcher.dispatch(context,db,work)
     }
     fun scan(context:Context,stop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
