@@ -9,7 +9,7 @@ Status: **Source implemented; local compile, unit tests and APK verification pas
 - Do not substitute a differently signed debug APK and claim that it updates the installed preview.
 
 ## Implemented in the Android application
-- Settings → Application Updates has a native Check for update / Download and verify / Install verified update flow.
+- Settings → Application Updates has a native Check for update / Download & Install verified update flow (with a staged-APK Install retry after permissions).
 - Discovers release-tagged assets only in the repository's matching production or preview channel.
 - Requires a release APK and matching named .sha256, compares the SHA-256 digest, verifies exact package ID and strictly increasing Android versionCode, then compares the APK's actual signing certificate with the installed application's signer.
 - Downloads to a private .part file, performs bounded streaming and atomic staging, and grants Android's system installer temporary read-only access through a non-exported ContentProvider.
@@ -35,7 +35,7 @@ Branch: feature/asterion-unified-downloads-20261030
 - Build: Gradle 8.13, app:testDebugUnitTest app:testPreviewUnitTest app:assemblePreview
 - Result: **BUILD SUCCESSFUL**, 63 actionable tasks
 - Locally generated preview APK: C:\Users\mimim\source\repos\AsterionDownloader-Final\app\build\outputs\apk\preview\app-preview.apk
-- APK SHA-256: AED5FE8CE16391616E3500DFE1E000BB7A3D462854F65F386437E480C66DE7DE
+- APK SHA-256: 21779624BBB7B739490C3F3D9858DB7488E1E88D3A940DA228E1184DCAAD64E6
 - Local preview signing certificate SHA-256: 9bc439712a0a460cc4703ebf254aaaf9bf3cc6e67b0ced6fc12162ed3ca3b9ad
 - Package identity and certificate were verified with Android aapt and apksigner.
 
