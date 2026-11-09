@@ -24,11 +24,8 @@ object ChapterScraper {
         numberFrom(text)?:pathChapter.find(text)?.groupValues?.get(1)
             ?.replace('_','.')?.toDoubleOrNull()?:Double.MAX_VALUE
     fun sort(items:List<ChapterLink>):List<ChapterLink> =
-        items.distinctBy{it.url.trimEnd('/')}.sortedWith(
-            compareBy<ChapterLink>{
-                val titleNumber=naturalKey(it.title)
-                if(titleNumber!=Double.MAX_VALUE)titleNumber else naturalKey(it.url)
-            }.thenBy{it.title.lowercase(Locale.ROOT)}.thenBy{it.url})
+        SequenceOrder.arrange(items.distinctBy{it.url.trimEnd('/')},
+            SequenceOrder.Kind.CHAPTER,{it.title},{it.url})
     fun isSingleChapter(url:String):Boolean =
         pathChapter.containsMatchIn(URI(url).path.orEmpty()) ||
             SushiScanChapters.isReader(url)
@@ -163,7 +160,7 @@ object ChapterScraper {
                 !Regex("(?i)(avatar|icon|emoji|logo|loading|spinner)").containsMatchIn(resolved))
                 urls.add(resolved)
         }
-        return urls.toList()
+        return SequenceOrder.comicPages(urls.toList())
     }
     fun pageImages(chapterUrl:String,context:Context?=null):List<String>{
         // Canonical NHentai gallery metadata may already list full original
