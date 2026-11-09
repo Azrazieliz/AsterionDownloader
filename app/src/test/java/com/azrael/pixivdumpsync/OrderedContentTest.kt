@@ -46,7 +46,7 @@ class OrderedContentTest {
         assertEquals(4,SequenceOrder.nextVolume(3,setOf(3),setOf(4,5)))
         assertNull(SequenceOrder.nextVolume(3,setOf(3),setOf(5)))
         assertNull(SequenceOrder.nextVolume(3,emptySet(),setOf(4,5)))
-        assertEquals(7,SequenceOrder.nextVolume(7,setOf(7,8).filter{it==7}.toSet(),setOf(7)))
+        assertEquals(8,SequenceOrder.nextVolume(7,setOf(7),setOf(8)))
     }
     private fun zip(vararg files:Pair<String,String>):ByteArray {
         val out=ByteArrayOutputStream()
