@@ -65,23 +65,35 @@ object AsterionUnifiedFollowing {
     private fun images(a:Activity,p:LinearLayout,items:List<Pair<String,()->Unit>>,
                        local:Boolean=false){
         if(items.isEmpty())return
-        val line=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-        for((url,tap) in items.take(5)){
-            val img=ImageView(a).apply{
-                scaleType=ImageView.ScaleType.CENTER_CROP
-                setBackgroundColor(ui.raised)
-                contentDescription="Open preview"
-                setOnClickListener{tap()}
+        val widthDp=a.resources.displayMetrics.widthPixels/
+            a.resources.displayMetrics.density
+        val columns=if(widthDp>=385f)4 else 3
+        for(part in items.take(16).chunked(columns)){
+            val row=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+            for((url,tap) in part){
+                val img=ImageView(a).apply{
+                    scaleType=ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(ui.raised)
+                    contentDescription="Open this creator's actual media"
+                    isClickable=true
+                    isFocusable=true
+                    setOnClickListener{tap()}
+                }
+                row.addView(img,LinearLayout.LayoutParams(
+                    0,ui.px(a,if(columns==4)115 else 145),1f).apply{
+                    rightMargin=ui.px(a,5)
+                })
+                if(local && url.startsWith("content:"))
+                    CreatorPreviews.galleryThumbnail(a,img,url,null)
+                else if(local)CreatorPreviews.galleryThumbnail(a,img,null,url)
+                else RemoteImageLoader.load(a,img,url,url)
             }
-            line.addView(img,LinearLayout.LayoutParams(ui.px(a,106),ui.px(a,106))
-                .apply{rightMargin=ui.px(a,7)})
-            if(local && url.startsWith("content:"))CreatorPreviews.galleryThumbnail(a,img,url,null)
-            else if(local)CreatorPreviews.galleryThumbnail(a,img,null,url)
-            else RemoteImageLoader.load(a,img,url,url)
+            repeat(columns-part.size){
+                row.addView(android.view.View(a),
+                    LinearLayout.LayoutParams(0,1,1f))
+            }
+            put(a,p,row,7)
         }
-        put(a,p,HorizontalScrollView(a).apply{
-            isHorizontalScrollBarEnabled=false;addView(line)
-        },9)
     }
     private fun currentLimit(a:Activity,key:String)=
         a.getSharedPreferences("asterion_unified_ui",0).getInt(key,10).coerceIn(10,400)
