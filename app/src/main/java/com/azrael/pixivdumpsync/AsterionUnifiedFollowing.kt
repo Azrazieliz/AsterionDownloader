@@ -40,7 +40,7 @@ object AsterionUnifiedFollowing {
         },5)
     }
     private fun cardTitle(a:Activity,p:LinearLayout,title:String,subtitle:String,thumbnail:String?,
-                          remote:Boolean=false):ImageView{
+                          remote:Boolean=false,referer:String?=null):ImageView{
         val line=ui.row(a)
         val image=ImageView(a).apply{
             // A recognizable source icon is preferable to a fake globe
@@ -51,7 +51,7 @@ object AsterionUnifiedFollowing {
         }
         line.addView(image,LinearLayout.LayoutParams(ui.px(a,60),ui.px(a,60)))
         if(thumbnail!=null) {
-            if(remote)RemoteImageLoader.load(a,image,thumbnail,thumbnail)
+            if(remote)RemoteImageLoader.load(a,image,thumbnail,referer?:thumbnail)
             else CreatorPreviews.galleryThumbnail(a,image,thumbnail,null)
         }
         val names=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL
@@ -63,7 +63,7 @@ object AsterionUnifiedFollowing {
         return image
     }
     private fun images(a:Activity,p:LinearLayout,items:List<Pair<String,()->Unit>>,
-                       local:Boolean=false){
+                       local:Boolean=false,referer:String?=null){
         if(items.isEmpty())return
         val widthDp=a.resources.displayMetrics.widthPixels/
             a.resources.displayMetrics.density
@@ -86,7 +86,7 @@ object AsterionUnifiedFollowing {
                 if(local && url.startsWith("content:"))
                     CreatorPreviews.galleryThumbnail(a,img,url,null)
                 else if(local)CreatorPreviews.galleryThumbnail(a,img,null,url)
-                else RemoteImageLoader.load(a,img,url,url)
+                else RemoteImageLoader.load(a,img,url,referer?:url)
             }
             repeat(columns-part.size){
                 row.addView(android.view.View(a),
@@ -150,7 +150,7 @@ object AsterionUnifiedFollowing {
                 else "History cursor saved")
             val cover=profile?.avatar?:found.firstOrNull()?.photo
             val avatar=cardTitle(a,c,profile?.name?:("@"+source.handle),
-                subtitle,cover,true)
+                subtitle,cover,true,source.url)
             val previewHolder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             fun drawPreviews(latest:List<String>){
                 previewHolder.removeAllViews()
@@ -226,7 +226,7 @@ object AsterionUnifiedFollowing {
             }else entity.displayName
             val avatar=cardTitle(a,c,shortName.take(if(isProvider)28 else 90),
                 if(isProvider)siteHost else entity.source.wireName,cover,
-                cover!=null && !cover.startsWith("content:"))
+                cover!=null && !cover.startsWith("content:"),entity.canonicalUrl)
             val holder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             val nativePreviews=gallery.mapNotNull{item->
                 (item.firstUri?:item.firstUrl)?.let{url->
@@ -257,7 +257,8 @@ object AsterionUnifiedFollowing {
                         }.onFailure{notice(a,it.message?:"Gallery parser unavailable")}
                     }
                 }
-                if(previews.isNotEmpty())images(a,holder,previews)
+                if(previews.isNotEmpty())images(a,holder,previews,
+                    referer=entity.canonicalUrl)
                 else put(a,holder,ui.text(a,
                     site?.error?.let{"Gallery preview unavailable · "+it.take(95)}
                         ?: "Latest galleries not indexed yet · BACKFILL to populate",
