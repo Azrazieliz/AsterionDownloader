@@ -62,7 +62,7 @@ internal object KurohaMediaPreview {
                     }
                     card.addView(cover,LinearLayout.LayoutParams(
                         -1,ui.px(a,if(columns==4)112 else 148)))
-                    if(tile.video)VideoSearchPreviews.display(a,cover,tile.thumbnail)
+                    if(tile.video)VideoSearchPreviews.display(a,cover,tile.thumbnail,tile.referer)
                     else RemoteImageLoader.load(a,cover,tile.thumbnail,tile.referer)
                     card.addView(ui.text(a,tile.title,
                         if(columns==4)10f else 11f,ui.white,true).apply{
