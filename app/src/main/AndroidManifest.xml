@@ -96,6 +96,9 @@
         <service android:name=".NovelEpubJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".Mp4VolumeJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name=".Mp4SeriesJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
