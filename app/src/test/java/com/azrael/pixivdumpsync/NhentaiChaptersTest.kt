@@ -42,4 +42,35 @@ class NhentaiChaptersTest {
         assertEquals(listOf("https://i.nhentai.net/galleries/112/5.jpg"),
             NhentaiChapters.pageImage(doc))
     }
+    @Test fun alternateReaderMarkupStillFindsCompleteGallery(){
+        val url="https://nhentai.xxx/g/123456/"
+        val doc=Jsoup.parse("""<main>
+            <a class="reader-page" href="/g/123456/2/">Two</a>
+            <a class="reader-page" href="/g/123456/1/">One</a>
+            </main><footer>2 pages</footer>""",url)
+        assertEquals(listOf("Page 1","Page 2"),
+            NhentaiChapters.pages(doc,url).map{it.title})
+    }
+    @Test fun canonicalEmbeddedInventoryCanDeliverOriginals(){
+        val url="https://nhentai.net/g/123456/"
+        val doc=Jsoup.parse("""<div id="gallery-data"
+            data-gallery='{"id":123456,"media_id":"987654",
+            "num_pages":2,"images":{"pages":[{"t":"j"},{"t":"p"}]}}'>
+            </div>""",url)
+        val links=NhentaiChapters.pages(doc,url)
+        assertEquals(listOf(
+            "https://i.nhentai.net/galleries/987654/1.jpg",
+            "https://i.nhentai.net/galleries/987654/2.png"),links.map{it.url})
+        assertEquals(links.first().url,
+            ChapterScraper.pageImages(links.first().url).single())
+        assertFalse(NhentaiChapters.isOriginalImage(
+            "https://untrusted.example/galleries/987654/1.jpg"))
+    }
+    @Test fun incompleteEmbeddedInventoryMustNotBeAccepted(){
+        val url="https://nhentai.net/g/123456/"
+        val doc=Jsoup.parse("""<div data-gallery='{"media_id":"987654",
+            "num_pages":3,"images":{"pages":[{"t":"j"},{"t":"p"}]}}'></div>""",url)
+        assertTrue(NhentaiChapters.pages(doc,url).isEmpty())
+    }
+
 }
