@@ -96,7 +96,23 @@ object AsterionAdultHub {
             .sortedByDescending{it.discoveredAt}
             .take(600).toList()
         val bySite=indexed.groupBy{SiteControls.key(it.source)}
-        val active=sources.filter{bySite[it.host].orEmpty().isNotEmpty()}
+        // Reuse actual thumbnail evidence from previous Search results when
+        // SourceIndex has not yet re-indexed an individual video. This restores
+        // visual browsing without generating imaginary/random previews.
+        val approvedHosts=sources.map{it.host}.toSet()
+        val searchBySite=SearchResultsDb(a).use{it.list(300)}
+            .asSequence()
+            .filter{it.source.isNotBlank() &&
+                !it.thumbnail.isNullOrBlank() &&
+                SearchRanking.validUrl(it.thumbnail) &&
+                IndexedMediaQuality.isMedia(it.url,it.title,it.thumbnail,area) &&
+                SiteControls.key(it.url) in approvedHosts}
+            .distinctBy{SearchRanking.canonicalKey(it.url)}
+            .groupBy{SiteControls.key(it.url)}
+        val active=sources.filter{
+            bySite[it.host].orEmpty().isNotEmpty() ||
+                searchBySite[it.host].orEmpty().isNotEmpty()
+        }
         val inactive=sources.filterNot{it in active}
         parent.addView(ui.text(a,
             sources.size.toString()+" websites · "+active.size+
@@ -107,6 +123,9 @@ object AsterionAdultHub {
         // than appearing under an unrelated "latest" website.
         fun siteCard(site:Site){
             val media=bySite[site.host].orEmpty()
+            val known=media.map{SearchRanking.canonicalKey(it.url)}.toSet()
+            val searches=searchBySite[site.host].orEmpty()
+                .filterNot{SearchRanking.canonicalKey(it.url) in known}
             val issue=error(site,a)
             val operation=SiteRunControl.status(a,site.url)
             val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
@@ -116,24 +135,46 @@ object AsterionAdultHub {
             nameBlock.addView(ui.text(a,site.name,17f,ui.white,true)
                 .apply{maxLines=1;ellipsize=TextUtils.TruncateAt.END})
             nameBlock.addView(ui.text(a,
-                (if(media.isNotEmpty())media.size.toString()+" indexed previews · "
-                 else "")+sourceState(a,site),
+                ((media.size+searches.size).takeIf{it>0}
+                    ?.let{count->count.toString()+" source-owned previews · "}
+                    ?: "")+sourceState(a,site),
                 11f,if(issue.isNullOrBlank())ui.secondary else ui.danger),
                 ui.lp(a,4))
             identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(identity)
-            if(media.isNotEmpty()){
+            if(media.isNotEmpty()||searches.isNotEmpty()){
+                val mediaTiles=media.map{item->KurohaMediaPreview.Tile(
+                    url=item.url,title=item.title,
+                    thumbnail=item.preview.orEmpty(),
+                    attribution=site.name,
+                    referer=item.source,
+                    video=item.kind=="video"
+                )}
+                val searchTiles=searches.map{item->KurohaMediaPreview.Tile(
+                    url=item.url,title=item.title,
+                    thumbnail=item.thumbnail.orEmpty(),
+                    attribution=site.name+" · search match",
+                    referer=item.url,video=true
+                )}
                 KurohaMediaPreview.render(a,card,
                     "website:"+area+":"+site.host,
-                    media.map{item->KurohaMediaPreview.Tile(
-                        url=item.url,title=item.title,
-                        thumbnail=item.preview.orEmpty(),
-                        attribution=site.name,
-                        referer=item.source,
-                        video=item.kind=="video"
-                    )}){tile->
-                    media.firstOrNull{it.url==tile.url}
-                        ?.let{SourceIndexPanel.details(a,it)}
+                    mediaTiles+searchTiles){tile->
+                    val indexItem=media.firstOrNull{it.url==tile.url}
+                    if(indexItem!=null){
+                        SourceIndexPanel.details(a,indexItem)
+                    }else{
+                        val hit=searches.firstOrNull{it.url==tile.url}
+                        if(hit!=null){
+                            val created=VideoDb(a).use{
+                                it.addVideo(hit.url,hit.title)
+                            }
+                            if(created)VideoEngine.launch(a,false)
+                            Toast.makeText(a,
+                                if(created)"Original queued · "+hit.title.take(45)
+                                else "Already in Downloads · "+hit.title.take(45),
+                                Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             val commandRow=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
