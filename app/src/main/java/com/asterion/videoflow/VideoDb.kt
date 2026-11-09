@@ -9,11 +9,11 @@ import android.net.Uri
 data class Watch(val id: Long, val address: String, val label: String, val enabled: Boolean, val lastCheck: Long, val error: String?, val cursor: String? = null, val backfillComplete:Boolean=false)
 data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long, val updated: Long = 0L)
 
-class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 3) {
+class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 4) {
     private val appContext = context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE watches(id INTEGER PRIMARY KEY, address TEXT UNIQUE NOT NULL, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_check INTEGER NOT NULL DEFAULT 0, error TEXT, cursor TEXT, backfill_complete INTEGER NOT NULL DEFAULT 0)")
-        db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0, request_origin TEXT NOT NULL DEFAULT 'user')")
         db.execSQL("CREATE INDEX video_queue ON videos(state, updated)")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -24,6 +24,16 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         if(oldVersion<3){
             db.execSQL("ALTER TABLE watches ADD COLUMN cursor TEXT")
             db.execSQL("ALTER TABLE watches ADD COLUMN backfill_complete INTEGER NOT NULL DEFAULT 0")
+        }
+        if(oldVersion<4){
+            db.execSQL("ALTER TABLE videos ADD COLUMN request_origin TEXT NOT NULL DEFAULT 'legacy'")
+            // Preserve old transfer records/files, but do not silently resume
+            // thousands of website-discovered videos never explicitly chosen.
+            // Any retained job can be manually resumed with its Retry action.
+            db.execSQL("""UPDATE videos SET state='paused',
+                error='Older queue held; tap RETRY to authorize this file'
+                WHERE request_origin='legacy' AND state IN
+                    ('queued','running','retry_wait')""")
         }
     }
     fun addWatch(address: String, label: String = address): Boolean {
@@ -61,11 +71,13 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         writableDatabase.update("watches",v,"id=?",arrayOf("$id"))
     }
-    fun addVideo(url: String, title: String = url, watchId: Long = 0): Boolean {
+    fun addVideo(url: String, title: String = url, watchId: Long = 0,
+                 origin:String=if(watchId==0L)"user" else "website"): Boolean {
         val normalized = WebDiscovery.normalize(url) ?: return false
         val row = ContentValues().apply {
             put("url", normalized); put("title", title.take(220))
             put("watch_id", watchId); put("state", "queued")
+            put("request_origin",origin.take(24))
             put("updated", System.currentTimeMillis())
         }
         return writableDatabase.insertWithOnConflict("videos", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
@@ -116,7 +128,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                 (v.state='retry_wait' AND v.retry_after<=?))
               AND (v.watch_id=0 OR w.enabled=1)
             ORDER BY CASE WHEN v.watch_id=0 THEN 0 ELSE 1 END,
-                v.updated ASC LIMIT 300""",arrayOf(now)).use { c ->
+                v.updated ASC LIMIT 15000""",arrayOf(now)).use { c ->
             while(c.moveToNext()){
                 val watchId=c.getLong(7)
                 if(watchId!=0L){
@@ -175,7 +187,9 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     }
     fun retry(id: Long) {
         update(id,"queued")
-        writableDatabase.execSQL("UPDATE videos SET attempts=0,retry_after=0 WHERE id=?",arrayOf(id))
+        writableDatabase.execSQL(
+            "UPDATE videos SET attempts=0,retry_after=0,request_origin='user' WHERE id=?",
+            arrayOf(id))
     }
     /** A new verified full-version reference may unblock previous shortened/unknown
      * candidates. Only matching scene titles are reconsidered, not all downloads.
