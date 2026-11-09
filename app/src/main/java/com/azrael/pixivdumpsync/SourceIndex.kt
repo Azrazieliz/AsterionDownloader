@@ -737,16 +737,26 @@ object SourceIndex {
         else nextRetryMs(context)?.let{scheduleCatchup(context,delayMs=it)}
     }
     fun nextRetryMs(context:Context):Long? = SourceIndexDb(context).use{db->
-        listOfNotNull(db.nextDetailRetryMs(),db.nextDirectRetryMs()).minOrNull()
+        if(db.sources().none{
+                it.adapter=="generic" &&
+                    SiteControls.explicitlyEnabled(context,it.url)
+            })null else db.nextDetailRetryMs()
     }
     /** A complete provider round is not the same as its historical backfill ending. */
     fun needsCatchup(context:Context):Boolean {
-        if(!context.getSharedPreferences(STATE,0).getBoolean("initial",false))
-            return true
+        // Discovered pages and old outstanding non-user transfers are not
+        // permission to reschedule an infinite catch-up loop.
         return SourceIndexDb(context).use{db->
-            db.sources().any{it.enabled && it.adapter=="generic" &&
-                !it.cursor.isNullOrBlank() && it.error.isNullOrBlank()} ||
-                db.hasPendingDetails() || db.hasPendingDirect()
+            val selected=db.sources().filter{it.enabled &&
+                it.adapter=="generic" &&
+                    SiteControls.explicitlyEnabled(context,it.url)}
+            selected.any{!it.cursor.isNullOrBlank() &&
+                it.error.isNullOrBlank()} ||
+                (selected.isNotEmpty() &&
+                    db.pendingDetails(50).any{item->
+                        SiteControls.explicitlyEnabled(context,item.source)
+                    }) ||
+                db.pendingDirect(100).any{automaticallyRequested(context,it)}
         }
     }
     fun scheduleCatchup(context:Context,force:Boolean=false,delayMs:Long=30_000L){
@@ -838,9 +848,10 @@ object SourceIndex {
             var directAttempted=0
             // Visit each discovered detail page independently of listing
             // pagination; retries are persisted and bounded to protect the phone.
-            for(item in SourceIndexDb(context).use{it.pendingDetails(12)}){
+            for(item in SourceIndexDb(context).use{it.pendingDetails(50)}){
                 if(stop() || !AppPower.enabled(context))break
                 if(area!=null && item.area!=area)continue
+                if(!SiteControls.explicitlyEnabled(context,item.source))continue
                 runCatching{
                     val source=SourceIndexDb(context).use{db->
                         db.sources().firstOrNull{x->x.url==item.source}
