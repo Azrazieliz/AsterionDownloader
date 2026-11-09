@@ -108,8 +108,16 @@ object AsterionAdultHub {
                 SiteControls.key(it.url) in approvedHosts}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .groupBy{SiteControls.key(it.url)}
+        // Provider HTML often advertises genuine video covers before an
+        // authenticated native index has discovered the originals.
+        val publicBySite=sources.associate{site->
+            site.host to KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
+                .filter{SearchRanking.isVideoUrl(it.url) &&
+                    !IndexedMediaQuality.navigationTitle(it.title)}
+        }
         val hasVisual=bySite.values.any{it.isNotEmpty()} ||
-            searchBySite.values.any{it.isNotEmpty()}
+            searchBySite.values.any{it.isNotEmpty()} ||
+            publicBySite.values.any{it.isNotEmpty()}
         // A fresh installation may have sources but no indexed previews.
         // Start a bounded thumbnail-only discovery; never queue originals just
         // to populate this gallery. Throttle automatic retries after failures.
@@ -124,6 +132,18 @@ object AsterionAdultHub {
                         if(!a.isFinishing && !a.isDestroyed)refresh()
                     }
                 }
+                val missing=sources.filter{site->
+                    bySite[site.host].orEmpty().isEmpty() &&
+                        searchBySite[site.host].orEmpty().isEmpty()
+                }
+                val batch=missing.take(4)
+                for(site in batch){
+                    if(KyoraCreatorPreviews.cached(a,site.url)==null)
+                        KyoraCreatorPreviews.load(a,site.url){snap->
+                            if(snap.entries.isNotEmpty() && !a.isFinishing &&
+                                !a.isDestroyed)refresh()
+                        }
+                }
             }
         }
         val previewHeader=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
@@ -134,6 +154,25 @@ object AsterionAdultHub {
                 Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
             }else{
                 Toast.makeText(a,"Checking source previews",Toast.LENGTH_SHORT).show()
+                val missing=sources.filter{site->
+                    bySite[site.host].orEmpty().isEmpty() &&
+                        searchBySite[site.host].orEmpty().isEmpty()
+                }
+                val config=a.getSharedPreferences("asterion_adult_public_shelf",0)
+                if(missing.isNotEmpty()){
+                    val offset=config.getInt("next:"+area,0)%missing.size
+                    val batch=(0 until minOf(4,missing.size)).map{
+                        missing[(offset+it)%missing.size]
+                    }
+                    config.edit().putInt("next:"+area,
+                        (offset+batch.size)%missing.size).apply()
+                    for(site in batch){
+                        KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
+                            if(snapshot.entries.isNotEmpty() &&
+                                !a.isFinishing && !a.isDestroyed)refresh()
+                        }
+                    }
+                }
                 SourceIndex.refreshPreviews(a.applicationContext,area){checked->
                     a.runOnUiThread{
                         if(!a.isFinishing && !a.isDestroyed){
@@ -155,13 +194,15 @@ object AsterionAdultHub {
             12f,ui.secondary),ui.lp(a,7))
         val active=sources.filter{
             bySite[it.host].orEmpty().isNotEmpty() ||
-                searchBySite[it.host].orEmpty().isNotEmpty()
+                searchBySite[it.host].orEmpty().isNotEmpty() ||
+                publicBySite[it.host].orEmpty().isNotEmpty()
         }
         val inactive=sources.filterNot{it in active}
         parent.addView(ui.text(a,
             sources.size.toString()+" websites · "+active.size+
                 " with real thumbnails · "+
-                inactive.count{!error(it,a).isNullOrBlank()}+" needing attention",
+                inactive.count{!error(it,a).isNullOrBlank()}+" source errors · "+
+                inactive.size+" without previews",
             12f,ui.secondary),ui.lp(a,3))
         // A selected model's content remains inside that model's card, rather
         // than appearing under an unrelated "latest" website.
@@ -170,6 +211,11 @@ object AsterionAdultHub {
             val known=media.map{SearchRanking.canonicalKey(it.url)}.toSet()
             val searches=searchBySite[site.host].orEmpty()
                 .filterNot{SearchRanking.canonicalKey(it.url) in known}
+            val public=publicBySite[site.host].orEmpty()
+                .filterNot{entry->
+                    media.any{it.url==entry.url} ||
+                        searches.any{it.url==entry.url}
+                }
             val issue=error(site,a)
             val operation=SiteRunControl.status(a,site.url)
             val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
@@ -188,6 +234,10 @@ object AsterionAdultHub {
             if(media.isEmpty())searches.firstOrNull()?.let{hit->
                 VideoSearchPreviews.display(a,avatar,hit.thumbnail,hit.url)
             }
+            if(media.isEmpty() && searches.isEmpty())
+                public.firstOrNull()?.let{item->
+                    VideoSearchPreviews.display(a,avatar,item.cover,site.url)
+                }
             val nameBlock=LinearLayout(a).apply{
                 orientation=LinearLayout.VERTICAL
                 setPadding(ui.px(a,11),0,0,0)
@@ -198,7 +248,7 @@ object AsterionAdultHub {
             nameBlock.addView(ui.text(a,site.host,12f,ui.secondary),ui.lp(a,4))
             identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(identity)
-            if(media.isNotEmpty()||searches.isNotEmpty()){
+            if(media.isNotEmpty()||searches.isNotEmpty()||public.isNotEmpty()){
                 val mediaTiles=media.map{item->KurohaMediaPreview.Tile(
                     url=item.url,title=item.title,
                     thumbnail=item.preview.orEmpty(),
@@ -212,9 +262,12 @@ object AsterionAdultHub {
                     attribution=site.name+" · search match",
                     referer=item.url,video=true
                 )}
+                val publicTiles=public.map{item->KurohaMediaPreview.Tile(
+                    url=item.url,title=item.title,thumbnail=item.cover,
+                    attribution=site.name,referer=site.url,video=true)}
                 KurohaMediaPreview.render(a,card,
                     "website:"+area+":"+site.host,
-                    mediaTiles+searchTiles){tile->
+                    mediaTiles+searchTiles+publicTiles){tile->
                     val indexItem=media.firstOrNull{it.url==tile.url}
                     if(indexItem!=null){
                         SourceIndexPanel.details(a,indexItem)
@@ -229,12 +282,29 @@ object AsterionAdultHub {
                                 if(created)"Original queued · "+hit.title.take(45)
                                 else "Already in Downloads · "+hit.title.take(45),
                                 Toast.LENGTH_SHORT).show()
+                        }else if(public.any{it.url==tile.url}){
+                            // Public listing covers are real preview evidence,
+                            // but not proof that the original is accessible.
+                            thread(name="asterion-adult-public-gallery"){
+                                val message=runCatching{
+                                    val source=site.source
+                                    if(source?.adapter=="native")
+                                        ProviderBackfillActions.request(a,source)
+                                    else if(SiteRunControl.start(a,site.url,area))
+                                        "Original indexing requested · "+site.name
+                                    else "Provider already scanning"
+                                }.getOrElse{it.message?:"Provider unavailable"}
+                                a.runOnUiThread{
+                                    if(!a.isFinishing&&!a.isDestroyed)
+                                        Toast.makeText(a,message,Toast.LENGTH_LONG).show()
+                                }
+                            }
                         }
                     }
                 }
             }
             card.addView(ui.text(a,
-                (media.size+searches.size).toString()+" discovered media · "+
+                (media.size+searches.size+public.size).toString()+" source-owned covers · "+
                     sourceState(a,site),12f,ui.secondary),ui.lp(a,5))
             val sync=Switch(a).apply{
                 text="Sync new videos";textSize=14f;setTextColor(ui.white)
