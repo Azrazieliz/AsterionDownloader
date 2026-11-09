@@ -123,25 +123,18 @@ object AsterionAdultHub {
             identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(identity)
             if(media.isNotEmpty()){
-                val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-                for(item in media.take(5)){
-                    val image=ImageView(a).apply{
-                        scaleType=ImageView.ScaleType.CENTER_CROP
-                        setBackgroundColor(ui.surface)
-                        contentDescription=item.title+" · download original from "+site.name
-                        isClickable=true
-                        setOnClickListener{SourceIndexPanel.details(a,item)}
-                    }
-                    strip.addView(image,LinearLayout.LayoutParams(
-                        ui.px(a,108),ui.px(a,112)).apply{
-                            rightMargin=ui.px(a,7)
-                    })
-                    item.preview?.let{RemoteImageLoader.load(a,image,it,item.source)}
+                KurohaMediaPreview.render(a,card,
+                    "website:"+area+":"+site.host,
+                    media.map{item->KurohaMediaPreview.Tile(
+                        url=item.url,title=item.title,
+                        thumbnail=item.preview.orEmpty(),
+                        attribution=site.name,
+                        referer=item.source,
+                        video=item.kind=="video"
+                    )}){tile->
+                    media.firstOrNull{it.url==tile.url}
+                        ?.let{SourceIndexPanel.details(a,it)}
                 }
-                card.addView(HorizontalScrollView(a).apply{
-                    isHorizontalScrollBarEnabled=false
-                    addView(strip)
-                },ui.lp(a,10))
             }
             val commandRow=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
             val sync=Switch(a).apply{
