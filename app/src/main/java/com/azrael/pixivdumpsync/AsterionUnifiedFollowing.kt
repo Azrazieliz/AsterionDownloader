@@ -244,10 +244,17 @@ object AsterionUnifiedFollowing {
                 holder.removeAllViews()
                 val previews=site?.entries.orEmpty().map{item->
                     item.cover to {
-                        AuthenticatedItemDownloader.download(a,
-                            IndexedItem(item.url,item.title,item.cover,
-                                entity.canonicalUrl,"COSPLAY","image",
-                                System.currentTimeMillis(),false))
+                        // A listing cover is not a validated original file.
+                        // Ask the existing native parser to resolve this gallery,
+                        // instead of downloading an HTML page as an image.
+                        if(!AppPower.enabled(a))notice(a,"Resume first")
+                        else runCatching{
+                            a.startForegroundService(Intent(a,GalleryService::class.java)
+                                .setAction(GalleryService.ACTION_START)
+                                .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name)
+                                .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId))
+                            notice(a,"Indexing original gallery · "+item.title.take(50))
+                        }.onFailure{notice(a,it.message?:"Gallery parser unavailable")}
                     }
                 }
                 if(previews.isNotEmpty())images(a,holder,previews)
