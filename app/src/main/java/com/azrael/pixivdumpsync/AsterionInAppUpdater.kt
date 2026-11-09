@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.LinearLayout
-import android.widget.Toast
 import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
@@ -301,8 +300,6 @@ object AsterionInAppUpdater {
     }
 
     private fun launchInstaller(activity: Activity) {
-        val context = activity.applicationContext
-        verifyStagedAgain(context)
         if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
             status = "Allow installation from Asterion Downloader, return, then tap Install."
             activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
@@ -364,34 +361,37 @@ object AsterionInAppUpdater {
             val selected = candidate
             if (ready || selected != null) {
                 val label = if (ready) "INSTALL VERIFIED UPDATE"
-                    else "DOWNLOAD AND VERIFY " + selected!!.version
+                    else "DOWNLOAD & INSTALL " + selected!!.version
                 panel.addView(ui.action(activity, label, true) {
                     if (!lock.compareAndSet(false, true)) return@action
-                    if (ready) {
-                        runCatching { launchInstaller(activity) }.onFailure {
-                            status = "Install blocked: " + (it.message ?: "Android installer unavailable")
-                            Toast.makeText(activity, status, Toast.LENGTH_LONG).show()
-                        }
-                        lock.set(false)
-                        refresh()
-                    } else if (selected != null) {
-                        status = "Verifying release checksum…"
-                        refresh()
-                        thread(name = "asterion-updater-download") {
-                            runCatching { download(context, selected) {
+                    status = if (ready) "Checking staged APK integrity…"
+                        else "Downloading and verifying update…"
+                    refresh()
+                    thread(name = "asterion-updater-install") {
+                        val result = runCatching {
+                            if (ready) verifyStagedAgain(context)
+                            else if (selected != null) download(context, selected) {
                                 activity.runOnUiThread {
                                     if (!activity.isFinishing && !activity.isDestroyed) refresh()
                                 }
-                            } }.onFailure { error ->
-                                status = "Update blocked: " + (error.message ?: "Download failed")
-                            }
-                            lock.set(false)
-                            activity.runOnUiThread {
-                                if (!activity.isFinishing && !activity.isDestroyed) refresh()
                             }
                         }
-                    } else {
                         lock.set(false)
+                        activity.runOnUiThread {
+                            if (!activity.isFinishing && !activity.isDestroyed) {
+                                result.onSuccess {
+                                    runCatching { launchInstaller(activity) }
+                                        .onFailure { error ->
+                                            status = "Installer unavailable: " +
+                                                (error.message ?: "Android error")
+                                        }
+                                }.onFailure { error ->
+                                    status = "Update blocked: " +
+                                        (error.message ?: "Verification failed")
+                                }
+                                refresh()
+                            }
+                        }
                     }
                 }, ui.lp(activity, 8))
             }
