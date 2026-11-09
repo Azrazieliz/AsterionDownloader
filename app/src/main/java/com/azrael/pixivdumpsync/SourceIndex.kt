@@ -774,7 +774,7 @@ object SourceIndex {
      * Rotate at most four sources per request to avoid monopolizing the UI.
      */
     fun refreshPreviews(context:Context,area:String,finished:(Int)->Unit={}) {
-        if(area !in setOf("ADULT","HENTAI")) { finished(0); return }
+        if(area !in setOf("ADULT","HENTAI","COSPLAY")) { finished(0); return }
         thread(name="asterion-preview-refresh-"+area.lowercase(Locale.ROOT)){
             if(!AppPower.enabled(context) || !previewBusy.compareAndSet(false,true)){
                 finished(0)
@@ -786,8 +786,10 @@ object SourceIndex {
                 ensure(context)
                 val sites=SourceIndexDb(context).use{db->
                     db.sources().filter{site->
-                        site.area==area && site.enabled &&
-                            SiteControls.sync(context,site.url,site.enabled)
+                        site.area==area &&
+                            SiteControls.key(site.url).isNotBlank() &&
+                            // Listing previews are not permission to download.
+                            SourceIndexParser.safe(site.url)
                     }
                 }
                 val prefs=context.getSharedPreferences("asterion_preview_probe",0)
@@ -1113,7 +1115,7 @@ object SourceIndex {
             (historyEnabled && !source.historyComplete || index==0)){
             if(stop()||Thread.currentThread().isInterrupted) return
             if(!AppPower.enabled(context) ||
-                (!manual && !SiteControls.sync(context,source.url)))break
+                (!manual && !previewOnly && !SiteControls.sync(context,source.url)))break
             val address=pages[index++]
             if(!visited.add(address))continue
             var doc=fetchPage(context,source,address)
