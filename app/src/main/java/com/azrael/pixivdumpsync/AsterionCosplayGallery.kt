@@ -86,7 +86,7 @@ object AsterionCosplayGallery {
                     a.runOnUiThread{if(!a.isFinishing && !a.isDestroyed)refresh()}
                 }
                 approved.forEach{site->
-                    KyoraCreatorPreviews.load(a,site.url,{got->
+                    KyoraCreatorPreviews.load(a,site.url,force=true){got->
                         if(!a.isFinishing && !a.isDestroyed){
                             toast(a,if(got.error.isNullOrBlank())
                                 "Updated gallery previews · "+site.name
