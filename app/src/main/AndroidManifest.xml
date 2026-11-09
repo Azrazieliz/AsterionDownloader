@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Package visibility is needed to validate the installed peer certificate
          on Android 11+. Unknown apps still fail the UID/approval check. -->
@@ -63,6 +64,10 @@
             android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".DownloaderHubActivity" android:exported="false"/>
         <activity android:name=".OfflineVnActivity" android:exported="false" />
+        <provider android:name=".AsterionUpdateFileProvider"
+            android:authorities="${applicationId}.update-apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <provider android:name=".TorrentDescriptorProvider"
             android:authorities="${applicationId}.torrent-files"
             android:exported="false"
