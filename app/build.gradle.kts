@@ -70,6 +70,16 @@ android {
             // preview signer exists. CI must fail closed on missing key.
             matchingFallbacks += listOf("debug")
         }
+        // One-time functional acceptance app before the Downloader–Rounder merge.
+        // Separate package identity avoids uninstalling or replacing the owner's
+        // differently signed Downloader. Never claim this is an in-place update.
+        create("pilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".pilot"
+            versionNameSuffix = "-pilot"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
         release {
             isMinifyEnabled = false
             if (hasOriginalSigningKey) {
