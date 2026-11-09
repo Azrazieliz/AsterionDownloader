@@ -2,6 +2,8 @@ package com.azrael.pixivdumpsync
 
 import android.app.Activity
 import android.content.Context
+import com.azrael.galleryflow.HttpClient
+import com.azrael.galleryflow.SiteSession
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
