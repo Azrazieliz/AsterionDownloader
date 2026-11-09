@@ -62,7 +62,7 @@ object KyoraCreatorPreviews {
         if(!force)cached(a,url)?.let{onReady(it)}
         if(!SourceIndexParser.safe(url))return
         val stored=cached(a,url)
-        if(stored!=null && System.currentTimeMillis()-stored.updated<
+        if(!force && stored!=null && System.currentTimeMillis()-stored.updated<
             (if(stored.error==null)12L*60*60*1000 else 2L*60*60*1000))return
         if(!inflight.add(url))return
         pool.execute{
