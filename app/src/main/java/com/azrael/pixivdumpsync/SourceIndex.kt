@@ -672,6 +672,7 @@ object SourceIndex {
     private const val CATCHUP_ID=48532
     private const val STATE="asterion_source_index_cursor"
     private val busy=AtomicBoolean(false)
+    private val previewBusy=AtomicBoolean(false)
     private val extra=listOf(
         Triple("Patreon","https://www.patreon.com/","CREATORS"),
         Triple("FANBOX","https://www.fanbox.cc/","CREATORS"),
@@ -775,7 +776,7 @@ object SourceIndex {
     fun refreshPreviews(context:Context,area:String,finished:(Int)->Unit={}) {
         if(area !in setOf("ADULT","HENTAI")) { finished(0); return }
         thread(name="asterion-preview-refresh-"+area.lowercase(Locale.ROOT)){
-            if(!AppPower.enabled(context) || !busy.compareAndSet(false,true)){
+            if(!AppPower.enabled(context) || !previewBusy.compareAndSet(false,true)){
                 finished(0)
                 return@thread
             }
@@ -812,7 +813,7 @@ object SourceIndex {
                     db.items(area,1000).count{!it.preview.isNullOrBlank()}
                 }-initialPreviews).coerceAtLeast(0)
             }finally{
-                busy.set(false)
+                previewBusy.set(false)
                 finished(newPreviews)
             }
         }
