@@ -16,7 +16,7 @@ object VideoSearchPreviews {
         override fun sizeOf(key:String,value:Bitmap):Int=value.byteCount
     }
     private val lock=Any()
-    fun display(a:Activity,image:ImageView,url:String?) {
+    fun display(a:Activity,image:ImageView,url:String?,referer:String?=null) {
         image.setImageResource(R.drawable.ic_source_video)
         image.scaleType=ImageView.ScaleType.CENTER_INSIDE
         image.contentDescription="Video preview unavailable"
@@ -35,6 +35,8 @@ object VideoSearchPreviews {
                     readTimeout=8000
                     setRequestProperty("User-Agent","Mozilla/5.0")
                     setRequestProperty("Accept","image/*")
+                    if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer))
+                        setRequestProperty("Referer",referer)
                 }
                 require(connection.contentType.orEmpty().startsWith("image/"))
                 val bytes=connection.getInputStream().use{input->
