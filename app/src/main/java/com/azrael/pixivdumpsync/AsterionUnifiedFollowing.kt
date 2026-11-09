@@ -310,8 +310,8 @@ object AsterionUnifiedFollowing {
         val creators=NameWatchDb(a).use{it.list()}
         val providers=VideoDb(a).use{it.listWatches()}
         put(a,p,ui.text(a,"Followed performers",19f,ui.white,true),13)
-        put(a,p,ui.text(a,creators.size.toString()+" followed names · "+
-            providers.count{it.enabled}+" active providers",12f,ui.secondary),3)
+        put(a,p,ui.text(a,creators.size.toString()+" followed performers · "+
+            providers.count{it.enabled}+" subscribed websites",12f,ui.secondary),3)
         // Creator previews live inside the corresponding followed-name cards.
         // A separate top-of-module media strip misattributes thumbnail ownership.
         val follow=ui.card(a)
@@ -334,6 +334,22 @@ object AsterionUnifiedFollowing {
                 it.listForQuery(creator.name,if(full)100 else 24)
             }.filter{SearchExactness.matches(creator.name,it.title) &&
                 !IndexedMediaQuality.navigationTitle(it.title)}
+            val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
+                SearchRanking.validUrl(it.thumbnail)}
+            val head=ui.row(a)
+            val avatar=ImageView(a).apply{
+                scaleType=ImageView.ScaleType.CENTER_CROP
+                setImageResource(R.drawable.ic_source_video)
+                setBackgroundColor(ui.raised)
+            }
+            head.addView(avatar,LinearLayout.LayoutParams(ui.px(a,52),ui.px(a,52)))
+            gallery.firstOrNull()?.let{cover->
+                VideoSearchPreviews.display(a,avatar,cover.thumbnail,cover.url)
+            }
+            val labels=LinearLayout(a).apply{
+                orientation=LinearLayout.VERTICAL
+                setPadding(ui.px(a,11),0,0,0)
+            }
             val name=ui.text(a,creator.name,17f,ui.white,true).apply{
                 isClickable=true
                 isFocusable=true
@@ -343,13 +359,13 @@ object AsterionUnifiedFollowing {
                     refresh()
                 }
             }
-            put(a,c,name,5)
-            put(a,c,ui.text(a,
-                hits.size.toString()+" indexed videos · "+
+            labels.addView(name)
+            labels.addView(ui.text(a,
+                hits.size.toString()+" indexed originals · "+
                     if(full)"full collection" else "tap name to expand",
-                11f,ui.secondary),4)
-            val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
-                SearchRanking.validUrl(it.thumbnail)}
+                12f,ui.secondary),ui.lp(a,4))
+            head.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+            put(a,c,head,3)
             if(gallery.isNotEmpty()){
                 KurohaMediaPreview.render(a,c,
                     "model:"+creator.id,
