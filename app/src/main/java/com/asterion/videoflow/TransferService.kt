@@ -143,9 +143,12 @@ object VideoEngine {
                     progress.edit().putInt("cursor",(index+6)%eligible.size).apply()
                     (0 until 6).map{eligible[(index+it)%eligible.size]}
                 }
-                val scans=selectedWatches.map{selected->
+                selectedWatches.forEach{selected->
+                    // Per-provider discovery owns its own DB connection. The
+                    // transfer worker no longer waits on slow/blocked sites.
                     com.azrael.pixivdumpsync.BackfillAgents.submit(
                         context,"videoflow:"+selected.address){
+                        VideoDb(context).use{db->
                         for(watch in listOf(selected)){
                     if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                         Thread.currentThread().isInterrupted)break
@@ -230,12 +233,13 @@ object VideoEngine {
                         db.checked(watch.id,t.message?: "Discovery failed")
                     }
                         }
+                        }
+                        // Discovery and transfer run asynchronously. Enqueued
+                        // originals wake a dedicated transfer pass instead of
+                        // retaining the shared worker until all sites finish.
+                        if(com.azrael.pixivdumpsync.AppPower.enabled(context))
+                            Scheduling.requestImmediate(context,false)
                     }
-                }
-                for(scan in scans){
-                    if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
-                        Thread.currentThread().isInterrupted)break
-                    runCatching{scan.get()}
                 }
             }
             if(scan)drainQueued(4)
