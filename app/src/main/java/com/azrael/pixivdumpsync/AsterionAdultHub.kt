@@ -55,7 +55,19 @@ object AsterionAdultHub {
     private fun error(site:Site,a:Activity):String?{
         val r=SiteRunControl.status(a,site.url)
         if(r.state=="ERROR")return r.message
-        return site.source?.error
+        return site.source?.error ?:
+            KyoraCreatorPreviews.cached(a,site.url)?.error
+    }
+    // A real source-owned media cover may precede native original indexing.
+    // Exclude category/menu links and never claim a cover proves a download.
+    internal fun publicMedia(url:String,title:String,cover:String):Boolean{
+        if(!SourceIndexParser.safe(url) ||
+            !SearchRanking.validUrl(cover) ||
+            IndexedMediaQuality.navigationTitle(title))return false
+        if(SearchRanking.isVideoUrl(url) ||
+            IndexedMediaQuality.isMedia(url,title,cover,"ADULT"))return true
+        val path=runCatching{Uri.parse(url).path.orEmpty()}.getOrDefault("")
+        return Regex("^/[0-9]{4,}[-/][a-zA-Z0-9_-]{4,}").containsMatchIn(path)
     }
     /** Do not recommend site menus, language directories, tags or category pages
      * as if they were individual media. Never invent missing thumbnails.
@@ -112,37 +124,29 @@ object AsterionAdultHub {
         // authenticated native index has discovered the originals.
         val publicBySite=sources.associate{site->
             site.host to KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
-                .filter{SearchRanking.isVideoUrl(it.url) &&
-                    !IndexedMediaQuality.navigationTitle(it.title)}
+                .filter{publicMedia(it.url,it.title,it.cover)}
         }
         val hasVisual=bySite.values.any{it.isNotEmpty()} ||
             searchBySite.values.any{it.isNotEmpty()} ||
             publicBySite.values.any{it.isNotEmpty()}
-        // A fresh installation may have sources but no indexed previews.
-        // Start a bounded thumbnail-only discovery; never queue originals just
-        // to populate this gallery. Throttle automatic retries after failures.
+        // Every approved provider is probed independently. The old four-site
+        // batch plus 15-minute delay left 17 of 19 sources unseen.
         if(AppPower.enabled(a)){
             val attempts=a.getSharedPreferences("asterion_gallery_preview_bootstrap",0)
-            val key="pixiv-style-probe:"+area
+            val key="full-scope:"+area
             val now=System.currentTimeMillis()
-            if(now-attempts.getLong(key,0L)>15L*60L*1000L){
+            if(now-attempts.getLong(key,0L)>20L*60L*1000L){
                 attempts.edit().putLong(key,now).apply()
                 SourceIndex.refreshPreviews(a.applicationContext,area){
-                    a.runOnUiThread{
-                        if(!a.isFinishing && !a.isDestroyed)refresh()
-                    }
+                    a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
                 }
-                val missing=sources.filter{site->
-                    bySite[site.host].orEmpty().isEmpty() &&
-                        searchBySite[site.host].orEmpty().isEmpty()
-                }
-                val batch=missing.take(4)
-                for(site in batch){
-                    if(KyoraCreatorPreviews.cached(a,site.url)==null)
-                        KyoraCreatorPreviews.load(a,site.url){snap->
-                            if(snap.entries.isNotEmpty() && !a.isFinishing &&
-                                !a.isDestroyed)refresh()
-                        }
+            }
+            for(site in sources){
+                val saved=KyoraCreatorPreviews.cached(a,site.url)
+                val stale=saved==null || now-saved.updated>
+                    (if(saved.error.isNullOrBlank())4L*60*60*1000 else 10L*60*1000)
+                if(stale)KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
+                    if(!a.isFinishing && !a.isDestroyed)refresh()
                 }
             }
         }
@@ -154,23 +158,11 @@ object AsterionAdultHub {
                 Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
             }else{
                 Toast.makeText(a,"Checking source previews",Toast.LENGTH_SHORT).show()
-                val missing=sources.filter{site->
-                    bySite[site.host].orEmpty().isEmpty() &&
-                        searchBySite[site.host].orEmpty().isEmpty()
-                }
-                val config=a.getSharedPreferences("asterion_adult_public_shelf",0)
-                if(missing.isNotEmpty()){
-                    val offset=config.getInt("next:"+area,0)%missing.size
-                    val batch=(0 until minOf(4,missing.size)).map{
-                        missing[(offset+it)%missing.size]
-                    }
-                    config.edit().putInt("next:"+area,
-                        (offset+batch.size)%missing.size).apply()
-                    for(site in batch){
-                        KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
-                            if(snapshot.entries.isNotEmpty() &&
-                                !a.isFinishing && !a.isDestroyed)refresh()
-                        }
+                // Explicit refresh checks every provider; nothing is hidden
+                // behind a management dialog or an arbitrary four-site cycle.
+                for(site in sources){
+                    KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
+                        if(!a.isFinishing&&!a.isDestroyed)refresh()
                     }
                 }
                 SourceIndex.refreshPreviews(a.applicationContext,area){checked->
@@ -303,9 +295,21 @@ object AsterionAdultHub {
                     }
                 }
             }
+            val publicChecked=KyoraCreatorPreviews.cached(a,site.url)
+            val state=if(publicChecked?.entries?.isNotEmpty()==true &&
+                sourceState(a,site)=="Not checked")
+                    "Catalog checked · originals not verified"
+                else sourceState(a,site)
             card.addView(ui.text(a,
-                (media.size+searches.size+public.size).toString()+" source-owned covers · "+
-                    sourceState(a,site),12f,ui.secondary),ui.lp(a,5))
+                (media.size+searches.size+public.size).toString()+
+                    " real media previews · "+state,
+                12f,ui.secondary),ui.lp(a,5))
+            if(media.isEmpty() && searches.isEmpty() && public.isEmpty()){
+                card.addView(ui.text(a,
+                    "No accessible previews for this site yet. CHECK NEW retries"+
+                        " this source only; login may be required.",
+                    12f,ui.secondary),ui.lp(a,5))
+            }
             val sync=Switch(a).apply{
                 text="Sync new videos";textSize=14f;setTextColor(ui.white)
                 isChecked=SiteControls.sync(a,site.url,site.source?.enabled?:false)
@@ -333,10 +337,13 @@ object AsterionAdultHub {
                 if(!AppPower.enabled(a))
                     Toast.makeText(a,"Resume first",Toast.LENGTH_SHORT).show()
                 else{
-                    SourceIndex.refreshPreviews(a.applicationContext,area){
+                    SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
                         a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
                     }
-                    Toast.makeText(a,"Checking real website previews",Toast.LENGTH_SHORT).show()
+                    KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
+                        if(!a.isFinishing&&!a.isDestroyed)refresh()
+                    }
+                    Toast.makeText(a,"Checking "+site.name+" only",Toast.LENGTH_SHORT).show()
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
             controls.addView(ui.action(a,if(running)"STOP" else "BACKFILL",false){
@@ -378,9 +385,8 @@ object AsterionAdultHub {
         }
         // Index-backed sites first. Provider rows never display media from
         // another website. Other sites remain accessible, not duplicated.
-        for(site in active)siteCard(site)
-        parent.addView(ui.action(a,"MANAGE WEBSITES · "+sources.size,false){
-            SourceIndexPanel.showStatus(a,listOf(area),title)
-        },ui.lp(a,11))
+        // Every approved website is present directly in its Pixiv-style card.
+        // No separate Manage Websites screen, secondary list, or hidden sites.
+        for(site in active+inactive)siteCard(site)
     }
 }
