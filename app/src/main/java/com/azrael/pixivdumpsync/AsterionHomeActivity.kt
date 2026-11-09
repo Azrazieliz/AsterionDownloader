@@ -592,6 +592,9 @@ class AsterionHomeActivity:Activity(){
             })
         }
         put(body,switches,10)
+        // Gallery first, just like Kuroha: source-owned real previews are
+        // visible before the long chapter/EPUB queue and error controls.
+        SourceIndexPanel.render(this,body,if(bookMode=="EPUB")"BOOKS" else "COMICS")
         when(bookMode){
             "EPUB"->{
                 val archive=card()
@@ -669,13 +672,11 @@ class AsterionHomeActivity:Activity(){
                 }
                 put(body,archive,12)
                 Mp4SeriesPanel.render(this,body){render()}
-                SourceIndexPanel.render(this,body,"BOOKS")
 
             }
             else->{
                 AsterionComicFollowing.render(this,body){render()}
                 DoujinGalleryPanel.render(this,body){render()}
-                SourceIndexPanel.render(this,body,"COMICS")
             }
         }
     }
