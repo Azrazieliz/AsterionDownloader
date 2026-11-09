@@ -754,55 +754,75 @@ object SourceIndex {
             .setMinimumLatency(delay).setOverrideDeadline(delay+4L*60_000L).build())
     }
     /**
-     * Populate the preview shelf from one listing page per enabled site.
-     * Metadata-only: no full video downloads, detail fetches or cursor updates.
-     * Rotate at most four sources per request to avoid monopolizing the UI.
+     * Examine every registered provider in this module, not just four per
+     * 15-minute interval. These listing checks never enqueue originals or
+     * advance a backfill cursor. Four bounded workers isolate slow sites.
      */
     fun refreshPreviews(context:Context,area:String,finished:(Int)->Unit={}) {
         if(area !in setOf("ADULT","HENTAI","COSPLAY")) { finished(0); return }
-        thread(name="asterion-preview-refresh-"+area.lowercase(Locale.ROOT)){
+        thread(name="asterion-all-site-previews-"+area.lowercase(Locale.ROOT)){
             if(!AppPower.enabled(context) || !previewBusy.compareAndSet(false,true)){
                 finished(0)
                 return@thread
             }
-            var initialPreviews=0
+            val executor=java.util.concurrent.Executors.newFixedThreadPool(4)
             var newPreviews=0
-            try{
+            try {
                 ensure(context)
                 val sites=SourceIndexDb(context).use{db->
-                    db.sources().filter{site->
-                        site.area==area &&
-                            SiteControls.key(site.url).isNotBlank() &&
-                            // Listing previews are not permission to download.
-                            SourceIndexParser.safe(site.url)
-                    }
+                    db.sources().filter{
+                        it.area==area && SourceIndexParser.safe(it.url)
+                    }.distinctBy{SiteControls.key(it.url)}
                 }
-                val prefs=context.getSharedPreferences("asterion_preview_probe",0)
-                initialPreviews=SourceIndexDb(context).use{db->
-                    db.items(area,1000).count{!it.preview.isNullOrBlank()}
+                val before=SourceIndexDb(context).use{db->
+                    db.items(area,4000).count{!it.preview.isNullOrBlank()}
                 }
-                if(sites.isNotEmpty()){
-                    val offset=prefs.getInt("next:"+area,0).coerceAtLeast(0)%sites.size
-                    val count=minOf(4,sites.size)
-                    prefs.edit().putInt("next:"+area,(offset+count)%sites.size).apply()
-                    for(i in 0 until count){
-                        if(!AppPower.enabled(context))break
-                        val site=sites[(offset+i)%sites.size]
+                val jobs=sites.map{site->
+                    executor.submit(java.util.concurrent.Callable {
                         runCatching{scanOne(context,site,previewOnly=true)}
                             .onFailure{error->
                                 SourceIndexDb(context).use{
                                     it.failure(site.url,error.message?:"Preview check failed")
                                 }
                             }
-                    }
+                    })
+                }
+                for(job in jobs){
+                    if(!AppPower.enabled(context))break
+                    runCatching{job.get()}
                 }
                 newPreviews=(SourceIndexDb(context).use{db->
-                    db.items(area,1000).count{!it.preview.isNullOrBlank()}
-                }-initialPreviews).coerceAtLeast(0)
+                    db.items(area,4000).count{!it.preview.isNullOrBlank()}
+                }-before).coerceAtLeast(0)
             }finally{
+                executor.shutdownNow()
                 previewBusy.set(false)
                 finished(newPreviews)
             }
+        }
+    }
+
+    /** Perform a real listing check for one site, never the arbitrary next
+     * four sites when the user taps that site's CHECK NEW button.
+     */
+    fun refreshSitePreview(context:Context,area:String,address:String,
+                           finished:(Boolean)->Unit={}) {
+        thread(name="asterion-single-site-preview"){
+            if(!AppPower.enabled(context)){ finished(false); return@thread }
+            ensure(context)
+            val source=SourceIndexDb(context).use{db->
+                db.sources().firstOrNull{
+                    it.area==area && SiteControls.key(it.url)==SiteControls.key(address)
+                }
+            }
+            val result=source!=null && runCatching{
+                scanOne(context,source,previewOnly=true)
+            }.onFailure{error->
+                SourceIndexDb(context).use{
+                    it.failure(source!!.url,error.message?:"Preview check failed")
+                }
+            }.isSuccess
+            finished(result)
         }
     }
 
@@ -1136,8 +1156,19 @@ object SourceIndex {
                 // Do not start thousands of DownloadManager requests while a
                 // single large listing page is still being indexed.
             }
-            // Index only thumbnail evidence; history backfill remains unchanged.
-            if(previewOnly)return
+            // Catalog-only checks update last-check/index count, but never
+            // advance a historical backfill cursor or queue any downloads.
+            if(previewOnly){
+                SourceIndexDb(context).use{db->
+                    db.update(source.url,source.cursor,null,
+                        source.discovered+fresh,null)
+                    if(records.isEmpty()){
+                        db.failure(source.url,
+                            "No supported public media on listing; login or adapter may be required")
+                    }
+                }
+                return
+            }
             val next=SourceIndexParser.next(doc,source.url,address)
             if(historyEnabled && index==1 && saved==null && next!=null && next !in visited)
                 pages+=next
