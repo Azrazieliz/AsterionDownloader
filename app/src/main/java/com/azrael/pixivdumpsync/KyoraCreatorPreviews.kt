@@ -43,9 +43,7 @@ object KyoraCreatorPreviews {
             if(target.scheme!="https" ||target.host.lowercase().removePrefix("www.")!=host)
                 continue
             val img=anchor.selectFirst("img")?:continue
-            val cover=sequenceOf("data-original","data-src","data-lazy-src","src")
-                .map{img.absUrl(it)}.firstOrNull{SearchRanking.validUrl(it)}
-                ?:continue
+            val cover=SitePreviewImage.best(img)?:continue
             val imgPath=URI(cover).path.lowercase()
             if(listOf("logo","icon","avatar","sprite","banner","pixel","advert")
                 .any{imgPath.contains(it)})continue
