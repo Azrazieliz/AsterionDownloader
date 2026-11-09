@@ -35,6 +35,22 @@ object ProviderBackfillActions {
                 else "Unable to start video check for "+host
         }
         if(site.area=="COSPLAY"){
+            // Approved native sites may be registered in SourceIndex before
+            // GalleryFlow has ever saved a native entity. Explicit BACKFILL
+            // must enroll the actual site profile, not silently do nothing.
+            val exists=GalleryDb(a).use{db->db.listEntities().any{
+                SiteControls.key(it.canonicalUrl)==host
+            }}
+            if(!exists){
+                val enrolled=runCatching{
+                    val adapter=com.azrael.galleryflow.AdapterRegistry.forUrl(site.url)
+                    val entity=adapter.resolveEntity(site.url)
+                    GalleryDb(a).use{it.addEntity(entity)}
+                }
+                if(enrolled.isFailure)
+                    return "Provider profile unavailable · "+
+                        (enrolled.exceptionOrNull()?.message?:"adapter needs repair")
+            }
             val selected=GalleryDb(a).use{db->
                 val matched=db.listEntities().filter{entity->
                     SiteControls.key(entity.canonicalUrl)==host
