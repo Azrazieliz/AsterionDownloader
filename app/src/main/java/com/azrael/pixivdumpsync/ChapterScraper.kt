@@ -166,6 +166,10 @@ object ChapterScraper {
         return urls.toList()
     }
     fun pageImages(chapterUrl:String,context:Context?=null):List<String>{
+        // Canonical NHentai gallery metadata may already list full original
+        // image files: do not treat them as HTML chapter-reader pages.
+        if(NhentaiChapters.isOriginalImage(chapterUrl))
+            return listOf(chapterUrl)
         val doc=read(chapterUrl,context)
         val images=if(NhentaiChapters.isPage(chapterUrl))
             NhentaiChapters.pageImage(doc)
