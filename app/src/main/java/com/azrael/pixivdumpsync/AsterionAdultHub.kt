@@ -71,7 +71,7 @@ object AsterionAdultHub {
         val title=if(isAdult)"Porn" else "Hentai"
         val preferences=a.getSharedPreferences("asterion_gallery_layout",0)
         val showModels=isAdult && preferences.getBoolean("adult_models",false)
-        val expanded=preferences.getBoolean(area+"_other_sites",false)
+        val expanded=preferences.getBoolean(area+"_manage_sites_v2",false)
         val sources=sites(a,area)
         val header=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
         header.addView(ui.text(a,title,22f,ui.white,true),
@@ -109,6 +109,51 @@ object AsterionAdultHub {
                 SiteControls.key(it.url) in approvedHosts}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .groupBy{SiteControls.key(it.url)}
+        val hasVisual=bySite.values.any{it.isNotEmpty()} ||
+            searchBySite.values.any{it.isNotEmpty()}
+        // A fresh installation may have sources but no indexed previews.
+        // Start a bounded thumbnail-only discovery; never queue originals just
+        // to populate this gallery. Throttle automatic retries after failures.
+        if(!hasVisual && AppPower.enabled(a)){
+            val attempts=a.getSharedPreferences("asterion_gallery_preview_bootstrap",0)
+            val key="last:"+area
+            val now=System.currentTimeMillis()
+            if(now-attempts.getLong(key,0L)>15L*60L*1000L){
+                attempts.edit().putLong(key,now).apply()
+                SourceIndex.refreshPreviews(a.applicationContext,area){
+                    a.runOnUiThread{
+                        if(!a.isFinishing && !a.isDestroyed)refresh()
+                    }
+                }
+            }
+        }
+        val previewHeader=ui.row(a).apply{gravity=Gravity.CENTER_VERTICAL}
+        previewHeader.addView(ui.text(a,"Media previews",18f,ui.white,true),
+            LinearLayout.LayoutParams(0,-2,1f))
+        previewHeader.addView(ui.chip(a,"REFRESH",false){
+            if(!AppPower.enabled(a)){
+                Toast.makeText(a,"Resume downloads first",Toast.LENGTH_SHORT).show()
+            }else{
+                Toast.makeText(a,"Checking source previews",Toast.LENGTH_SHORT).show()
+                SourceIndex.refreshPreviews(a.applicationContext,area){checked->
+                    a.runOnUiThread{
+                        if(!a.isFinishing && !a.isDestroyed){
+                            Toast.makeText(a,
+                                if(checked>0)"Preview index updated" else
+                                    "No new source previews available",
+                                Toast.LENGTH_SHORT).show()
+                            refresh()
+                        }
+                    }
+                }
+            }
+        },LinearLayout.LayoutParams(-2,-2))
+        parent.addView(previewHeader,ui.lp(a,12))
+        if(!hasVisual)parent.addView(ui.text(a,
+            "No real media thumbnails indexed yet. An enabled website's " +
+                "preview check can populate this gallery without starting " +
+                "a full backfill; unavailable sources remain unverified.",
+            12f,ui.secondary),ui.lp(a,7))
         val active=sources.filter{
             bySite[it.host].orEmpty().isNotEmpty() ||
                 searchBySite[it.host].orEmpty().isNotEmpty()
@@ -241,18 +286,12 @@ object AsterionAdultHub {
         for(site in active)siteCard(site)
         if(inactive.isNotEmpty()){
             parent.addView(ui.action(a,
-                if(expanded)"SHOW FEWER WEBSITES" else
-                    "MORE WEBSITES · "+inactive.size,false){
-                preferences.edit().putBoolean(area+"_other_sites",!expanded).apply()
+                if(expanded)"HIDE WEBSITE CONTROLS" else
+                    "MANAGE WEBSITES · "+inactive.size,false){
+                preferences.edit().putBoolean(area+"_manage_sites_v2",!expanded).apply()
                 refresh()
             },ui.lp(a,10))
             if(expanded)for(site in inactive)siteCard(site)
-        }
-        if(active.isEmpty()){
-            parent.addView(ui.text(a,
-                "No media previews indexed yet. Choose a website and run its Backfill. "+
-                    "Unavailable pages are not completed downloads.",
-                12f,ui.secondary),ui.lp(a,9))
         }
     }
 }
