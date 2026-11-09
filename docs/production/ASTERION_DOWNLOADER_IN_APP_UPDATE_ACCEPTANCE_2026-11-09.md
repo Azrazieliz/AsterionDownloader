@@ -43,7 +43,7 @@ Branch: feature/asterion-unified-downloads-20261030
 - A published v1.3.41 preview APK previously inspected was signed by **316f4069cb0a87c88379869e9c70adc4a7275dd81ca814fd4e9f1910ea6f06c9**, not the local v1.3.46 signing identity. This is not proof that the inspected v1.3.41 APK is exactly the one installed.
 - Historical production Kuroha v0.6.1 has yet another original certificate, documented in docs/ORIGINAL_APK_UPGRADE_SIGNING.md.
 - Successful compilation is not proof that the Android package can upgrade the phone's existing installation.
-- The signed-preview GitHub Actions workflow reported failed runs with zero jobs exposed through the workflow jobs API. Its precise infrastructure/configuration failure is not diagnosed. No v1.3.46 signed release was verified as published.
+- The v1.3.46 signed-preview workflow failed its mandatory signing-identity gate. GitHub check-run annotation on run 42679749302 explicitly states: Permanent preview signing identity not installed. Refusing to publish another incompatible debug APK. No v1.3.46 release APK was published (release API search found zero). Do not bypass this gate by publishing an ephemeral CI debug certificate.
 - Asterion Control's existing phone connection was verified reachable, but Windows ADB device list was empty. No compatible installation, foreground gallery verification or live-provider acceptance was demonstrated.
 - Do not mark the visual gallery restored on device solely because source rendering was repaired.
 
