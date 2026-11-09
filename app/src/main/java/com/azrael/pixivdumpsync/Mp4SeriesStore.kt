@@ -14,6 +14,8 @@ data class Mp4Follow(val id:Long,val family:String,val name:String,val aliases:S
     val cursor:String?,val lastScan:Long,val error:String?)
 data class Mp4Candidate(val url:String,val workId:Long,val title:String,
     val volume:Int?,val type:String,val state:String)
+data class Mp4OrderedCandidate(val url:String,val title:String,val volume:Int,
+    val state:String,val downloadId:Long?)
 
 class Mp4SeriesStore(context:Context):
     SQLiteOpenHelper(context,"asterion_mp4_subscriptions.sqlite",null,1) {
@@ -111,6 +113,22 @@ class Mp4SeriesStore(context:Context):
             while(c.moveToNext())out+=Mp4Candidate(c.getString(0),c.getLong(1),
                 c.getString(2),if(c.isNull(3))null else c.getInt(3),
                 c.getString(4),c.getString(5))
+        }
+        return out
+    }
+    /** Sequences are scoped to one work, never across unrelated novels.
+     * Old records without a DownloadManager id stay unverified.
+     */
+    fun orderedCandidates(workId:Long,type:String):List<Mp4OrderedCandidate>{
+        val out=ArrayList<Mp4OrderedCandidate>()
+        readableDatabase.rawQuery(
+            """SELECT url,title,volume,state,download_id FROM candidates
+               WHERE work_id=? AND type=? AND volume IS NOT NULL
+               ORDER BY volume ASC,updated ASC LIMIT 1000""",
+            arrayOf(workId.toString(),type)).use{c->
+            while(c.moveToNext())out+=Mp4OrderedCandidate(
+                c.getString(0),c.getString(1),c.getInt(2),c.getString(3),
+                if(c.isNull(4))null else c.getLong(4))
         }
         return out
     }
