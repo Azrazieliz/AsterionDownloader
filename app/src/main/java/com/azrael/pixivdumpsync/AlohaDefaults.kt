@@ -45,8 +45,9 @@ object AlohaDefaults {
                         db.addWatch(site.url,site.name)
                         val watch=db.listWatches().firstOrNull{host(it.address)==site.host}
                             ?:error("Video provider was not saved")
-                        db.enableWatch(watch.id,true)
-                        db.resetWatchBackfill(watch.id)
+                        db.enableWatch(watch.id,SiteControls.explicitlyEnabled(app,site.url))
+                        if(SiteControls.explicitlyEnabled(app,site.url))
+                            db.resetWatchBackfill(watch.id)
                         prefs.edit().putBoolean(key,true).remove("error_"+key).apply()
                         newVideo=true
                     }.onFailure{prefs.edit().putString("error_"+key,it.message.orEmpty()).apply()}
@@ -63,16 +64,19 @@ object AlohaDefaults {
                         }
                         if(present.isNotEmpty()){
                             for(item in present){
-                                db.setSelected(item.source,item.entityId,true)
-                                db.setLiveEnabled(item.source,item.entityId,true)
-                                db.setLiveCursor(item.source,item.entityId,null)
+                                if(SiteControls.explicitlyEnabled(app,site.url)){
+                                    db.setSelected(item.source,item.entityId,true)
+                                    db.setLiveEnabled(item.source,item.entityId,true)
+                                }
                             }
                         }else{
                             val adapter=AdapterRegistry.forUrl(site.url)
                             val entity=adapter.resolveEntity(site.url)
                             db.addEntity(entity)
-                            db.setSelected(entity.source,entity.stableId,true)
-                            db.setLiveEnabled(entity.source,entity.stableId,true)
+                            db.setSelected(entity.source,entity.stableId,
+                                SiteControls.explicitlyEnabled(app,site.url))
+                            db.setLiveEnabled(entity.source,entity.stableId,
+                                SiteControls.explicitlyEnabled(app,site.url))
                         }
                         prefs.edit().putBoolean(key,true).remove("error_"+key).apply()
                         newGallery=true
@@ -83,10 +87,16 @@ object AlohaDefaults {
             // A source's homepage may not support backfill; preserve the source and
             // its error instead of claiming that indexing the homepage completed it.
             if(AppPower.enabled(app)){
-                if(newVideo){
+                if(newVideo && AlohaSources.all.any{
+                        it.area in videoAreas &&
+                            SiteControls.explicitlyEnabled(app,it.url)
+                    }){
                     runCatching{Scheduling.ensure(app);VideoEngine.launch(app,true)}
                 }
-                if(newGallery){
+                if(newGallery && AlohaSources.all.any{
+                        it.area in galleryAreas &&
+                            SiteControls.explicitlyEnabled(app,it.url)
+                    }){
                     runCatching{
                         Scheduler.ensure(app)
                         app.startForegroundService(Intent(app,SyncForegroundService::class.java)
