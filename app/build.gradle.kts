@@ -12,6 +12,16 @@ val originalKeyPassword = System.getenv("KUROHA_KEY_PASSWORD")
 val hasOriginalSigningKey = listOf(
     originalKeyStorePath, originalStorePassword, originalKeyAlias, originalKeyPassword
 ).all { !it.isNullOrBlank() }
+ 
+// A single preview signature is required across upgrades. CI's automatically
+// generated per-run debug key must never be published as an update APK.
+val previewKeyStorePath = System.getenv("ASTERION_PREVIEW_KEYSTORE")
+val previewStorePassword = System.getenv("ASTERION_PREVIEW_STORE_PASSWORD")
+val previewKeyAlias = System.getenv("ASTERION_PREVIEW_KEY_ALIAS")
+val previewKeyPassword = System.getenv("ASTERION_PREVIEW_KEY_PASSWORD")
+val hasStablePreviewKey = listOf(
+    previewKeyStorePath, previewStorePassword, previewKeyAlias, previewKeyPassword
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.azrael.pixivdumpsync"
@@ -21,13 +31,22 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 70
-        versionName = "1.3.41"
+        versionCode = 71
+        versionName = "1.3.42"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
 
     signingConfigs {
+        if (hasStablePreviewKey) {
+            create("stablePreviewKey") {
+                storeFile = file(requireNotNull(previewKeyStorePath))
+                storePassword = requireNotNull(previewStorePassword)
+                keyAlias = requireNotNull(previewKeyAlias)
+                keyPassword = requireNotNull(previewKeyPassword)
+                enableV2Signing = true
+            }
+        }
         if (hasOriginalSigningKey) {
             create("originalUpgradeKey") {
                 storeFile = file(requireNotNull(originalKeyStorePath))
@@ -45,6 +64,10 @@ android {
             applicationIdSuffix = ".nocturne"
             versionNameSuffix = "-preview"
             isDebuggable = true
+            if (hasStablePreviewKey)
+                signingConfig = signingConfigs.getByName("stablePreviewKey")
+            // Local Windows PC debug signing is persistent when no configured
+            // preview signer exists. CI must fail closed on missing key.
             matchingFallbacks += listOf("debug")
         }
         release {
