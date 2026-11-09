@@ -17,12 +17,12 @@ object KyoraCreatorPreviews {
     data class Snapshot(val entries:List<Preview>,val updated:Long,val error:String?)
     private const val PREF="asterion_kyora_site_previews"
     private val inflight=ConcurrentHashMap.newKeySet<String>()
-    private val pool=Executors.newFixedThreadPool(2)
+    private val pool=Executors.newFixedThreadPool(5)
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
         val obj=JSONObject(raw)
         val arr=obj.optJSONArray("entries")?:JSONArray()
-        Snapshot((0 until minOf(8,arr.length())).mapNotNull{i->
+        Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
             arr.optJSONObject(i)?.let{
                 Preview(it.optString("url"),it.optString("cover"),it.optString("title"))
             }
@@ -34,9 +34,13 @@ object KyoraCreatorPreviews {
         val result=LinkedHashMap<String,Preview>()
         val sections=doc.select("article a:has(img),.gallery a:has(img),"+
             ".post a:has(img),.posts a:has(img),.album a:has(img),"+
-            ".entry a:has(img),.grid a:has(img),main a:has(img)")
+            ".entry a:has(img),.grid a:has(img),main a:has(img),"+
+            ".video a:has(img),.videos a:has(img),.video-item a:has(img),"+
+            ".video-card a:has(img),.thumb a:has(img),.thumbs a:has(img),"+
+            ".video-thumb a:has(img),.clip a:has(img),.movie a:has(img),"+
+            ".items a:has(img),.post-item a:has(img)")
         val anchors=if(sections.isEmpty())doc.select("a:has(img)") else sections
-        for(anchor in anchors.take(200)){
+        for(anchor in anchors.take(1500)){
             val page=anchor.absUrl("href")
             if(!SearchRanking.validUrl(page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
@@ -48,10 +52,16 @@ object KyoraCreatorPreviews {
             if(listOf("logo","icon","avatar","sprite","banner","pixel","advert")
                 .any{imgPath.contains(it)})continue
             val title=anchor.attr("title").ifBlank{img.attr("alt")}
-                .ifBlank{anchor.text()}.trim().take(100)
-                .ifBlank{"Gallery"}
+                .ifBlank{anchor.text()}
+                .ifBlank{anchor.closest("article,.post,.video,.item")?.selectFirst("h2,h3")?.text().orEmpty()}
+                .ifBlank{runCatching{
+                    URI(page).path.orEmpty().trim('/').substringAfterLast('/')
+                        .replace('-', ' ').replace('_',' ')
+                }.getOrDefault("")}
+                .trim().take(100).ifBlank{"Untitled media"}
+            if(IndexedMediaQuality.navigationTitle(title))continue
             result.putIfAbsent(page,Preview(page,cover,title))
-            if(result.size>=6)break
+            if(result.size>=24)break
         }
         return result.values.toList()
     }
@@ -66,7 +76,8 @@ object KyoraCreatorPreviews {
         pool.execute{
             val snapshot=runCatching{
                 val page=Jsoup.connect(url).timeout(15000).maxBodySize(2_000_000)
-                    .userAgent("Mozilla/5.0 (Android 17) AsterionDownloader")
+                    .userAgent(HttpClient.USER_AGENT)
+                    .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
                     .get()
                 require(page.location().startsWith("https://")){"Source redirected to HTTP"}
                 val items=parse(page.outerHtml(),page.location())
