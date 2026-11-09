@@ -25,21 +25,9 @@ internal object Mp4VolumeDispatcher {
     private fun verified(context:Context,uri:Uri,type:String):Boolean =
         runCatching{
             context.contentResolver.openInputStream(uri)?.use{input->
-                ZipInputStream(input.buffered()).use{zip->
-                    val first=zip.nextEntry?:return@use false
-                    if(type=="EPUB"){
-                        if(first.name!="mimetype")return@use false
-                        val header=ByteArray(20)
-                        if(zip.read(header)!=header.size)return@use false
-                        String(header,Charsets.US_ASCII)=="application/epub+zip"
-                    }else{
-                        // Non-EPUB image archives can contain a top-level folder.
-                        !first.name.startsWith("/") &&
-                            !first.name.contains("../") &&
-                            first.name.isNotBlank()
-                    }
-                }
-            } == true
+                ArchiveIntegrity.inspect(input,type)
+                true
+            }==true
         }.getOrDefault(false)
 
     fun dispatch(context:Context,db:Mp4SeriesStore,work:Mp4Follow):Boolean {
