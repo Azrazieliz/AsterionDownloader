@@ -207,8 +207,8 @@ object AsterionAdultHub {
         for(site in active)siteCard(site)
         if(inactive.isNotEmpty()){
             parent.addView(ui.action(a,
-                if(expanded)"HIDE UNINDEXED WEBSITES" else
-                    "OTHER WEBSITES · "+inactive.size,false){
+                if(expanded)"SHOW FEWER WEBSITES" else
+                    "MORE WEBSITES · "+inactive.size,false){
                 preferences.edit().putBoolean(area+"_other_sites",!expanded).apply()
                 refresh()
             },ui.lp(a,10))
@@ -216,8 +216,8 @@ object AsterionAdultHub {
         }
         if(active.isEmpty()){
             parent.addView(ui.text(a,
-                "No site-owned previews are indexed yet. Backfill an individual "+
-                    "provider; inaccessible pages are not counted as downloads.",
+                "No media previews indexed yet. Choose a website and run its Backfill. "+
+                    "Unavailable pages are not completed downloads.",
                 12f,ui.secondary),ui.lp(a,9))
         }
     }
