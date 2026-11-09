@@ -38,7 +38,12 @@ object SequenceOrder {
                 return Index(season,episode)
             }
         }
-        val match=numbered[kind]?.find(raw)?:return null
+        val match=numbered[kind]?.find(raw)
+            ?: if(kind==Kind.CHAPTER)
+                (numbered[Kind.VOLUME]?.find(raw)
+                    ?:numbered[Kind.EPISODE]?.find(raw))
+               else null
+            ?:return null
         val major=match.groupValues[1].toLongOrNull()?:return null
         val minor=match.groupValues.getOrElse(2){""}
             .takeIf(String::isNotBlank)?.toLongOrNull()?:0L
