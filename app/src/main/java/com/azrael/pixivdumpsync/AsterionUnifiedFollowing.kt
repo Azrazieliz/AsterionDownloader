@@ -201,8 +201,11 @@ object AsterionUnifiedFollowing {
         }
         more(a,p,"x",sources.size,refresh)
     }
-    fun kyora(a:Activity,p:LinearLayout,refresh:()->Unit){
+    fun kyora(a:Activity,p:LinearLayout,refresh:()->Unit,
+              creatorsOnly:Boolean=false){
         val followed=GalleryDb(a).use{it.listEntities()}
+            .filter{!creatorsOnly || it.kind!="site"}
+        if(creatorsOnly && followed.isEmpty())return
         put(a,p,ui.text(a,"Cosplay · Following",22f,ui.white,true),8)
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
         // Latest gallery thumbnails are embedded within each followed creator card.
