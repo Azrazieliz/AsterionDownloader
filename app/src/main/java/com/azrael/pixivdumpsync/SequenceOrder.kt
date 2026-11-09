@@ -76,7 +76,7 @@ object SequenceOrder {
                 .getOrDefault(url)
             index(Kind.PAGE,path)?:run {
                 // Some comic readers use /pages/001.jpg with no "page" word.
-                val parent=Regex("""(?i)/(?:pages?|chapters?)/\d{1,9}(?:/|$)""")
+                val parent=Regex("""(?i)/(?:pages?|chapters?)/\d{1,9}(?:\.(?:jpe?g|png|webp|gif|avif)|/|$)""")
                     .containsMatchIn(path)
                 val match=if(parent)
                     Regex("""/(\d{1,6})\.(?:jpe?g|png|gif|webp|avif)$""",
