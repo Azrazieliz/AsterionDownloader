@@ -9,7 +9,7 @@ data class ChapterTask(val id:Long,val url:String,val title:String,val state:Str
     val progress:Int,val error:String?,val savedUri:String?,val attempts:Int,val updated:Long=0L,
     val syncEnabled:Boolean=true,val lastCheck:Long=0L,val fingerprint:String?=null)
 
-class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_queue.sqlite",null,2){
+class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_queue.sqlite",null,3){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE tasks(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +23,8 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
           updated INTEGER NOT NULL,
           sync_enabled INTEGER NOT NULL DEFAULT 1,
           last_check INTEGER NOT NULL DEFAULT 0,
-          fingerprint TEXT)""")
+          fingerprint TEXT,
+          requested_by TEXT NOT NULL DEFAULT 'user')""")
     }
     override fun onUpgrade(db:SQLiteDatabase,oldVersion:Int,newVersion:Int){
         if(oldVersion<2){
@@ -31,10 +32,19 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
             db.execSQL("ALTER TABLE tasks ADD COLUMN last_check INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE tasks ADD COLUMN fingerprint TEXT")
         }
+        if(oldVersion<3){
+            db.execSQL("ALTER TABLE tasks ADD COLUMN requested_by TEXT NOT NULL DEFAULT 'legacy'")
+            // Existing queue stays recoverable, but cannot silently restart
+            // unsolicited archive jobs on a version upgrade.
+            db.execSQL("""UPDATE tasks SET state='paused',
+                error='Older queue held; RETRY to authorize'
+                WHERE requested_by='legacy' AND state IN ('queued','working','error')""")
+        }
     }
     fun enqueue(url:String,title:String=url):Boolean {
         val v=ContentValues().apply{
             put("url",url.trim());put("title",title.take(130));put("state","queued")
+            put("requested_by","user")
             put("updated",System.currentTimeMillis())
         }
         return writableDatabase.insertWithOnConflict("tasks",null,v,
@@ -129,7 +139,7 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
     fun retry(task:Long,manual:Boolean=true){
         update(task,"queued",0)
         if(manual)writableDatabase.execSQL(
-            "UPDATE tasks SET attempts=0 WHERE id=?",arrayOf(task))
+            "UPDATE tasks SET attempts=0,requested_by='user' WHERE id=?",arrayOf(task))
     }
     fun retryDueFailures():Int{
         val now=System.currentTimeMillis()
