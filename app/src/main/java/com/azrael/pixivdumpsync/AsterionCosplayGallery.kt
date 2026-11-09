@@ -93,7 +93,7 @@ object AsterionCosplayGallery {
                                 else site.name+": "+got.error.take(80))
                             refresh()
                         }
-                    },force=true)
+                    }
                 }
                 toast(a,"Checking real gallery covers from approved sources")
             }
