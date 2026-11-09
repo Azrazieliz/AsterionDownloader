@@ -316,40 +316,76 @@ object AsterionUnifiedFollowing {
         put(a,p,follow,10)
         for(creator in creators.take(currentLimit(a,"creators"))){
             val c=ui.card(a)
-            val hits=SearchResultsDb(a).use{it.listForQuery(creator.name,10)}
-            val previews=hits.mapNotNull{hit->
-                hit.thumbnail?.let{url->
-                    url to {
+            val prefs=a.getSharedPreferences("asterion_performer_gallery",0)
+            val full=prefs.getBoolean("expanded:"+creator.id,false)
+            val hits=SearchResultsDb(a).use{
+                it.listForQuery(creator.name,if(full)100 else 24)
+            }.filter{SearchExactness.matches(creator.name,it.title) &&
+                !IndexedMediaQuality.navigationTitle(it.title)}
+            val name=ui.text(a,creator.name,17f,ui.white,true).apply{
+                isClickable=true
+                isFocusable=true
+                contentDescription="Expand indexed videos for "+creator.name
+                setOnClickListener{
+                    prefs.edit().putBoolean("expanded:"+creator.id,!full).apply()
+                    refresh()
+                }
+            }
+            put(a,c,name,5)
+            put(a,c,ui.text(a,
+                hits.size.toString()+" indexed videos · "+
+                    if(full)"full collection" else "tap name to expand",
+                11f,ui.secondary),4)
+            val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
+                SearchRanking.validUrl(it.thumbnail)}.take(if(full)24 else 5)
+            if(gallery.isNotEmpty()){
+                val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
+                for(hit in gallery){
+                    val img=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        isClickable=true
+                        contentDescription="Download "+hit.title+" from "+hit.source
+                        setOnClickListener{
+                            if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
+                                VideoEngine.launch(a,false)
+                            notice(a,"Queued in Downloads · "+hit.title.take(50))
+                        }
+                    }
+                    strip.addView(img,LinearLayout.LayoutParams(
+                        ui.px(a,112),ui.px(a,116)).apply{
+                            rightMargin=ui.px(a,7)
+                    })
+                    VideoSearchPreviews.display(a,img,hit.thumbnail.orEmpty())
+                }
+                put(a,c,HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false
+                    addView(strip)
+                },8)
+            }
+            if(full){
+                for(hit in hits.filter{it.thumbnail.isNullOrBlank()}.take(8)){
+                    action(a,c,"DOWNLOAD · "+hit.title.take(45),false){
                         if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
                             VideoEngine.launch(a,false)
-                        notice(a,"Video queued or already saved")
+                        notice(a,"Queued · "+hit.title.take(65))
                     }
                 }
             }
-            if(previews.isNotEmpty()){
-                val line=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-                for((url,tap) in previews.take(5)){
-                    val img=ImageView(a).apply{
-                        setOnClickListener{tap()}
-                        contentDescription="Queue video from preview"
-                    }
-                    line.addView(img,LinearLayout.LayoutParams(ui.px(a,106),ui.px(a,106))
-                        .apply{rightMargin=ui.px(a,7)})
-                    VideoSearchPreviews.display(a,img,url)
-                }
-                put(a,c,HorizontalScrollView(a).apply{addView(line)},8)
+            if(hits.isEmpty()){
+                put(a,c,ui.text(a,
+                    "No matching indexed originals yet. CHECK searches this performer only.",
+                    12f,ui.secondary),6)
             }
-            put(a,c,ui.text(a,creator.name,17f,ui.white,true),9)
             if(!creator.lastError.isNullOrBlank())
-                put(a,c,ui.text(a,"Last scan: "+creator.lastError.take(90),
+                put(a,c,ui.text(a,"Source errors: "+creator.lastError.take(160),
                     11f,ui.danger),5)
-            toggle(a,c,"Live discovery",creator.enabled){enabled->
-                NameWatchDb(a).use{db->db.setEnabled(creator.id,enabled)}
+            toggle(a,c,"Sync new videos",creator.enabled){enabled->
+                NameWatchDb(a).use{it.setEnabled(creator.id,enabled)}
             }
-            pair(a,c,"BACKFILL / CHECK","REMOVE",{
+            pair(a,c,"CHECK THIS MODEL","REMOVE",{
                 NameWatchDb(a).use{it.setEnabled(creator.id,true)}
-                thread(name="asterion-creator-scan"){NameCrawler.scan(a.applicationContext)}
-                notice(a,"Creator scan started")
+                NameCrawler.scanCreator(a.applicationContext,creator.id)
+                notice(a,"Checking "+creator.name+" across providers")
             },{
                 AlertDialog.Builder(a).setTitle("Unfollow "+creator.name+"?")
                     .setNegativeButton("Cancel",null)
