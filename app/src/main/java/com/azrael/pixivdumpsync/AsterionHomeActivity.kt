@@ -444,25 +444,7 @@ class AsterionHomeActivity:Activity(){
             "Home"->renderHome()
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
-            "Site"->{
-                val settings=getSharedPreferences("asterion_gallery_layout",MODE_PRIVATE)
-                val showingFollowing=settings.getBoolean("cosplay_following",false)
-                val header=theme.row(this)
-                header.addView(text("Cosplay",20f,theme.white,true),
-                    LinearLayout.LayoutParams(0,-2,1f))
-                header.addView(theme.chip(this,
-                    if(showingFollowing)"HIDE FOLLOWING" else "MANAGE FOLLOWING",
-                    showingFollowing){
-                    settings.edit().putBoolean("cosplay_following",!showingFollowing)
-                        .apply()
-                    render()
-                },LinearLayout.LayoutParams(-2,-2))
-                put(body,header,4)
-                // The real media gallery comes first, like Kuroha/Pixiv.
-                // Following-site controls remain accessible without gating it.
-                SourceIndexPanel.render(this,body,"COSPLAY")
-                if(showingFollowing)AsterionUnifiedFollowing.kyora(this,body){render()}
-            }
+            "Site"->AsterionCosplayGallery.render(this,body){render()}
             "Porn"->AsterionAdultHub.render(this,body,"ADULT"){render()}
             "Hentai"->AsterionAdultHub.render(this,body,"HENTAI"){render()}
             "Books"->renderBooks()
