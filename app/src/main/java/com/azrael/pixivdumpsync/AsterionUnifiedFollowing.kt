@@ -337,30 +337,23 @@ object AsterionUnifiedFollowing {
                     if(full)"full collection" else "tap name to expand",
                 11f,ui.secondary),4)
             val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
-                SearchRanking.validUrl(it.thumbnail)}.take(if(full)24 else 5)
+                SearchRanking.validUrl(it.thumbnail)}
             if(gallery.isNotEmpty()){
-                val strip=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
-                for(hit in gallery){
-                    val img=ImageView(a).apply{
-                        scaleType=ImageView.ScaleType.CENTER_CROP
-                        isClickable=true
-                        contentDescription="Download "+hit.title+" from "+hit.source
-                        setOnClickListener{
-                            if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
-                                VideoEngine.launch(a,false)
-                            notice(a,"Queued in Downloads · "+hit.title.take(50))
-                        }
+                KurohaMediaPreview.render(a,c,
+                    "model:"+creator.id,
+                    gallery.map{hit->KurohaMediaPreview.Tile(
+                        url=hit.url,title=hit.title,
+                        thumbnail=hit.thumbnail.orEmpty(),
+                        attribution=hit.source,
+                        referer=hit.url,video=true
+                    )}){tile->
+                    val matching=gallery.firstOrNull{it.url==tile.url}
+                    if(matching!=null){
+                        if(VideoDb(a).use{it.addVideo(matching.url,matching.title)})
+                            VideoEngine.launch(a,false)
+                        notice(a,"Queued in Downloads · "+matching.title.take(50))
                     }
-                    strip.addView(img,LinearLayout.LayoutParams(
-                        ui.px(a,112),ui.px(a,116)).apply{
-                            rightMargin=ui.px(a,7)
-                    })
-                    VideoSearchPreviews.display(a,img,hit.thumbnail.orEmpty())
                 }
-                put(a,c,HorizontalScrollView(a).apply{
-                    isHorizontalScrollBarEnabled=false
-                    addView(strip)
-                },8)
             }
             if(full){
                 for(hit in hits.filter{it.thumbnail.isNullOrBlank()}.take(8)){
