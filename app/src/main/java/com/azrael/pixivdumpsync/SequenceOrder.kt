@@ -49,6 +49,33 @@ object SequenceOrder {
         return Index(major,minor)
     }
 
+    /** Only group genuinely numbered episodes from a recognizable series.
+     * Unrelated clips, scene galleries and ordinary photo albums stay separate.
+     */
+    fun episodeSeries(title:String):String? {
+        val matched=seasonEpisode.find(title)
+            ?:numbered[Kind.EPISODE]?.find(title)?:return null
+        val normalized=title.removeRange(matched.range)
+            .replace(Regex("""(?i)\b(?:eng(?:lish)?|sub(?:titles?)?|dub(?:bed)?|1080p|720p|2160p|4k|hd)\b""")," ")
+            .lowercase(Locale.ROOT)
+            .replace(Regex("""[^a-z0-9\p{L}]+""")," ")
+            .trim().replace(Regex("""\s+""")," ")
+        return normalized.takeIf{it.length>=4}
+    }
+
+    /** One episode is eligible only if no *known* earlier numbered episode
+     * from the same series remains unfinished. Unknown episodes are not
+     * invented; a separate source catalogue determines completeness.
+     */
+    fun canDownloadEpisode(title:String,unfinished:List<String>):Boolean {
+        val group=episodeSeries(title)?:return true
+        val number=index(Kind.EPISODE,title)?:return true
+        return unfinished.none{
+            episodeSeries(it)==group &&
+                (index(Kind.EPISODE,it)?.let{n->n<number}==true)
+        }
+    }
+
     /** Stable numerical ordering only for an explicitly ordered content type.
      * Unknown indices are never guessed and keep their original relative order.
      */
