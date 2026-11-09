@@ -658,6 +658,7 @@ object SourceIndex {
     private const val STATE="asterion_source_index_cursor"
     private val busy=AtomicBoolean(false)
     private val previewBusy=AtomicBoolean(false)
+    private val previewDbLock=Any()
     private val extra=listOf(
         Triple("Patreon","https://www.patreon.com/","CREATORS"),
         Triple("FANBOX","https://www.fanbox.cc/","CREATORS"),
@@ -1147,15 +1148,15 @@ object SourceIndex {
                 }
             }
             val records=SourceIndexParser.entries(doc,source.url,source.area,System.currentTimeMillis())
-            SourceIndexDb(context).use{db->
-                for(item in records){
-                    if(db.upsert(item))fresh++
+            synchronized(previewDbLock){
+                SourceIndexDb(context).use{db->
+                    for(item in records){
+                        if(db.upsert(item))fresh++
+                    }
                 }
-                // Newly found originals remain durable in the download queue;
-                // the global scheduler submits a bounded, deduplicated batch.
-                // Do not start thousands of DownloadManager requests while a
-                // single large listing page is still being indexed.
             }
+            // All original downloads remain owned by the existing queue.
+            // Catalog discovery itself never enqueues originals.
             // Catalog-only checks update last-check/index count, but never
             // advance a historical backfill cursor or queue any downloads.
             if(previewOnly){
