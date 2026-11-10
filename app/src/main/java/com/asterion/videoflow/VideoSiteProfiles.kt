@@ -18,7 +18,7 @@ internal object VideoSiteProfiles {
         Route("eporner.com",Regex("""(?i)^/(?:hd-porn/[a-z0-9]+|video-[a-z0-9]+)(?:/|$)""")),
         Route("hqpornerxxx.com",Regex("""(?i)^/(?:hdporn|video|videos)/[^/?#]+""")),
         Route("jav.guru",Regex("""(?i)^/[0-9]{4,10}/[a-z0-9][a-z0-9_-]{3,240}/?$""")),
-        Route("javideo.net",Regex("""(?i)^/(?:en/)?(?:video|watch|jav)/[^/?#]+""")),
+        Route("javideo.net",Regex("""(?i)^/(?:en/)?[a-z0-9]{1,20}-[0-9]{5,9}(?:-[0-9]{1,5})?/?$""")),
         Route("roshy.tv",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("cums.net",Regex("""(?i)^/(?:video|watch|v)/[^/?#]+""")),
         Route("peekvids.com",Regex("""(?i)^/(?:v|video|videos)/[^/?#]+""")),
