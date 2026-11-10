@@ -94,8 +94,13 @@ object DirectDownloadTracker {
             val progress=if(item.total>0)
                 " · "+(100L*item.bytes/item.total).toInt().coerceIn(0,100)+"%"
                 else ""
+            val receipt=OriginalReceiptState.get(a,item.job.id)
             val label=when(item.status){
-                DownloadManager.STATUS_SUCCESSFUL->"Saved"
+                DownloadManager.STATUS_SUCCESSFUL->when(receipt){
+                    "VERIFIED"->"Saved original"
+                    "INVALID"->"Invalid file · check source and retry"
+                    else->"Transfer finished · verifying original"
+                }
                 DownloadManager.STATUS_RUNNING->"Downloading"+progress
                 DownloadManager.STATUS_PENDING->"Queued"
                 DownloadManager.STATUS_PAUSED->"Paused"+progress
@@ -103,13 +108,20 @@ object DirectDownloadTracker {
                 else->"Waiting"
             }
             card.addView(ui.text(a,item.job.folder+" · "+item.job.sourceHost+
-                " · "+label,12f,if(item.status==DownloadManager.STATUS_FAILED)
-                    ui.danger else ui.secondary),ui.lp(a,5))
+                " · "+label,12f,if(item.status==DownloadManager.STATUS_FAILED ||
+                    receipt=="INVALID") ui.danger else ui.secondary),ui.lp(a,5))
             if(item.status==DownloadManager.STATUS_SUCCESSFUL){
                 card.addView(ui.action(a,"OPEN FILE",false){
                     val manager=a.getSystemService(DownloadManager::class.java)
-                    val file=manager.getUriForDownloadedFile(item.job.id)
-                    if(file==null)Toast.makeText(a,"Downloaded file is unavailable",
+                    val checked=OriginalFileReceipt.verify(
+                        a,manager,item.job.id,item.job.filename)
+                    OriginalReceiptState.set(a,item.job.id,
+                        if(checked.valid)"VERIFIED" else "INVALID")
+                    val file=if(checked.valid)
+                        manager.getUriForDownloadedFile(item.job.id) else null
+                    if(file==null)Toast.makeText(a,
+                        if(checked.valid)"Downloaded file is unavailable"
+                        else "Original rejected: "+checked.reason,
                         Toast.LENGTH_LONG).show()
                     else runCatching{
                         a.startActivity(Intent(Intent.ACTION_VIEW).apply{
