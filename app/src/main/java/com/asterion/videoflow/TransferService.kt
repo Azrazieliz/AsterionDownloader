@@ -520,6 +520,7 @@ object VideoEngine {
             val heartbeat=java.util.concurrent.atomic.AtomicLong(
                 android.os.SystemClock.elapsedRealtime())
             var greatest=0f
+            var lastSavedPercent=-1
             val response=executeControlled(request(link,referer),
                 "transfer",heartbeat){progress,_,_->
                 if(stopRequests.contains(item.id))
@@ -529,8 +530,11 @@ object VideoEngine {
                     heartbeat.set(android.os.SystemClock.elapsedRealtime())
                 }
                 val percent=progress.toInt().coerceIn(0,100)
-                db.progress(item.id,percent)
-                if(percent%5==0) status(percent)
+                if(percent>lastSavedPercent){
+                    db.progress(item.id,percent)
+                    lastSavedPercent=percent
+                    if(percent%5==0)status(percent)
+                }
             }
             if(!response.isSuccess)error("Video extractor failed with exit code ${response.exitCode}")
         }
