@@ -21,6 +21,7 @@ object SiteControls {
         // historical subscriptions but never show independent site switches.
         return when(host){
             "buondua.com"->"buondua.net"
+            "omg.xxx"->"omg.porn"
             else->host
         }
     }
