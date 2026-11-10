@@ -586,12 +586,32 @@ object VideoEngine {
         // silently bypass an age/login requirement or send cookies cross-site.
         // Other providers retain existing canonical-URL behavior.
         val variants=EpornerOriginalSource.videoCandidates(item.url,connected)
+        val watchPorn=if(viaProxy)null else runCatching{
+            WatchPornOriginalSource.resolve(item.url)
+        }.getOrNull()
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
         var heldReason:String?=null
         try {
-            for(candidate in variants.distinct()) {
+            if(watchPorn!=null){
+                // Full runtime was published twice in the provider's own page.
+                // This avoids a pointless 50-second metadata preflight for a
+                // signed direct MP4 that has no extractor-reported duration.
+                // Final device-side runtime is still checked below.
+                val decision=FullLengthVideoPolicy.assess(
+                    item.title,item.title,item.url,
+                    watchPorn.durationSeconds,watchPorn.durationSeconds,
+                    publisherVerified=true)
+                if(decision.verdict==FullLengthVideoPolicy.Verdict.ACCEPT){
+                    try{
+                        execute(watchPorn.mediaUrl,item.url)
+                        expectedDuration=watchPorn.durationSeconds
+                        downloaded=true
+                    }catch(t:Exception){last=t}
+                }else heldReason=decision.reason
+            }
+            if(!downloaded) for(candidate in variants.distinct()) {
                 val checked=runCatching{preflight(candidate)}
                 if(checked.isSuccess){
                     val decision=checked.getOrThrow().second
