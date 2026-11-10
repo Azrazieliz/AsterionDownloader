@@ -77,4 +77,12 @@ def main():
             print("META_PLAYER_HOST",host_or_empty(u))
     print("IN_PAGE_MEDIA_MARKERS",
           len(re.findall(r"\.(?:mp4|m3u8|webm)(?:\?|[\"'])",page,re.I)))
+    media_hosts=set()
+    for match in re.finditer(r"https?://[^\s\"'<>]{4,350}\.(?:mp4|m3u8|webm)",page,re.I):
+        host=host_or_empty(match.group(0).replace("\\/","/"))
+        if host:media_hosts.add(host)
+    print("INLINE_MEDIA_HOSTS",",".join(sorted(media_hosts)[:8]))
+    duration_meta=re.findall(
+        r'(?i)(?:video:duration|itemprop=[\"\']duration[\"\']|duration[\"\']?\s*[:=])[^\n<>]{0,45}',page)
+    print("PUBLISHED_DURATION_MARKERS",len(duration_meta))
 if __name__=="__main__":main()
