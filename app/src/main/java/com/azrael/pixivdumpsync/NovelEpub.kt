@@ -18,7 +18,15 @@ data class NovelText(val title:String,val paragraphs:List<String>)
 object NovelEpubParser {
     private val number=Regex("""(?i)(?:^|[/\s_-])(?:chapter|chapitre|ch|episode)[/_\s.-]*(\d+(?:[._]\d+)?)""")
     private val readerHosts=setOf(
-        "freewebnovel.com","novelbuddy.com","readnovelfull.com")
+        "freewebnovel.com","novelbuddy.com","novelbuddy.me","readnovelfull.com")
+    private fun canonicalReaderHost(host:String?):String{
+        val normalized=host.orEmpty().lowercase().removePrefix("www.")
+        return if(normalized=="novelbuddy.com")"novelbuddy.me" else normalized
+    }
+    private fun sameReaderHost(a:String?,b:String?):Boolean{
+        val host=canonicalReaderHost(a)
+        return host.isNotBlank() && host==canonicalReaderHost(b)
+    }
     /** Text-based novels are always EPUB. ZIP is for image-based series. */
     fun readableZipSeries(url:String):Boolean=false
     fun supportedSeries(url:String):Boolean = runCatching{
@@ -52,7 +60,7 @@ object NovelEpubParser {
         val found=LinkedHashMap<String,NovelChapter>()
         for(a in doc.select("a[href]").take(10000)){
             val url=runCatching{root.resolve(a.attr("href"))}.getOrNull()?:continue
-            if(url.scheme!="https" || !url.host.equals(root.host,true) ||
+            if(url.scheme!="https" || !sameReaderHost(url.host,root.host) ||
                 url.userInfo!=null || url.fragment!=null ||
                 !url.path.startsWith(home+"/"))continue
             // The displayed chapter number may differ from the provider's URL ID.
@@ -79,7 +87,7 @@ object NovelEpubParser {
         for(a in candidates) {
             val url=runCatching{resolveLink(a.attr("href"))}.getOrNull()
                 ?:continue
-            if(url.scheme=="https" && url.host.equals(root.host,true) &&
+            if(url.scheme=="https" && sameReaderHost(url.host,root.host) &&
                 url.path.trimEnd('/')==root.path.trimEnd('/') &&
                 url.toString() !in visited)return url.toString()
         }
@@ -91,7 +99,7 @@ object NovelEpubParser {
         val links=doc.select("a[href]").mapNotNull{a->
             val next=runCatching{resolveLink(a.attr("href"))}
                 .getOrNull()?:return@mapNotNull null
-            if(next.scheme!="https" || !next.host.equals(root.host,true) ||
+            if(next.scheme!="https" || !sameReaderHost(next.host,root.host) ||
                 next.path.trimEnd('/')!=root.path.trimEnd('/') ||
                 next.toString() in visited)return@mapNotNull null
             val page=Regex("""(?:^|[?&])page=(\d+)""")
@@ -113,7 +121,7 @@ object NovelEpubParser {
             if(!next)continue
             val dest=runCatching{URI(doc.location()).resolve(a.attr("href"))}
                 .getOrNull()?:continue
-            if(dest.scheme=="https" && dest.host.equals(home.host,true) &&
+            if(dest.scheme=="https" && sameReaderHost(dest.host,home.host) &&
                 dest.userInfo==null && dest.fragment==null &&
                 dest.path.startsWith(home.path.trimEnd('/')+"/") &&
                 parseChapterNumber(dest.path)!=null &&
