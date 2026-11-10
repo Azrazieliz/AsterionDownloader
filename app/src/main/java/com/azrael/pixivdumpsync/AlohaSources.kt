@@ -35,18 +35,18 @@ CamStreams|https://camstreams.tv/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
-Pornhub|https://pornhub.com/|ADULT
+Pornhub|https://www.pornhub.com/|ADULT
 EPORNER|https://www.eporner.com/|ADULT
 XVIDEOS|https://fr.xvideos.com/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
 OMG.xxx|https://www.omg.porn/fr/|ADULT
 Jav Guru|https://jav.guru/|ADULT
-Roshy JAV|https://roshy.tv/category/decensored/|ADULT
+Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 CUMS|https://cums.net/|ADULT
 PeekVids|https://www.peekvids.com/|ADULT
 PornTrex|https://www.porntrex.com/|ADULT
-TNAFLIX|https://m.tnaflix.com/|ADULT
+TNAFLIX|https://www.tnaflix.com/|ADULT
 Pornhits|https://www.pornhits.com/main/|ADULT
 XNXX|https://www.xnxx.com/|ADULT
 XXXClub|https://xxxclub.to/|ADULT
@@ -59,8 +59,8 @@ Uncensored Hentai|https://uncensoredhentai.xxx/|HENTAI
 Hentai Haven|https://hentaihaven.xxx/|HENTAI
 Rule34 videos|https://rule34video.com/|HENTAI
 Sushi-Scan|https://sushiscan.net/|COMICS
-Freeweb Novel|https://freewebnovel.com/|BOOKS
-NovelBuddy|https://novelbuddy.com/home|BOOKS
+Freeweb Novel|https://freewebnovel.com/home|BOOKS
+NovelBuddy|https://novelbuddy.me/home|BOOKS
 ReadNovelFull|https://readnovelfull.com/|BOOKS
 NHentai mirror|https://nhentai.xxx/language/english/|COMICS
 Sukebei Nyaa|https://sukebei.nyaa.si/|GAMES
