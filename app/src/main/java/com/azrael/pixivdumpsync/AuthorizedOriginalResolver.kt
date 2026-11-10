@@ -102,17 +102,48 @@ object AuthorizedOriginalResolver {
         // Inspect only response headers before treating them as HTML listings.
         runCatching{AuthorizedEndpointInspector.inspect(pageOrFile,hint)}
             .getOrNull()?.let{return it}
-        val request=Jsoup.connect(pageOrFile).timeout(17000).maxBodySize(3_000_000)
-            .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
-            .header("Accept","text/html,application/xhtml+xml")
-            .ignoreHttpErrors(true).followRedirects(true)
-        SiteSession.cookie(pageOrFile)?.let{request.header("Cookie",it)}
-        val response=request.execute()
-        val destination=response.url().toString()
-        check(SearchRanking.validUrl(destination) && destination.startsWith("https://")){
-            "Untrusted HTTP redirect"
+        // Inspect each redirect explicitly. Preserve authorization only on
+        // the approved first-party site; never forward account cookies to an
+        // arbitrary destination or mislabel an unrelated provider as original.
+        var address=pageOrFile
+        var response:org.jsoup.Connection.Response?=null
+        repeat(5){
+            require(SourceIndexParser.safe(address) &&
+                SourceIndexParser.sameSite(pageOrFile,address)){
+                "Provider redirected outside its verified source; adapter update required"
+            }
+            val request=Jsoup.connect(address).timeout(17000)
+                .maxBodySize(3_000_000)
+                .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
+                .header("Accept","text/html,application/xhtml+xml")
+                .ignoreHttpErrors(true).followRedirects(false)
+            SiteSession.cookie(address)?.let{request.header("Cookie",it)}
+            val r=request.execute()
+            if(r.statusCode() in 300..399){
+                val location=r.header("Location")?.takeIf{it.isNotBlank()}
+                    ?:throw OriginalAccessException(OriginalAccessCause.NO_ORIGINAL,
+                        "Provider redirect has no destination")
+                val next=URI(address).resolve(location).toString()
+                if(!SourceIndexParser.safe(next) ||
+                    !SourceIndexParser.sameSite(pageOrFile,next)){
+                    throw OriginalAccessException(OriginalAccessCause.NO_ORIGINAL,
+                        "Provider changed to an unrelated website; verify new original source")
+                }
+                address=next
+            }else{
+                response=r
+                return@repeat
+            }
         }
-        when(response.statusCode()){
+        val finalResponse=response
+            ?:throw OriginalAccessException(OriginalAccessCause.NO_ORIGINAL,
+                "Provider redirect limit reached")
+        val destination=finalResponse.url().toString()
+        require(SourceIndexParser.safe(destination) &&
+            SourceIndexParser.sameSite(pageOrFile,destination)){
+            "Untrusted provider URL after redirect"
+        }
+        when(finalResponse.statusCode()){
             401->throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
                 "Sign in with an account authorized to access this original")
             402->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
@@ -124,8 +155,8 @@ object AuthorizedOriginalResolver {
             429->throw OriginalAccessException(OriginalAccessCause.RATE_LIMIT,
                 "Provider rate limit reached; try again later")
         }
-        require(response.statusCode() in 200..299) {
-            "Provider HTTP "+response.statusCode()
+        require(finalResponse.statusCode() in 200..299) {
+            "Provider HTTP "+finalResponse.statusCode()
         }
         val target=java.net.URI(destination)
         val original=java.net.URI(pageOrFile)
@@ -138,7 +169,7 @@ object AuthorizedOriginalResolver {
         if(target.path.orEmpty().matches(Regex("(?i).*/(?:login|signin|sign-in|auth|account/login)/?")))
             throw OriginalAccessException(OriginalAccessCause.SIGN_IN,
                 "Session expired or account sign-in required")
-        val doc=response.parse()
+        val doc=finalResponse.parse()
         val content=doc.outerHtml()
         return parse(content,destination,hint)
             ?:throw OriginalAccessException(OriginalAccessCause.NO_ORIGINAL,
