@@ -18,10 +18,10 @@ class RounderDownloadCompleteReceiver:BroadcastReceiver(){
         val pending=goAsync()
         kotlin.concurrent.thread(name="asterion-rounder-download-complete"){
             try{
-                val known=DirectDownloadTracker.states(app,250)
-                    .any{it.job.id==id &&
-                        it.status==DownloadManager.STATUS_SUCCESSFUL}
-                if(known)RounderDispatch.scan(app)
+                // System completion may contain an HTML access page or a
+                // corrupt ZIP. Verify actual bytes before Rounder receives it.
+                if(DirectDownloadRetry.validateCompleted(app,id))
+                    RounderDispatch.scan(app)
             }finally{pending.finish()}
         }
     }
