@@ -763,7 +763,7 @@ object SourceIndex {
                     db.pendingDetails(50).any{item->
                         SiteControls.explicitlyEnabled(context,item.source)
                     }) ||
-                db.pendingDirect(100).any{automaticallyRequested(context,it)}
+                db.pendingDirect(100).any{originalRequested(context,it)}
         }
     }
     fun scheduleCatchup(context:Context,force:Boolean=false,delayMs:Long=30_000L){
@@ -1077,7 +1077,7 @@ object SourceIndex {
                         for(file in originals){
                             db.upsert(file)
                             if(SourceIndexParser.autoOriginal(file) &&
-                                queueDirect(context,file)){
+                                submitOriginal(context,file)){
                                 db.markQueued(file.url)
                                 enqueued++
                             }
@@ -1096,7 +1096,7 @@ object SourceIndex {
                 it.pendingForSource(address,false,40)
             }){
                 if(stop() || !AppPower.enabled(context))return
-                if(SourceIndexParser.autoOriginal(item) && queueDirect(context,item)){
+                if(SourceIndexParser.autoOriginal(item) && submitOriginal(context,item)){
                     SourceIndexDb(context).use{it.markQueued(item.url)}
                     enqueued++
                 }
