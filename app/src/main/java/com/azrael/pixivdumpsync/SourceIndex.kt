@@ -283,7 +283,7 @@ class SourceIndexDb(context:Context):
     /** Retry only direct originals not yet accepted by their native download
      * engine. Historical pages do not have to be revisited just to retry a URL.
      */
-    fun pendingDirect(limit:Int=30,area:String?=null):List<IndexedItem>{
+    fun pendingDirect(limit:Int=30,area:String?=null,offset:Int=0):List<IndexedItem>{
         val rows=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
@@ -316,10 +316,10 @@ class SourceIndexDb(context:Context):
                     OR (kind='archive' AND area IN ('GAMES','ASSETS'))
                     OR (kind='apk' AND area='GAMES')
                 )
-                ORDER BY discovered_at ASC LIMIT ?""",
+                ORDER BY discovered_at ASC LIMIT ? OFFSET ?""",
             arrayOf(System.currentTimeMillis().toString(),
                 System.currentTimeMillis().toString(),area.orEmpty(),area.orEmpty(),
-                limit.coerceIn(1,120).toString())).use{c->
+                limit.coerceIn(1,120).toString(),offset.coerceAtLeast(0).toString())).use{c->
             while(c.moveToNext())rows+=IndexedItem(c.getString(0),c.getString(1),
                 c.getString(2),c.getString(3),c.getString(4),c.getString(5),
                 c.getLong(6),c.getInt(7)==1)
