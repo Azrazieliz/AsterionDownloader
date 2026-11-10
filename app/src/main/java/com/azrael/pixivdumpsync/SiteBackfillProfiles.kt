@@ -29,6 +29,8 @@ internal object SiteBackfillProfiles {
             Regex("^/novel/[A-Za-z0-9][A-Za-z0-9_-]*/?$"),"books"),
         Profile("novelbuddy.com","BOOKS",chapters,
             Regex("^/(?:novel|book)/[A-Za-z0-9][A-Za-z0-9_-]*/?$"),"books"),
+        Profile("novelbuddy.me","BOOKS",chapters,
+            Regex("^/(?:novel|book)/[A-Za-z0-9][A-Za-z0-9_-]*/?$"),"books"),
         Profile("readnovelfull.com","BOOKS",chapters,
             Regex("^/(?:novel|book)/[A-Za-z0-9][A-Za-z0-9_-]*/?$"),"books"),
         Profile("sushiscan.net","COMICS",comics,
