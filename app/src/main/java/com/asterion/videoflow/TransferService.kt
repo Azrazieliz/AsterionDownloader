@@ -190,7 +190,7 @@ object VideoEngine {
                             collected.values.toList()
                         }else{
                             val collected=linkedMapOf<String,VideoHit>()
-                            val latest=WebDiscovery.page(watch.address,watch.address)
+                            val latest=WebDiscovery.page(watch.address,watch.address,context)
                             for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
                             // Every scan checks latest posts. A durable cursor then resumes
                             // older pages, instead of always resetting at the homepage.
@@ -203,7 +203,7 @@ object VideoEngine {
                                 collected.size<650 && visited.add(cursor) &&
                                 com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                                 !Thread.currentThread().isInterrupted){
-                                val page=WebDiscovery.page(cursor,watch.address)
+                                val page=WebDiscovery.page(cursor,watch.address,context)
                                 for(hit in page.hits)collected.putIfAbsent(hit.url,hit)
                                 cursor=page.next
                                 pages++
@@ -312,7 +312,7 @@ object VideoEngine {
                 com.azrael.pixivdumpsync.AppPower.enabled(context)){
                 val page=pages[pageIndex++]
                 if(!seen.add(page))continue
-                val response=try { WebDiscovery.page(page,selected.address) }
+                val response=try { WebDiscovery.page(page,selected.address,context) }
                     catch(e:Exception){
                         db.checked(selected.id,e.message?:"Provider discovery failed")
                         com.azrael.pixivdumpsync.SourceIndexDb(context).use{
