@@ -38,22 +38,22 @@ object FullLengthVideoPolicy {
         return clean.take(220)
     }
     fun assess(pageTitle:String,extractedTitle:String,url:String,durationSec:Long?,
-               referenceSec:Long?):Decision {
+               referenceSec:Long?,publisherVerified:Boolean=false):Decision {
         if(previewWords.containsMatchIn(pageTitle)||
             previewWords.containsMatchIn(extractedTitle)||
             previewWords.containsMatchIn(runCatching{URI(url).path}.getOrDefault("")))
             return Decision(Verdict.REJECT_SHORT_VERSION,"Trailer, sample or segmented cut")
         val duration=durationSec?.takeIf{it>0}
             ?:return Decision(Verdict.HOLD_FOR_REFERENCE,"Extractor did not report duration")
-        if(duration<60L)
-            return Decision(Verdict.REJECT_SHORT_VERSION,"Video shorter than one minute")
+        if(duration<60L && !(publisherVerified && referenceSec==duration))
+            return Decision(Verdict.REJECT_SHORT_VERSION,"Short video without independently verified full published runtime")
         if(referenceSec!=null && referenceSec>0){
             // Allow only a few seconds of encoder/container timing variance.
             // A 50-minute original cut down to 49 minutes is NOT acceptable.
             if(duration+5L<referenceSec)
                 return Decision(Verdict.REJECT_SHORT_VERSION,
                     "Only ${duration}s of expected ${referenceSec}s")
-            return Decision(Verdict.ACCEPT,"Verified against full-version runtime")
+            return Decision(Verdict.ACCEPT,if(publisherVerified) "Official publisher duration matches complete video" else "Verified against full-version runtime")
         }
         // User-designated full-release providers are explicit positive sources;
         // this is NOT crowdsourced reviews, search ranking, or generic site trust.
