@@ -170,17 +170,11 @@ object KoikatsuFollowing {
                         setImageResource(R.drawable.ic_source_koikatsu)
                         contentDescription=item.name+" original PNG"
                         setOnClickListener{
-                            thread(name="asterion-koi-download"){
-                                val res=runCatching{
-                                    KoikatsuCards.download(a,
-                                        KoikatsuCards.resolve(item),item.name)
-                                }
-                                a.runOnUiThread{
-                                    if(!a.isFinishing)Toast.makeText(a,
-                                        res.fold({"Saved original PNG · "+item.name},
-                                            {"PNG download failed: "+it.message}),
-                                        Toast.LENGTH_LONG).show()
-                                }
+                            KoikatsuCardAgents.submit(a,item){res->
+                                Toast.makeText(a,
+                                    res.fold({"Saved original PNG · "+item.name},
+                                        {"PNG download failed: "+it.message}),
+                                    Toast.LENGTH_LONG).show()
                             }
                         }
                     }
