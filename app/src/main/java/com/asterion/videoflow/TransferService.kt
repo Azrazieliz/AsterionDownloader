@@ -7,6 +7,7 @@ import android.provider.MediaStore
 import android.os.Environment
 import android.net.Uri
 import android.media.MediaMetadataRetriever
+import com.azrael.galleryflow.SiteSession
 import java.io.File
 import org.json.JSONObject
 import java.util.concurrent.Executors
