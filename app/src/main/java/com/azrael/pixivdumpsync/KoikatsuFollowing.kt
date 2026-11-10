@@ -184,7 +184,7 @@ object KoikatsuFollowing {
                             }
                         }
                     }
-                    gallery.addView(image,LinearLayout.LayoutParams(ui.px(a,108),ui.px(a,108))
+                    gallery.addView(image,LinearLayout.LayoutParams(ui.px(a,108),ui.px(a,152))
                         .apply{rightMargin=ui.px(a,7)})
                     (item.preview?:item.download.takeIf{item.source=="BepisDB"})?.let{
                         RemoteImageLoader.load(a,image,it,item.page)
