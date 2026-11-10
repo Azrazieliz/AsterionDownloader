@@ -411,7 +411,15 @@ object VideoEngine {
         require(!hidden||viaProxy){"Configure a SOCKS proxy before connecting to this source"}
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
+        val connected=SiteSession.bound(context,item.url)
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
+        // The Eporner watch page can serve a verification interstitial even
+        // though the official embed exposes the publisher's actual player.
+        // Only use that alternate route after the user explicitly connects
+        // an authorized site session. The public official API attests runtime.
+        val publishedRuntime=if(connected &&
+            EpornerOriginalSource.videoId(item.url)!=null)
+            EpornerOriginalSource.officialDuration(item.url) else null
         val preparationStart=android.os.SystemClock.elapsedRealtime()
         check(db.touchClaim(item.id,item.lease)){
             "Download claim is no longer owned by this worker"
@@ -526,11 +534,12 @@ object VideoEngine {
             val duration=json.optDouble("duration",0.0)
                 .takeIf{it.isFinite() && it>0.0}?.toLong()
             val extracted=json.optString("title","")
-            val expected=FullSceneRuntimeDb(context).use{db->
+            val expected=publishedRuntime ?: FullSceneRuntimeDb(context).use{db->
                 listOfNotNull(db.expected(item.title),db.expected(extracted)).maxOrNull()
             }
             val decision=FullLengthVideoPolicy.assess(item.title,
-                extracted,link,duration,expected)
+                extracted,link,duration,expected,
+                publisherVerified=publishedRuntime!=null)
             // Collect comparison evidence even for held videos, without granting
             // full-length status to an uncorroborated provider's own metadata.
             if(duration!=null){
@@ -572,8 +581,10 @@ object VideoEngine {
             if(!response.isSuccess)error(
                 VideoExtractorErrors.message(response.output,response.exitCode,"transfer"))
         }
-        // Historical builds altered original hostnames. Try the precise URL first.
-        val variants=listOf(item.url)+SourceDiagnostics.alternateHosts(item.url)
+        // For Eporner use the verified publisher's own embed first. Never
+        // silently bypass an age/login requirement or send cookies cross-site.
+        // Other providers retain existing canonical-URL behavior.
+        val variants=EpornerOriginalSource.videoCandidates(item.url,connected)
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
