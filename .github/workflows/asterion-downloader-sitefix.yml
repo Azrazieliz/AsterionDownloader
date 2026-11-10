@@ -49,31 +49,31 @@ jobs:
           APK=app/build/outputs/apk/pilot/app-pilot.apk
           test -s "$APK"
           TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "$TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.pilotbackend'"
-          "$TOOLS/aapt" dump badging "$APK" | grep -F "versionName='1.3.49-pilot'"
+          "$TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.pilotagents'"
+          "$TOOLS/aapt" dump badging "$APK" | grep -F "versionName='1.3.50-pilot'"
           "$TOOLS/apksigner" verify "$APK"
           unzip -t "$APK" >/dev/null
-          cp "$APK" Asterion-Downloader-Backend-Fix-v1.3.49.apk
-          sha256sum Asterion-Downloader-Backend-Fix-v1.3.49.apk > Asterion-Downloader-Backend-Fix-v1.3.49.sha256
+          cp "$APK" Asterion-Downloader-Agents-v1.3.50.apk
+          sha256sum Asterion-Downloader-Agents-v1.3.50.apk > Asterion-Downloader-Agents-v1.3.50.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Asterion-Downloader-Backend-Fix-v1.3.49
+          name: Asterion-Downloader-Agents-v1.3.50
           if-no-files-found: error
           path: |
-            Asterion-Downloader-Backend-Fix-v1.3.49.apk
-            Asterion-Downloader-Backend-Fix-v1.3.49.sha256
+            Asterion-Downloader-Agents-v1.3.50.apk
+            Asterion-Downloader-Agents-v1.3.50.sha256
       - name: Publish directly installable Android APK
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          TAG="asterion-downloader-backend-v1.3.49-$(git rev-parse --short=10 "$GITHUB_SHA")"
+          TAG="asterion-downloader-agents-v1.3.50-$(git rev-parse --short=10 "$GITHUB_SHA")"
           gh release create "$TAG" \
-            Asterion-Downloader-Backend-Fix-v1.3.49.apk \
-            Asterion-Downloader-Backend-Fix-v1.3.49.sha256 \
+            Asterion-Downloader-Agents-v1.3.50.apk \
+            Asterion-Downloader-Agents-v1.3.50.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Asterion Downloader v1.3.49 — Backend Repair Pilot" \
-            --notes "Temporary pre-merge Android testing APK. Approved v1.3.48 UI is unchanged. Backend repairs: bounded yt-dlp metadata and stalled transfers, robust multi-line metadata JSON extraction, durable due-time retries and permanent-error classification, verified same-provider canonical redirects and use of explicitly authorized site browser sessions. REGRESSION TESTS PASS. This build is NOT proof that every third-party provider supplies downloadable originals; HTTP 403 and inaccessible content require a valid authorized session or adapter work. App package com.azrael.pixivdumpsync.pilotbackend is DISTINCT from v1.3.48, retaining the previous install and its private data. No data migration. Debug signing is intended for this temporary acceptance build, not seamless production updates." \
+            --title "Asterion Downloader v1.3.50 — Concurrent Agents Pilot" \
+            --notes "Temporary pre-merge Android testing APK. Approved v1.3.48 UI is unchanged. Backend repairs: bounded yt-dlp metadata and stalled transfers, robust multi-line metadata JSON extraction, durable due-time retries and permanent-error classification, verified same-provider canonical redirects and use of explicitly authorized site browser sessions. REGRESSION TESTS PASS. This build is NOT proof that every third-party provider supplies downloadable originals; HTTP 403 and inaccessible content require a valid authorized session or adapter work. App package com.azrael.pixivdumpsync.pilotagents is DISTINCT from v1.3.48, retaining the previous install and its private data. No data migration. Debug signing is intended for this temporary acceptance build, not seamless production updates." \
             --prerelease
