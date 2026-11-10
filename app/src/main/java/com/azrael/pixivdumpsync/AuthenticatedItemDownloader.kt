@@ -9,7 +9,6 @@ import com.asterion.videoflow.VideoEngine
 import com.azrael.galleryflow.SiteLoginActivity
 import com.azrael.galleryflow.SiteSession
 import org.json.JSONObject
-import kotlin.concurrent.thread
 
 /** Shared authorized retrieval. Access checks never invent subscriber credentials. */
 object AuthenticatedItemDownloader {
@@ -25,7 +24,7 @@ object AuthenticatedItemDownloader {
             return
         }
         Toast.makeText(a,"Resolving accessible original…",Toast.LENGTH_SHORT).show()
-        thread(name="asterion-authenticated-original"){
+        val accepted=ModuleOriginalAgents.submitUser(a,item.area,item.url){
             val found=runCatching{AuthorizedOriginalResolver.resolve(item.url,item.area)}
             a.runOnUiThread{
                 if(a.isDestroyed||a.isFinishing)return@runOnUiThread
@@ -96,6 +95,9 @@ object AuthenticatedItemDownloader {
                 }
             }
         }
+        if(!accepted)Toast.makeText(a,
+            "Original already being retrieved or this module is unavailable",
+            Toast.LENGTH_SHORT).show()
     }
     fun resumeIfConnected(a:Activity){
         val saved=preferences(a).getString(PENDING,null)?:return
