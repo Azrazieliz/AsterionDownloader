@@ -79,12 +79,38 @@ object KyoraCreatorPreviews {
         if(!inflight.add(url))return
         pool.execute{
             val snapshot=runCatching{
-                val page=Jsoup.connect(url).timeout(15000).maxBodySize(2_000_000)
-                    .userAgent(HttpClient.USER_AGENT)
-                    .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
-                    .get()
-                require(page.location().startsWith("https://")){"Source redirected to HTTP"}
-                val items=parse(page.outerHtml(),page.location())
+                var current=url
+                var page:org.jsoup.nodes.Document?=null
+                for(hop in 0..4){
+                    require(SourceIndexParser.safe(current) &&
+                        SourceIndexParser.sameSite(url,current)){
+                        "Provider redirect moved to a different domain; verify updated source"
+                    }
+                    val response=Jsoup.connect(current).timeout(15000)
+                        .maxBodySize(2_000_000).userAgent(HttpClient.USER_AGENT)
+                        .followRedirects(false).ignoreHttpErrors(true)
+                        .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                        .execute()
+                    if(response.statusCode() in 300..399){
+                        val location=response.header("Location")
+                            ?:error("Provider redirect has no destination")
+                        val next=URI(current).resolve(location).toString()
+                        require(SourceIndexParser.safe(next) &&
+                            SourceIndexParser.sameSite(url,next)){
+                            "Provider redirected to a different website; source ownership unverified"
+                        }
+                        current=next
+                    }else{
+                        require(response.statusCode() in 200..299){
+                            "Provider HTTP "+response.statusCode()+
+                                "; connect an authorized account if required"
+                        }
+                        page=response.parse()
+                        break
+                    }
+                }
+                val document=page?:error("Too many provider redirects")
+                val items=parse(document.outerHtml(),document.location())
                 if(items.isEmpty())error("No gallery thumbnails exposed by listing")
                 Snapshot(items,System.currentTimeMillis(),null)
             }.getOrElse{
