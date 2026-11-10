@@ -51,6 +51,16 @@ class VideoProviderRoutingTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://javideo.net/en/category/jav"))
     }
+    @Test fun xvideosActualDotIdUrlsAreVideosNotCategoryPages(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://fr.xvideos.com/video.oupkhvt9b50/hsf-straight/0/example"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://www.xvideos.com/video123456/example"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fr.xvideos.com/c/Cam_Porn-58"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fr.xvideos.com/video.fake/"))
+    }
     @Test fun failureClassificationsPreserveHttpMeaning(){
         assertEquals(VideoFailurePolicy.Kind.AUTH,
             VideoFailurePolicy.classify("Provider HTTP 403; account unavailable"))
