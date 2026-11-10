@@ -48,6 +48,33 @@ class NovelEpubQueue(context:Context):
     @Synchronized fun recover(){
         writableDatabase.execSQL("UPDATE novels SET state='PENDING' WHERE state='WORKING'")
     }
+    /** Atomically reserve one complete-book task. Two EPUB workers must
+     * never generate the same series or overwrite each other's saved receipt.
+     */
+    fun claimNext():NovelEpubTask?{
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val now=System.currentTimeMillis()
+            val task=db.rawQuery(
+                "SELECT url,title,attempts FROM novels "+
+                    "WHERE state IN ('PENDING','RETRY') AND retry_after<=? "+
+                    "ORDER BY last_update ASC LIMIT 1",
+                arrayOf(now.toString())).use{c->
+                if(c.moveToFirst())NovelEpubTask(
+                    c.getString(0),c.getString(1),c.getInt(2)) else null
+            }
+            if(task==null){db.setTransactionSuccessful();return null}
+            val fields=ContentValues().apply{
+                put("state","WORKING");put("last_update",now)
+            }
+            val changed=db.update("novels",fields,
+                "url=? AND state IN ('PENDING','RETRY') AND retry_after<=?",
+                arrayOf(task.url,now.toString()))
+            db.setTransactionSuccessful()
+            return if(changed==1)task else null
+        }finally{db.endTransaction()}
+    }
     fun next():NovelEpubTask?{
         val now=System.currentTimeMillis().toString()
         return readableDatabase.rawQuery(
