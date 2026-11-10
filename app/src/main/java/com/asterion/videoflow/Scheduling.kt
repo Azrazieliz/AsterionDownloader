@@ -14,6 +14,21 @@ import java.util.concurrent.Executors
 object Scheduling {
     private const val ID=42681
     private const val DOWNLOAD_NOW=42682
+    private const val DOWNLOAD_RETRY=42683
+    /** Wake the durable retry queue when the earliest backoff expires.
+     * This is separate from immediate jobs so the next manual launch cannot
+     * overwrite an already scheduled retry or vice versa.
+     */
+    fun requestRetry(context:Context,delayMs:Long):Boolean{
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
+        val delay=delayMs.coerceIn(2_000L,60L*60_000L)
+        val job=JobInfo.Builder(DOWNLOAD_RETRY,
+            ComponentName(context,PollJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(delay).setOverrideDeadline(delay+30_000L)
+            .build()
+        return context.getSystemService(JobScheduler::class.java).schedule(job)>0
+    }
     fun requestImmediate(context:Context,scan:Boolean=false,targetHost:String?=null):Boolean {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val extras=PersistableBundle().apply {
@@ -54,7 +69,7 @@ class PollJobService: JobService() {
     private val exec=Executors.newSingleThreadExecutor()
     override fun onStartJob(params: JobParameters?): Boolean {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(this))return false
-        val manual=params?.jobId==42682
+        val manual=params?.jobId==42682 || params?.jobId==42683
         if(!manual &&
             !getSharedPreferences("video_options",MODE_PRIVATE).getBoolean("auto",true))
             return false
