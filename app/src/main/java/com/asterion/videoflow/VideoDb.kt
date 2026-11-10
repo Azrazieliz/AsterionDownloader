@@ -7,13 +7,15 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.net.Uri
 
 data class Watch(val id: Long, val address: String, val label: String, val enabled: Boolean, val lastCheck: Long, val error: String?, val cursor: String? = null, val backfillComplete:Boolean=false)
-data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long, val updated: Long = 0L)
+data class Video(val id: Long, val url: String, val title: String, val status: String, val progress: Int, val savedUri: String?, val error: String?, val watchId: Long, val updated: Long = 0L, val lease:Long=0L)
 
-class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 4) {
+class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 5) {
     private val appContext = context.applicationContext
+    init { setWriteAheadLoggingEnabled(true) }
+    private val staleLeaseMs=180_000L
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE watches(id INTEGER PRIMARY KEY, address TEXT UNIQUE NOT NULL, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_check INTEGER NOT NULL DEFAULT 0, error TEXT, cursor TEXT, backfill_complete INTEGER NOT NULL DEFAULT 0)")
-        db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0, request_origin TEXT NOT NULL DEFAULT 'user')")
+        db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0, request_origin TEXT NOT NULL DEFAULT 'user', lease INTEGER NOT NULL DEFAULT 0, heartbeat_at INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE INDEX video_queue ON videos(state, updated)")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -34,6 +36,10 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                 error='Older queue held; tap RETRY to authorize this file'
                 WHERE request_origin='legacy' AND state IN
                     ('queued','running','retry_wait')""")
+        }
+        if(oldVersion<5){
+            db.execSQL("ALTER TABLE videos ADD COLUMN lease INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE videos ADD COLUMN heartbeat_at INTEGER NOT NULL DEFAULT 0")
         }
     }
     fun addWatch(address: String, label: String = address): Boolean {
@@ -158,6 +164,57 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return null
     }
+    /** Cross-process atomic lease: the two isolated video agents may never
+     * take the same original. The existing next() keeps episode ordering and
+     * sync/backfill eligibility; this wraps selection and claiming in one
+     * SQLite write transaction.
+     */
+    fun claimNext():Video?{
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val next=next()
+            if(next==null){db.setTransactionSuccessful();return null}
+            val oldLease=android.database.DatabaseUtils.longForQuery(
+                db,"SELECT lease FROM videos WHERE id=?",
+                arrayOf(next.id.toString()))
+            val now=System.currentTimeMillis()
+            val values=ContentValues().apply{
+                put("state","running");put("progress",0);put("updated",now)
+                put("heartbeat_at",now);put("lease",oldLease+1L)
+                putNull("error")
+            }
+            val updated=db.update("videos",values,
+                "id=? AND (state='queued' OR (state='retry_wait' AND retry_after<=?))",
+                arrayOf(next.id.toString(),now.toString()))
+            db.setTransactionSuccessful()
+            return if(updated==1)next.copy(status="running",lease=oldLease+1L)
+                else null
+        }finally{db.endTransaction()}
+    }
+    /** A worker must relinquish a video as soon as its lease is paused or
+     * replaced. This also refreshes its crash-recovery heartbeat.
+     */
+    fun touchClaim(id:Long,lease:Long):Boolean{
+        val row=ContentValues().apply{put("heartbeat_at",System.currentTimeMillis())}
+        return writableDatabase.update("videos",row,
+            "id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+    }
+    fun ownsClaim(id:Long,lease:Long):Boolean=
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM videos WHERE id=? AND lease=? AND state='running' LIMIT 1",
+            arrayOf(id.toString(),lease.toString())).use{it.moveToFirst()}
+
+    fun completeClaim(id:Long,lease:Long,uri:String):Boolean{
+        val values=ContentValues().apply{
+            put("state","done");put("progress",100);put("saved_uri",uri)
+            put("updated",System.currentTimeMillis());putNull("error")
+        }
+        return writableDatabase.update("videos",values,
+            "id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+    }
     fun listVideos(limit: Int = 100): List<Video> {
         val out=ArrayList<Video>()
         readableDatabase.rawQuery("SELECT id,url,title,state,progress,saved_uri,error,watch_id,updated FROM videos ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, updated DESC LIMIT ${limit.coerceIn(1,1000)}", null).use { c ->
@@ -235,7 +292,13 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
     }
     fun recover() {
-        writableDatabase.execSQL("UPDATE videos SET state='queued', progress=0 WHERE state='running'")
+        // Never reset another live agent's download merely because a second
+        // service starts. Only crashed workers with stale heartbeats recover.
+        val deadline=System.currentTimeMillis()-staleLeaseMs
+        writableDatabase.execSQL(
+            "UPDATE videos SET state='queued', progress=0, lease=lease+1 "+
+                "WHERE state='running' AND heartbeat_at<?",
+            arrayOf(deadline))
     }
     fun delete(id: Long) { writableDatabase.delete("videos","id=?", arrayOf("$id")) }
 }
