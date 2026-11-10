@@ -11,7 +11,7 @@ def get(url,method="GET",ref=None):
         if method=="HEAD":return dict(res.headers)
         return res.read(2_000_000).decode("utf-8",errors="replace")
 home=get("https://watchporn.to/")
-match=re.search(r'href=["\'](/video/\d+/[^"\']+)["\']',home)
+match=re.search(r'href=["\'](?:https?://(?:www\.)?watchporn\.to)?(/video/\d+/[^"\']+)["\']',home)
 if not match:raise SystemExit("NO_VIDEO_PAGE")
 page="https://watchporn.to"+match.group(1)
 html=get(page)
