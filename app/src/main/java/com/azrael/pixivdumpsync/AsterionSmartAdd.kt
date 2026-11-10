@@ -43,7 +43,7 @@ object AsterionSmartAdd {
         if(host in listOf("sukebei.nyaa.si","nyaa.si","ggbases.com",
                 "onejav.com","f95zone.to","nyaa.v300.eu.org"))
             return Kind.TORRENTS
-        if(host in listOf("freewebnovel.com","novelbuddy.com","readnovelfull.com",
+        if(host in listOf("freewebnovel.com","novelbuddy.com","novelbuddy.me","readnovelfull.com",
                 "mp4directs.com","shionlib.com","annas-archive.org"))
             return Kind.BOOKS
         // Multi-format creator platforms need a user-selected content module.
