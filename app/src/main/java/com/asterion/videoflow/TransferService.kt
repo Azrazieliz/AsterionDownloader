@@ -486,8 +486,8 @@ object VideoEngine {
                     throw java.util.concurrent.CancellationException("Video paused")
             }
             if(!response.isSuccess)error(
-                "Cannot inspect complete-video metadata (extractor exit "+
-                    response.exitCode+")")
+                VideoExtractorErrors.message(response.output,
+                    response.exitCode,"metadata"))
             val json=VideoMetadataOutput.parse(response.output)
                 ?:error("Video extractor returned no valid metadata JSON")
             val duration=json.optDouble("duration",0.0)
@@ -536,7 +536,8 @@ object VideoEngine {
                     if(percent%5==0)status(percent)
                 }
             }
-            if(!response.isSuccess)error("Video extractor failed with exit code ${response.exitCode}")
+            if(!response.isSuccess)error(
+                VideoExtractorErrors.message(response.output,response.exitCode,"transfer"))
         }
         // Historical builds altered original hostnames. Try the precise URL first.
         val variants=listOf(item.url)+SourceDiagnostics.alternateHosts(item.url)
