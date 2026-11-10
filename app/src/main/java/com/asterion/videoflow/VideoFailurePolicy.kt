@@ -11,7 +11,7 @@ internal object VideoFailurePolicy {
             Regex("""(?:\b401\b|\b403\b|forbidden|unauthorized|login required|sign in|authentication required|access denied|captcha|verify you are human)""").containsMatchIn(text)->Kind.AUTH
             Regex("""(?:\b429\b|too many requests|rate limit|ratelimit)""").containsMatchIn(text)->Kind.RATE_LIMIT
             Regex("""(?:\b404\b|\b410\b|not found|gone|removed video|video unavailable)""").containsMatchIn(text)->Kind.GONE
-            Regex("""(?:unsupported url|no suitable extractor|unsupported site|extractor not supported|drm protected)""").containsMatchIn(text)->Kind.UNSUPPORTED
+            Regex("""(?:unsupported url|no suitable extractor|unsupported site|extractor not supported|drm protected|unable to extract hash|player metadata unavailable|extractor repair required)""").containsMatchIn(text)->Kind.UNSUPPORTED
             Regex("""(?:no valid metadata json|no metadata json|cannot inspect complete-video metadata)""").containsMatchIn(text)->Kind.METADATA
             Regex("""(?:timeout|timed out|connection|reset by peer|broken pipe|network unreachable|\b502\b|\b503\b|\b504\b|temporary|gateway error)""").containsMatchIn(text)->Kind.TRANSIENT
             else->Kind.OTHER
