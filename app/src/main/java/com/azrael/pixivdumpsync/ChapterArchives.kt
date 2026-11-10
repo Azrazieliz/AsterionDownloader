@@ -70,20 +70,25 @@ object ChapterArchives {
     fun run(context:Context,onStatus:(String)->Unit)=executor.submit{
         if(!AppPower.enabled(context))return@submit
         if(!busy.compareAndSet(false,true))return@submit
+        val agents=Executors.newFixedThreadPool(2){r->
+            Thread(r,"asterion-comics-zip-original-agent").apply{isDaemon=true}
+        }
         try{
             ChapterQueue(context).use{db->
                 db.recover()
                 db.retryDueFailures()
+            }
+            val jobs=(0 until 2).map{
+                agents.submit {
+                    ChapterQueue(context).use{db->
                 var completedThisPass=0
                 val deadline=android.os.SystemClock.elapsedRealtime()+5L*60_000L
                 while(AppPower.enabled(context) &&
                     !Thread.currentThread().isInterrupted &&
-                    completedThisPass<3 &&
+                    completedThisPass<2 &&
                     android.os.SystemClock.elapsedRealtime()<deadline){
                     completedThisPass++
-                    val job=db.next()?:break
-                    db.attempt(job.id)
-                    db.update(job.id,"working",job.progress)
+                    val job=db.claimNext()?:break
                     try{
                         val chapters=ChapterScraper.chapters(job.url,context)
                         val signature=MessageDigest.getInstance("SHA-256")
@@ -126,8 +131,14 @@ object ChapterArchives {
                         }
                     }
                 }
+                    }
+                }
             }
-        }finally{busy.set(false)}
+            for(job in jobs)runCatching{job.get()}
+        }finally{
+            agents.shutdownNow()
+            busy.set(false)
+        }
     }
     private fun safeName(value:String):String=value.replace(
         Regex("[^\\p{L}\\p{N} ._-]"),"_").take(85).ifBlank{"Archive"}
