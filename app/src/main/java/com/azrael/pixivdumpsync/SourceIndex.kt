@@ -1104,6 +1104,49 @@ object SourceIndex {
     private fun scanOne(context:Context,source:IndexedSource,
                         stop:()->Boolean={false},manual:Boolean=false,
                         previewOnly:Boolean=false){
+        // For providers with a verified, first-party JSON listing, parse the
+        // published catalog directly. An authentic cover is not an original
+        // download, and a preview-only refresh must not move history cursors.
+        val specialist=source.url.let{
+            val host=runCatching{URI(it).host.orEmpty().lowercase()
+                .removePrefix("www.")}.getOrDefault("")
+            host in setOf("eporner.com","hentaibros.net") &&
+                source.area in setOf("ADULT","HENTAI")
+        }
+        if(specialist){
+            var cursor=if(previewOnly) null else source.cursor
+            var fresh=0
+            var pageCount=0
+            var more:String?
+            do {
+                if(stop() || Thread.currentThread().isInterrupted ||
+                    !AppPower.enabled(context))return
+                val result=VerifiedSiteCatalogApi.fetch(context,source,cursor)
+                    ?:error("Provider catalog adapter unavailable")
+                if(pageCount==0 && result.media.isEmpty()){
+                    error("Provider published no supported catalog media")
+                }
+                synchronized(previewDbLock){
+                    SourceIndexDb(context).use{db->
+                        for(item in result.media){
+                            if(db.upsert(item))fresh++
+                        }
+                    }
+                }
+                more=result.next
+                pageCount++
+                cursor=more
+                if(!previewOnly)SourceIndexDb(context).use{db->
+                    db.update(source.url,cursor,null,source.discovered+fresh,
+                        if(manual && cursor==null)true else null)
+                }
+            }while(!previewOnly && manual && more!=null &&
+                pageCount<8 && !stop())
+            if(previewOnly)SourceIndexDb(context).use{db->
+                db.update(source.url,source.cursor,null,source.discovered+fresh)
+            }
+            return
+        }
         var cursor=source.cursor
         var fresh=0
         val pages=ArrayList<String>()
