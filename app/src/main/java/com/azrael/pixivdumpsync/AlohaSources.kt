@@ -39,7 +39,7 @@ Pornhub|https://pornhub.com/|ADULT
 EPORNER|https://www.eporner.com/|ADULT
 XVIDEOS|https://fr.xvideos.com/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
-OMG.xxx|https://www.omg.xxx/fr/|ADULT
+OMG.xxx|https://www.omg.porn/fr/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
