@@ -57,8 +57,16 @@ object VideoEngine {
         val intent=Intent(context,TransferService::class.java).putExtra("scan",scan)
             .putExtra("target_site_host",targetHost)
         return try {
-            if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent)
+            if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
             else context.startService(intent)
+            // Real parallel transfers run in a second isolated Android
+            // process. Separate Python interpreters and working directories
+            // prevent the embedded yt-dlp chdir() from corrupting each other.
+            runCatching{
+                val secondary=Intent(context,TransferAgentTwoService::class.java)
+                if(Build.VERSION.SDK_INT>=26)context.startForegroundService(secondary)
+                else context.startService(secondary)
+            }
             true
         } catch (_: Exception) {
             // Android 14+ often forbids starting a foreground service from a
@@ -88,10 +96,11 @@ object VideoEngine {
                 while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                       !Thread.currentThread().isInterrupted && transferred<maxItems &&
                       android.os.SystemClock.elapsedRealtime()<deadline) {
-                val next=db.next() ?: break
+                val next=db.claimNext() ?: break
                 transferred++
                 onStatus("Downloading ${next.title}")
-                db.update(next.id,"running")
+                // Atomic claim was already persisted by VideoDb; repeating a
+                // blind state update could steal a paused or replaced job.
                 VideoTransferJournal.record(context,next.id,"preparing")
                 try {
                     val uri=downloadOne(context,db,next) { percent ->
@@ -99,7 +108,13 @@ object VideoEngine {
                     }
                     if(stopRequests.contains(next.id))
                         throw java.util.concurrent.CancellationException("Paused")
-                    db.update(next.id,"done",100,uri)
+                    if(!db.completeClaim(next.id,next.lease,uri)){
+                        runCatching{
+                            context.contentResolver.delete(android.net.Uri.parse(uri),null,null)
+                        }
+                        throw java.util.concurrent.CancellationException(
+                            "Transfer cancelled or superseded before final receipt")
+                    }
                     VideoTransferJournal.record(context,next.id,"saved")
                     if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
                         com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
@@ -112,6 +127,13 @@ object VideoEngine {
                     }
                     onStatus("Saved ${next.title}")
                 } catch(t:Exception) {
+                    if(!db.ownsClaim(next.id,next.lease)){
+                        // Another process, pause or restart owns the current
+                        // state. Do not overwrite that state from this worker.
+                        stopRequests.remove(next.id)
+                        onStatus("Transfer claim released: "+next.title)
+                        continue
+                    }
                     if(stopRequests.remove(next.id) ||
                         t is java.util.concurrent.CancellationException){
                         db.pause(next.id)
@@ -391,6 +413,9 @@ object VideoEngine {
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
         val preparationStart=android.os.SystemClock.elapsedRealtime()
+        check(db.touchClaim(item.id,item.lease)){
+            "Download claim is no longer owned by this worker"
+        }
         fun executeControlled(
             request:YtDlpRequest,
             phase:String,
@@ -404,6 +429,7 @@ object VideoEngine {
             extractionJobs[item.id]=future
             var bytes=parent.listFiles()?.filter{it.isFile}?.sumOf{it.length()}?:0L
             var lastByteTick=start
+            var lastLeaseHeartbeat=0L
             VideoTransferJournal.record(context,item.id,phase)
             try{
                 while(true){
@@ -411,6 +437,13 @@ object VideoEngine {
                         Thread.currentThread().isInterrupted)
                         throw java.util.concurrent.CancellationException("Video paused")
                     val now=android.os.SystemClock.elapsedRealtime()
+                    if(now-lastLeaseHeartbeat>4_000L){
+                        if(!db.touchClaim(item.id,item.lease)){
+                            throw java.util.concurrent.CancellationException(
+                                "Transfer lease released or paused")
+                        }
+                        lastLeaseHeartbeat=now
+                    }
                     if(phase=="transfer"){
                         val current=parent.listFiles()?.filter{it.isFile}
                             ?.sumOf{it.length()}?:0L
