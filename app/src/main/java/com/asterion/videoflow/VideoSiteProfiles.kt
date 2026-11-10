@@ -13,7 +13,7 @@ internal object VideoSiteProfiles {
                              val listing:String="a[href]")
     private val routes=listOf(
         Route("pornhub.com",Regex("""(?i)^/view_video\.php\?[^#]*\bviewkey=[^&#]+""")),
-        Route("xvideos.com",Regex("""(?i)^/video\d{2,14}(?:/|$)""")),
+        Route("xvideos.com",Regex("""(?i)^/(?:video\d{2,14}|video\.[a-z0-9]{7,18})(?:/|$)""")),
         Route("xnxx.com",Regex("""(?i)^/video-[a-z0-9]+(?:/|$)""")),
         Route("eporner.com",Regex("""(?i)^/(?:hd-porn/[a-z0-9]+|video-[a-z0-9]+)(?:/|$)""")),
         Route("hqpornerxxx.com",Regex("""(?i)^/(?:hdporn|video|videos)/[^/?#]+""")),
