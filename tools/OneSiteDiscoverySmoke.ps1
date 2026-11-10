@@ -1,7 +1,8 @@
 param(
   [Parameter(Mandatory=$true)][ValidatePattern('^https://')][string]$Listing,
   [Parameter(Mandatory=$true)][string]$VideoPathRegex,
-  [int]$MaxSeconds=180
+  [int]$MaxSeconds=180,
+  [switch]$DirectSource
 )
 $ErrorActionPreference='Stop'
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -30,5 +31,9 @@ if($null -eq $candidate){
 }
 Write-Output ('VIDEO_PATH_LENGTH '+$candidate.AbsolutePath.Length)
 Write-Output ('VIDEO_PATH_SEGMENTS '+$candidate.AbsolutePath.Trim('/').Split('/').Count)
-& $python (Join-Path $here 'site_original_smoke.py') --url $candidate.AbsoluteUri --max-seconds $MaxSeconds
+if($DirectSource){
+  & $python (Join-Path $here 'site_direct_source_receipt.py') --url $candidate.AbsoluteUri --max-bytes 31457280
+}else{
+  & $python (Join-Path $here 'site_original_smoke.py') --url $candidate.AbsoluteUri --max-seconds $MaxSeconds
+}
 exit $LASTEXITCODE
