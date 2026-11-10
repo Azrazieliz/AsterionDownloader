@@ -1,6 +1,8 @@
 package com.azrael.pixivdumpsync
 
 import android.content.Context
+import android.app.DownloadManager
+import android.os.SystemClock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ExecutorService
@@ -37,6 +39,73 @@ internal object ModuleOriginalAgents {
             }
     }
     private val lanes=ConcurrentHashMap<String,Lane>()
+    private val PREF="asterion_module_original_agents_v1"
+    private fun status(context:Context,area:String,slot:Int,value:String){
+        context.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+            .putString(area+":"+slot,
+                System.currentTimeMillis().toString()+"|"+value).apply()
+    }
+    fun states(context:Context):Map<String,String>{
+        val prefs=context.getSharedPreferences(PREF,Context.MODE_PRIVATE)
+        return MODULES.flatMap{area->
+            (0 until AGENTS_PER_MODULE).map{slot->
+                val key=area+":"+slot
+                key to prefs.getString(key,"IDLE").orEmpty()
+            }
+        }.toMap()
+    }
+    private fun folder(area:String):String=when(area){
+        "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
+        "CREATORS"->"Creators";"COSPLAY"->"Cosplay";"ARTWORK"->"Artwork"
+        "STUDIO"->"Assets/Koikatsu Studio";"MMD"->"Assets/MMD"
+        "LIVE2D"->"Assets/Live2D";"ANIMATION"->"Assets/Animation"
+        "MODS"->"Games/Mods";"VOICE"->"Audio/Doujin Voice"
+        else->"Assets"
+    }
+    private fun activeDirect(context:Context,area:String):Int{
+        val category=folder(area)
+        return DirectDownloadTracker.states(context,220).count{state->
+            state.job.folder==category && state.status in setOf(
+                DownloadManager.STATUS_PENDING,DownloadManager.STATUS_RUNNING,
+                DownloadManager.STATUS_PAUSED)
+        }
+    }
+    private fun monitor(context:Context,area:String,slot:Int,id:Long){
+        val manager=context.getSystemService(DownloadManager::class.java)
+        val deadline=SystemClock.elapsedRealtime()+15L*60_000L
+        while(AppPower.enabled(context) &&
+            !Thread.currentThread().isInterrupted &&
+            SystemClock.elapsedRealtime()<deadline){
+            val statusValue=manager.query(
+                DownloadManager.Query().setFilterById(id))?.use{cursor->
+                if(cursor.moveToFirst()){
+                    val index=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    if(index>=0)cursor.getInt(index) else null
+                }else null
+            }
+            if(statusValue==DownloadManager.STATUS_FAILED){
+                status(context,area,slot,"SYSTEM_FAILED")
+                return
+            }
+            if(statusValue==DownloadManager.STATUS_SUCCESSFUL){
+                val receipt=manager.getUriForDownloadedFile(id)
+                val valid=receipt!=null && runCatching{
+                    context.contentResolver.openFileDescriptor(receipt,"r")?.use{
+                        it.statSize>0L
+                    }==true
+                }.getOrDefault(false)
+                status(context,area,slot,if(valid)"SAVED_RECEIPT" else "BAD_RECEIPT")
+                return
+            }
+            if(statusValue==null){
+                status(context,area,slot,"SYSTEM_REQUEST_NOT_FOUND")
+                return
+            }
+            status(context,area,slot,"TRANSFER_IN_FLIGHT")
+            Thread.sleep(2_500L)
+        }
+        status(context,area,slot,"SYSTEM_TRANSFER_CONTINUES")
+    }
 
     fun start(context:Context,area:String){
         if(area !in MODULES || !AppPower.enabled(context))return
@@ -49,6 +118,7 @@ internal object ModuleOriginalAgents {
         repeat(AGENTS_PER_MODULE){slot->
             lane.executor.submit {
                 BackfillPerformance.backgroundWorker()
+                status(app,area,slot,"STARTED")
                 try {
                     var handled=0
                     while(AppPower.enabled(app) && handled<40 &&
@@ -67,22 +137,43 @@ internal object ModuleOriginalAgents {
                             if(!claimed)continue
                             acquired=true
                             handled++
+                            var downloadId:Long?=null
+                            var accepted=false
                             try {
-                                val submitted=SourceIndex.submitOriginal(app,item)
-                                SourceIndexDb(app).use{db->
-                                    if(submitted)db.markQueued(item.url)
-                                    else db.defer(item.url)
+                                // Enforce at most two active DownloadManager
+                                // HTTP transfers per module. The media SDK may
+                                // use its own scheduler; we do not overfill it.
+                                synchronized(lane){
+                                    val isVideo=item.kind=="video"
+                                    if(isVideo || activeDirect(app,area)<AGENTS_PER_MODULE){
+                                        accepted=SourceIndex.submitOriginal(app,item){id->
+                                            downloadId=id
+                                        }
+                                        if(accepted)SourceIndexDb(app).use{
+                                            it.markQueued(item.url)
+                                        }else SourceIndexDb(app).use{
+                                            it.defer(item.url)
+                                        }
+                                    }
                                 }
                             }catch(_:Exception){
                                 SourceIndexDb(app).use{it.defer(item.url)}
                             }finally{
                                 SourceIndexDb(app).use{it.releaseDirect(item.url)}
                             }
+                            if(accepted && downloadId!=null){
+                                monitor(app,area,slot,downloadId!!)
+                            }else if(!accepted && downloadId==null &&
+                                activeDirect(app,area)>=AGENTS_PER_MODULE){
+                                status(app,area,slot,"TWO_DOWNLOADS_ALREADY_ACTIVE")
+                                break
+                            }
                             if(handled>=40)break
                         }
                         if(!acquired)break
                     }
                 }finally{
+                    status(app,area,slot,"IDLE")
                     if(lane.remaining.decrementAndGet()==0){
                         lane.active.set(false)
                         if(lane.requested.getAndSet(false) &&
