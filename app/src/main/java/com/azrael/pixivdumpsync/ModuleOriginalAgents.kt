@@ -25,7 +25,7 @@ internal object ModuleOriginalAgents {
     val MODULES=setOf(
         "ADULT","HENTAI","VIDEOS","CREATORS","COSPLAY","ARTWORK",
         "BOOKS","COMICS","GAMES","ASSETS","STUDIO","MMD",
-        "LIVE2D","ANIMATION","MODS","VOICE"
+        "LIVE2D","ANIMATION","MODS","VOICE","PIXIV","X","REFERENCE","STUDY"
     )
     private class Lane(area:String){
         val requested=AtomicBoolean(false)
