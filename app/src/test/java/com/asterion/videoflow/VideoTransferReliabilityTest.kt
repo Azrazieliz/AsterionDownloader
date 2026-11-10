@@ -43,6 +43,16 @@ class VideoTransferReliabilityTest {
             VideoFailurePolicy.classify(message))
         assertTrue(VideoFailurePolicy.actionable(VideoFailurePolicy.classify(message)))
     }
+    @Test fun reproducibleNoFormatAndShortIdFailuresNeedActionNotLoop(){
+        val errors=listOf(
+            "ERROR: [XVideos] No video formats found!",
+            "ERROR: [PeekVids] Unable to extract short video ID")
+        for(error in errors){
+            val category=VideoFailurePolicy.classify(error)
+            assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,category)
+            assertTrue(VideoFailurePolicy.actionable(category))
+        }
+    }
     @Test fun boundedProgressTimeouts(){
         assertNull(VideoTransferLimits.expired("metadata",10_000L,0L))
         assertNotNull(VideoTransferLimits.expired("metadata",50_000L,0L))
