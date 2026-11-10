@@ -84,6 +84,46 @@ class SourceIndexDb(context:Context):
     /** Promote supported torrent feeds into their own history engine without
      * resetting user's include/exclude preference or saved source metadata.
      */
+    /** Preserve subscribed source identity and every discovered media row when
+     * a provider officially migrates its domain (OMG.xxx -> OMG.porn).
+     * Never auto-migrate to an unrelated redirect destination.
+     */
+    fun migrateOfficialSource(oldUrl:String,newUrl:String){
+        if(oldUrl==newUrl || !SourceIndexParser.safe(oldUrl) ||
+            !SourceIndexParser.safe(newUrl))return
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val old=db.rawQuery(
+                "SELECT name,area,enabled,cursor,last_check,error,discovered,"+
+                    "adapter,history_complete FROM sources WHERE url=?",
+                arrayOf(oldUrl)).use{q->
+                if(q.moveToFirst())List(9){n->
+                    if(q.isNull(n))null else q.getString(n)
+                }else null
+            }?:run{db.setTransactionSuccessful();return}
+            val newExists=db.rawQuery(
+                "SELECT 1 FROM sources WHERE url=?",arrayOf(newUrl))
+                .use{it.moveToFirst()}
+            if(!newExists){
+                db.execSQL("UPDATE sources SET url=? WHERE url=?",
+                    arrayOf(newUrl,oldUrl))
+            }else{
+                db.execSQL(
+                    "UPDATE sources SET enabled=?,cursor=COALESCE(cursor,?),"+
+                    "last_check=MAX(last_check,?),"+
+                    "discovered=MAX(discovered,?),"+
+                    "history_complete=MAX(history_complete,?) WHERE url=?",
+                    arrayOf(old[2]?: "1",old[3],old[4]?: "0",
+                        old[6]?: "0",old[8]?: "0",newUrl))
+                db.delete("sources","url=?",arrayOf(oldUrl))
+            }
+            db.execSQL("UPDATE entries SET source=? WHERE source=?",
+                arrayOf(newUrl,oldUrl))
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
+
     fun setAdapter(url:String,adapter:String){
         require(adapter in setOf("native","generic"))
         writableDatabase.update("sources",ContentValues().apply{
@@ -696,6 +736,8 @@ object SourceIndex {
     )
     fun ensure(context:Context){
         SourceIndexDb(context).use{db->
+            db.migrateOfficialSource(
+                "https://www.omg.xxx/fr/","https://www.omg.porn/fr/")
             for(site in AlohaSources.all){
                 val ownsFeed=site.host in setOf("onejav.com","sukebei.nyaa.si")
                 db.add(site.url,site.name,site.area.name,
