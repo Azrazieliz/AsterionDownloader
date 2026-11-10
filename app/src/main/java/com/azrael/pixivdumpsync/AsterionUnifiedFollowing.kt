@@ -329,23 +329,41 @@ object AsterionUnifiedFollowing {
         val follow=ui.card(a)
         val field=CreatorNames.input(a,"Artist or model name","PERFORMERS")
         put(a,follow,field,0)
-        action(a,follow,"FOLLOW & SEARCH ALL PROVIDERS",true){
+        action(a,follow,"VERIFY & FOLLOW PERFORMER",true){
             val name=field.text.toString().trim()
-            if(name.length<2){notice(a,"Enter a name");return@action}
-            NameWatchDb(a).use{it.add(name)}
-            CreatorNames.remember(a,name,"PERFORMERS",true)
-            thread(name="asterion-follow-scan"){NameCrawler.scan(a.applicationContext)}
-            refresh()
+            if(name.length<2){notice(a,"Enter a performer name");return@action}
+            notice(a,"Checking actual first-party performer profiles…")
+            thread(name="asterion-performer-verify"){
+                val proof=PerformerIdentity.lookup(name)
+                a.runOnUiThread{
+                    if(a.isFinishing || a.isDestroyed)return@runOnUiThread
+                    if(proof==null){
+                        notice(a,"No verified performer profile found. Nothing was followed.")
+                    }else{
+                        val id=NameWatchDb(a).use{
+                            it.addVerified(proof.displayName,proof.profileUrl)
+                        }
+                        CreatorNames.remember(a,proof.displayName,"PERFORMERS",true)
+                        NameCrawler.scanCreator(a.applicationContext,id)
+                        notice(a,"Verified "+proof.displayName+" on "+proof.provider)
+                        refresh()
+                    }
+                }
+            }
         }
         put(a,p,follow,10)
         for(creator in creators.take(currentLimit(a,"creators"))){
             val c=ui.card(a)
             val prefs=a.getSharedPreferences("asterion_performer_gallery",0)
             val full=prefs.getBoolean("expanded:"+creator.id,false)
-            val hits=SearchResultsDb(a).use{
+            val verified=PerformerIdentity.isProfileUrl(creator.name,creator.source)
+            // Old name-only follows are retained for recovery, but unrelated
+            // historic keyword results never pass as verified performer media.
+            val hits=if(verified)SearchResultsDb(a).use{
                 it.listForQuery(creator.name,if(full)100 else 24)
             }.filter{SearchExactness.matches(creator.name,it.title) &&
                 !IndexedMediaQuality.navigationTitle(it.title)}
+            else emptyList()
             val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
                 SearchRanking.validUrl(it.thumbnail)}
             val head=ui.row(a)
@@ -405,20 +423,43 @@ object AsterionUnifiedFollowing {
                 }
             }
             if(hits.isEmpty()){
-                put(a,c,ui.text(a,
-                    "No matching indexed originals yet. CHECK searches this performer only.",
+                put(a,c,ui.text(a,if(verified)
+                    "Verified profile · no attributable original videos indexed yet"
+                    else "Unverified legacy name · CHECK verifies real performer identity before syncing",
                     12f,ui.secondary),6)
             }
             if(!creator.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,"Source errors: "+creator.lastError.take(160),
                     11f,ui.danger),5)
-            toggle(a,c,"Sync new videos",creator.enabled){enabled->
-                NameWatchDb(a).use{it.setEnabled(creator.id,enabled)}
+            toggle(a,c,"Sync new videos",creator.enabled && verified){enabled->
+                if(enabled && !verified){
+                    notice(a,"Verify this model's actual profile first")
+                }else NameWatchDb(a).use{it.setEnabled(creator.id,enabled)}
             }
-            pair(a,c,"CHECK THIS MODEL","REMOVE",{
-                NameWatchDb(a).use{it.setEnabled(creator.id,true)}
-                NameCrawler.scanCreator(a.applicationContext,creator.id)
-                notice(a,"Checking "+creator.name+" across providers")
+            pair(a,c,if(verified)"CHECK THIS MODEL" else "VERIFY THIS MODEL","REMOVE",{
+                if(verified){
+                    NameWatchDb(a).use{it.setEnabled(creator.id,true)}
+                    NameCrawler.scanCreator(a.applicationContext,creator.id)
+                    notice(a,"Checking verified performer profile: "+creator.name)
+                }else{
+                    notice(a,"Verifying performer identity…")
+                    thread(name="asterion-existing-performer-verify"){
+                        val proof=PerformerIdentity.lookup(creator.name)
+                        a.runOnUiThread{
+                            if(!a.isFinishing && !a.isDestroyed){
+                                if(proof==null)
+                                    notice(a,"Not verified; automatic Sync remains disabled")
+                                else{
+                                    val id=NameWatchDb(a).use{
+                                        it.addVerified(creator.name,proof.profileUrl)
+                                    }
+                                    NameCrawler.scanCreator(a.applicationContext,id)
+                                    refresh()
+                                }
+                            }
+                        }
+                    }
+                }
             },{
                 AlertDialog.Builder(a).setTitle("Unfollow "+creator.name+"?")
                     .setNegativeButton("Cancel",null)
