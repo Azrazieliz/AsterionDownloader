@@ -142,7 +142,7 @@ object KoikatsuFollowing {
             val c=ui.card(a)
             val header=ui.row(a)
             val portrait=ImageView(a).apply{
-                scaleType=ImageView.ScaleType.CENTER_CROP
+                scaleType=ImageView.ScaleType.FIT_CENTER
                 setBackgroundColor(ui.raised)
                 setImageResource(R.drawable.ic_source_koikatsu)
             }
@@ -165,7 +165,7 @@ object KoikatsuFollowing {
                 val gallery=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
                 for(item in cards.take(5)){
                     val image=ImageView(a).apply{
-                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        scaleType=ImageView.ScaleType.FIT_CENTER
                         setBackgroundColor(ui.raised)
                         setImageResource(R.drawable.ic_source_koikatsu)
                         contentDescription=item.name+" original PNG"
