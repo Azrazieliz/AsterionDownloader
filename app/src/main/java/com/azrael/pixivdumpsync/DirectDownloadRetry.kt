@@ -102,6 +102,25 @@ object DirectDownloadRetry {
         }
         return true
     }
+    /** DownloadManager broadcasts completion promptly, long before the
+     * periodic retry poll. A transport-successful HTML error is not saved.
+     */
+    fun validateCompleted(ctx:Context,id:Long):Boolean {
+        val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}
+            ?:return false
+        val manager=ctx.getSystemService(DownloadManager::class.java)
+        val done=DirectDownloadTracker.states(ctx,250).any{
+            it.job.id==id && it.status==DownloadManager.STATUS_SUCCESSFUL
+        }
+        if(!done)return false
+        val receipt=OriginalFileReceipt.verify(ctx,manager,id,record.name)
+        OriginalReceiptState.set(ctx,id,
+            if(receipt.valid)"VERIFIED" else "INVALID")
+        if(!receipt.valid)return false
+        CrossSourceDedup(ctx).use{it.completeById(id)}
+        DirectRetryVault.remove(ctx,id)
+        return true
+    }
     fun retry(ctx:Context):Int=retrySelected(ctx,null)
     private fun retrySelected(ctx:Context,forceId:Long?):Int{
         if(!AppPower.enabled(ctx))return 0
