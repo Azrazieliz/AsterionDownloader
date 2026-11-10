@@ -23,7 +23,7 @@ class VideoSiteProfilesTest {
     }
     @Test fun javGuruBlogPostIsDetectedButCategoryIsNot(){
         assertTrue(VideoSiteProfiles.isVideoPage(
-            "https://jav.guru/sample-post-slug/"))
+            "https://jav.guru/1076295/start-663-sample-post/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://jav.guru/category/uncensored/"))
     }
