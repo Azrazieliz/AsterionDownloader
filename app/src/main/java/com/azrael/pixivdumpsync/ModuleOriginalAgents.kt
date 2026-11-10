@@ -110,13 +110,17 @@ internal object ModuleOriginalAgents {
                 return
             }
             if(statusValue==DownloadManager.STATUS_SUCCESSFUL){
-                val receipt=manager.getUriForDownloadedFile(id)
-                val valid=receipt!=null && runCatching{
-                    context.contentResolver.openFileDescriptor(receipt,"r")?.use{
-                        it.statSize>0L
-                    }==true
-                }.getOrDefault(false)
-                status(context,area,slot,if(valid)"SAVED_RECEIPT" else "BAD_RECEIPT")
+                val filename=DirectDownloadTracker.states(context,250)
+                    .firstOrNull{it.job.id==id}?.job?.filename
+                    ?:return status(context,area,slot,"RECEIPT_FILE_NOT_TRACKED")
+                val result=OriginalFileReceipt.verify(context,manager,id,filename)
+                OriginalReceiptState.set(context,id,
+                    if(result.valid)"VERIFIED" else "INVALID")
+                status(context,area,slot,
+                    if(result.valid)"SAVED_RECEIPT" else "BAD_RECEIPT")
+                // The durable encrypted retry request remains owned by
+                // DirectDownloadRetry until it verifies and commits, not when
+                // DownloadManager merely reports HTTP/transport success.
                 return
             }
             if(statusValue==null){
