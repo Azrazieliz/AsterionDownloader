@@ -27,6 +27,36 @@ class NameWatchDb(context:Context):SQLiteOpenHelper(context,"asterion_name_watch
         return writableDatabase.insertWithOnConflict(
             "name_watches",null,v,SQLiteDatabase.CONFLICT_IGNORE)>0L
     }
+    /** Retain the existing watch identity when it was previously saved
+     * without evidence. Verified follow never creates a fake person record.
+     */
+    fun addVerified(name:String,profileUrl:String):Long{
+        require(PerformerIdentity.isProfileUrl(name,profileUrl)){
+            "A verified first-party performer profile is required"
+        }
+        val db=writableDatabase
+        db.beginTransaction()
+        try{
+            val prior=db.rawQuery(
+                "SELECT id FROM name_watches WHERE lower(name)=lower(?) ORDER BY id LIMIT 1",
+                arrayOf(name.trim())).use{q->if(q.moveToFirst())q.getLong(0)else null}
+            val id=if(prior!=null){
+                val values=ContentValues().apply{
+                    put("source",profileUrl);put("enabled",1)
+                    putNull("last_error")
+                }
+                db.update("name_watches",values,"id=?",arrayOf(prior.toString()))
+                prior
+            }else{
+                val values=ContentValues().apply{
+                    put("name",name.trim());put("source",profileUrl);put("enabled",1)
+                }
+                db.insertOrThrow("name_watches",null,values)
+            }
+            db.setTransactionSuccessful()
+            return id
+        }finally{db.endTransaction()}
+    }
     fun list():List<NameWatch>{
         val out=ArrayList<NameWatch>()
         readableDatabase.rawQuery("""SELECT id,name,source,enabled,last_check,last_error
@@ -60,61 +90,47 @@ object NameCrawler {
         val watch=NameWatchDb(context).use{it.list().firstOrNull{
             candidate->candidate.id==id && candidate.enabled
         }}?:return false
+        if(!PerformerIdentity.isProfileUrl(watch.name,watch.source)){
+            NameWatchDb(context).use{it.setResult(id,
+                "Unverified performer identity. Recheck an official profile before Sync.")}
+            onStatus("Cannot sync unverified performer: "+watch.name)
+            return false
+        }
         BackfillAgents.submit(context,"performer:"+id){
             NameWatchDb(context).use{watches->
-                VideoDb(context).use{videos->
-                    try{
-                        onStatus("Discovering videos: ${watch.name}")
-                        val errors=ArrayList<String>()
-                        val found=ArrayList<RankedHit>()
-                        if(watch.source.isBlank()) {
-                            val archived=runCatching{publicArchive(watch.name)}
-                                .getOrElse{
-                                    errors.add("Internet Archive: ${it.message}")
-                                    emptyList()
-                                }
-                            found.addAll(archived.map{(title,url)->
-                                RankedHit(title,url,"Internet Archive")
-                            })
-                            for(area in listOf(VideoSearchArea.PORN,VideoSearchArea.HENTAI)){
-                                val indexed=runCatching{
-                                    KeywordSources.searchDetailed(context,watch.name,area)
-                                }.getOrElse{
-                                    errors.add(area.name+": "+it.message)
-                                    SearchOutcome(emptyList(),0,emptyList())
-                                }
-                                found.addAll(indexed.hits)
-                                errors.addAll(indexed.failures)
-                            }
-                        }else {
-                            val custom=KeywordSources.searchCustom(context,watch.name,watch.source)
-                            found.addAll(custom.hits)
-                            errors.addAll(custom.failures)
-                        }
-                        val hits=SearchRanking.deduplicate(watch.name,found)
-                            .filter{hit->
-                                hit.score>0 &&
-                                SearchExactness.matches(watch.name,hit.title) &&
-                                !IndexedMediaQuality.navigationTitle(hit.title)
-                            }
-                        SearchResultsDb(context).use{results->
-                            results.save(watch.name,hits)
-                            // Show low-confidence candidates in Results rather than
-                            // automatically downloading unrelated search hits.
-                            for(hit in hits.filter{it.score>0}.take(100)){
-                                if(!results.wasQueued(watch.name,hit.url) &&
-                                    videos.addVideo(hit.url,hit.title,0L,"performer"))
+                try{
+                    val profile=com.asterion.videoflow.WebDiscovery.page(
+                        watch.source,watch.source,context)
+                    val hits=profile.hits.asSequence()
+                        .filter{com.asterion.videoflow.VideoSiteProfiles
+                            .isVideoPage(it.url)}
+                        // A profile can display recommendations. We only admit
+                        // titles that also explicitly name the followed actor.
+                        .filter{SearchExactness.matches(watch.name,it.title)}
+                        .distinctBy{SearchRanking.canonicalKey(it.url)}
+                        .take(120)
+                        .map{RankedHit(it.title,it.url,
+                            "Verified profile: "+watch.source,score=350,
+                            thumbnail=it.preview)}.toList()
+                    SearchResultsDb(context).use{results->
+                        results.save(watch.name,hits)
+                        VideoDb(context).use{videos->
+                            for(hit in hits){
+                                if(watch.enabled &&
+                                    !results.wasQueued(watch.name,hit.url) &&
+                                    videos.addVideo(hit.url,hit.title,0L,"performer")){
                                     results.markQueued(watch.name,hit.url)
+                                }
                             }
                         }
-                        if(hits.isEmpty() && errors.isEmpty())
-                            errors.add("No matching video result was found by enabled sources")
-                        watches.setResult(watch.id,errors.take(5).joinToString(" | ")
-                            .takeIf{it.isNotEmpty()})
-                        onStatus("${watch.name}: ${hits.size} candidates, ${errors.size} source issues")
-                    }catch(t:Exception){watches.setResult(watch.id,
-                        t.message?:"Discovery failed")}
-
+                    }
+                    watches.setResult(id,if(hits.isEmpty())
+                        "Profile verified; no attributable originals found yet"
+                        else null)
+                    onStatus("Verified profile "+watch.name+": "+hits.size+" attributable videos")
+                }catch(t:Exception){
+                    watches.setResult(id,t.message?:"Profile could not be checked")
+                    onStatus("Performer lookup failed: "+watch.name)
                 }
             }
             if(AppPower.enabled(context))
