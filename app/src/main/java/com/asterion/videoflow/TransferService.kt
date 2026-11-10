@@ -92,6 +92,7 @@ object VideoEngine {
                 transferred++
                 onStatus("Downloading ${next.title}")
                 db.update(next.id,"running")
+                VideoTransferJournal.record(context,next.id,"preparing")
                 try {
                     val uri=downloadOne(context,db,next) { percent ->
                         onStatus("${next.title}: $percent%")
@@ -99,6 +100,7 @@ object VideoEngine {
                     if(stopRequests.contains(next.id))
                         throw java.util.concurrent.CancellationException("Paused")
                     db.update(next.id,"done",100,uri)
+                    VideoTransferJournal.record(context,next.id,"saved")
                     if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
                         com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
                             queue.enqueue("videos",
@@ -113,12 +115,17 @@ object VideoEngine {
                     if(stopRequests.remove(next.id) ||
                         t is java.util.concurrent.CancellationException){
                         db.pause(next.id)
+                        VideoTransferJournal.record(context,next.id,"paused")
                         onStatus("Paused video: "+next.title)
                     }else if(t is FullVersionUnavailable) {
                         db.update(next.id,"full_only_hold",error=t.message)
+                        VideoTransferJournal.record(context,next.id,"held")
                         onStatus("Full version unverified: ${next.title}")
                     }else{
-                        db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
+                        val reason=t.message?:t.javaClass.simpleName
+                        db.scheduleRetry(next.id,reason)
+                        VideoTransferJournal.record(context,next.id,"retry",
+                            VideoFailurePolicy.classify(reason).name)
                         onStatus("Failed ${next.title}")
                     }
                 }
@@ -260,6 +267,10 @@ object VideoEngine {
                 val pending=runCatching { VideoDb(context).use{it.next()!=null} }
                     .getOrDefault(false)
                 if(pending)Scheduling.requestImmediate(context,false)
+                val due=runCatching{
+                    VideoDb(context).use{it.nextRetryDelayMs()}
+                }.getOrNull()
+                if(due!=null)Scheduling.requestRetry(context,due)
             }
         }
     }
@@ -379,18 +390,51 @@ object VideoEngine {
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
+        val preparationStart=android.os.SystemClock.elapsedRealtime()
         fun executeControlled(
             request:YtDlpRequest,
+            phase:String,
+            activity:java.util.concurrent.atomic.AtomicLong?=null,
             onProgress:dev.ffmpegkit_maintained.ytdlp.DownloadProgressCallback
         ):dev.ffmpegkit_maintained.ytdlp.YtDlpResponse{
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
+            val start=android.os.SystemClock.elapsedRealtime()
             val future=YtDlp.executeAsync(request,onProgress)
             extractionJobs[item.id]=future
-            return try{
-                future.get()
-            }catch(e:java.util.concurrent.ExecutionException){
-                throw e.cause as? Exception ?: Exception(e.cause)
+            var bytes=parent.listFiles()?.filter{it.isFile}?.sumOf{it.length()}?:0L
+            var lastByteTick=start
+            VideoTransferJournal.record(context,item.id,phase)
+            try{
+                while(true){
+                    if(stopRequests.contains(item.id) ||
+                        Thread.currentThread().isInterrupted)
+                        throw java.util.concurrent.CancellationException("Video paused")
+                    val now=android.os.SystemClock.elapsedRealtime()
+                    if(phase=="transfer"){
+                        val current=parent.listFiles()?.filter{it.isFile}
+                            ?.sumOf{it.length()}?:0L
+                        if(current>bytes){bytes=current;lastByteTick=now}
+                    }
+                    val tick=maxOf(lastByteTick,activity?.get()?:start)
+                    val elapsed=now-start
+                    val idle=now-tick
+                    val limit=VideoTransferLimits.expired(phase,elapsed,idle)
+                    val preparationLimit=phase=="metadata" &&
+                        now-preparationStart>=80_000L
+                    if(limit!=null || preparationLimit)
+                        throw java.util.concurrent.TimeoutException(
+                            limit?:"Original preparation exceeded its 80s budget")
+                    try{
+                        return future.get(VideoTransferLimits.POLL_MS,
+                            java.util.concurrent.TimeUnit.MILLISECONDS)
+                    }catch(_:java.util.concurrent.TimeoutException){
+                        // Check real bytes, cancellation and bounded deadlines.
+                    }
+                }
+            }catch(t:Exception){
+                future.cancel(true)
+                throw t
             }finally{
                 extractionJobs.remove(item.id,future)
             }
@@ -437,15 +481,15 @@ object VideoEngine {
                         ?:cookie.takeIf{it.isFile&&it.length()>0}
                     if(selected!=null)addOption("--cookies",selected.absolutePath)
                 }
-            val response=executeControlled(request){_,_,_->
+            val response=executeControlled(request,"metadata"){_,_,_->
                 if(stopRequests.contains(item.id))
                     throw java.util.concurrent.CancellationException("Video paused")
             }
-            if(!response.isSuccess)error("Cannot inspect complete-video metadata")
-            val text=response.output.lineSequence().map{it.trim()}
-                .firstOrNull{it.startsWith("{")&&it.endsWith("}")}
-                ?:error("Video extractor returned no metadata JSON")
-            val json=JSONObject(text)
+            if(!response.isSuccess)error(
+                "Cannot inspect complete-video metadata (extractor exit "+
+                    response.exitCode+")")
+            val json=VideoMetadataOutput.parse(response.output)
+                ?:error("Video extractor returned no valid metadata JSON")
             val duration=json.optDouble("duration",0.0)
                 .takeIf{it.isFinite() && it>0.0}?.toLong()
             val extracted=json.optString("title","")
@@ -473,9 +517,17 @@ object VideoEngine {
             return (duration?:0L) to decision
         }
         fun execute(link:String,referer:String?=null) {
-            val response=executeControlled(request(link,referer)){progress,_,_->
+            val heartbeat=java.util.concurrent.atomic.AtomicLong(
+                android.os.SystemClock.elapsedRealtime())
+            var greatest=0f
+            val response=executeControlled(request(link,referer),
+                "transfer",heartbeat){progress,_,_->
                 if(stopRequests.contains(item.id))
                     throw java.util.concurrent.CancellationException("Video paused")
+                if(progress>greatest){
+                    greatest=progress
+                    heartbeat.set(android.os.SystemClock.elapsedRealtime())
+                }
                 val percent=progress.toInt().coerceIn(0,100)
                 db.progress(item.id,percent)
                 if(percent%5==0) status(percent)
