@@ -145,14 +145,23 @@ internal object ModuleOriginalAgents {
                     var handled=0
                     while(AppPower.enabled(app) && handled<40 &&
                         !Thread.currentThread().isInterrupted){
-                        val due=SourceIndexDb(app).use{
-                            it.pendingDirect(60,area)
+                        val due=SourceIndexDb(app).use{db->
+                            val selected=ArrayList<IndexedItem>()
+                            var offset=0
+                            while(selected.size<60 && offset<24_000){
+                                val page=db.pendingDirect(60,area,offset)
+                                if(page.isEmpty())break
+                                selected.addAll(page.filter{
+                                    SourceIndex.originalRequested(app,it)
+                                })
+                                offset+=page.size
+                            }
+                            selected
                         }
                         if(due.isEmpty())break
                         var acquired=false
                         for(item in due){
                             if(!AppPower.enabled(app))break
-                            if(!SourceIndex.originalRequested(app,item))continue
                             val claimed=SourceIndexDb(app).use{
                                 it.claimDirect(item.url)
                             }
