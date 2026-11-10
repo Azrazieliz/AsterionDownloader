@@ -22,6 +22,7 @@ object SiteControls {
         return when(host){
             "buondua.com"->"buondua.net"
             "omg.xxx"->"omg.porn"
+            "novelbuddy.com"->"novelbuddy.me"
             else->host
         }
     }
