@@ -1247,7 +1247,8 @@ object SourceIndex {
             SiteControls.explicitlyEnabled(context,item.source)) &&
         SourceIndexParser.autoOriginal(item)
 
-    internal fun submitOriginal(context:Context,item:IndexedItem):Boolean=runCatching{
+    internal fun submitOriginal(context:Context,item:IndexedItem,
+                                 onDirectEnqueued:(Long)->Unit={}):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
         if(item.kind=="video"){
             val queued=VideoDb(context).use{it.addVideo(item.url,item.title)}
@@ -1307,6 +1308,7 @@ object SourceIndex {
             CrossSourceDedup(context).use{it.attach(item.url,id)}
             DirectDownloadTracker.record(context,id,filename,folder,item.url)
             DirectDownloadRetry.remember(context,id,item.url,folder,filename,item.source)
+            if(id>0L)runCatching{onDirectEnqueued(id)}
             id>0L
         }catch(e:Exception){
             CrossSourceDedup(context).use{it.release(item.url)}
