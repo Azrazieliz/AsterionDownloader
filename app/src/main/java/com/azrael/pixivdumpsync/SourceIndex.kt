@@ -297,6 +297,8 @@ class SourceIndexDb(context:Context):
                          url LIKE 'https://www.freewebnovel.com/%' OR
                          url LIKE 'https://novelbuddy.com/%' OR
                          url LIKE 'https://www.novelbuddy.com/%' OR
+                         url LIKE 'https://novelbuddy.me/%' OR
+                         url LIKE 'https://www.novelbuddy.me/%' OR
                          url LIKE 'https://readnovelfull.com/%' OR
                          url LIKE 'https://www.readnovelfull.com/%') AND
                         (url LIKE '%/novel/%' OR url LIKE '%/book/%') AND
@@ -425,7 +427,7 @@ internal object SourceIndexParser {
             name=listOf("www.","m.","fr.","en.").firstOrNull{name.startsWith(it)}
                 ?.let{name.removePrefix(it)}?:name
         }
-        if(name=="omg.xxx")"omg.porn" else name
+        when(name){"omg.xxx"->"omg.porn";"novelbuddy.com"->"novelbuddy.me";else->name}
     }.getOrDefault("")
     internal fun sameSite(a:String,b:String):Boolean{
         val x=host(a)
@@ -738,6 +740,17 @@ object SourceIndex {
         SourceIndexDb(context).use{db->
             db.migrateOfficialSource(
                 "https://www.omg.xxx/fr/","https://www.omg.porn/fr/")
+            db.migrateOfficialSource(
+                "https://pornhub.com/","https://www.pornhub.com/")
+            db.migrateOfficialSource(
+                "https://roshy.tv/category/decensored/",
+                "https://roshy.tv/category/decensored-6/")
+            db.migrateOfficialSource(
+                "https://m.tnaflix.com/","https://www.tnaflix.com/")
+            db.migrateOfficialSource(
+                "https://freewebnovel.com/","https://freewebnovel.com/home")
+            db.migrateOfficialSource(
+                "https://novelbuddy.com/home","https://novelbuddy.me/home")
             for(site in AlohaSources.all){
                 val ownsFeed=site.host in setOf("onejav.com","sukebei.nyaa.si")
                 db.add(site.url,site.name,site.area.name,
