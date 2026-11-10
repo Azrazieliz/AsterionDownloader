@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
-import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Switch
@@ -29,20 +28,15 @@ object Mp4SeriesPanel {
             "Name the main series once. Each work and spin-off tracks its own backfill and future releases.",
             12f,ui.secondary),ui.lp(a,4))
         val name=entry(a,"Main series name (e.g. Tensura)")
-        val next=entry(a,"First volume to acquire (1 for a new series)")
-        next.inputType=InputType.TYPE_CLASS_NUMBER
-        next.setText("1")
         form.addView(name,ui.lp(a,9))
-        form.addView(next,ui.lp(a,5))
         form.addView(ui.action(a,"FOLLOW SERIES",true){
             val title=name.text.toString().trim()
-            val floor=next.text.toString().trim().toIntOrNull()
-            if(title.length<3 || floor==null || floor !in 1..999){
-                Toast.makeText(a,"Enter a series name and a starting volume",
+            if(title.length<3){
+                Toast.makeText(a,"Enter a series name",
                     Toast.LENGTH_LONG).show()
                 return@action
             }
-            val id=Mp4SeriesStore(a).use{it.add(title,title,floor)}
+            val id=Mp4SeriesStore(a).use{it.add(title,title,1)}
             Mp4SeriesSync.ensure(a)
             Mp4SeriesSync.startBackfill(a,id)
             refresh()
@@ -60,7 +54,7 @@ object Mp4SeriesPanel {
             val card=ui.card(a)
             card.addView(ui.text(a,work.name,16f,ui.white,true),ui.lp(a,2))
             card.addView(ui.text(a,work.type+" · "+work.family+
-                " · from volume "+work.firstVolume,12f,ui.secondary),ui.lp(a,3))
+                " · per-volume Rounder inventory reconciliation",12f,ui.secondary),ui.lp(a,3))
             if(!work.error.isNullOrBlank())
                 card.addView(ui.text(a,work.error.take(180),11f,ui.danger),ui.lp(a,4))
             val controls=ui.row(a)
@@ -74,19 +68,6 @@ object Mp4SeriesPanel {
             }
             controls.addView(sync)
             card.addView(controls,ui.lp(a,5))
-            val actions=ui.row(a)
-            val floor=entry(a,"Start volume")
-            floor.setText(work.firstVolume.toString())
-            floor.inputType=InputType.TYPE_CLASS_NUMBER
-            actions.addView(floor,LinearLayout.LayoutParams(0,-2,1f))
-            actions.addView(ui.action(a,"SAVE FLOOR",false){
-                val n=floor.text.toString().toIntOrNull()
-                if(n!=null && n in 1..999){
-                    Mp4SeriesStore(a).use{it.startAt(work.id,n)}
-                    Mp4SeriesSync.scanNow(a);refresh()
-                }
-            })
-            card.addView(actions,ui.lp(a,6))
             val aliases=entry(a,"Alternate titles (comma-separated)")
             aliases.setText(work.aliases)
             card.addView(aliases,ui.lp(a,6))
