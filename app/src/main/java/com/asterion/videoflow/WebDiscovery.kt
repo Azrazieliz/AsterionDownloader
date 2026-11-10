@@ -1,6 +1,7 @@
 package com.asterion.videoflow
 
 import org.jsoup.Jsoup
+import android.content.Context
 import org.jsoup.nodes.Document
 import com.azrael.galleryflow.SiteSession
 import java.net.URI
@@ -107,12 +108,20 @@ object WebDiscovery {
     }
 
     /** One bounded source-page traversal. Caller saves 'next' before marking the page done. */
-    fun page(address:String,root:String):VideoPage {
+    fun page(address:String,root:String,context:Context?=null):VideoPage {
         require(isUrl(address)&&isUrl(root)){"Invalid source URL"}
         require(VideoSiteProfiles.sameProvider(root,address)){
             "Source pagination crossed providers"
         }
-        val doc=open(address)
+        val doc=try{
+            open(address)
+        }catch(error:Exception){
+            // Retry as an authenticated WebView only after the user connected
+            // this exact site. Do not bypass access controls on public sources.
+            if(context==null || !SiteSession.bound(context,address))throw error
+            val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(context,address)
+            Jsoup.parse(html,address)
+        }
         val actual=URI(doc.location())
         require(VideoSiteProfiles.sameProvider(root,doc.location())){
             "Unexpected source redirect across provider domains"
