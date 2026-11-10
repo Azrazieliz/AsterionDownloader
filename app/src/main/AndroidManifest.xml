@@ -126,9 +126,14 @@
         <service android:name=".ChapterRecoveryService"
             android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name="com.asterion.videoflow.TransferService"
-            android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
+            android:exported="false" android:process=":videoflow_primary"
+            android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
+        <service android:name="com.asterion.videoflow.TransferAgentTwoService"
+            android:exported="false" android:process=":videoflow_secondary"
+            android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
         <service android:name="com.asterion.videoflow.PollJobService"
-            android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE"/>
+            android:exported="true" android:process=":videoflow_primary"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <receiver android:name="com.asterion.videoflow.BootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter>
         </receiver>
