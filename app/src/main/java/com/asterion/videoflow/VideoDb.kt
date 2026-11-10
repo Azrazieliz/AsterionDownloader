@@ -214,10 +214,25 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         val count=db.rawQuery("SELECT attempts FROM videos WHERE id=?",arrayOf(id.toString())).use{
             if(it.moveToFirst())it.getInt(0)+1 else 1
         }
-        val wait=(15000L shl (count-1).coerceIn(0,6)).coerceAtMost(900000L)
-        update(id,if(count<=6)"retry_wait" else "error",error=reason)
+        val category=VideoFailurePolicy.classify(reason)
+        val requiresAction=VideoFailurePolicy.actionable(category)
+        val waiting=!requiresAction && count<=6
+        val wait=if(waiting)VideoFailurePolicy.delayMs(category,count) else 0L
+        update(id,if(waiting)"retry_wait" else "error",error=reason)
         db.execSQL("UPDATE videos SET attempts=?,retry_after=? WHERE id=?",
-            arrayOf(count,System.currentTimeMillis()+wait,id))
+            arrayOf(count,if(waiting)System.currentTimeMillis()+wait else 0L,id))
+    }
+    /** Durable due-time for retriable work; periodic polling alone makes a
+     * 20-second retry wait up to 15 minutes. Scheduling can wake exactly when due.
+     */
+    fun nextRetryDelayMs():Long?{
+        val now=System.currentTimeMillis()
+        return readableDatabase.rawQuery(
+            "SELECT MIN(retry_after) FROM videos WHERE state='retry_wait' AND retry_after>0",
+            null).use{c->
+            if(!c.moveToFirst() || c.isNull(0))null
+            else(c.getLong(0)-now).coerceAtLeast(1_000L)
+        }
     }
     fun recover() {
         writableDatabase.execSQL("UPDATE videos SET state='queued', progress=0 WHERE state='running'")
