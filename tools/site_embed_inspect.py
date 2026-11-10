@@ -34,23 +34,29 @@ def host_or_empty(url):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--listing",required=True)
-    p.add_argument("--path-regex",required=True)
+    p.add_argument("--listing")
+    p.add_argument("--path-regex")
+    p.add_argument("--video-url")
     o=p.parse_args()
-    root,html=fetch(o.listing)
-    doc=Inspector();doc.feed(html)
-    wanted=re.compile(o.path_regex,re.I)
-    selected=None
-    for href in doc.anchors:
-        u=urllib.parse.urljoin(root,href)
-        parsed=urllib.parse.urlsplit(u)
-        if parsed.scheme!="https" or parsed.hostname!=host_or_empty(root):continue
-        if wanted.search(parsed.path):
-            selected=u;break
-    print("LISTING_HOST",host_or_empty(root),"CANDIDATES",len(doc.anchors))
-    if not selected:
-        print("NO_RECOGNIZED_INDIVIDUAL_VIDEO_PAGE")
-        return
+    if o.video_url:
+        selected=o.video_url
+    else:
+        if not o.listing or not o.path_regex:
+            p.error("Provide --video-url or both --listing and --path-regex")
+        root,html=fetch(o.listing)
+        doc=Inspector();doc.feed(html)
+        wanted=re.compile(o.path_regex,re.I)
+        selected=None
+        for href in doc.anchors:
+            u=urllib.parse.urljoin(root,href)
+            parsed=urllib.parse.urlsplit(u)
+            if parsed.scheme!="https" or parsed.hostname!=host_or_empty(root):continue
+            if wanted.search(parsed.path):
+                selected=u;break
+        print("LISTING_HOST",host_or_empty(root),"CANDIDATES",len(doc.anchors))
+        if not selected:
+            print("NO_RECOGNIZED_INDIVIDUAL_VIDEO_PAGE")
+            return
     actual,page=fetch(selected)
     print("PAGE_HOST",host_or_empty(actual),"HTML_BYTES",len(page))
     detail=Inspector();detail.feed(page)
