@@ -235,23 +235,34 @@ object Mp4SeriesSync {
     fun scan(context:Context,stop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
         BackfillPerformance.backgroundWorker()
+        val pool=java.util.concurrent.Executors.newFixedThreadPool(2){r->
+            Thread(r,"asterion-books-series-agent").apply{isDaemon=true}
+        }
         try{
-            Mp4SeriesStore(context).use{db->
-                val visited=HashSet<Long>()
-                // A first pass can discover related work subscriptions. The
-                // second pass begins their independent historical scan now.
-                repeat(2){
-                    for(work in db.list()){
-                        if(stop()||!AppPower.enabled(context))break
-                        if(!visited.add(work.id))continue
-                        runCatching{scanWork(context,db,work)}.onFailure{
-                            db.checked(work.id,work.cursor,
-                                it.message?:it.javaClass.simpleName)
+            val visited=HashSet<Long>()
+            repeat(2){
+                if(stop()||!AppPower.enabled(context))return@repeat
+                val works=Mp4SeriesStore(context).use{db->
+                    db.list().filter{visited.add(it.id)}
+                }
+                // Two concurrent book-series agents; volume order remains
+                // strictly serial inside each series via Mp4VolumeDispatcher.
+                val jobs=works.map{work->
+                    pool.submit {
+                        Mp4SeriesStore(context).use{db->
+                            runCatching{scanWork(context,db,work)}.onFailure{
+                                db.checked(work.id,work.cursor,
+                                    it.message?:it.javaClass.simpleName)
+                            }
                         }
                     }
                 }
+                for(job in jobs)runCatching{job.get()}
             }
-        }finally{busy.set(false)}
+        }finally{
+            pool.shutdownNow()
+            busy.set(false)
+        }
     }
 }
 class Mp4SeriesJob:JobService(){
