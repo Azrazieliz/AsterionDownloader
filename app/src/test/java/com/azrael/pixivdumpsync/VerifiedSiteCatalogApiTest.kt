@@ -1,0 +1,50 @@
+package com.azrael.pixivdumpsync
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class VerifiedSiteCatalogApiTest {
+    @Test fun epornerOnlyAcceptsActualVideoPostsWithSourceOwnedCovers(){
+        val json="""{"page":1,"total_pages":2,"videos":[
+          {"url":"https://www.eporner.com/video-09wPiRnMhaU/example-scene/",
+           "title":"Example original","default_thumb":{
+              "src":"https://static-ca-cdn.eporner.com/thumbs/a.jpg"}},
+          {"url":"https://www.eporner.com/category/all/",
+           "title":"Category","default_thumb":{"src":"https://example.com/logo.jpg"}},
+          {"url":"https://untrusted.example/video-100/foreign/",
+           "title":"Foreign video","default_thumb":{"src":"https://example.com/a.jpg"}}
+        ]}"""
+        val result=VerifiedSiteCatalogApi.eporner(
+            json,"https://www.eporner.com/","ADULT",123L)
+        assertEquals(1,result.media.size)
+        assertEquals("Example original",result.media.first().title)
+        assertEquals("video",result.media.first().kind)
+        assertEquals("https://static-ca-cdn.eporner.com/thumbs/a.jpg",
+            result.media.first().preview)
+        assertTrue(result.next!!.contains("page=2"))
+    }
+
+    @Test fun hentaiBrosIndexesPublishedPostsNotNavigation(){
+        val json="""[
+          {"status":"publish","type":"post",
+           "link":"https://hentaibros.net/example-animation-episode-2/",
+           "title":{"rendered":"Example Animation Episode 2"},
+           "yoast_head_json":{"og_image":[{"url":"https://hentaibros.net/media/episode.jpg"}]}},
+          {"status":"draft","type":"post",
+           "link":"https://hentaibros.net/draft-episode/",
+           "title":{"rendered":"Draft Episode"},
+           "yoast_head_json":{"og_image":[{"url":"https://hentaibros.net/a.jpg"}]}}
+        ]"""
+        val r=VerifiedSiteCatalogApi.hentaiBros(
+            json,"https://hentaibros.net/","HENTAI")
+        assertEquals(1,r.media.size)
+        assertTrue(r.media.single().url.contains("episode-2"))
+        assertFalse(r.media.single().queued)
+    }
+
+    @Test(expected = org.json.JSONException::class)
+    fun invalidCatalogJsonIsNotSilentlyCountedAsSuccessful(){
+        VerifiedSiteCatalogApi.eporner("<html>blocked</html>",
+            "https://www.eporner.com/","ADULT")
+    }
+}
