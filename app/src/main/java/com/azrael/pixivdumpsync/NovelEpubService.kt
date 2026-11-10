@@ -331,21 +331,37 @@ object NovelEpubService {
     fun run(context:Context,stop:()->Boolean={false}){
         if(!AppPower.enabled(context)||!busy.compareAndSet(false,true))return
         BackfillPerformance.backgroundWorker()
+        val pool=java.util.concurrent.Executors.newFixedThreadPool(2){r->
+            Thread(r,"asterion-books-original-agent").apply{isDaemon=true}
+        }
         try{
             NovelEpubQueue(context).use{db->
                 db.recover()
                 db.refreshDue()
-                for(i in 0 until 2){
-                    if(stop()||!AppPower.enabled(context))break
-                    val task=db.next()?:break
-                    db.started(task.url)
-                    try{
-                        val (saved,signature)=generate(context,task,stop,db)
-                        db.completed(task.url,saved,signature)
-                    }catch(t:Exception){db.failure(task,t.message?:t.javaClass.simpleName)}
+            }
+            // Two true parallel EPUB download/generator lanes. Each has a
+            // separate DB connection with a single transactional series claim.
+            val jobs=(0 until 2).map{
+                pool.submit {
+                    NovelEpubQueue(context).use{db->
+                        repeat(2){
+                            if(stop()||!AppPower.enabled(context))return@use
+                            val task=db.claimNext()?:return@use
+                            try{
+                                val (saved,signature)=generate(context,task,stop,db)
+                                db.completed(task.url,saved,signature)
+                            }catch(t:Exception){
+                                db.failure(task,t.message?:t.javaClass.simpleName)
+                            }
+                        }
+                    }
                 }
             }
-        }finally{busy.set(false)}
+            for(job in jobs)runCatching{job.get()}
+        }finally{
+            pool.shutdownNow()
+            busy.set(false)
+        }
     }
 }
 class NovelEpubJob:JobService(){
