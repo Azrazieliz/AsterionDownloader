@@ -365,7 +365,7 @@ internal object SourceIndexParser {
             name=listOf("www.","m.","fr.","en.").firstOrNull{name.startsWith(it)}
                 ?.let{name.removePrefix(it)}?:name
         }
-        name
+        if(name=="omg.xxx")"omg.porn" else name
     }.getOrDefault("")
     internal fun sameSite(a:String,b:String):Boolean{
         val x=host(a)
