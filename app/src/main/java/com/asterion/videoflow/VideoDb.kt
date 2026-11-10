@@ -216,7 +216,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         val category=VideoFailurePolicy.classify(reason)
         val requiresAction=VideoFailurePolicy.actionable(category)
-        val waiting=!requiresAction && count<=6
+        val waiting=!requiresAction && count<=VideoFailurePolicy.maxRetries(category)
         val wait=if(waiting)VideoFailurePolicy.delayMs(category,count) else 0L
         update(id,if(waiting)"retry_wait" else "error",error=reason)
         db.execSQL("UPDATE videos SET attempts=?,retry_after=? WHERE id=?",
