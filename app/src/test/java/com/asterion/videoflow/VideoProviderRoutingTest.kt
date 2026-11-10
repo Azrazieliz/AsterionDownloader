@@ -34,6 +34,14 @@ class VideoProviderRoutingTest {
             "https://pornhub.com/models/example"))
     }
 
+    @Test fun javGuruPublishedNumericPostRoutesArePlayableCandidates(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://jav.guru/1076295/start-663-original-episode/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://jav.guru/category/jav/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://jav.guru/jav-actress-list/"))
+    }
     @Test fun failureClassificationsPreserveHttpMeaning(){
         assertEquals(VideoFailurePolicy.Kind.AUTH,
             VideoFailurePolicy.classify("Provider HTTP 403; account unavailable"))
