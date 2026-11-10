@@ -33,6 +33,16 @@ class VideoTransferReliabilityTest {
         val result=VideoExtractorErrors.message("ERROR: HTTP Error 502 Bad Gateway",1,"transfer")
         assertTrue(result.contains("5xx"))
     }
+    @Test fun epornerPlayerHashFailureRequiresActionNotEndlessRetry(){
+        val log="ERROR: [Eporner] video: Unable to extract hash"
+        val message=VideoExtractorErrors.message(log,1,"metadata")
+        assertTrue(message.contains("Eporner"))
+        assertTrue(message.contains("CONNECT ACCOUNT"))
+        assertFalse(message.contains("video:"))
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,
+            VideoFailurePolicy.classify(message))
+        assertTrue(VideoFailurePolicy.actionable(VideoFailurePolicy.classify(message)))
+    }
     @Test fun boundedProgressTimeouts(){
         assertNull(VideoTransferLimits.expired("metadata",10_000L,0L))
         assertNotNull(VideoTransferLimits.expired("metadata",50_000L,0L))
