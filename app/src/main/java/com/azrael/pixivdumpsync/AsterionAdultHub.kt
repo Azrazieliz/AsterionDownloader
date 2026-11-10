@@ -276,20 +276,33 @@ object AsterionAdultHub {
                                 else "Already in Downloads · "+hit.title.take(45),
                                 Toast.LENGTH_SHORT).show()
                         }else if(public.any{it.url==tile.url}){
-                            // Public listing covers are real preview evidence,
-                            // but not proof that the original is accessible.
-                            thread(name="asterion-adult-public-gallery"){
-                                val message=runCatching{
-                                    val source=site.source
-                                    if(source?.adapter=="native")
-                                        ProviderBackfillActions.request(a,source)
-                                    else if(SiteRunControl.start(a,site.url,area))
-                                        "Original indexing requested · "+site.name
-                                    else "Provider already scanning"
-                                }.getOrElse{it.message?:"Provider unavailable"}
-                                a.runOnUiThread{
-                                    if(!a.isFinishing&&!a.isDestroyed)
-                                        Toast.makeText(a,message,Toast.LENGTH_LONG).show()
+                            // A cover is not a downloaded original. However,
+                            // tapping a confirmed video page must enqueue THAT
+                            // exact original, not start an unrelated site-wide
+                            // backfill and misleadingly claim download progress.
+                            if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(tile.url)){
+                                val created=VideoDb(a).use{
+                                    it.addVideo(tile.url,tile.title)
+                                }
+                                if(created)VideoEngine.launch(a,false)
+                                Toast.makeText(a,
+                                    if(created)"Original queued · "+tile.title.take(45)
+                                    else "Already in Downloads · "+tile.title.take(45),
+                                    Toast.LENGTH_SHORT).show()
+                            }else{
+                                thread(name="asterion-adult-public-gallery"){
+                                    val message=runCatching{
+                                        val source=site.source
+                                        if(source?.adapter=="native")
+                                            ProviderBackfillActions.request(a,source)
+                                        else if(SiteRunControl.start(a,site.url,area))
+                                            "Video page indexing requested · "+site.name
+                                        else "Provider already scanning"
+                                    }.getOrElse{it.message?:"Provider unavailable"}
+                                    a.runOnUiThread{
+                                        if(!a.isFinishing&&!a.isDestroyed)
+                                            Toast.makeText(a,message,Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         }
