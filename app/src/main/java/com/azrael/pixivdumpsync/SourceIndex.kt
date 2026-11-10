@@ -32,7 +32,7 @@ data class IndexedItem(val url:String,val title:String,val preview:String?,val s
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,5) {
+    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,6) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
@@ -46,6 +46,7 @@ class SourceIndexDb(context:Context):
             queued INTEGER NOT NULL DEFAULT 0,
             attempts INTEGER NOT NULL DEFAULT 0,
             retry_after INTEGER NOT NULL DEFAULT 0,
+            dispatch_until INTEGER NOT NULL DEFAULT 0,
             detail_checked INTEGER NOT NULL DEFAULT 0,
             detail_attempts INTEGER NOT NULL DEFAULT 0,
             detail_retry_after INTEGER NOT NULL DEFAULT 0,
@@ -71,6 +72,8 @@ class SourceIndexDb(context:Context):
             db.execSQL("CREATE INDEX IF NOT EXISTS entries_original_queue ON entries(queued,retry_after,discovered_at)")
         }
         if(a<5)db.execSQL("ALTER TABLE sources ADD COLUMN history_complete INTEGER NOT NULL DEFAULT 0")
+        if(a<6)db.execSQL(
+            "ALTER TABLE entries ADD COLUMN dispatch_until INTEGER NOT NULL DEFAULT 0")
     }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
         val v=ContentValues().apply{
@@ -240,12 +243,12 @@ class SourceIndexDb(context:Context):
     /** Retry only direct originals not yet accepted by their native download
      * engine. Historical pages do not have to be revisited just to retry a URL.
      */
-    fun pendingDirect(limit:Int=30):List<IndexedItem>{
+    fun pendingDirect(limit:Int=30,area:String?=null):List<IndexedItem>{
         val rows=ArrayList<IndexedItem>()
         readableDatabase.rawQuery(
             """SELECT url,title,preview,source,area,kind,discovered_at,queued
-                FROM entries WHERE queued=0 AND retry_after<=? AND
-                    EXISTS (SELECT 1 FROM sources src WHERE src.url=entries.source
+                FROM entries WHERE queued=0 AND retry_after<=? AND dispatch_until<=? AND
+                    (?='' OR area=?) AND EXISTS (SELECT 1 FROM sources src WHERE src.url=entries.source
                         AND src.enabled=1) AND (
                     (kind='video' AND area IN ('VIDEOS','ADULT','HENTAI','CREATORS'))
                     OR (kind='epub' AND area='BOOKS')
@@ -275,12 +278,29 @@ class SourceIndexDb(context:Context):
                 )
                 ORDER BY discovered_at ASC LIMIT ?""",
             arrayOf(System.currentTimeMillis().toString(),
+                System.currentTimeMillis().toString(),area.orEmpty(),area.orEmpty(),
                 limit.coerceIn(1,120).toString())).use{c->
             while(c.moveToNext())rows+=IndexedItem(c.getString(0),c.getString(1),
                 c.getString(2),c.getString(3),c.getString(4),c.getString(5),
                 c.getLong(6),c.getInt(7)==1)
         }
         return rows
+    }
+    /** Acquire exclusive enqueue ownership before either module agent
+     * submits a direct original. SQLite conditional UPDATE prevents duplicate
+     * requests across threads; expired claims recover after worker crashes.
+     */
+    fun claimDirect(url:String):Boolean{
+        val now=System.currentTimeMillis()
+        val v=ContentValues().apply{put("dispatch_until",now+120_000L)}
+        return writableDatabase.update("entries",v,
+            "url=? AND queued=0 AND retry_after<=? AND dispatch_until<=?",
+            arrayOf(url,now.toString(),now.toString()))==1
+    }
+    fun releaseDirect(url:String){
+        writableDatabase.update("entries",ContentValues().apply{
+            put("dispatch_until",0L)
+        },"url=?",arrayOf(url))
     }
     /** Only retry items whose persisted backoff has expired. */
     fun hasPendingDirect():Boolean=pendingDirect(1).isNotEmpty()
