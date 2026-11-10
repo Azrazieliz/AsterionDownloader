@@ -40,11 +40,22 @@ internal object VideoSiteProfiles {
     ).associateBy{it.domain}
     private fun domain(raw:String):String=runCatching{
         var host=URI(raw).host.orEmpty().lowercase(Locale.ROOT)
-        for(prefix in listOf("www.","m.","fr.")){
-            if(host.startsWith(prefix))host=host.removePrefix(prefix)
+        while(listOf("www.","m.","fr.","en.").any{host.startsWith(it)}){
+            val prefix=listOf("www.","m.","fr.","en.")
+                .first{host.startsWith(it)}
+            host=host.removePrefix(prefix)
         }
         host
     }.getOrDefault("")
+    /** A provider may redirect between its own mobile, language and www host
+     * without changing source ownership. Never treat unrelated domains or
+     * deceptive suffixes as the same provider.
+     */
+    fun sameProvider(a:String,b:String):Boolean{
+        val first=domain(a)
+        val second=domain(b)
+        return first.isNotBlank() && first==second
+    }
     fun isVideoPage(url:String):Boolean{
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         if(uri.scheme !in setOf("https","http") || uri.userInfo!=null)return false
