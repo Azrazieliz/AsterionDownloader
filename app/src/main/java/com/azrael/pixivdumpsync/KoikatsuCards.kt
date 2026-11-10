@@ -219,10 +219,9 @@ class KoikatsuCardActivity:Activity(){
         if(previewUrl!=null)RemoteImageLoader.load(this,preview,previewUrl,card.page)
         v.addView(ui.action(this,"DOWNLOAD CARD PNG",true){
             status.text="Retrieving "+card.name
-            thread(name="koikatsu-card-download"){
-                val done=runCatching{KoikatsuCards.download(this,KoikatsuCards.resolve(card),card.name)}
-                runOnUiThread{done.onSuccess{status.text="Saved original PNG: "+card.name}
-                    .onFailure{status.text="Download failed: "+it.message}}
+            KoikatsuCardAgents.submit(this,card){done->
+                done.onSuccess{status.text="Saved original PNG: "+card.name}
+                    .onFailure{status.text="Download failed: "+it.message}
             }
         },ui.lp(this,8))
         results.addView(v,ui.lp(this,10))
