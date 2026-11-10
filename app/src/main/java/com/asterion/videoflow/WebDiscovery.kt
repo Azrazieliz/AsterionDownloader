@@ -42,20 +42,60 @@ object WebDiscovery {
         mediaFiles.containsMatchIn(address) ||
         videoPaths.any { it.containsMatchIn(address) } ||
         VideoSiteProfiles.isVideoPage(address)
-    private fun open(url:String):Document=Jsoup.connect(url)
-        .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
-        .timeout(18000).followRedirects(true).maxBodySize(2500000)
-        .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}.get()
+    /** Redirects are bounded to the same approved provider. Site cookies are
+     * attached afresh to each same-provider request, never forwarded through
+     * an automatic third-party redirect.
+     */
+    private fun open(url:String):Document{
+        require(isUrl(url)){"Invalid public provider URL"}
+        var current=url
+        repeat(5){
+            require(isUrl(current) && VideoSiteProfiles.sameProvider(url,current)){
+                "Provider redirected outside its approved website"
+            }
+            val response=Jsoup.connect(current)
+                .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+                .timeout(14_000).followRedirects(false).maxBodySize(2_500_000)
+                .ignoreHttpErrors(true)
+                .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                .execute()
+            if(response.statusCode() in 300..399){
+                val redirect=response.header("Location")
+                    ?.takeIf{it.isNotBlank()}?:error("Provider redirect has no destination")
+                val target=URI(current).resolve(redirect).toString()
+                require(target.startsWith("https://") &&
+                    isUrl(target) && VideoSiteProfiles.sameProvider(url,target)){
+                    "Provider redirected to a different website; review source URL"
+                }
+                current=target
+            }else{
+                require(response.statusCode() in 200..299){
+                    "Provider HTTP "+response.statusCode()+
+                        if(response.statusCode() in setOf(401,403))
+                            " · authorized login or browser verification needed"
+                        else " · request unsuccessful"
+                }
+                val document=response.parse()
+                val title=document.title().lowercase()
+                require(!title.contains("just a moment") &&
+                    !title.contains("access denied") &&
+                    !title.contains("verify you are human")){
+                    "Provider browser verification required; connect an authorized account"
+                }
+                return document
+            }
+        }
+        error("Provider exceeded five same-site redirects")
+    }
     fun findOnPage(address:String,limit:Int=15):List<VideoHit> {
         require(isUrl(address)){"Invalid public HTTP(S) page"}
         val root=open(address)
-        val initialHost=URI(address).host.lowercase().removePrefix("www.")
+        val origin=address
         val found=linkedMapOf<String,VideoHit>()
         fun add(raw:String,title:String){
             val url=runCatching{URI(root.location()).resolve(raw).toString()}.getOrNull()?:return
             val normalized=normalize(url)?:return
-            val host=URI(normalized).host.lowercase().removePrefix("www.")
-            if(host!=initialHost&&!host.endsWith(".$initialHost"))return
+            if(!VideoSiteProfiles.sameProvider(origin,normalized))return
             if(!isVideoPage(normalized))return
             found.putIfAbsent(normalized,VideoHit(title.trim().ifEmpty{"Video"}.take(180),normalized))
         }
@@ -69,26 +109,25 @@ object WebDiscovery {
     /** One bounded source-page traversal. Caller saves 'next' before marking the page done. */
     fun page(address:String,root:String):VideoPage {
         require(isUrl(address)&&isUrl(root)){"Invalid source URL"}
-        val host=URI(root).host.lowercase().removePrefix("www.")
-        val target=URI(address).host.lowercase().removePrefix("www.")
-        require(target==host || target.endsWith(".$host")){"Source pagination crossed providers"}
+        require(VideoSiteProfiles.sameProvider(root,address)){
+            "Source pagination crossed providers"
+        }
         val doc=open(address)
         val actual=URI(doc.location())
-        val actualHost=actual.host.orEmpty().lowercase().removePrefix("www.")
-        require(actualHost==host || actualHost.endsWith(".$host")){"Unexpected source redirect"}
+        require(VideoSiteProfiles.sameProvider(root,doc.location())){
+            "Unexpected source redirect across provider domains"
+        }
         val found=linkedMapOf<String,VideoHit>()
         for(a in doc.select("a[href]").take(1500)){
             val url=normalize(a.absUrl("href"))?:continue
             val uri=URI(url)
-            val linkHost=uri.host.lowercase().removePrefix("www.")
-            if(linkHost!=host && !linkHost.endsWith(".$host"))continue
+            if(!VideoSiteProfiles.sameProvider(root,url))continue
             if(!isVideoPage(url))continue
             val title=a.attr("title").ifBlank{a.text()}
                 .ifBlank{a.selectFirst("img[alt]")?.attr("alt").orEmpty()}
                 .ifBlank{"Video"}.take(180)
-            val thumbnail=a.selectFirst("img")?.let{img->
-                listOf("data-src","data-original","src")
-                    .map{img.absUrl(it)}.firstOrNull{isUrl(it)}
+            val thumbnail=a.selectFirst("img")?.let{
+                com.azrael.pixivdumpsync.SitePreviewImage.best(it)
             }
             found.putIfAbsent(url,VideoHit(title,url,thumbnail))
             if(found.size>=350)break
@@ -115,8 +154,7 @@ object WebDiscovery {
             ?:com.azrael.pixivdumpsync.SourceIndexParser.next(doc,root,address))
             ?.let(::normalize)?.takeIf{candidate->
                 val u=URI(candidate)
-                val h=u.host.lowercase().removePrefix("www.")
-                (h==host || h.endsWith(".$host")) &&
+                VideoSiteProfiles.sameProvider(root,candidate) &&
                     (rootPath.isEmpty() || u.path.startsWith(rootPath) ||
                         u.query.orEmpty().contains("page=") ||
                         u.path.contains("/page/")) &&
