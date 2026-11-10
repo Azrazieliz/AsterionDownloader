@@ -35,5 +35,8 @@ class VideoTransferReliabilityTest {
         assertFalse(VideoFailurePolicy.actionable(VideoFailurePolicy.Kind.RATE_LIMIT))
         assertEquals(VideoFailurePolicy.Kind.TRANSIENT,VideoFailurePolicy.classify("Connection timed out"))
         assertTrue(VideoFailurePolicy.delayMs(VideoFailurePolicy.Kind.RATE_LIMIT,1)>=600_000)
+        assertEquals(VideoFailurePolicy.Kind.METADATA,
+            VideoFailurePolicy.classify("Video extractor returned no valid metadata JSON"))
+        assertEquals(2,VideoFailurePolicy.maxRetries(VideoFailurePolicy.Kind.METADATA))
     }
 }
