@@ -216,6 +216,14 @@ object RounderDispatch {
                         val category=folderCategory(folder)?:continue
                         val uri=android.content.ContentUris.withAppendedId(
                             MediaStore.Downloads.EXTERNAL_CONTENT_URI,id)
+                        // In the current downloader namespace an HTTP 200 can
+                        // be a saved HTML login page. Never forward it to
+                        // Rounder/TeraBox as a completed original asset.
+                        if(folder.lowercase().contains("asteriondownloader")){
+                            val receipt=OriginalFileReceipt.verifyUri(
+                                context,uri,name)
+                            if(!receipt.valid)continue
+                        }
                         outbox.enqueue(uri,name,category)
                         total++
                     }
