@@ -22,6 +22,17 @@ class VideoTransferReliabilityTest {
         assertNull(VideoMetadataOutput.parse("WARNING no JSON from extractor"))
         assertNull(VideoMetadataOutput.parse("WARNING {invalid}"))
     }
+    @Test fun extractorErrorsRemainActionableWithoutLeakingMediaTokens(){
+        val raw="ERROR: HTTP Error 403: https://videos.example/full.mp4?token=PRIVATE"
+        val result=VideoExtractorErrors.message(raw,1,"metadata")
+        assertTrue(result.contains("403"))
+        assertFalse(result.contains("PRIVATE"))
+        assertFalse(result.contains("videos.example"))
+    }
+    @Test fun transientExtractorFailureReportsRetryableHostClass(){
+        val result=VideoExtractorErrors.message("ERROR: HTTP Error 502 Bad Gateway",1,"transfer")
+        assertTrue(result.contains("5xx"))
+    }
     @Test fun boundedProgressTimeouts(){
         assertNull(VideoTransferLimits.expired("metadata",10_000L,0L))
         assertNotNull(VideoTransferLimits.expired("metadata",50_000L,0L))
