@@ -28,7 +28,7 @@ internal object VideoSiteProfiles {
         Route("pornhits.com",Regex("""(?i)^/(?:video|watch|videos)/[^/?#]+""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
-        Route("omg.xxx",Regex("""(?i)^/(?:[a-z]{2}/)?(?:video|videos|watch)/[^/?#]+""")),
+        Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:video|videos|watch)/[^/?#]+""")),
         Route("hentaibros.net",Regex("""(?i)^/[a-z0-9][a-z0-9_-]{5,180}/?$""")),
         Route("mp4hentai.com",Regex("""(?i)^/(?!category/)(?:video|watch|hentai)/[^/?#]+""")),
         Route("hentaibros.net",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
@@ -46,7 +46,7 @@ internal object VideoSiteProfiles {
                 .first{host.startsWith(it)}
             host=host.removePrefix(prefix)
         }
-        host
+        if(host=="omg.xxx")"omg.porn" else host
     }.getOrDefault("")
     /** A provider may redirect between its own mobile, language and www host
      * without changing source ownership. Never treat unrelated domains or
