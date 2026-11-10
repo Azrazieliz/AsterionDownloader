@@ -120,6 +120,36 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
             c.getInt(7),c.getLong(8),c.getInt(9)==1,c.getLong(10),c.getString(11))
         else null
     }
+    /** Atomically claim one chapter archive. Two parallel ZIP downloaders
+     * cannot take the same gallery or mark a partially written ZIP complete.
+     */
+    fun claimNext():ChapterTask?{
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val chosen=db.rawQuery(
+                """SELECT id,url,title,state,progress,error,saved_uri,attempts,
+                   updated,sync_enabled,last_check,fingerprint FROM tasks
+                   WHERE state='queued' ORDER BY updated ASC LIMIT 1""",null
+            ).use{c->
+                if(c.moveToFirst())ChapterTask(
+                    c.getLong(0),c.getString(1),c.getString(2),c.getString(3),
+                    c.getInt(4),c.getString(5),c.getString(6),c.getInt(7),
+                    c.getLong(8),c.getInt(9)==1,c.getLong(10),c.getString(11))
+                else null
+            }
+            if(chosen==null){db.setTransactionSuccessful();return null}
+            val fields=ContentValues().apply{
+                put("state","working");put("attempts",chosen.attempts+1)
+                put("updated",System.currentTimeMillis())
+            }
+            val taken=db.update("tasks",fields,"id=? AND state='queued'",
+                arrayOf(chosen.id.toString()))
+            db.setTransactionSuccessful()
+            return if(taken==1)chosen else null
+        }finally{db.endTransaction()}
+    }
+
     fun update(task:Long,state:String,progress:Int,error:String?=null,savedUri:String?=null){
         val v=ContentValues().apply{
             put("state",state);put("progress",progress.coerceIn(0,100))
