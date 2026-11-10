@@ -95,6 +95,13 @@ internal object OriginalFileReceipt {
                filename:String):Check {
         val uri=runCatching{manager.getUriForDownloadedFile(id)}.getOrNull()
             ?:return failed("DownloadManager returned no saved original")
+        return verifyUri(context,uri,filename)
+    }
+    /** Also validate already-persisted MediaStore originals before passing
+     * them to Rounder. No queued request or cloud-upload receipt is implied.
+     */
+    fun verifyUri(context:Context,uri:android.net.Uri,filename:String):Check {
+        if(uri.scheme!="content")return failed("Untrusted original URI")
         return runCatching {
             context.contentResolver.openFileDescriptor(uri,"r")?.use{descriptor->
                 val length=descriptor.statSize
