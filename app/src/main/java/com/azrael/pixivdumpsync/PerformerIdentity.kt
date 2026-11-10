@@ -6,6 +6,7 @@ import java.net.URI
 import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.TimeUnit
 
 /** Evidence-based performer following. A search-title match is NOT a person
@@ -14,8 +15,8 @@ import java.util.concurrent.TimeUnit
  */
 internal object PerformerIdentity {
     data class Proof(val displayName:String,val profileUrl:String,val provider:String)
-    private val acceptedHosts=setOf("pornhub.com")
-    private val namePath=Regex("""^/(?:model|pornstar|models|pornstars)/([a-z0-9-]+)/?$""",
+    private val acceptedHosts=setOf("pornhub.com","xvideos.com","xnxx.com")
+    private val namePath=Regex("""^/(?:model|pornstar|models|pornstars|profiles)/([a-z0-9-]+)/?$""",
         RegexOption.IGNORE_CASE)
 
     fun slug(name:String):String=Normalizer.normalize(name,Normalizer.Form.NFKD)
@@ -62,29 +63,38 @@ internal object PerformerIdentity {
         if(handle.length<2 || needle.length<2)return null
         val urls=listOf(
             "https://www.pornhub.com/model/$handle",
-            "https://www.pornhub.com/pornstar/$handle"
+            "https://www.pornhub.com/pornstar/$handle",
+            "https://www.xvideos.com/pornstars/$handle",
+            "https://www.xvideos.com/profiles/$handle",
+            "https://www.xnxx.com/pornstars/$handle"
         )
-        val pool=Executors.newFixedThreadPool(2)
+        val pool=Executors.newFixedThreadPool(4)
+        val completion=ExecutorCompletionService<Proof?>(pool)
         try{
-            val jobs=urls.map{candidate->
-                pool.submit<Proof?> {
+            for(candidate in urls){
+                completion.submit {
                     runCatching {
                         val response=Jsoup.connect(candidate)
                             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
-                            .followRedirects(false)
-                            .ignoreHttpErrors(true)
-                            .timeout(7_000).maxBodySize(1_800_000).execute()
-                        if(response.statusCode() !in 200..299)return@submit null
-                        val doc=response.parse()
-                        if(matchesEvidence(needle,candidate,doc))
-                            Proof(needle,candidate,"Pornhub")
-                        else null
+                            .followRedirects(false).ignoreHttpErrors(true)
+                            .timeout(6_500).maxBodySize(1_800_000).execute()
+                        if(response.statusCode() !in 200..299)null
+                        else {
+                            val doc=response.parse()
+                            if(matchesEvidence(needle,candidate,doc))
+                                Proof(needle,candidate,host(candidate))
+                            else null
+                        }
                     }.getOrNull()
                 }
             }
-            for(job in jobs){
-                val proof=runCatching{job.get(9,TimeUnit.SECONDS)}.getOrNull()
-                if(proof!=null)return proof
+            val deadline=System.nanoTime()+12_000_000_000L
+            repeat(urls.size){
+                val remaining=deadline-System.nanoTime()
+                if(remaining<=0L)return null
+                val result=completion.poll(remaining,TimeUnit.NANOSECONDS)
+                    ?:return null
+                result.get()?.let{return it}
             }
             return null
         }finally{
