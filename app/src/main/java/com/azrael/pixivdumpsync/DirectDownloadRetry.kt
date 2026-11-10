@@ -112,14 +112,31 @@ object DirectDownloadRetry {
         for(record in DirectRetryVault.all(ctx)){
             if(forceId!=null && record.id!=forceId)continue
             val state=status[record.id]?:continue
-            if(state.status==DownloadManager.STATUS_SUCCESSFUL){
+            val systemSuccess=state.status==DownloadManager.STATUS_SUCCESSFUL
+            val receipt=if(systemSuccess)
+                OriginalFileReceipt.verify(ctx,manager,record.id,record.name)
+                else null
+            if(receipt?.valid==true){
+                OriginalReceiptState.set(ctx,record.id,"VERIFIED")
                 DirectRetryVault.remove(ctx,record.id)
                 CrossSourceDedup(ctx).use{it.completeById(record.id)}
                 continue
             }
-            if(!DirectRetryPolicy.shouldAttempt(
-                state.status==DownloadManager.STATUS_FAILED,state.reason,
-                record.attempts,record.after,now,forceId==record.id))continue
+            val badReceipt=systemSuccess && receipt?.valid==false
+            if(badReceipt)OriginalReceiptState.set(ctx,record.id,"INVALID")
+            // The OS can report 200 OK for a login page, blocked provider
+            // or an HTML error saved as .zip/.epub/.png. Never mark it done.
+            // Retry corrupted responses at most twice automatically; account
+            // pages require the owner to reconnect the provider manually.
+            val loginPage=badReceipt && receipt!!.reason.contains(
+                "HTML/XML error or access page")
+            val due=if(badReceipt)
+                forceId==record.id ||
+                    (!loginPage && record.attempts<2 && now>=record.after)
+                else DirectRetryPolicy.shouldAttempt(
+                    state.status==DownloadManager.STATUS_FAILED,state.reason,
+                    record.attempts,record.after,now,forceId==record.id)
+            if(!due)continue
             try{
                 val request=DownloadManager.Request(Uri.parse(record.url)).apply{
                     setTitle(record.name)
@@ -140,6 +157,7 @@ object DirectDownloadRetry {
                 val id=manager.enqueue(request)
                 val committed=runCatching{
                     DirectDownloadTracker.record(ctx,id,record.name,record.folder,record.url)
+                    OriginalReceiptState.set(ctx,id,"UNVERIFIED")
                     DirectRetryVault.remember(ctx,record.copy(id=id,
                         attempts=record.attempts+1,
                         after=now+DirectRetryPolicy.backoffMs(record.attempts)))
@@ -156,6 +174,7 @@ object DirectDownloadRetry {
                 manager.remove(record.id)
                 DirectDownloadTracker.forget(ctx,record.id)
                 DirectRetryVault.remove(ctx,record.id)
+                OriginalReceiptState.clear(ctx,record.id)
                 count++
             }catch(_:Exception){
                 // Preserve the prior encrypted record and retry status for investigation.
