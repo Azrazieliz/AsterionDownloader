@@ -42,6 +42,15 @@ class VideoProviderRoutingTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://jav.guru/jav-actress-list/"))
     }
+    @Test fun javideoActualReleaseIdRoutesAreVideoPages(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://javideo.net/en/fc2ppv-4994603"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://javideo.net/en/carib-111026-001"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://javideo.net/en/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://javideo.net/en/category/jav"))
+    }
     @Test fun failureClassificationsPreserveHttpMeaning(){
         assertEquals(VideoFailurePolicy.Kind.AUTH,
             VideoFailurePolicy.classify("Provider HTTP 403; account unavailable"))
