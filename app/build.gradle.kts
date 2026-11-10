@@ -31,8 +31,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 78
-        versionName = "1.3.49"
+        versionCode = 79
+        versionName = "1.3.50"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
@@ -75,7 +75,7 @@ android {
         // differently signed Downloader. Never claim this is an in-place update.
         create("pilot") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".pilotbackend"
+            applicationIdSuffix = ".pilotagents"
             versionNameSuffix = "-pilot"
             isDebuggable = true
             matchingFallbacks += listOf("debug")
