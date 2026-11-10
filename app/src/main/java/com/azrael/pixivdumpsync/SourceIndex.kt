@@ -924,8 +924,8 @@ object SourceIndex {
             // Persist every discovered original, but bound actual Android
             // DownloadManager submissions in one scheduler pass. The remaining
             // originals keep their durable unqueued state for catch-up.
-            val directBudget=500
-            var directAttempted=0
+            // Direct originals are now routed by two asynchronous agents PER
+            // module. Discovery must not occupy those download lanes.
             // Visit each discovered detail page independently of listing
             // pagination; retries are persisted and bounded to protect the phone.
             for(item in SourceIndexDb(context).use{it.pendingDetails(50)}){
@@ -962,12 +962,8 @@ object SourceIndex {
                     SourceIndexDb(context).use{db->
                         for(file in files){
                             db.upsert(file)
-                            if(automaticallyRequested(context,file) &&
-                                directAttempted<directBudget){
-                                directAttempted++
-                                if(queueDirect(context,file))db.markQueued(file.url)
-                                else db.defer(file.url)
-                            }
+                            // The module's two claimed agents enqueue this
+                            // original after the source detail is persisted.
                         }
                         db.detailsFinished(item.url)
                     }
@@ -976,18 +972,9 @@ object SourceIndex {
                         failure.message?:"Post detail unavailable")}
                 }
             }
-            // Repair transient enqueue failures even after the historical cursor
-            // advanced, without downloading duplicate originals.
-            if(directAttempted<directBudget)SourceIndexDb(context).use{db->
-                for(item in db.pendingDirect(minOf(120,directBudget-directAttempted))){
-                    if(stop() || !AppPower.enabled(context))break
-                    if(area!=null && item.area!=area)continue
-                    if(!automaticallyRequested(context,item))continue
-                    directAttempted++
-                    if(queueDirect(context,item))db.markQueued(item.url)
-                    else db.defer(item.url)
-                }
-            }
+            // Dispatch up to two asynchronous original queues per module,
+            // with atomic per-file claims and persisted due-time retries.
+            ModuleOriginalAgents.startAll(context,area)
             // Use the established six-hour source scheduler for followed
             // creator profile and creator-designated hub discovery as well.
             // This is separate from post/media download identities.
@@ -1255,12 +1242,12 @@ object SourceIndex {
     /** Discover and index all sources, but never enqueue unrequested
      * books, comics, games or media from an auto-seeded provider.
      */
-    private fun automaticallyRequested(context:Context,item:IndexedItem):Boolean =
+    internal fun originalRequested(context:Context,item:IndexedItem):Boolean =
         DownloadConsentPolicy.automaticAllowed(item.area,
             SiteControls.explicitlyEnabled(context,item.source)) &&
         SourceIndexParser.autoOriginal(item)
 
-    private fun queueDirect(context:Context,item:IndexedItem):Boolean=runCatching{
+    internal fun submitOriginal(context:Context,item:IndexedItem):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
         if(item.kind=="video"){
             val queued=VideoDb(context).use{it.addVideo(item.url,item.title)}
