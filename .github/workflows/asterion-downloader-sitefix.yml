@@ -21,18 +21,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - name: Verify approved UI is unchanged
+      - name: Verify frozen gallery layout and approved behavioral corrections
         shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin refs/heads/checkpoint/downloader-v1.3.48-ui-approved-20261110
+          # Exact frozen layout files cannot change. The already-approved
+          # AdultHub source has a narrowly scoped thumbnail click callback
+          # correction (queue the chosen original, not the entire site).
           git diff --exit-code FETCH_HEAD HEAD -- \
             app/src/main/java/com/azrael/pixivdumpsync/AsterionHomeActivity.kt \
-            app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt \
             app/src/main/java/com/azrael/pixivdumpsync/AsterionCosplayGallery.kt \
             app/src/main/java/com/azrael/pixivdumpsync/KurohaMediaPreview.kt \
             app/src/main/java/com/azrael/pixivdumpsync/SourceIndexPanel.kt \
             app/src/main/java/com/azrael/pixivdumpsync/UnifiedDownloadsUi.kt
+          grep -q 'KurohaMediaPreview.render' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
+          grep -q 'for(site in active+inactive)' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
+          grep -q 'VideoSiteProfiles.isVideoPage(tile.url)' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
+          if grep -q 'MANAGE WEBSITES' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt; then
+            echo 'Unapproved Manage Websites UI regression' >&2
+            exit 1
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -62,18 +71,8 @@ jobs:
           path: |
             Asterion-Downloader-Agents-v1.3.50.apk
             Asterion-Downloader-Agents-v1.3.50.sha256
-      - name: Publish directly installable Android APK
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="asterion-downloader-agents-v1.3.50-$(git rev-parse --short=10 "$GITHUB_SHA")"
-          gh release create "$TAG" \
-            Asterion-Downloader-Agents-v1.3.50.apk \
-            Asterion-Downloader-Agents-v1.3.50.sha256 \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Asterion Downloader v1.3.50 — Concurrent Agents Pilot" \
-            --notes "Temporary pre-merge Android testing APK. Approved v1.3.48 UI is unchanged. Backend repairs: bounded yt-dlp metadata and stalled transfers, robust multi-line metadata JSON extraction, durable due-time retries and permanent-error classification, verified same-provider canonical redirects and use of explicitly authorized site browser sessions. REGRESSION TESTS PASS. This build is NOT proof that every third-party provider supplies downloadable originals; HTTP 403 and inaccessible content require a valid authorized session or adapter work. App package com.azrael.pixivdumpsync.pilotagents is DISTINCT from v1.3.48, retaining the previous install and its private data. No data migration. Debug signing is intended for this temporary acceptance build, not seamless production updates." \
-            --prerelease
+      # CI-generated Android debug certificates differ between runs, so a
+      # published artifact cannot update the same installed app while keeping
+      # its private data. The verified APK remains attached to this CI run
+      # for controlled fresh-package testing. Do not publish a misleading
+      # in-place update until a fixed, securely held signing identity exists.
