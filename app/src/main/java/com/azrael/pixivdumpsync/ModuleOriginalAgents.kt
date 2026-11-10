@@ -39,6 +39,28 @@ internal object ModuleOriginalAgents {
             }
     }
     private val lanes=ConcurrentHashMap<String,Lane>()
+    private val userRequests=ConcurrentHashMap.newKeySet<String>()
+    /** Explicit user-requested original retrieval shares the same pair of
+     * workers as automated requests in that module, never spawning a third
+     * unbounded ad-hoc downloader thread on every repeated tap.
+     */
+    fun submitUser(context:Context,area:String,identity:String,
+                   operation:()->Unit):Boolean{
+        if(area !in MODULES || !AppPower.enabled(context))return false
+        val key=area+":"+identity
+        if(!userRequests.add(key))return false
+        val lane=lanes.computeIfAbsent(area){Lane(area)}
+        return try{
+            lane.executor.submit{
+                try{operation()}
+                finally{userRequests.remove(key)}
+            }
+            true
+        }catch(_:java.util.concurrent.RejectedExecutionException){
+            userRequests.remove(key)
+            false
+        }
+    }
     private val PREF="asterion_module_original_agents_v1"
     private fun status(context:Context,area:String,slot:Int,value:String){
         context.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
