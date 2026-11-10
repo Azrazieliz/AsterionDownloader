@@ -107,7 +107,7 @@ object AuthorizedOriginalResolver {
         // arbitrary destination or mislabel an unrelated provider as original.
         var address=pageOrFile
         var response:org.jsoup.Connection.Response?=null
-        repeat(5){
+        for(hop in 0 until 5){
             require(SourceIndexParser.safe(address) &&
                 SourceIndexParser.sameSite(pageOrFile,address)){
                 "Provider redirected outside its verified source; adapter update required"
@@ -132,7 +132,7 @@ object AuthorizedOriginalResolver {
                 address=next
             }else{
                 response=r
-                return@repeat
+                break
             }
         }
         val finalResponse=response
