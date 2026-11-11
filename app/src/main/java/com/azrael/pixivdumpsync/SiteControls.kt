@@ -28,7 +28,7 @@ object SiteControls {
     }
     fun sync(context:Context,url:String,default:Boolean=false):Boolean {
         val host=key(url)
-        if(host.isBlank())return false
+        if(host.isBlank() || ProviderRetirement.isRetired(url))return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("sync:$host",default)
     }
@@ -38,19 +38,25 @@ object SiteControls {
     /** Auto-discovery is not permission to download the site's contents. */
     fun explicitlyEnabled(context:Context,url:String):Boolean {
         val host=key(url)
-        if(host.isBlank())return false
+        if(host.isBlank() || ProviderRetirement.isRetired(url))return false
         val p=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
         return p.contains("sync:$host") && p.getBoolean("sync:$host",false)
     }
     fun setSync(context:Context,url:String,enabled:Boolean){
         val host=key(url)
         require(host.isNotBlank())
+        require(!enabled || !ProviderRetirement.isRetired(url)){
+            "This provider was removed from Asterion"
+        }
         context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .edit().putBoolean("sync:$host",enabled).apply()
     }
     fun setBackfill(context:Context,url:String,enabled:Boolean){
         val host=key(url)
         require(host.isNotBlank())
+        require(!enabled || !ProviderRetirement.isRetired(url)){
+            "This provider was removed from Asterion"
+        }
         context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .edit().putBoolean("backfill:$host",enabled).apply()
     }
