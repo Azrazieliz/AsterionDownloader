@@ -382,7 +382,18 @@ object UnifiedDownloadsUi {
         val attention=rows.count{it.state==State.HELD}
         val failed=rows.count{it.state==State.FAILED}
         val saved=rows.count{it.state==State.DONE}
-        parent.addView(ui.text(a,"Downloads",24f,ui.white,true),ui.lp(a,15))
+        val heading=ui.text(a,"Downloads",24f,ui.white,true)
+        parent.addView(heading,ui.lp(a,15))
+        // Visible, real queue updates without a fake progress animation.
+        // This redraws only while jobs genuinely have work to report, and
+        // stops automatically when the user leaves this screen.
+        if(rows.any{it.state==State.ACTIVE || it.state==State.QUEUED}){
+            parent.postDelayed({
+                if(!a.isFinishing && !a.isDestroyed &&
+                    heading.parent===parent && heading.isAttachedToWindow)
+                    refresh()
+            },5_000L)
+        }
         if(!AppPower.enabled(a)){
             val notice=ui.card(a,12)
             notice.addView(ui.text(a,"Transfers paused",15f,ui.danger,true))
