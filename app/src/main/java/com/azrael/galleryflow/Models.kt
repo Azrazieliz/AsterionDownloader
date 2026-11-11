@@ -7,6 +7,8 @@ enum class SourceId(val wireName: String) {
     FOUR_K_HD("4khd"),
     BUONDUA("buondua"),
     COSPLAYTELE("cosplaytele"),
+    FOUR_K_GIRL("4kgirl"),
+    EVERIA("everia"),
     GENERIC("generic"),
     RULE34("rule34"),
     GELBOORU("gelbooru"),
@@ -31,6 +33,7 @@ enum class TransferState(val dbValue: String) {
 }
 
 enum class SyncMode { LIVE, BACKFILL }
+enum class MediaKind { IMAGE, VIDEO, ARCHIVE }
 
 data class SourceEntity(
     val source: SourceId,
@@ -69,6 +72,10 @@ data class MediaRef(
     val normalizedUrl: String,
     val referer: String,
     val mimeHint: String? = null,
+    val kind: MediaKind = MediaKind.IMAGE,
+    val provider: String? = null,
+    val archivePassword: String? = null,
+    val archiveVideosOnly: Boolean = false,
     val tags: List<String> = emptyList()
 )
 
@@ -109,6 +116,12 @@ data class DownloadResult(
     val aHash64: String?
 )
 
+data class ExtractedDownload(val media: MediaRef, val result: DownloadResult)
+data class DownloadOutcome(val primary: DownloadResult, val extracted: List<ExtractedDownload> = emptyList())
+class InteractiveProviderRequiredException(
+    val provider: String, val providerUrl: String,
+    message: String = "$provider requires an interactive/account download session."
+) : Exception(message)
 class AdapterException(message: String, cause: Throwable? = null) : Exception(message, cause)
 class HttpStatusException(val code: Int, message: String) : Exception(message)
 class SyncCancelledException : Exception("Sync cancelled")

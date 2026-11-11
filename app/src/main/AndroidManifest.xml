@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="com.azrael.pixivdumpsync.permission.REQUEST_ASTERION_DOWNLOAD"
+        android:protectionLevel="signature" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -7,6 +10,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Package visibility is needed to validate the installed peer certificate
+         on Android 11+. Unknown apps still fail the UID/approval check. -->
+    <queries>
+        <package android:name="com.asterion.art"/>
+        <package android:name="com.ailm.android"/>
+        <package android:name="com.gamepilot"/>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -15,25 +27,104 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- Receiver authenticates OS caller UID and installed signing certificate,
+             then requires per-peer user approval for independent Asterion keys. -->
+        <!-- Dedicated, non-exported process keeps STOP responsive during a
+             main-process ANR. It cancels only this application's backfill. -->
+        <receiver android:name=".EmergencyBackfillStopReceiver"
+            android:exported="false"
+            android:process=":emergency"/>
+        <receiver android:name=".RounderDownloadCompleteReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".AsterionDownloadRequestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.azrael.pixivdumpsync.action.DOWNLOAD_REQUEST" />
+            </intent-filter>
+        </receiver>
+        <service android:name=".AsterionDownloadJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <activity android:name=".LoginActivity" android:exported="false" />
         <activity android:name=".FollowingActivity" android:exported="false" />
+        <activity android:name=".XFollowingImportActivity" android:exported="false" />
+        <activity android:name=".XMediaCaptureActivity" android:exported="false" />
+        <activity android:name=".KoikatsuCardActivity" android:exported="false" />
+        <activity android:name=".AssetMarketplaceActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name="com.azrael.galleryflow.MainActivity" android:exported="false" />
+        <activity android:name="com.azrael.galleryflow.SiteLoginActivity" android:exported="false" />
+        <activity android:name="com.azrael.galleryflow.ProviderWebActivity" android:exported="false" />
         <activity android:name="com.azrael.galleryflow.GalleryDetailActivity" android:exported="false" />
         <activity android:name="com.asterion.videoflow.MainActivity"
-            android:exported="true" android:windowSoftInputMode="adjustResize">
+            android:exported="false" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name=".DownloaderHubActivity" android:exported="false"/>
+        <activity android:name=".OfflineVnActivity" android:exported="false" />
+        <provider android:name=".AsterionUpdateFileProvider"
+            android:authorities="${applicationId}.update-apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <provider android:name=".TorrentDescriptorProvider"
+            android:authorities="${applicationId}.torrent-files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <activity android:name=".AsterionHomeActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
-        <activity android:name=".DownloaderHubActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+        <service android:name=".DirectRetryJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".RounderJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".KoikatsuFollowJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".SiteRunJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".SourceIndexJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".NovelEpubJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".Mp4VolumeJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".Mp4SeriesJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".TorrentFeedJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".CreatorArchiveJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".TorrentTransferService" android:exported="false"
+            android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
+        <service android:name=".XPhotoService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".XPhotoJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".ChapterArchiveJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".ChapterArchiveService"
+            android:exported="false" android:foregroundServiceType="dataSync"
+            android:stopWithTask="false"/>
+        <service android:name=".ChapterRecoveryService"
+            android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE"/>
         <service android:name="com.asterion.videoflow.TransferService"
             android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
         <service android:name="com.asterion.videoflow.PollJobService"

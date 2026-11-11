@@ -11,7 +11,9 @@ object Scheduler {
     private const val FIFTEEN_MINUTES = 15L * 60L * 1000L
 
     fun ensure(context: Context) {
+        if(!AppPower.enabled(context)){cancel(context);return}
         if (
+            !AppPower.enabled(context) ||
             !SessionStore.autoSync(context) ||
             !SessionStore.followingFeedEnabled(context) ||
             !SessionStore.isLoggedIn(context)
@@ -36,7 +38,9 @@ object Scheduler {
     }
 
     fun runSoon(context: Context) {
+        if(!AppPower.enabled(context))return
         if (
+            !AppPower.enabled(context) ||
             !SessionStore.autoSync(context) ||
             !SessionStore.followingFeedEnabled(context) ||
             !SessionStore.isLoggedIn(context)

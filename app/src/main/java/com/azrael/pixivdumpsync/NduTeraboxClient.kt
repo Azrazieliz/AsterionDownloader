@@ -6,6 +6,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -28,6 +30,19 @@ class NduTeraboxClient(private val ndus: String,
 
     companion object {
         const val CHUNK_SIZE = 4*1024*1024
+        /** TeraBox increases part size above 4 GiB to keep block counts bounded.
+         * Matching the provider's transfer strategy avoids oversize block lists for games.
+         */
+        internal fun chunkSizeFor(fileSize:Long):Int {
+            require(fileSize>0)
+            var chunk=CHUNK_SIZE.toLong()
+            var threshold=4L*1024*1024*1024
+            while(fileSize>threshold){
+                chunk*=2
+                threshold*=2
+            }
+            return chunk.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
         // Values used by the open-source TeraBox web backend for precreate.
         private const val DUMMY_MD5_A = "5910a591dd8fc18c32a8f3df4fdc1761"
         private const val DUMMY_MD5_B = "a5fc157d78e6ad1c7e114b056c92821e"
@@ -145,9 +160,57 @@ class NduTeraboxClient(private val ndus: String,
         }
     }
 
+    /** Do not mark an upload complete just because /api/create accepted the request.
+     * Check that the remote object exists at the expected path with exact file size.
+     * When a remote whole-file hash is available, require it to match as well.
+     */
+    private fun confirmRemote(path:String,size:Long,localMd5:String,
+                              requireRemoteHash:Boolean=false):NduRemoteReceipt? {
+        repeat(4){attempt->
+            val response=request("/api/filemetas","GET",mapOf(
+                "target" to JSONArray(listOf(path)).toString(),"dlink" to "0"))
+            ok(response,"Remote file verification")
+            val files=response.optJSONArray("info")?:JSONArray()
+            for(i in 0 until files.length()){
+                val item=files.optJSONObject(i)?:continue
+                val remotePath=item.optString("path")
+                val remoteSize=item.optLong("size",-1L)
+                val fsId=item.optLong("fs_id",0L)
+                val remoteMd5=item.optString("md5").trim()
+                if(remotePath!=path || remoteSize!=size || fsId<=0L)continue
+                if(remoteMd5.isNotBlank() && !remoteMd5.equals(localMd5,true))
+                    throw java.io.IOException("TeraBox remote hash does not match the local file")
+                if(!NduRemoteProof.matches(path,size,localMd5,remotePath,
+                    remoteSize,fsId,remoteMd5,requireRemoteHash))continue
+                return NduRemoteReceipt(path,size,fsId,
+                    remoteMd5.ifBlank{null},System.currentTimeMillis())
+            }
+            if(attempt<3)Thread.sleep(1200L*(attempt+1))
+        }
+        return null
+    }
+    /** Recheck historical completed records before crediting them as verified. */
+    fun verifyExisting(context:Context,uri:Uri,fileName:String,
+                       categoryPath:String,cancelled:()->Boolean={false}):NduRemoteReceipt?{
+        val path=NduSettings.validateDirectory(categoryPath)+"/"+safeFileName(fileName)
+        val size=context.contentResolver.openFileDescriptor(uri,"r")?.use{it.statSize}?:-1L
+        if(size<=0L)return null
+        val digest=MessageDigest.getInstance("MD5")
+        context.contentResolver.openInputStream(uri)?.use{stream->
+            val buffer=ByteArray(128*1024)
+            while(true){
+                if(cancelled())throw InterruptedException("Cloud verification cancelled")
+                val n=stream.read(buffer)
+                if(n<0)break
+                digest.update(buffer,0,n)
+            }
+        }?:return null
+        val md5=digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+        return confirmRemote(path,size,md5)
+    }
     fun upload(context: Context, uri: Uri, fileName: String, categoryPath: String,
                cancelled: () -> Boolean = { false },
-               progress: (Long,Long) -> Unit = { _,_ -> }) {
+               progress: (Long,Long) -> Unit = { _,_ -> }):NduRemoteReceipt {
         val name=safeFileName(fileName)
         val folder=NduSettings.validateDirectory(categoryPath)
         val path="$folder/$name"
@@ -164,8 +227,25 @@ class NduTeraboxClient(private val ndus: String,
             "block_list" to blocks.toString(),"local_mtime" to (System.currentTimeMillis()/1000).toString(),
             "file_limit_switch_v34" to "true"))
         ok(pre,"Precreate")
-        // Instant/rapid file transfer may be confirmed without chunk uploads.
-        if (pre.optInt("return_type")==2) return
+        // Rapid upload is not proof that this file's bytes are present remotely.
+        // Compute the actual content hash before accepting that response.
+        if(pre.optInt("return_type")==2){
+            val whole=MessageDigest.getInstance("MD5")
+            resolver.openInputStream(uri)?.use { stream ->
+                val buffer=ByteArray(128*1024)
+                while(true){
+                    if(cancelled())throw InterruptedException("Cloud upload cancelled")
+                    val read=stream.read(buffer)
+                    if(read<0)break
+                    whole.update(buffer,0,read)
+                }
+            }?:throw java.io.IOException("Cannot read rapid-upload source")
+            val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+            val proof=confirmRemote(path,size,md5,requireRemoteHash=true)
+                ?: throw java.io.IOException("Rapid upload not independently verified")
+            progress(size,size)
+            return proof
+        }
         val uploadId=pre.optString("uploadid").takeIf { it.isNotBlank() }
             ?: throw java.io.IOException("TeraBox did not return upload ID")
         val locate=JSONObject(read(connection(
@@ -173,25 +253,39 @@ class NduTeraboxClient(private val ndus: String,
             "GET",false)))
         val host=checkedUploadHost(locate.optString("host"))
         val md5List=JSONArray()
+        val whole=MessageDigest.getInstance("MD5")
+        val chunkSize=chunkSizeFor(size)
         var uploaded=0L
         resolver.openInputStream(uri)?.use { stream ->
             var part=0
+            val buffer=ByteArray(128*1024)
             while(uploaded<size) {
-                if (cancelled()) throw InterruptedException("Cloud upload cancelled")
-                val length=min(CHUNK_SIZE.toLong(),size-uploaded).toInt()
-                val bytes=ByteArray(length)
-                var n=0
-                while(n<length) {
-                    val v=stream.read(bytes,n,length-n)
-                    if (v<0) throw java.io.EOFException("Local file truncated")
-                    n+=v
-                }
-                val md5=partHashes(bytes)
-                uploadChunk(host,path,uploadId,part,name,bytes,md5)
-                md5List.put(md5)
-                uploaded+=length
-                progress(uploaded,size)
-                part++
+                if(cancelled())throw InterruptedException("Cloud upload cancelled")
+                val length=min(chunkSize.toLong(),size-uploaded).toInt()
+                val cache=File.createTempFile("asterion-cloud-part-", ".tmp",context.cacheDir)
+                try {
+                    val chunkMd5=MessageDigest.getInstance("MD5")
+                    var left=length
+                    FileOutputStream(cache).buffered().use { output ->
+                        while(left>0){
+                            if(cancelled())throw InterruptedException("Cloud upload cancelled")
+                            val n=stream.read(buffer,0,min(left,buffer.size))
+                            if(n<0)throw java.io.EOFException("Local file truncated")
+                            if(n==0)continue
+                            output.write(buffer,0,n)
+                            whole.update(buffer,0,n)
+                            chunkMd5.update(buffer,0,n)
+                            left-=n
+                        }
+                    }
+                    val md5=chunkMd5.digest()
+                        .joinToString(""){"%02x".format(it.toInt() and 255)}
+                    uploadChunk(host,path,uploadId,part,name,cache,md5)
+                    md5List.put(md5)
+                    uploaded+=length
+                    progress(uploaded,size)
+                    part++
+                }finally{cache.delete()}
             }
         } ?: throw java.io.IOException("Cannot read local download")
         val finalized=request("/api/create","POST",
@@ -200,10 +294,13 @@ class NduTeraboxClient(private val ndus: String,
                 "target_path" to folder,"block_list" to md5List.toString(),
                 "local_mtime" to (System.currentTimeMillis()/1000).toString()))
         ok(finalized,"Finalize upload")
+        val md5=whole.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
+        return confirmRemote(path,size,md5)
+            ?: throw java.io.IOException("TeraBox has not confirmed the uploaded file")
     }
 
     private fun uploadChunk(host:String, path:String, uploadId:String, part:Int,
-                            name:String, data:ByteArray, md5:String) {
+                            name:String, data:File, md5:String) {
         val uri="https://$host/rest/2.0/pcs/superfile2?"+formEncode(
             linkedMapOf("method" to "upload","path" to path,
                 "uploadid" to uploadId,"partseq" to part.toString(),
@@ -219,8 +316,15 @@ class NduTeraboxClient(private val ndus: String,
                 val conn=connection(uri,"POST",true)
                 conn.doOutput=true
                 conn.setRequestProperty("Content-Type","multipart/form-data; boundary=$boundary")
-                conn.setFixedLengthStreamingMode(prefix.size+data.size+suffix.size)
-                conn.outputStream.use { it.write(prefix);it.write(data);it.write(suffix) }
+                conn.setFixedLengthStreamingMode(prefix.size.toLong()+data.length()+
+                    suffix.size.toLong())
+                conn.outputStream.use { output ->
+                    output.write(prefix)
+                    data.inputStream().buffered().use { input ->
+                        input.copyTo(output,128*1024)
+                    }
+                    output.write(suffix)
+                }
                 val result=JSONObject(read(conn))
                 val remoteHash=result.optString("md5")
                 if(!remoteHash.equals(md5,true))

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- The temporary pilot must not claim the production app's signature permission. -->
+    <permission
+        android:name="com.azrael.pixivdumpsync.permission.REQUEST_ASTERION_DOWNLOAD"
+        tools:node="remove" />
+    <application
+        android:label="Asterion Downloader Fixed"
+        tools:replace="android:label" />
+</manifest>

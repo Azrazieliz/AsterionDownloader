@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 
-class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", null, 4) {
+class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", null, 6) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entities(
             source TEXT NOT NULL,
@@ -87,6 +87,34 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             db.execSQL("""
                 UPDATE entities SET archived=1, selected=0, live_enabled=0
                 WHERE source NOT IN ('kiutaku','generic')
+            """.trimIndent())
+        }
+        if (oldVersion < 5) {
+            // Unhide preserved records from the original Kyora providers.
+            // Do not automatically re-enable background downloads.
+            db.execSQL("""
+                UPDATE entities SET archived=0
+                WHERE source IN ('4khd','buondua','cosplaytele','4kgirl','everia')
+            """.trimIndent())
+        }
+        if (oldVersion < 6) {
+            // Consolidate historic 4KHD categories in the FOLLOWING view.
+            // Album and cosplay history, media, errors, and saved cursors stay
+            // in their original tables; do not drop or delete any records.
+            // Preserve opt-out: if every old subscription is disabled, the
+            // new shared provider is also disabled.
+            db.execSQL("""
+                INSERT OR IGNORE INTO entities(
+                    source,entity_id,display_name,canonical_url,kind,
+                    selected,live_enabled,archived)
+                SELECT '4khd','site:all','4KHD','https://www.4khd.com/',
+                    'site',MAX(selected),MAX(live_enabled),0
+                FROM entities WHERE source='4khd' AND archived=0
+                GROUP BY source
+            """.trimIndent())
+            db.execSQL("""
+                UPDATE entities SET archived=1
+                WHERE source='4khd' AND entity_id<>'site:all'
             """.trimIndent())
         }
     }
@@ -184,8 +212,29 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
 
     data class GalleryCard(
         val source: SourceId, val galleryId: String, val title: String,
-        val count: Int, val state: String, val firstUri: String?
+        val count: Int, val state: String, val firstUri: String?, val firstUrl:String?=null
     )
+
+    fun latestSelectedGalleries(limit:Int=24):List<Pair<String,GalleryCard>>{
+        val cards=ArrayList<Pair<String,GalleryCard>>()
+        val sql="""SELECT e.display_name,g.source,g.gallery_id,g.title,g.media_count,g.state,
+          (SELECT m.content_uri FROM media m WHERE m.source=g.source
+           AND m.gallery_id=g.gallery_id AND m.content_uri IS NOT NULL
+           AND m.state='complete' ORDER BY m.media_index LIMIT 1),
+          (SELECT m.url FROM media m WHERE m.source=g.source
+           AND m.gallery_id=g.gallery_id ORDER BY m.media_index LIMIT 1)
+          FROM galleries g JOIN entities e ON e.source=g.source AND e.entity_id=g.entity_id
+          WHERE e.selected=1 AND e.archived=0
+          ORDER BY COALESCE(g.retrieved_at,0) DESC, g.gallery_id DESC LIMIT ?"""
+        readableDatabase.rawQuery(sql,arrayOf(limit.coerceIn(1,100).toString())).use{c->
+            while(c.moveToNext()){
+                cards+=c.getString(0) to GalleryCard(
+                    SourceId.fromWire(c.getString(1)),c.getString(2),
+                    c.getString(3),c.getInt(4),c.getString(5),c.getString(6),c.getString(7))
+            }
+        }
+        return cards
+    }
 
     fun galleryCards(entityId: String, limit: Int = 80): List<GalleryCard> {
         val result = ArrayList<GalleryCard>()
@@ -193,7 +242,9 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             SELECT g.source, g.gallery_id, g.title, g.media_count, g.state,
               (SELECT m.content_uri FROM media m WHERE m.source=g.source
                AND m.gallery_id=g.gallery_id AND m.content_uri IS NOT NULL
-               AND m.state='complete' ORDER BY m.media_index LIMIT 1)
+               AND m.state='complete' ORDER BY m.media_index LIMIT 1),
+          (SELECT m.url FROM media m WHERE m.source=g.source
+           AND m.gallery_id=g.gallery_id ORDER BY m.media_index LIMIT 1)
             FROM galleries g WHERE g.entity_id=?
             ORDER BY COALESCE(g.retrieved_at, 0) DESC, g.gallery_id DESC
             LIMIT ?
@@ -213,7 +264,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
         readableDatabase.query(
             "entities",
             arrayOf("source","entity_id","display_name","canonical_url","kind","selected","live_enabled","live_cursor","last_sync_at","last_error"),
-            "archived=0 AND source IN ('kiutaku','generic')",
+            "archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
             null,null,null,"display_name COLLATE NOCASE ASC"
         ).use { c ->
             while (c.moveToNext()) {
@@ -242,6 +293,39 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
         }, "source=? AND entity_id=?", arrayOf(source.wireName, entityId))
     }
 
+    /** Seed the original Kyora supported-site catalog once; no background sync starts.
+     * Existing rows, enabled flags and user removals are respected. */
+    fun seedCatalogOnce(context: Context) {
+        val preferences=context.getSharedPreferences("kyora_catalog",Context.MODE_PRIVATE)
+        if(preferences.getBoolean("canonical_six_seeded_20261031",false)) return
+        writableDatabase.beginTransaction()
+        try {
+            for (entity in AdapterRegistry.defaultEntities()) {
+                val row=ContentValues().apply {
+                    put("source",entity.source.wireName)
+                    put("entity_id",entity.stableId)
+                    put("display_name",entity.displayName)
+                    put("canonical_url",entity.canonicalUrl)
+                    put("kind",entity.kind)
+                    put("selected",0)
+                    put("live_enabled",0)
+                    put("archived",0)
+                }
+                writableDatabase.insertWithOnConflict("entities",null,row,SQLiteDatabase.CONFLICT_IGNORE)
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally { writableDatabase.endTransaction() }
+        preferences.edit().putBoolean("canonical_six_seeded_20261031",true).apply()
+    }
+
+    fun setAllSelected(value:Boolean) {
+        writableDatabase.execSQL("UPDATE entities SET selected=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
+            arrayOf(if(value)1 else 0))
+    }
+    fun setAllLiveEnabled(value:Boolean) {
+        writableDatabase.execSQL("UPDATE entities SET live_enabled=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
+            arrayOf(if(value)1 else 0))
+    }
     fun setSelected(source: SourceId, entityId: String, value: Boolean) =
         setEntityBoolean(source, entityId, "selected", value)
 

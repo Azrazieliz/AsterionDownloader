@@ -890,9 +890,11 @@ class SyncEngine(private val context: Context) {
                 SyncControl.updateMessage(message)
                 progress(message)
                 try {
-                    val remotePath = client.uploadArtwork(item.filename)
-                    queue.uploaded(item.filename, remotePath)
-                    stats.cloudUploaded++
+                    val proof=if(item.state=="VERIFY_PENDING")
+                        client.verifyHistoricalArtwork(item.filename,item.remotePath)
+                    else client.uploadArtwork(item.filename)
+                    queue.uploaded(item.filename,proof)
+                    if(item.state!="VERIFY_PENDING")stats.cloudUploaded++
                 } catch (t: Throwable) {
                     if (SyncControl.isStopping() ||
                         t is SyncCancelledException || t is InterruptedException

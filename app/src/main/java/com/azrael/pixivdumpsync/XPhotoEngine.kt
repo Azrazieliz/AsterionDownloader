@@ -1,0 +1,350 @@
+package com.azrael.pixivdumpsync
+
+import android.app.*
+import android.content.*
+import android.net.Uri
+import android.os.*
+import android.provider.MediaStore
+import org.json.JSONObject
+import org.jsoup.Jsoup
+import java.net.URI
+import java.net.URLEncoder
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** X/Twitter image archiver. Ignores videos; no media URL is routed to VideoFlow. */
+object XPhotoEngine {
+    private val working=AtomicBoolean(false)
+    private val executor=Executors.newSingleThreadExecutor()
+    private val pausedPhotos=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val stoppedSources=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val scanningSources=java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun pause(context:Context,id:Long){
+        pausedPhotos.add(id)
+        XPhotoQueue(context).use{it.change(id,"paused")}
+    }
+    fun resume(context:Context,id:Long){
+        pausedPhotos.remove(id)
+        XPhotoQueue(context).use{it.retry(id)}
+        start(context)
+    }
+    fun isScanning(source:String)=source in scanningSources
+    fun stopSource(context:Context,source:String){
+        stoppedSources.add(source)
+        // Stops historical pagination only. Existing live Sync stays unchanged.
+        XPhotoQueue(context).use{it.setMode(source,"backfill_enabled",false)}
+    }
+    fun startSourceBackfill(context:Context,source:String){
+        stoppedSources.remove(source)
+        XPhotoQueue(context).use{it.backfill(source)}
+        start(context,false,source)
+    }
+    private const val CHANNEL="asterion_x_images"
+    private fun json(url:String):JSONObject {
+        var last:Exception?=null
+        repeat(3){attempt->
+            try{
+                val response=Jsoup.connect(url).ignoreContentType(true).ignoreHttpErrors(true)
+                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36")
+                    .header("Accept","application/json")
+                    .timeout(30000).maxBodySize(12_000_000).execute()
+                val value=runCatching{JSONObject(response.body())}.getOrNull()
+                val status=response.statusCode()
+                val code=value?.optInt("code",status)?:status
+                if(status==404 && value?.optJSONArray("results")!=null)return value
+                if(status in 200..299 && code in 200..299 &&
+                    value!=null)return value
+                val error=IllegalStateException("X metadata upstream HTTP $status / code $code")
+                if(status !in setOf(408,429,500,502,503,504) &&
+                    code !in setOf(429,500,502,503,504))throw error
+                last=error
+            }catch(t:Exception){
+                last=t
+                if(t is IllegalStateException &&
+                    !t.message.orEmpty().contains("upstream HTTP"))throw t
+            }
+            if(attempt<2)Thread.sleep(750L*(attempt+1))
+        }
+        throw last?:IllegalStateException("X metadata service unavailable")
+    }
+    private fun enqueuePhotos(db:XPhotoQueue,source:String,entry:JSONObject):Int {
+        val photos=entry.optJSONObject("media")?.optJSONArray("photos")?:return 0
+        val id=entry.optString("id")
+        var total=0
+        for(i in 0 until photos.length()) {
+            val photo=photos.optJSONObject(i)?:continue
+            val url=photo.optString("url")
+            if(!url.startsWith("https://"))continue
+            if(db.addPhoto(source,id,url))total++
+        }
+        return total
+    }
+    private fun scan(context:Context,db:XPhotoQueue,source:String,handle:String,
+                     initialCursor:String?,live:Boolean,backfill:Boolean,
+                     historyComplete:Boolean){
+        scanningSources.add(source)
+        try{
+        if(stoppedSources.contains(source))return
+        val path=runCatching{URI(source).path.orEmpty()}.getOrDefault("")
+        val id=Regex("/status/([0-9]+)").find(path)?.groupValues?.get(1)
+        if(id!=null){
+            val root=json("https://api.fxtwitter.com/2/status/$id")
+            val post=root.optJSONObject("status")?:root.optJSONObject("tweet")
+                ?:error("Post metadata not returned")
+            enqueuePhotos(db,source,post)
+            return
+        }
+        val visited=HashSet<String>()
+        fun getPage(cursor:String?):JSONObject{
+            val target="https://api.fxtwitter.com/2/profile/$handle/media?count=100"+
+                (if(cursor.isNullOrBlank())"" else
+                    "&cursor="+URLEncoder.encode(cursor,"UTF-8"))
+            // FxEmbed /media may return upstream HTTP 500 intermittently.
+            // Its documented /statuses timeline has the same results/cursor format,
+            // and enqueuePhotos filters entries to photos only.
+            return try { json(target) } catch(mediaError:Exception) {
+                val fallback="https://api.fxtwitter.com/2/profile/$handle/statuses?count=100"+
+                    (if(cursor.isNullOrBlank())"" else
+                        "&cursor="+URLEncoder.encode(cursor,"UTF-8"))
+                try { json(fallback) } catch(other:Exception) {
+                    throw IllegalStateException(
+                        "X media and timeline both failed: "+mediaError.message+
+                        " | "+other.message,other)
+                }
+            }
+        }
+        // Always examine the newest posts first. The saved cursor is exclusively
+        // the older-content backfill position and must not suppress live sync.
+        if(!live && (!backfill || historyComplete))return
+        val latest=getPage(null)
+        val newest=latest.optJSONArray("results")
+        if(newest!=null){
+            for(i in 0 until newest.length()){
+                val post=newest.optJSONObject(i)?:continue
+                enqueuePhotos(db,source,post)
+            }
+        }
+        if(!backfill || historyComplete)return
+        var cursor=initialCursor?:latest.optJSONObject("cursor")
+            ?.optString("bottom")?.takeIf{it.isNotBlank()}
+        if(cursor.isNullOrBlank()){
+            db.cursor(source,handle,null)
+            return
+        }
+        while(AppPower.enabled(context) && !stoppedSources.contains(source) &&
+            db.wantsBackfill(source) &&
+            !Thread.currentThread().isInterrupted){
+            if(cursor.isNullOrBlank()||!visited.add(cursor))break
+            val root=getPage(cursor)
+            val list=root.optJSONArray("results")?:error("X media list missing")
+            for(i in 0 until list.length()){
+                val post=list.optJSONObject(i)?:continue
+                enqueuePhotos(db,source,post)
+            }
+            val next=root.optJSONObject("cursor")?.optString("bottom")
+                ?.takeIf{it.isNotBlank()}
+            db.cursor(source,handle,next)
+            cursor=next
+        }
+        }finally{scanningSources.remove(source)}
+    }
+    fun notice(context:Context,description:String):Notification {
+        context.getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(NotificationChannel(
+                CHANNEL,"Asterion X photo downloads",NotificationManager.IMPORTANCE_LOW))
+        val open=PendingIntent.getActivity(context,0,
+            Intent(context,AsterionHomeActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(context,CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("Asterion · X Images")
+            .setContentText(description.take(100)).setContentIntent(open)
+            .setOngoing(true).build()
+    }
+    fun start(context:Context,automatic:Boolean=false,targetSource:String?=null,
+              allowJobFallback:Boolean=true):Boolean {
+        if(!AppPower.enabled(context))return false
+        val intent=Intent(context,XPhotoService::class.java)
+            .putExtra("asterion_auto_sync",automatic)
+            .putExtra("asterion_target_source",targetSource)
+        return try{
+            if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
+            else context.startService(intent)
+            true
+        }catch(_:Exception){
+            if(allowJobFallback)XPhotoScheduler.requestImmediate(
+                context,automatic,targetSource)
+            false
+        }
+    }
+    fun submit(context:Context,automatic:Boolean=false,targetSource:String?=null,
+               onStatus:(String)->Unit={})=executor.submit{
+        if(!AppPower.enabled(context))return@submit
+        if(!working.compareAndSet(false,true))return@submit
+        try{
+            XPhotoQueue(context).use{db->
+                db.recover()
+                db.retryDueFailures()
+                // Drain existing downloads FIRST: the previous order scanned
+                // hundreds of remote accounts before touching 2,300+ queued photos.
+                var processed=0
+                val deadline=android.os.SystemClock.elapsedRealtime()+90000L
+                fun drainQueued(max:Int){
+                    while(AppPower.enabled(context) && processed<max &&
+                        android.os.SystemClock.elapsedRealtime()<deadline){
+                        val photo=db.next()?:break
+                        db.change(photo.id,"running")
+                        try{
+                            val saved=fetchPhoto(context,photo.photo){
+                                pausedPhotos.contains(photo.id) ||
+                                !AppPower.enabled(context)
+                            }
+                            if(pausedPhotos.contains(photo.id))
+                                throw java.util.concurrent.CancellationException("Photo paused")
+                            db.change(photo.id,"done",saved)
+                            if(NduSettings.configured(context)){
+                                NduCloudQueue(context).use{it.enqueue("x",
+                                    Uri.parse(saved).lastPathSegment.orEmpty()
+                                        .ifBlank{"x_"+photo.id+".jpg"},Uri.parse(saved))}
+                                NduUploadService.launch(context)
+                            }
+                            onStatus("Saved X image "+(processed+1))
+                        }catch(t:Exception){
+                            if(pausedPhotos.remove(photo.id) ||
+                                t is java.util.concurrent.CancellationException){
+                                db.change(photo.id,"paused",
+                                    error="Paused; restart this file from Downloads")
+                                onStatus("Paused X image")
+                            }else{
+                                db.change(photo.id,"error",error=t.message)
+                                onStatus("X download failed: "+
+                                    (t.message?:"unknown").take(80))
+                            }
+                        }
+                        processed++
+                    }
+                }
+                if(targetSource==null)drainQueued(30)
+                val watchers=db.allSources().filter{source->
+                    val liveAllowed=source.liveEnabled &&
+                        (!automatic || context.getSharedPreferences("asterion_x_live",0)
+                            .getBoolean(source.url,true))
+                    source.enabled && (liveAllowed ||
+                        (source.backfillEnabled && !source.historyComplete)) &&
+                    (targetSource==null || source.url==targetSource)
+                }
+                val tasks=(if(targetSource==null)
+                    XPhotoScheduler.selectBatch(context,watchers,8) else watchers).map{source->
+                    BackfillAgents.submit(context,"xphotos:"+source.url){
+                        if(AppPower.enabled(context)){
+                            XPhotoQueue(context).use{worker->
+                                onStatus("Scanning X @"+source.handle)
+                                runCatching{scan(context,worker,source.url,source.handle,
+                                    source.cursor,source.liveEnabled &&
+                                        (!automatic ||
+                                            context.getSharedPreferences("asterion_x_live",0)
+                                                .getBoolean(source.url,true)),
+                                    source.backfillEnabled,source.historyComplete)}
+                                    .onFailure{worker.markSourceError(source.url,
+                                        it.message?:"X scan failed")}
+                            }
+                        }
+                    }
+                }
+                for(task in tasks){
+                    if(!AppPower.enabled(context))break
+                    runCatching{task.get()}
+                }
+                drainQueued(60)
+                // Continue in a later durable worker pass, not as an endless
+                // foreground freeze when thousands of media jobs are pending.
+                if(AppPower.enabled(context) && db.next()!=null)
+                    XPhotoScheduler.requestImmediate(context,true)
+
+            }
+        }finally{working.set(false)}
+    }
+    private fun fetchPhoto(context:Context,source:String,
+                           stop:()->Boolean={false}):String {
+        val remote=URI(source)
+        require(remote.scheme=="https" && remote.host=="pbs.twimg.com" &&
+            remote.path.startsWith("/media/")){"Only X original photo CDN links can be downloaded"}
+        val address=Uri.parse(source)
+        val fileBase=address.lastPathSegment.orEmpty()
+            .substringBefore('?').substringBeforeLast('.')
+            .replace(Regex("[^A-Za-z0-9_-]"),"_")
+            .take(90).ifBlank{"x_photo"}
+        val original=address.getQueryParameter("format")
+        val ext=original?.takeIf{it in listOf("jpg","jpeg","png","webp")}
+            ?:address.lastPathSegment.orEmpty().substringAfterLast('.',"jpg")
+                .lowercase().takeIf{it in listOf("jpg","jpeg","png","webp")}?: "jpg"
+        var last:Exception?=null
+        repeat(4){attempt->
+            if(stop())throw java.util.concurrent.CancellationException("Photo paused")
+            try{
+                val preferred=if(attempt>=2 && source.contains("name=orig"))
+                    source.replace("name=orig","name=large") else source
+                val connection=java.net.URL(preferred).openConnection().apply{
+                    connectTimeout=30000;readTimeout=45000
+                    setRequestProperty("User-Agent","Mozilla/5.0")
+                }
+                val mime=connection.contentType.orEmpty().substringBefore(';').trim()
+                require(mime.startsWith("image/")){"X server returned $mime"}
+                val values=ContentValues().apply{
+                    put(MediaStore.Downloads.DISPLAY_NAME,"$fileBase.$ext")
+                    put(MediaStore.Downloads.MIME_TYPE,mime)
+                    put(MediaStore.Downloads.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS+"/AsterionDownloader/X/")
+                    put(MediaStore.Downloads.IS_PENDING,1)
+                }
+                val dest=context.contentResolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,values)
+                    ?:error("Cannot create X image")
+                try{
+                    var bytes=0L
+                    connection.getInputStream().buffered().use{input->
+                        context.contentResolver.openOutputStream(dest,"w")!!.use{output->
+                            val buffer=ByteArray(65536)
+                            while(true){
+                                if(stop())throw java.util.concurrent.CancellationException(
+                                    "Photo paused")
+                                val n=input.read(buffer)
+                                if(n<0)break
+                                output.write(buffer,0,n);bytes+=n
+                            }
+                        }
+                    }
+                    require(bytes>128 && (connection.contentLengthLong<=0 ||
+                        bytes==connection.contentLengthLong)){"X image truncated"}
+                    context.contentResolver.update(dest,ContentValues().apply{
+                        put(MediaStore.Downloads.IS_PENDING,0)},null,null)
+                    val canonical=CrossSourceDedup(context).use{
+                        it.registerFile(context,dest)
+                    }
+                    RounderDispatch.saved(context,canonical,"$fileBase.$ext","X")
+                    return canonical.toString()
+                }catch(t:Exception){
+                    context.contentResolver.delete(dest,null,null);throw t
+                }
+            }catch(t:Exception){
+                if(t is java.util.concurrent.CancellationException)throw t
+                last=t;if(attempt<3)Thread.sleep(1000L*(attempt+1))
+            }
+        }
+        throw last?:IllegalStateException("X photo download failed")
+    }
+}
+class XPhotoService:Service(){
+    override fun onBind(intent:Intent?):IBinder?=null
+    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
+        startForeground(25823,XPhotoEngine.notice(this,"Checking images"))
+        val automatic=intent?.getBooleanExtra("asterion_auto_sync",false)==true
+        val target=intent?.getStringExtra("asterion_target_source")
+        val future=XPhotoEngine.submit(applicationContext,automatic,target){message->
+            getSystemService(NotificationManager::class.java)
+                .notify(25823,XPhotoEngine.notice(this,message))
+        }
+        Thread{runCatching{future.get()};stopSelfResult(startId)}.start()
+        return START_REDELIVER_INTENT
+    }
+}

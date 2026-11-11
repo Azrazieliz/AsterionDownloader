@@ -1,0 +1,388 @@
+package com.azrael.pixivdumpsync
+
+import android.app.Activity
+import android.app.DownloadManager
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
+import android.content.ContentValues
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+import android.net.Uri
+import android.os.Environment
+import android.provider.BaseColumns
+import android.provider.MediaStore
+import android.widget.LinearLayout
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
+
+data class RounderState(val queued:Int,val requested:Int,val lastError:String?,val uploaded:Int=0)
+class RounderOutbox(context:Context):
+    SQLiteOpenHelper(context,"asterion_rounder_outbox.sqlite",null,2){
+    override fun onCreate(db:SQLiteDatabase){
+        db.execSQL("""CREATE TABLE files(
+            content_uri TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'PENDING',observed INTEGER NOT NULL,
+            last_request INTEGER NOT NULL DEFAULT 0,error TEXT,
+            remote_path TEXT,remote_size INTEGER,remote_fs_id INTEGER,
+            verified_at INTEGER)""")
+        db.execSQL("CREATE INDEX rounder_file_status ON files(state,observed)")
+    }
+    override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
+        if(a<2){
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_path TEXT")
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_size INTEGER")
+            db.execSQL("ALTER TABLE files ADD COLUMN remote_fs_id INTEGER")
+            db.execSQL("ALTER TABLE files ADD COLUMN verified_at INTEGER")
+            // No receipt survived in legacy rows: never advertise their handoff as verified.
+            db.execSQL("UPDATE files SET state='DIRECT_PENDING' WHERE state='UPLOADED'")
+        }
+    }
+    @Synchronized fun enqueue(uri:Uri,name:String,category:String){
+        if(uri.scheme!="content")return
+        val cv=ContentValues().apply{
+            put("content_uri",uri.toString());put("name",name.take(180))
+            put("category",category.take(50));put("observed",System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("files",null,cv,SQLiteDatabase.CONFLICT_IGNORE)
+    }
+    fun pending():Int=readableDatabase.rawQuery(
+        "SELECT COUNT(*) FROM files WHERE state='PENDING'",null).use{
+        if(it.moveToFirst())it.getInt(0) else 0
+    }
+    fun state():RounderState{
+        val db=readableDatabase
+        val queued=pending()
+        val requested=db.rawQuery(
+            "SELECT COUNT(*) FROM files WHERE state IN ('REQUESTED','DIRECT_PENDING')",null)
+            .use{if(it.moveToFirst())it.getInt(0)else 0}
+        val error=db.rawQuery("SELECT error FROM files WHERE error IS NOT NULL "+
+            "ORDER BY last_request DESC LIMIT 1",null).use{
+            if(it.moveToFirst())it.getString(0)else null
+        }
+        val uploaded=db.rawQuery("SELECT COUNT(*) FROM files WHERE state='UPLOADED'",null)
+            .use{if(it.moveToFirst())it.getInt(0)else 0}
+        return RounderState(queued,requested,error,uploaded)
+    }
+    fun pendingFiles(limit:Int=150):List<Triple<Uri,String,String>>{
+        val out=ArrayList<Triple<Uri,String,String>>()
+        readableDatabase.rawQuery(
+            "SELECT content_uri,name,category FROM files WHERE state='PENDING' "+
+                "ORDER BY observed ASC LIMIT ?",arrayOf(limit.coerceIn(1,500).toString())
+        ).use{c->
+            while(c.moveToNext()){
+                out+=Triple(Uri.parse(c.getString(0)),c.getString(1),c.getString(2))
+            }
+        }
+        return out
+    }
+    fun markDirect(uri:Uri){
+        val v=ContentValues().apply{
+            put("state","DIRECT_PENDING")
+            put("last_request",System.currentTimeMillis())
+            putNull("error")
+        }
+        writableDatabase.update("files",v,"content_uri=? AND state='PENDING'",
+            arrayOf(uri.toString()))
+    }
+    @Synchronized fun ack(uri:Uri,proof:NduRemoteReceipt):Boolean{
+        require(proof.path.startsWith("/") && proof.fsId>0L &&
+            proof.size>0L && proof.verifiedAt>0L){"Unverified remote receipt"}
+        val v=ContentValues().apply{
+            put("state","UPLOADED")
+            put("last_request",System.currentTimeMillis())
+            putNull("error")
+            put("remote_path",proof.path)
+            put("remote_size",proof.size)
+            put("remote_fs_id",proof.fsId)
+            put("verified_at",proof.verifiedAt)
+        }
+        return writableDatabase.update("files",v,
+            "content_uri=? AND state='DIRECT_PENDING'",
+            arrayOf(uri.toString()))>0
+    }
+    fun awaitingDirect(limit:Int=500):List<Uri>{
+        val list=ArrayList<Uri>()
+        readableDatabase.rawQuery(
+            "SELECT content_uri FROM files WHERE state='DIRECT_PENDING' LIMIT ?",
+            arrayOf(limit.coerceIn(1,1000).toString())).use{c->
+            while(c.moveToNext())list+=Uri.parse(c.getString(0))
+        }
+        return list
+    }
+    fun markRequested(){
+        val cv=ContentValues().apply{
+            put("state","REQUESTED");put("last_request",System.currentTimeMillis())
+            putNull("error")
+        }
+        writableDatabase.update("files",cv,"state='PENDING'",null)
+    }
+    /** A Round Sync trigger is not confirmation of cloud storage. Once direct
+     * NDUS is configured, requeue those unconfirmed requests for actual upload.
+     */
+    fun restoreUnconfirmedRequests():Int {
+        val v=ContentValues().apply{
+            put("state","PENDING")
+            putNull("error")
+        }
+        return writableDatabase.update("files",v,"state='REQUESTED'",null)
+    }
+    fun markError(message:String){
+        val cv=ContentValues().apply{put("error",message.take(180))}
+        writableDatabase.update("files",cv,"state='PENDING'",null)
+    }
+}
+object RounderDispatch {
+    private const val JOB=48763
+    // 48764 belongs to DirectDownloadRetry. JobScheduler IDs are app-wide.
+    internal const val CATCHUP_JOB=48872
+    private const val SCAN_BATCH=2500
+    private val busy=AtomicBoolean(false)
+    private const val PREF="asterion_rounder_scanner"
+    internal fun scheduleCatchup(context:Context,force:Boolean=false){
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        if(!force && jobs.allPendingJobs.any{it.id==CATCHUP_JOB})return
+        jobs.schedule(JobInfo.Builder(CATCHUP_JOB,
+            ComponentName(context,RounderJob::class.java))
+            .setPersisted(true)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(15_000L)
+            .setOverrideDeadline(2L*60_000L)
+            .build())
+    }
+    fun ensure(context:Context){
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        if(jobs.allPendingJobs.none{it.id==JOB})
+            jobs.schedule(JobInfo.Builder(JOB,ComponentName(context,RounderJob::class.java))
+                .setPersisted(true).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPeriodic(15*60_000L).build())
+        if(needsCatchup(context))scheduleCatchup(context)
+    }
+    internal fun needsCatchup(context:Context):Boolean=
+        context.getSharedPreferences(PREF,0).getBoolean("needs_catchup",false)
+    internal fun folderCategory(path:String):String?{
+        val p=path.lowercase()
+        if(!listOf("asteriondownloader","nocturnepixiv","pixiflow",
+            "videoflow","galleryflow","nocturnegallery").any{it in p})return null
+        return when{
+            "koikatsu" in p->"Koikatsu"
+            "creators" in p->"Creators"
+            "cosplay" in p->"Kyora"
+            "artwork" in p->"Artwork"
+            "assets" in p->"Assets"
+            "books" in p->"Books"
+            "comics" in p->"Comics"
+            "games" in p->"Games"
+            "torrent" in p->"Torrents"
+            "/x/" in p->"X"
+            "videoflow" in p||"videos" in p->"Videos"
+            "gallery" in p->"Kyora"
+            "pixiv" in p||"pixiflow" in p->"Pixiv"
+            else->"Originals"
+        }
+    }
+    /** Only completed, visible files in application-owned source folders are scanned.
+     * Scan cursor is (date_added,MediaStore ID), so a large history is not lost at a batch edge.
+     */
+    fun scan(context:Context,manual:Boolean=false):Int{
+        if((!manual && !AppPower.enabled(context)) ||
+            !busy.compareAndSet(false,true))return 0
+        try{
+            val prefs=context.getSharedPreferences(PREF,0)
+            var stamp=prefs.getLong("stamp",0L)
+            var lastId=prefs.getLong("last_id",0L)
+            val projection=arrayOf(BaseColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.RELATIVE_PATH,MediaStore.MediaColumns.DATE_ADDED)
+            var total=0
+            var scanned=0
+            val where="("+MediaStore.MediaColumns.DATE_ADDED+">? OR ("+
+                MediaStore.MediaColumns.DATE_ADDED+"=? AND "+BaseColumns._ID+">?))"
+            val args=arrayOf(stamp.toString(),stamp.toString(),lastId.toString())
+            context.contentResolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,projection,
+                where,args,MediaStore.MediaColumns.DATE_ADDED+" ASC, "+
+                    BaseColumns._ID+" ASC")?.use{cursor->
+                RounderOutbox(context).use{outbox->
+                    while(scanned<SCAN_BATCH && cursor.moveToNext()){
+                        scanned++
+                        val id=cursor.getLong(0)
+                        val name=cursor.getString(1).orEmpty()
+                        val folder=cursor.getString(2).orEmpty()
+                        val recorded=cursor.getLong(3)
+                        if(recorded!=stamp){stamp=recorded;lastId=0}
+                        if(id>lastId)lastId=id
+                        val category=folderCategory(folder)?:continue
+                        val uri=android.content.ContentUris.withAppendedId(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,id)
+                        outbox.enqueue(uri,name,category)
+                        total++
+                    }
+                }
+            }
+            val needsMore=scanned>=SCAN_BATCH
+            prefs.edit().putLong("stamp",stamp).putLong("last_id",lastId)
+                .putBoolean("needs_catchup",needsMore).apply()
+            // Persist the catch-up requirement across job completion or device
+            // restart; the current JobScheduler ID cannot reschedule itself
+            // until its own execution has finished.
+            if(needsMore)scheduleCatchup(context)
+            // Complete exact-URL dedup claims for DownloadManager transfers.
+            val manager=context.getSystemService(DownloadManager::class.java)
+            CrossSourceDedup(context).use{dedup->
+                for(item in DirectDownloadTracker.states(context,200)){
+                    if(item.status==DownloadManager.STATUS_SUCCESSFUL)
+                        dedup.completeById(item.job.id)
+                    if(item.status==DownloadManager.STATUS_FAILED)
+                        dedup.releaseById(item.job.id)
+                }
+            }
+            // Rounder orchestrates one cloud lane at a time. Direct NDUS is preferred
+            // when configured because the API returns explicit upload completion;
+            // Round Sync task triggering cannot confirm that an upload finished.
+            if(NduSettings.configured(context)){
+                var accepted=0
+                RounderOutbox(context).use{outbox->
+                    outbox.restoreUnconfirmedRequests()
+                    NduCloudQueue(context).use{cloud->
+                        for((uri,name,category) in outbox.pendingFiles(150)){
+                            val kind=when(category.lowercase()){
+                                "pixiv","kuroha"->"kuroha"
+                                "kyora","cosplay"->"kyora"
+                                "x"->"x";"comics"->"comics"
+                                "videos"->"videos";"books"->"books"
+                                "games"->"games";"assets"->"assets"
+                                "koikatsu"->"koikatsu";"torrents"->"torrents"
+                                "creators"->"creators"
+                                "images","artwork"->"images"
+                                else->"originals"
+                            }
+                            runCatching{
+                                cloud.enqueue(kind,name,uri)
+                                outbox.markDirect(uri)
+                                accepted++
+                            }.onFailure{outbox.markError(it.message?:"Cloud queue failed")}
+                        }
+                        for(uri in outbox.awaitingDirect()){
+                            cloud.receiptFor(uri.toString())?.let{receipt->
+                                outbox.ack(uri,receipt)
+                            }
+                        }
+                    }
+                }
+                if(accepted>0 && !manual)runCatching{NduUploadService.launch(context)}
+            }else if(RoundSyncBridge.enabled(context)){
+                RounderOutbox(context).use{outbox->
+                    if(outbox.pending()>0){
+                        val result=RoundSyncBridge.trigger(context)
+                        if(result.startsWith("Requested Round Sync task"))
+                            outbox.markRequested()
+                        else outbox.markError(result)
+                    }
+                }
+            }
+            return total
+        }finally{busy.set(false)}
+    }
+    fun saved(context:Context,uri:Uri,name:String,category:String){
+        RounderOutbox(context).use{it.enqueue(uri,name,category)}
+        val pref=context.getSharedPreferences(PREF,0)
+        val now=System.currentTimeMillis()
+        if((NduSettings.configured(context) || RoundSyncBridge.enabled(context)) &&
+            now-pref.getLong("last_signal",0)>90_000L){
+            pref.edit().putLong("last_signal",now).apply()
+            scanAsync(context)
+        }
+    }
+    fun scanAsync(context:Context){
+        thread(name="asterion-rounder-dispatch"){
+            runCatching{scan(context.applicationContext)}
+        }
+    }
+    fun render(a:Activity,p:LinearLayout){
+        val summary=RounderOutbox(a).use{it.state()}
+        val directState=NduCloudQueue(a).use{it.status()}
+        val ui=NocturneDesign
+        val card=ui.card(a,12)
+        card.addView(ui.text(a,"TO TERABOX",17f,ui.white,true))
+        val direct=NduSettings.configured(a)
+        val round=RoundSyncBridge.enabled(a) && RoundSyncBridge.taskId(a)>=0
+        card.addView(ui.text(a,
+            directState.completed.toString()+" remote verified · "+
+            summary.uploaded+" matched in Rounder · "+
+            directState.pending+" awaiting transfer / verification · "+
+            summary.requested+" handoffs not yet verified",
+            12f,ui.secondary),ui.lp(a,5))
+        card.addView(ui.text(a,when{
+            direct->"TeraBox direct: files are counted only after remote path, size and ID checks."
+            round->"Round Sync requests are not completion proof. Connect direct TeraBox to verify remote copies."
+            else->"Connect a TeraBox account or a Round Sync task."
+        },12f,ui.secondary),ui.lp(a,5))
+        directState.lastVerifiedPath?.let{path->
+            card.addView(ui.text(a,"Latest verified destination: "+path.take(180),
+                12f,ui.primary),ui.lp(a,6))
+        }
+        if(directState.verificationPending>0)
+            card.addView(ui.text(a,
+                directState.verificationPending.toString()+
+                    " older uploads await remote recheck before being counted",
+                12f,ui.secondary),ui.lp(a,4))
+        val destinations=listOf("kuroha","kyora","videos","x","comics","books",
+            "assets","koikatsu","games","torrents","creators","images")
+        card.addView(ui.action(a,"VIEW CLOUD DESTINATIONS",false){
+            android.app.AlertDialog.Builder(a)
+                .setTitle("TeraBox destination folders")
+                .setItems(destinations.map{
+                    it.replaceFirstChar{ch->ch.uppercase()}+"  ·  "+
+                        NduSettings.destination(a,it)
+                }.toTypedArray()){_,_->}
+                .setPositiveButton("Close",null)
+                .show()
+        },ui.lp(a,7))
+        if(!summary.lastError.isNullOrBlank())
+            card.addView(ui.text(a,summary.lastError,12f,ui.danger),ui.lp(a,4))
+        if(!directState.lastError.isNullOrBlank())
+            card.addView(ui.text(a,directState.lastError.take(140),12f,ui.danger),
+                ui.lp(a,4))
+        card.addView(ui.action(a,"UPLOAD DOWNLOADED FILES TO TERABOX",true){
+            if(direct){
+                runCatching{NduUploadService.uploadNow(a)}
+                    .onSuccess{
+                        android.widget.Toast.makeText(a,
+                            "TeraBox transfer running · notification shows progress",
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }.onFailure{
+                        android.widget.Toast.makeText(a,
+                            "Upload failed to start: "+it.message,
+                            android.widget.Toast.LENGTH_LONG).show()
+                    }
+            }else if(round){
+                scanAsync(a)
+                android.widget.Toast.makeText(a,
+                    "Rounder handoff requested; remote completion unconfirmed",
+                    android.widget.Toast.LENGTH_LONG).show()
+            }else NduSettingsDialog.show(a)
+        },ui.lp(a,7))
+        card.addView(ui.weighted(a,
+            ui.action(a,"TERABOX ACCOUNT",false){NduSettingsDialog.show(a)},
+            ui.action(a,"ROUNDER",false){RoundSyncBridge.showSettings(a)}),
+            ui.lp(a,7))
+        p.addView(card,ui.lp(a,10))
+    }
+}
+class RounderJob:JobService(){
+    override fun onStartJob(params:JobParameters):Boolean{
+        thread(name="asterion-rounder-job"){
+            try{RounderDispatch.scan(applicationContext)}
+            finally{
+                jobFinished(params,false)
+                if(params.jobId==RounderDispatch.CATCHUP_JOB &&
+                    RounderDispatch.needsCatchup(applicationContext))
+                    RounderDispatch.scheduleCatchup(applicationContext,force=true)
+            }
+        }
+        return true
+    }
+    override fun onStopJob(params:JobParameters):Boolean=true
+}

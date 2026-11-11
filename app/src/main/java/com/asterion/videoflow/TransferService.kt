@@ -6,15 +6,35 @@ import android.os.*
 import android.provider.MediaStore
 import android.os.Environment
 import android.net.Uri
+import android.media.MediaMetadataRetriever
 import java.io.File
+import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.ffmpegkit_maintained.ytdlp.YtDlp
 import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
 
+class FullVersionUnavailable(message:String):Exception(message)
+
 object VideoEngine {
     private val busy=AtomicBoolean(false)
     private val executor=Executors.newSingleThreadExecutor()
+    private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
+        java.util.concurrent.Future<dev.ffmpegkit_maintained.ytdlp.YtDlpResponse>>()
+    /** Cancels an individual video without deleting its source, metadata or cache.
+     * A stopped transfer can be explicitly resumed in Downloads.
+     */
+    fun pauseVideo(context:Context,id:Long){
+        stopRequests.add(id)
+        VideoDb(context).use{it.pause(id)}
+        extractionJobs[id]?.cancel(true)
+    }
+    fun resumeVideo(context:Context,id:Long){
+        stopRequests.remove(id)
+        VideoDb(context).use{it.retry(id)}
+        launch(context,false)
+    }
     const val CHANNEL="videoflow-transfers"
     fun makeChannel(context: Context) {
         val channel=NotificationChannel(CHANNEL, "Video downloads", NotificationManager.IMPORTANCE_LOW)
@@ -26,19 +46,33 @@ object VideoEngine {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(context,CHANNEL).setContentTitle("Asterion · VideoFlow")
             .setContentText(message).setSmallIcon(android.R.drawable.stat_sys_download)
-            .setOngoing(true).setContentIntent(open).build()
+            .setOngoing(true).setContentIntent(open)
+            .addAction(Notification.Action.Builder(null,"STOP ALL BACKFILL",
+                com.azrael.pixivdumpsync.EmergencyBackfillStopReceiver.action(context)).build())
+            .build()
     }
-    fun launch(context: Context, scan: Boolean = false): Boolean {
+    fun launch(context: Context, scan: Boolean = false,
+               targetHost:String?=null,allowJobFallback:Boolean=true): Boolean {
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val intent=Intent(context,TransferService::class.java).putExtra("scan",scan)
+            .putExtra("target_site_host",targetHost)
         return try {
-            if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent) else context.startService(intent)
+            if(Build.VERSION.SDK_INT>=26) context.startForegroundService(intent)
+            else context.startService(intent)
             true
         } catch (_: Exception) {
-            false // JobService can use its own job execution when FGS launch is restricted.
+            // Android 14+ often forbids starting a foreground service from a
+            // source-scan callback or background receiver. Persist an imminent
+            // JobScheduler request instead of silently abandoning the queue.
+            if(allowJobFallback)Scheduling.requestImmediate(context,scan,targetHost)
+            false
         }
     }
-    fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {}) {
+    fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
+             targetHost:String?=null) {
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
         if(!busy.compareAndSet(false,true)) return
+        com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         try {
             val db=VideoDb(context)
             db.recover()
@@ -48,44 +82,168 @@ object VideoEngine {
                 onStatus("Video engine initialization failed")
                 return
             }
-            if(scan) {
-                val settings=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
-                val max=settings.getInt("max_new",3).coerceIn(1,20)
-                for(watch in db.listWatches().filter { it.enabled }) {
-                    try {
-                        onStatus("Scanning ${watch.label}")
-                        if(!WebDiscovery.isUrl(watch.address)){
-                            db.checked(watch.id,"Unsupported saved search; remove this source")
-                            continue
-                        }
-                        val hits=WebDiscovery.findOnPage(watch.address,30)
-                        if(hits.isEmpty()) error("No video links found on this page; use a specific feed, profile, or search watch")
-                        var added=0
-                        for(hit in hits) {
-                            if(db.addVideo(hit.url,hit.title,watch.id)) added++
-                            if(added>=max) break
-                        }
-                        db.checked(watch.id,null)
-                    } catch(t:Exception) {
-                        db.checked(watch.id,t.message?: "Discovery failed")
-                    }
-                }
-            }
-            while(true) {
+            fun drainQueued(maxItems:Int) {
+                var transferred=0
+                val deadline=android.os.SystemClock.elapsedRealtime()+6L*60_000
+                while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                      !Thread.currentThread().isInterrupted && transferred<maxItems &&
+                      android.os.SystemClock.elapsedRealtime()<deadline) {
                 val next=db.next() ?: break
+                transferred++
                 onStatus("Downloading ${next.title}")
                 db.update(next.id,"running")
                 try {
                     val uri=downloadOne(context,db,next) { percent ->
                         onStatus("${next.title}: $percent%")
                     }
+                    if(stopRequests.contains(next.id))
+                        throw java.util.concurrent.CancellationException("Paused")
                     db.update(next.id,"done",100,uri)
+                    if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
+                        com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
+                            queue.enqueue("videos",
+                                android.net.Uri.parse(uri).lastPathSegment.orEmpty()
+                                    .ifBlank{"video_"+next.id+".mp4"},
+                                android.net.Uri.parse(uri))
+                        }
+                        com.azrael.pixivdumpsync.NduUploadService.launch(context)
+                    }
                     onStatus("Saved ${next.title}")
                 } catch(t:Exception) {
-                    db.update(next.id,"error",error=t.message?:t.javaClass.simpleName)
-                    onStatus("Failed ${next.title}")
+                    if(stopRequests.remove(next.id) ||
+                        t is java.util.concurrent.CancellationException){
+                        db.pause(next.id)
+                        onStatus("Paused video: "+next.title)
+                    }else if(t is FullVersionUnavailable) {
+                        db.update(next.id,"full_only_hold",error=t.message)
+                        onStatus("Full version unverified: ${next.title}")
+                    }else{
+                        db.scheduleRetry(next.id,t.message?:t.javaClass.simpleName)
+                        onStatus("Failed ${next.title}")
+                    }
                 }
             }
+            }
+
+            // Transfer queued media before any potentially slow provider scan.
+            drainQueued(if(scan)6 else 12)
+            if(scan) {
+                // Independent name crawlers keep their own scheduling and do
+                // not block the foreground download queue in this worker.
+                // Independent per-provider discovery agents run concurrently.
+                // Downloads still use their durable shared queue to avoid OOM.
+                val eligible=db.listWatches().filter {
+                    it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address) &&
+                    (targetHost==null ||
+                        com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost)
+                }
+                val selectedWatches=if(targetHost!=null || eligible.size<=6)eligible else {
+                    val progress=context.getSharedPreferences("asterion_video_scan_rotation",0)
+                    val index=progress.getInt("cursor",0).coerceAtLeast(0)%eligible.size
+                    progress.edit().putInt("cursor",(index+6)%eligible.size).apply()
+                    (0 until 6).map{eligible[(index+it)%eligible.size]}
+                }
+                selectedWatches.forEach{selected->
+                    // Per-provider discovery owns its own DB connection. The
+                    // transfer worker no longer waits on slow/blocked sites.
+                    com.azrael.pixivdumpsync.BackfillAgents.submit(
+                        context,"videoflow:"+selected.address){
+                        VideoDb(context).use{db->
+                        for(watch in listOf(selected)){
+                    if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                        Thread.currentThread().isInterrupted)break
+                    try {
+                        onStatus("Scanning ${watch.label}")
+                        if(!WebDiscovery.isUrl(watch.address)){
+                            db.checked(watch.id,"Unsupported saved search; remove this source")
+                            continue
+                        }
+                        val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
+                        val hits=if(artistArchive){
+                            val latest=WebDiscovery.watchPornArtistPage(
+                                watch.address,watch.address)
+                            val collected=linkedMapOf<String,VideoHit>()
+                            for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
+                            val backfill=!watch.backfillComplete &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
+                            var cursor=if(backfill)watch.cursor?:latest.next else null
+                            val visited=hashSetOf(watch.address)
+                            var pages=0
+                            while(cursor!=null && pages<8 && visited.add(cursor) &&
+                                com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                !Thread.currentThread().isInterrupted){
+                                val history=WebDiscovery.watchPornArtistPage(
+                                    watch.address,cursor)
+                                for(hit in history.hits)collected.putIfAbsent(hit.url,hit)
+                                cursor=history.next
+                                pages++
+                            }
+                            if(backfill && com.azrael.pixivdumpsync.AppPower.enabled(context))
+                                db.setBackfill(watch.id,cursor,cursor==null)
+                            collected.values.toList()
+                        }else{
+                            val collected=linkedMapOf<String,VideoHit>()
+                            val latest=WebDiscovery.page(watch.address,watch.address)
+                            for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
+                            // Every scan checks latest posts. A durable cursor then resumes
+                            // older pages, instead of always resetting at the homepage.
+                            val backfill=!watch.backfillComplete &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
+                            var cursor=if(backfill)watch.cursor?:latest.next else null
+                            val visited=HashSet<String>()
+                            var pages=0
+                            while(cursor!=null && pages<(if(backfill)8 else 1) &&
+                                collected.size<650 && visited.add(cursor) &&
+                                com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                !Thread.currentThread().isInterrupted){
+                                val page=WebDiscovery.page(cursor,watch.address)
+                                for(hit in page.hits)collected.putIfAbsent(hit.url,hit)
+                                cursor=page.next
+                                pages++
+                            }
+                            if(backfill && com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address) &&
+                                !Thread.currentThread().isInterrupted)
+                                db.setBackfill(watch.id,cursor,cursor==null)
+                            collected.values.toList()
+                        }
+                        if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                            Thread.currentThread().isInterrupted)break
+                        if(!com.azrael.pixivdumpsync.SiteControls.any(context,watch.address))continue
+                        if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
+                        var added=0
+                        for(hit in hits) {
+                            if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
+                                Thread.currentThread().isInterrupted)break
+                            if(db.addVideo(hit.url,hit.title,watch.id)) added++
+                            // Every observed new item is recorded; never truncate
+                            // a followed provider after three videos.
+                        }
+                        if(hits.any{!it.preview.isNullOrBlank()}){
+                            com.azrael.pixivdumpsync.SearchResultsDb(context).use{results->
+                                results.save("WATCH:"+watch.label,hits.map{hit->
+                                    com.azrael.pixivdumpsync.RankedHit(
+                                        hit.title,hit.url,watch.label,
+                                        thumbnail=hit.preview)
+                                })
+                            }
+                        }
+                        db.checked(watch.id,null)
+                    } catch(t:Exception) {
+                        db.checked(watch.id,t.message?: "Discovery failed")
+                    }
+                        }
+                        }
+                        // Discovery and transfer run asynchronously. Enqueued
+                        // originals wake a dedicated transfer pass instead of
+                        // retaining the shared worker until all sites finish.
+                        if(com.azrael.pixivdumpsync.AppPower.enabled(context))
+                            Scheduling.requestImmediate(context,false)
+                    }
+                }
+            }
+            if(scan)drainQueued(4)
+            if(db.next()!=null)onStatus("Queued downloads remain; next worker pass scheduled")
             if(context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getBoolean("cloud_after",false)) {
                 val id=context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getInt("cloud_task",-1)
                 if(id>=0) runCatching {
@@ -96,19 +254,154 @@ object VideoEngine {
                     context.startForegroundService(intent)
                 }
             }
-        } finally { busy.set(false) }
+        } finally {
+            busy.set(false)
+            if(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
+                val pending=runCatching { VideoDb(context).use{it.next()!=null} }
+                    .getOrDefault(false)
+                if(pending)Scheduling.requestImmediate(context,false)
+            }
+        }
     }
-    fun submit(context: Context, scan: Boolean, onStatus: (String)->Unit = {}) =
-        executor.submit { work(context,scan,onStatus) }
+    /** Manual per-provider discovery, independent of the busy transfer engine.
+     * Save actual preview metadata and a durable cursor, NOT thousands of
+     * unrequested download jobs. Download only when the user selects an item.
+     */
+    fun scanSite(context:Context,address:String,area:String,stop:()->Boolean){
+        val host=com.azrael.pixivdumpsync.SiteControls.key(address)
+        val db=VideoDb(context)
+        try{
+            var watch=db.listWatches().firstOrNull{
+                com.azrael.pixivdumpsync.SiteControls.key(it.address)==host &&
+                    it.address.trimEnd('/')==address.trimEnd('/')
+            } ?: db.listWatches().firstOrNull{
+                com.azrael.pixivdumpsync.SiteControls.key(it.address)==host
+            }
+            if(watch==null){
+                require(db.addWatch(address,host)){"Source could not be enrolled"}
+                watch=db.listWatches().firstOrNull{
+                    com.azrael.pixivdumpsync.SiteControls.key(it.address)==host
+                }
+            }
+            require(watch!=null){"Source is not recognized"}
+            val selected=watch
+            var cursor=selected.cursor
+            val pages=ArrayList<String>()
+            pages+=selected.address
+            if(!cursor.isNullOrBlank() && !selected.backfillComplete)
+                pages+=cursor
+            val seen=HashSet<String>()
+            var count=0
+            var enqueued=0
+            val existing=com.azrael.pixivdumpsync.SourceIndexDb(context).use{db->
+                db.sources().firstOrNull{it.url==address}
+            }
+            var pageIndex=0
+            while(pageIndex<pages.size && pageIndex<8 && !stop() &&
+                com.azrael.pixivdumpsync.AppPower.enabled(context)){
+                val page=pages[pageIndex++]
+                if(!seen.add(page))continue
+                val response=try { WebDiscovery.page(page,selected.address) }
+                    catch(e:Exception){
+                        db.checked(selected.id,e.message?:"Provider discovery failed")
+                        com.azrael.pixivdumpsync.SourceIndexDb(context).use{
+                            it.failure(address,e.message?:"Provider discovery failed")
+                        }
+                        throw e
+                    }
+                if(response.hits.isEmpty() && count==0)
+                    error("No videos found; this provider needs a supported parser or account")
+                val clock=System.currentTimeMillis()
+                com.azrael.pixivdumpsync.SourceIndexDb(context).use{index->
+                    index.add(address,selected.label,area,"native")
+                    for(hit in response.hits){
+                        if(stop())break
+                        val thumb=hit.preview?.takeIf{
+                            com.azrael.pixivdumpsync.SearchRanking.validUrl(it)
+                        }
+                        val genuine=com.azrael.pixivdumpsync.IndexedMediaQuality.isMedia(
+                            hit.url,hit.title,thumb,area) ||
+                            (WebDiscovery.isVideoPage(hit.url) &&
+                                !com.azrael.pixivdumpsync.IndexedMediaQuality.navigationTitle(
+                                    hit.title))
+                        if(!genuine)continue
+                        if(index.upsert(com.azrael.pixivdumpsync.IndexedItem(
+                            hit.url,hit.title,thumb,address,area,"video",clock,false)))
+                            count++
+                        // Explicit Backfill means obtaining originals, not simply
+                        // indexing them; preserve each file's own transfer status.
+                        // Manual Backfill is independent of automatic Sync.
+                        // Attach explicit user-requested files to watch_id=0;
+                        // otherwise a disabled Sync switch would silently block
+                        // the videos that Backfill itself discovered.
+                        if(db.addVideo(hit.url,hit.title,0L))enqueued++
+                    }
+                    if(stop())throw InterruptedException("Provider backfill stopped")
+                    // A checked page is discovery evidence, not download success.
+                    index.update(address,response.next,null,
+                        (existing?.discovered?:0)+count,response.next==null)
+                }
+                cursor=response.next
+                db.setBackfill(selected.id,cursor,cursor==null)
+                db.checked(selected.id,null)
+                if(pageIndex==1 && pages.size==1 && cursor!=null && cursor !in seen)
+                    pages+=cursor
+                else if(pageIndex>1 && cursor!=null && cursor !in seen)
+                    pages+=cursor
+            }
+            if(stop())throw InterruptedException("Stopped by user")
+            if(enqueued>0)launch(context,false)
+        }finally{db.close()}
+    }
+    fun submit(context: Context, scan: Boolean, targetHost:String?=null,
+               onStatus: (String)->Unit = {}) =
+        executor.submit { work(context,scan,onStatus,targetHost) }
     private fun downloadOne(context: Context, db: VideoDb, item: Video, status:(Int)->Unit): String {
-        val parent=File(context.getExternalFilesDir(Environment.DIRECTORY_MOVIES),"videoflow-staging/${item.id}")
-        parent.mkdirs()
+        // Native yt-dlp may run in a read-only working directory on Android.
+        // Force every output and .part file into a writable private staging area.
+        val parent=File(context.cacheDir,"videoflow-staging/${item.id}")
+        if(!parent.isDirectory && !parent.mkdirs())
+            throw java.io.IOException("Cannot create private download staging directory")
+        val probe=File.createTempFile(".write-probe",null,parent)
+        check(probe.delete()){"Cannot clean up download staging probe"}
         val template=File(parent,"%(title).160s [%(id)s].%(ext)s").absolutePath
+        val stage=parent.absolutePath
+        // The embedded Python yt-dlp process still produced relative .part
+        // names despite --output. Android's default process working directory
+        // is read-only. chdir prevents the confirmed EROFS error even if the
+        // underlying yt-dlp wrapper drops a path override.
+        AsterionCwd.enter(parent)
+        try {
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
+        val viaProxy=prefs.getBoolean("tor_proxy",false)
+        val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
+        require(!hidden||viaProxy){"Configure a SOCKS proxy before connecting to this source"}
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
+        val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
+        fun executeControlled(
+            request:YtDlpRequest,
+            onProgress:dev.ffmpegkit_maintained.ytdlp.DownloadProgressCallback
+        ):dev.ffmpegkit_maintained.ytdlp.YtDlpResponse{
+            if(stopRequests.contains(item.id))
+                throw java.util.concurrent.CancellationException("Video paused")
+            val future=YtDlp.executeAsync(request,onProgress)
+            extractionJobs[item.id]=future
+            return try{
+                future.get()
+            }catch(e:java.util.concurrent.ExecutionException){
+                throw e.cause as? Exception ?: Exception(e.cause)
+            }finally{
+                extractionJobs.remove(item.id,future)
+            }
+        }
         fun request(link:String, referer:String?=null)=
             YtDlpRequest(link).setOutputTemplate(template)
+                // An explicit output path overrides the wrapper's relative default.
+                .addOption("--paths","home:"+stage)
+                .addOption("--paths","temp:"+stage)
+                .addOption("--output",template)
+                .addOption("--no-cache-dir")
                 .addOption("--no-playlist").addOption("--continue")
                 .addOption("--no-overwrites").addOption("--retries","2")
                 .addOption("--fragment-retries","3")
@@ -119,11 +412,70 @@ object VideoEngine {
                 .addOption("-f",prefs.getString("quality","best[ext=mp4]/best")
                     ?: "best[ext=mp4]/best")
                 .apply {
+                    if(viaProxy && hidden)addOption("--proxy", "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
                     if(!referer.isNullOrBlank())addOption("--referer",referer)
-                    if(cookie.isFile&&cookie.length()>0)addOption("--cookies",cookie.absolutePath)
+                    val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+                        ?:cookie.takeIf{it.isFile&&it.length()>0}
+                    if(selected!=null)addOption("--cookies",selected.absolutePath)
                 }
+        fun preflight(link:String,referer:String?=null):
+                Pair<Long,FullLengthVideoPolicy.Decision> {
+            // Verify runtime before requesting a single media fragment; video
+            // resolution alone cannot establish that a scene is complete.
+            val request=YtDlpRequest(link)
+                .addOption("--no-cache-dir")
+                .addOption("--paths","home:"+stage)
+                .addOption("--dump-single-json")
+                .addOption("--skip-download")
+                .addOption("--no-playlist")
+                .addOption("--socket-timeout","20")
+                .apply{
+                    if(viaProxy && hidden)addOption("--proxy",
+                        "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
+                    if(!referer.isNullOrBlank())addOption("--referer",referer)
+                    val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+                        ?:cookie.takeIf{it.isFile&&it.length()>0}
+                    if(selected!=null)addOption("--cookies",selected.absolutePath)
+                }
+            val response=executeControlled(request){_,_,_->
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
+            }
+            if(!response.isSuccess)error("Cannot inspect complete-video metadata")
+            val text=response.output.lineSequence().map{it.trim()}
+                .firstOrNull{it.startsWith("{")&&it.endsWith("}")}
+                ?:error("Video extractor returned no metadata JSON")
+            val json=JSONObject(text)
+            val duration=json.optDouble("duration",0.0)
+                .takeIf{it.isFinite() && it>0.0}?.toLong()
+            val extracted=json.optString("title","")
+            val expected=FullSceneRuntimeDb(context).use{db->
+                listOfNotNull(db.expected(item.title),db.expected(extracted)).maxOrNull()
+            }
+            val decision=FullLengthVideoPolicy.assess(item.title,
+                extracted,link,duration,expected)
+            // Collect comparison evidence even for held videos, without granting
+            // full-length status to an uncorroborated provider's own metadata.
+            if(duration!=null){
+                val newReference=FullSceneRuntimeDb(context).use{store->
+                    val fromItem=store.remember(item.title,link,duration)
+                    val fromPage=if(extracted!=item.title)
+                        store.remember(extracted,link,duration) else false
+                    fromItem || fromPage
+                }
+                // A newly observed user-designated full original can resolve
+                // earlier held uploads on general-purpose platforms.
+                if(newReference){
+                    db.requeueHeldByTitle(item.title)
+                    if(extracted!=item.title)db.requeueHeldByTitle(extracted)
+                }
+            }
+            return (duration?:0L) to decision
+        }
         fun execute(link:String,referer:String?=null) {
-            val response=YtDlp.execute(request(link,referer)){progress,_,_->
+            val response=executeControlled(request(link,referer)){progress,_,_->
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
                 val percent=progress.toInt().coerceIn(0,100)
                 db.progress(item.id,percent)
                 if(percent%5==0) status(percent)
@@ -134,30 +486,81 @@ object VideoEngine {
         val variants=listOf(item.url)+SourceDiagnostics.alternateHosts(item.url)
         var last:Throwable?=null
         var downloaded=false
-        for(candidate in variants.distinct()) {
-            try {
-                execute(candidate)
-                downloaded=true
-                break
-            } catch(t:Exception) {last=t}
-            val media=runCatching{WebDiscovery.directMedia(candidate)}.getOrNull()
-            if(!media.isNullOrBlank()&&media!=candidate) {
-                try {
-                    execute(media,candidate)
-                    downloaded=true
-                    break
-                } catch(t:Exception) {last=t}
+        var expectedDuration:Long?=null
+        var heldReason:String?=null
+        try {
+            for(candidate in variants.distinct()) {
+                val checked=runCatching{preflight(candidate)}
+                if(checked.isSuccess){
+                    val decision=checked.getOrThrow().second
+                    if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                        heldReason=decision.reason
+                        continue
+                    }
+                    try {
+                        execute(candidate)
+                        expectedDuration=checked.getOrThrow().first
+                        downloaded=true
+                        break
+                    } catch(t:Exception){last=t}
+                }else last=checked.exceptionOrNull()
+                val media=if(viaProxy)null else runCatching{
+                    WebDiscovery.directMedia(candidate)}.getOrNull()
+                if(!media.isNullOrBlank()&&media!=candidate) {
+                    val checkedMedia=runCatching{preflight(media,candidate)}
+                    if(checkedMedia.isSuccess){
+                        val decision=checkedMedia.getOrThrow().second
+                        if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                            heldReason=decision.reason
+                            continue
+                        }
+                        try {
+                            execute(media,candidate)
+                            expectedDuration=checkedMedia.getOrThrow().first
+                            downloaded=true
+                            break
+                        } catch(t:Exception){last=t}
+                    }else last=checkedMedia.exceptionOrNull()
+                }
             }
+        } finally {
+            // Do not keep browser authentication in the file system after transfer.
+            connectedCookies?.delete()
         }
-        if(!downloaded)throw (last?:IllegalStateException("No video extractor succeeded"))
+        if(stopRequests.contains(item.id))
+            throw java.util.concurrent.CancellationException("Video paused")
+        if(!downloaded){
+            if(heldReason!=null)throw FullVersionUnavailable(heldReason!!)
+            throw (last?:IllegalStateException("No video extractor succeeded"))
+        }
         val file=parent.listFiles()?.filter { it.isFile && it.length()>0 &&
-            it.extension.lowercase() in setOf("mp4","mkv","webm","mov","ts") }
+            it.extension.lowercase() in setOf("mp4","mkv","webm","mov","ts","m4a","mp3","flac","opus") }
             ?.maxByOrNull { it.length() } ?: error("No completed playable video found")
+        val audioOnly=prefs.getString("quality","")=="bestaudio/best"
+        // Do not publish a truncated/incomplete local file even if the
+        // remote page advertised a longer runtime.
+        val actual=runCatching{
+            val retriever=MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()?.div(1000L)
+            }finally{retriever.release()}
+        }.getOrNull()
+        val promised=expectedDuration?:throw FullVersionUnavailable(
+            "Full-version runtime was lost before local verification")
+        if(actual==null || actual+5L<promised){
+            file.delete()
+            throw FullVersionUnavailable(
+                "Incomplete downloaded runtime: ${actual?:0}s of ${promised}s")
+        }
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
         val values=ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
             put(MediaStore.Downloads.MIME_TYPE,when(file.extension.lowercase()){
-                "mp4"->"video/mp4";"webm"->"video/webm";"mkv"->"video/x-matroska"; else->"video/*"
+                "mp4"->"video/mp4";"webm"->if(audioOnly)"audio/webm" else "video/webm"
+                "mkv"->"video/x-matroska";"m4a"->"audio/mp4";"mp3"->"audio/mpeg"
+                "flac"->"audio/flac";"opus"->"audio/ogg";else->"video/*"
             })
             put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/VideoFlow/")
             put(MediaStore.Downloads.IS_PENDING,1)
@@ -178,6 +581,9 @@ object VideoEngine {
             context.contentResolver.delete(uri,null,null)
             throw t
         }
+        } finally {
+            runCatching { AsterionCwd.enter(context.filesDir) }
+        }
     }
 }
 
@@ -187,7 +593,9 @@ class TransferService: Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         VideoEngine.makeChannel(this)
         startForeground(24014,VideoEngine.notification(this,"Preparing downloads"))
-        VideoEngine.submit(applicationContext,intent?.getBooleanExtra("scan",false)==true) { text ->
+        VideoEngine.submit(applicationContext,
+            intent?.getBooleanExtra("scan",false)==true,
+            intent?.getStringExtra("target_site_host")) { text ->
             getSystemService(NotificationManager::class.java)
                 .notify(24014,VideoEngine.notification(this,text.take(80)))
         }.let { future ->

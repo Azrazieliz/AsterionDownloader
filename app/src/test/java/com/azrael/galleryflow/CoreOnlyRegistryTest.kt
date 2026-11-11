@@ -3,37 +3,41 @@ package com.azrael.galleryflow
 import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * The shipping Nocturne catalog contains only Kuroha (outside this registry)
- * and Kyora (the Kiutaku cosplay adapter plus user-added generic websites).
- */
+/** The working Kyora six-adapter registry is the canonical production contract. */
 class CoreOnlyRegistryTest {
-    @Test fun onlyCoreGalleryAdaptersShip() {
-        assertEquals(setOf(SourceId.KIUTAKU, SourceId.GENERIC),
-            AdapterRegistry.adapters.map { it.source }.toSet())
-        assertEquals(2, AdapterRegistry.adapters.size)
+    @Test fun canonicalKyoraAdaptersAndGenericFallbackShip() {
+        assertEquals(setOf(
+            SourceId.BUONDUA, SourceId.KIUTAKU, SourceId.FOUR_K_GIRL,
+            SourceId.EVERIA, SourceId.FOUR_K_HD, SourceId.COSPLAYTELE,
+            SourceId.GENERIC
+        ), AdapterRegistry.adapters.map { it.source }.toSet())
+        assertEquals(7, AdapterRegistry.adapters.size)
     }
 
-    @Test fun manualWebsitesAreNotPreinstalledProviders() {
-        assertEquals(SourceId.GENERIC,
-            AdapterRegistry.forUrl("https://www.pornpics.com/galleries/sample/").source)
-        assertEquals(SourceId.GENERIC,
-            AdapterRegistry.forUrl("https://example.com/cosplay/artist/gallery").source)
+    @Test fun realProvidersOverrideGenericButUnknownSitesRemainAddable() {
+        assertEquals(SourceId.BUONDUA,
+            AdapterRegistry.forUrl("https://buondua.net/albums/example").source)
+        assertEquals(SourceId.FOUR_K_HD,
+            AdapterRegistry.forUrl("https://www.4khd.com/content/test.html").source)
+        assertEquals(SourceId.COSPLAYTELE,
+            AdapterRegistry.forUrl("https://cosplaytele.com/gallery").source)
         assertEquals(SourceId.KIUTAKU,
             AdapterRegistry.forUrl("https://kiutaku.com/tag/123").source)
+        assertEquals(SourceId.GENERIC,
+            AdapterRegistry.forUrl("https://example.com/creator/gallery").source)
     }
 
-    @Test fun retiredWireIdsRemainReadableButCannotRun() {
+    @Test fun historicRetiredBooruIdsRemainReadableWithoutEnablingThem() {
         assertEquals(SourceId.RULE34, SourceId.fromWire("rule34"))
         assertFalse(AdapterRegistry.available(SourceId.RULE34))
         assertFalse(AdapterRegistry.available(SourceId.DANBOORU))
-        assertFalse(AdapterRegistry.available(SourceId.FOUR_K_HD))
-        assertTrue(AdapterRegistry.available(SourceId.GENERIC))
+        assertTrue(AdapterRegistry.available(SourceId.FOUR_K_HD))
+        assertTrue(AdapterRegistry.available(SourceId.EVERIA))
         try {
             AdapterRegistry.forSource(SourceId.E621)
-            fail("Retired source unexpectedly enabled")
+            fail("Unexpected retired booru adapter")
         } catch (expected: AdapterException) {
-            assertTrue(expected.message.orEmpty().contains("Retired"))
+            assertTrue(expected.message.orEmpty().contains("No installed adapter"))
         }
     }
 }

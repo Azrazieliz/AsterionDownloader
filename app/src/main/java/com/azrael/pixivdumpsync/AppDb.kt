@@ -173,6 +173,11 @@ class AppDb(context: Context) : SQLiteOpenHelper(context, "pixivdump.db", null, 
         )
     }
 
+    fun setAllLiveEnabled(enabled:Boolean) {
+        writableDatabase.update("artists",
+            ContentValues().apply{put("live_enabled",if(enabled)1 else 0)},
+            "enabled=1",null)
+    }
     fun setArtistLiveEnabled(userId: String, enabled: Boolean) {
         writableDatabase.update(
             "artists",
