@@ -734,8 +734,19 @@ class TransferService: Service() {
     private val binder=Binder()
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        VideoEngine.makeChannel(this)
-        startForeground(24014,VideoEngine.notification(this,"Preparing downloads"))
+        try {
+            VideoEngine.makeChannel(this)
+            startForeground(24014,VideoEngine.notification(this,"Preparing downloads"))
+        }catch(t:Exception){
+            // Android can accept startForegroundService() but refuse the
+            // subsequent foreground promotion. That used to crash the
+            // process after launch() had already reported success.
+            runCatching{Scheduling.requestPrimaryImmediate(applicationContext,
+                intent?.getBooleanExtra("scan",false)==true,
+                intent?.getStringExtra("target_site_host"))}
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         VideoEngine.submit(applicationContext,
             intent?.getBooleanExtra("scan",false)==true,
             intent?.getStringExtra("target_site_host")) { text ->
