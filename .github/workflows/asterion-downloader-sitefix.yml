@@ -37,14 +37,25 @@ jobs:
           # Prove the rest of the frozen home/navigation/activity implementation
           # stayed byte-identical to its approved baseline.
           HOME=app/src/main/java/com/azrael/pixivdumpsync/AsterionHomeActivity.kt
-          git show "FETCH_HEAD:$HOME" | awk '
-            /^    private fun renderBooks\(\)\{/ {allowed=1;next}
-            /^    private fun renderToonily\(\)\{/ {allowed=0}
-            !allowed {print}' > /tmp/approved-home-outside-books-torrents
-          awk '
-            /^    private fun renderBooks\(\)\{/ {allowed=1;next}
-            /^    private fun renderToonily\(\)\{/ {allowed=0}
-            !allowed {print}' "$HOME" > /tmp/current-home-outside-books-torrents
+          # The owner also authorized one small global PAUSE/RESUME
+          # status-color correction; exclude only that text/icon state.
+          for side in baseline current; do
+            if [ "$side" = baseline ]; then
+              git show "FETCH_HEAD:$HOME"
+            else
+              cat "$HOME"
+            fi | awk '
+              /^        emergencyLabel=text\(/ {header=1;next}
+              /^        head.addView\(emergencyLabel\)/ {header=0}
+              /^        if\(::emergencyLabel.isInitialized\)/ {power=1;next}
+              /^        backControl.visibility=/ {power=0}
+              /^    private fun renderBooks\(\)\{/ {allowed=1;next}
+              /^    private fun renderToonily\(\)\{/ {allowed=0}
+              !allowed && !header && !power {print}
+            ' > "/tmp/${side}-home-guard"
+          done
+          cp /tmp/baseline-home-guard /tmp/approved-home-outside-books-torrents
+          cp /tmp/current-home-guard /tmp/current-home-outside-books-torrents
           cmp /tmp/approved-home-outside-books-torrents /tmp/current-home-outside-books-torrents
           grep -q 'WEBSITES · SYNC & BACKFILL' "$HOME"
           grep -q 'QUEUE COMPLETE EPUB' "$HOME"
