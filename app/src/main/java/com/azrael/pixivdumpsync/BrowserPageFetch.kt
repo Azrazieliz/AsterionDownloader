@@ -51,10 +51,18 @@ object BrowserPageFetch {
                             const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({
                                 '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
                             const anchors=[...document.querySelectorAll('a[href],option[value]')]
-                                .slice(0,10000).map(el=>'<a href="'+esc(el.getAttribute('href')||
-                                    el.getAttribute('value')||'')+'" class="'+esc(el.className||'')+
-                                    '" rel="'+esc(el.getAttribute('rel')||'')+'">'+
-                                    esc((el.innerText||el.textContent||'').slice(0,220))+'</a>').join('');
+                                .slice(0,10000).map(el=>{
+                                    const img=el.querySelector('img');
+                                    const keys=['src','data-src','data-original','data-lazy-src',
+                                        'data-cfsrc','data-lazy','data-full','srcset'];
+                                    const cover=img?'<img '+keys.map(k=>k+'="'+
+                                        esc(img.getAttribute(k)||'')+'"').join(' ')+'/>':'';
+                                    return '<a href="'+esc(el.getAttribute('href')||
+                                        el.getAttribute('value')||'')+'" class="'+
+                                        esc(el.className||'')+'" rel="'+
+                                        esc(el.getAttribute('rel')||'')+'">'+cover+
+                                        esc((el.innerText||el.textContent||'').slice(0,220))+'</a>';
+                                }).join('');
                             const reader=document.querySelectorAll(
                                 '.reading-content img,.chapter-content img,#reader img,'+
                                 '.page-chapter img,.container-chapter-reader img,'+
