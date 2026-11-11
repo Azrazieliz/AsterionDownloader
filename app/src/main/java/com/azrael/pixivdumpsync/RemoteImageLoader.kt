@@ -29,14 +29,16 @@ object RemoteImageLoader {
         context: Context,
         imageView: ImageView,
         url: String?,
-        referer: String = "https://www.pixiv.net/"
+        referer: String = "https://www.pixiv.net/",
+        preserveOriginal: Boolean = false
     ) {
         if (url.isNullOrBlank()) return
-        imageView.tag = url
+        val imageKey=if(preserveOriginal)"original-card:"+url else url
+        imageView.tag = imageKey
         val app=context.applicationContext
         val target=java.lang.ref.WeakReference(imageView)
 
-        memory.get(url)?.let {
+        memory.get(imageKey)?.let {
             imageView.setImageBitmap(it)
             return
         }
@@ -83,14 +85,14 @@ object RemoteImageLoader {
                     }
                 }
 
-                decodeSampled(file, 256)
+                decodeSampled(file, if(preserveOriginal) 1024 else 256)
             }.getOrNull()
 
             if (bitmap != null) {
-                memory.put(url, bitmap)
+                memory.put(imageKey, bitmap)
                 target.get()?.post {
                     val current=target.get()
-                    if(current!=null && current.tag==url &&
+                    if(current!=null && current.tag==imageKey &&
                         current.isAttachedToWindow){
                         current.setImageBitmap(bitmap)
                     }
