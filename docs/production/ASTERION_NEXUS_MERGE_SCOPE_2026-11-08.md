@@ -155,6 +155,12 @@ Android app sandboxing prevents Nexus from reading Rounder's private databases o
 - No silent full cloud mirroring, destructive migration, automatic duplicate deletion or unapproved card redesign.
 - No deletion or archival of Rounder/Downloader repositories until migration is accepted, and no deletion by default even afterward.
 
+## 8A. Embedded offline translation extension (owner decision 2026-11-11)
+
+The owner approved a new **self-contained native book/comic translation feature** for Nexus. Its frozen defaults, dependency prohibition, queue boundaries, reader integration, source preservation, OCR/translation quality gates and actual production acceptance are specified in [ASTERION_NEXUS_INTERNAL_TRANSLATION_CONTRACT_2026-11-11.md](ASTERION_NEXUS_INTERNAL_TRANSLATION_CONTRACT_2026-11-11.md).
+
+This is future implementation scope, **not** evidence of working translation or delivered Nexus app. It must not obstruct downloads, alter approved Rounder cards or silently index full book text. No outside runtime translator/service is permitted.
+
 ## 9. First implementation step and current state
 
 **This scope document is the only action being committed now.** Implementation of Nexus has NOT begun by virtue of creating this file. The next implementation commit should inventory actual installed APK signers and private-data migration possibilities, freeze both original apps, identify exact Rounder assembled-source outputs and begin a versioned, non-destructive provider/index module inside Downloader. Keep the donor source and installed old APKs until Nexus reaches N8 acceptance.
