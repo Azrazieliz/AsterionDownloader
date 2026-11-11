@@ -166,6 +166,8 @@ object KoikatsuFollowing {
                 for(item in cards.take(5)){
                     val image=ImageView(a).apply{
                         scaleType=ImageView.ScaleType.FIT_CENTER
+                        adjustViewBounds=true
+                        maxHeight=ui.px(a,320)
                         setBackgroundColor(ui.raised)
                         setImageResource(R.drawable.ic_source_koikatsu)
                         contentDescription=item.name+" original PNG"
@@ -178,10 +180,10 @@ object KoikatsuFollowing {
                             }
                         }
                     }
-                    gallery.addView(image,LinearLayout.LayoutParams(ui.px(a,108),ui.px(a,152))
+                    gallery.addView(image,LinearLayout.LayoutParams(ui.px(a,138),-2)
                         .apply{rightMargin=ui.px(a,7)})
                     (item.preview?:item.download.takeIf{item.source=="BepisDB"})?.let{
-                        RemoteImageLoader.load(a,image,it,item.page)
+                        RemoteImageLoader.load(a,image,it,item.page,preserveOriginal=true)
                     }
                 }
                 scroll.addView(gallery);c.addView(scroll,ui.lp(a,11))
