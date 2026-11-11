@@ -229,6 +229,12 @@ object NovelEpubService {
                 state.finished=false
                 saveWalk(context,url,state)
             }else if(fresh==null){
+                if(state.chapters.size<indexed.size ||
+                    (expected>0 && state.chapters.size<expected)){
+                    error("Previously completed EPUB lacks published chapters; "+
+                        "only "+state.chapters.size+" of at least "+
+                        maxOf(indexed.size,expected)+" recorded")
+                }
                 // Reuse only if all persisted actual chapter texts survive.
                 val dir=cacheDir(context,url)
                 if(state.chapters.isNotEmpty() &&
