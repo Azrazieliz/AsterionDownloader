@@ -737,6 +737,7 @@ object SourceIndex {
         Triple("Anna's Archive","https://annas-archive.org/","BOOKS")
     )
     fun ensure(context:Context){
+        ProviderRetirement.disableExisting(context)
         SourceIndexDb(context).use{db->
             db.migrateOfficialSource(
                 "https://www.omg.xxx/fr/","https://www.omg.porn/fr/")
@@ -768,7 +769,8 @@ object SourceIndex {
                 if(delim<1)continue
                 val type=record.substring(0,delim)
                 val url=record.substring(delim+1)
-                if(!SourceIndexParser.safe(url))continue
+                if(!SourceIndexParser.safe(url) ||
+                    ProviderRetirement.isRetired(url))continue
                 val area=when(type){
                     "PIXIV"->"ARTWORK"
                     "X"->"X"
