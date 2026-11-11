@@ -33,8 +33,17 @@ jobs:
             app/src/main/java/com/azrael/pixivdumpsync/AsterionHomeActivity.kt \
             app/src/main/java/com/azrael/pixivdumpsync/AsterionCosplayGallery.kt \
             app/src/main/java/com/azrael/pixivdumpsync/KurohaMediaPreview.kt \
-            app/src/main/java/com/azrael/pixivdumpsync/SourceIndexPanel.kt \
-            app/src/main/java/com/azrael/pixivdumpsync/UnifiedDownloadsUi.kt
+            app/src/main/java/com/azrael/pixivdumpsync/SourceIndexPanel.kt
+          # The Downloads screen fixes only receipt interpretation and the
+          # existing Start/Resume click handlers. Its entire visual layout,
+          # filters and rows from the preferences control onward stay frozen.
+          UI=app/src/main/java/com/azrael/pixivdumpsync/UnifiedDownloadsUi.kt
+          git show "FETCH_HEAD:$UI" | sed -n '/^        val pref=a.getSharedPreferences("asterion_downloads_ui"/,$p' > /tmp/frozen-downloads-layout
+          sed -n '/^        val pref=a.getSharedPreferences("asterion_downloads_ui"/,$p' "$UI" > /tmp/current-downloads-layout
+          test -s /tmp/frozen-downloads-layout
+          cmp /tmp/frozen-downloads-layout /tmp/current-downloads-layout
+          grep -q 'ModuleOriginalAgents.startAll(a)' "$UI"
+          grep -q 'OriginalFileReceipt.verify(a,dm' "$UI"
           grep -q 'KurohaMediaPreview.render' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
           grep -q 'for(site in active+inactive)' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
           grep -q 'VideoSiteProfiles.isVideoPage(tile.url)' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
