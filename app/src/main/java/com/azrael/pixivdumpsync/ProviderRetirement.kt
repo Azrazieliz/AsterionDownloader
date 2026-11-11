@@ -9,7 +9,9 @@ import java.util.Locale
  * watch/index databases. Keep all existing media, downloads and history.
  */
 object ProviderRetirement {
-    private val retired=setOf("pornhits.com")
+    // Both OMG aliases expose the same public 34/34 video identifiers as
+    // FreePornVideos in the 2026-11-11 verified listing comparison.
+    private val retired=setOf("pornhits.com","omg.porn","omg.xxx")
 
     fun isRetired(address:String):Boolean {
         val uri=runCatching { URI(address) }.getOrNull() ?: return false
@@ -21,25 +23,35 @@ object ProviderRetirement {
     fun disableExisting(context:Context) {
         val app=context.applicationContext
         val pref=app.getSharedPreferences("asterion_provider_retirements_v1",0)
-        if(pref.getBoolean("pornhits-disabled",false))return
-        // Use independent transactions so one unavailable database does not
-        // accidentally re-enable the other provider's work.
-        val indexed=runCatching {
-            SourceIndexDb(app).use { db->
-                db.sources().filter { isRetired(it.url) }.forEach {
-                    db.enable(it.url,false)
-                }
+        // Migrate retirement one provider at a time. The old builds may
+        // have already saved pornhits-disabled=true; that must never cause
+        // newly retired OMG aliases to be skipped.
+        for(domain in retired){
+            val key=if(domain=="pornhits.com")"pornhits-disabled"
+                else "$domain-disabled"
+            if(pref.getBoolean(key,false))continue
+            fun belongs(address:String):Boolean {
+                val host=runCatching{URI(address).host.orEmpty()
+                    .lowercase(Locale.ROOT)}.getOrDefault("")
+                return host==domain || host.endsWith("."+domain)
             }
-        }.isSuccess
-        val watched=runCatching {
-            com.asterion.videoflow.VideoDb(app).use { db->
-                db.listWatches().filter { isRetired(it.address) }.forEach {
-                    db.enableWatch(it.id,false)
+            val indexed=runCatching {
+                SourceIndexDb(app).use { db->
+                    db.sources().filter{belongs(it.url)}.forEach{
+                        db.enable(it.url,false)
+                    }
                 }
-                db.pauseProvider("pornhits.com")
-            }
-        }.isSuccess
-        if(indexed && watched)
-            pref.edit().putBoolean("pornhits-disabled",true).apply()
+            }.isSuccess
+            val watched=runCatching {
+                com.asterion.videoflow.VideoDb(app).use { db->
+                    db.listWatches().filter{belongs(it.address)}.forEach{
+                        db.enableWatch(it.id,false)
+                    }
+                    db.pauseProvider(domain)
+                }
+            }.isSuccess
+            if(indexed && watched)
+                pref.edit().putBoolean(key,true).apply()
+        }
     }
 }
