@@ -102,6 +102,25 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==5222){
+            if(resultCode==RESULT_OK && data?.data!=null){
+                val uri=data.data!!
+                runCatching{LegacyPixivInventory.addTree(this,uri)}
+                    .onSuccess{
+                        toast("Kuroha folder linked read-only; indexing saved Pixiv pages")
+                        LegacyPixivInventory.refreshAsync(applicationContext){count,error->
+                            runOnUiThread{
+                                if(isFinishing||isDestroyed)return@runOnUiThread
+                                toast(if(error==null)
+                                    "$count existing Pixiv pages indexed; no files moved"
+                                else "Pixiv inventory scan failed: "+error.message)
+                                if(::body.isInitialized)render()
+                            }
+                        }
+                    }.onFailure{toast("Kuroha folder unavailable: "+it.message)}
+            }
+            return
+        }
         if(requestCode==5221){
             if(resultCode==RESULT_OK && data?.data!=null){
                 val result=runCatching{
@@ -1177,7 +1196,44 @@ class AsterionHomeActivity:Activity(){
                 }.setNegativeButton("Cancel",null).show()
         },9)
         put(body,visual,10)
-        section("Storage & cloud backup","TeraBox uploads, destinations and Rounder verification.")
+        section("Storage & cloud backup","Local saved files and confirmed cloud inventory.")
+        val oldPixiv=LegacyPixivInventory.status(this)
+        val pixivInventory=card()
+        put(pixivInventory,text("KUROHA · EXISTING PIXIV DOWNLOADS",
+            15f,theme.white,true),0)
+        put(pixivInventory,text(
+            oldPixiv.savedPages.toString()+" indexed pages · "+
+                oldPixiv.linkedFolders+" linked folder(s)"+
+                (if(oldPixiv.scanning)" · scanning" else ""),
+            12f,theme.secondary),6)
+        put(pixivInventory,text(
+            "Link Downloads/Kuroha (and old PixiFlow if used). "+
+                "This is read-only. The original is checked again before "+
+                "skipping a download; Kuroha's app data is unchanged.",
+            12f,theme.secondary),6)
+        put(pixivInventory,button("LINK KUROHA / PIXIFLOW FOLDER"){
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            },5222)
+        },8)
+        if(oldPixiv.linkedFolders>0)put(pixivInventory,button(
+            if(oldPixiv.scanning)"INDEXING..." else "REFRESH SAVED PIXIV INVENTORY"){
+            LegacyPixivInventory.refreshAsync(applicationContext){_,error->
+                runOnUiThread{
+                    if(!isDestroyed && !isFinishing){
+                        toast(if(error==null)"Pixiv saved-file inventory updated"
+                            else "Inventory refresh error: "+error.message)
+                        render()
+                    }
+                }
+            }
+            render()
+        },5)
+        if(oldPixiv.lastError!=null)
+            put(pixivInventory,text(oldPixiv.lastError.take(180),
+                11f,theme.danger),5)
+        put(body,pixivInventory,10)
         RounderDispatch.render(this,body)
         val inventory=card()
         put(inventory,text("ROUNDER INVENTORY",14f,theme.white,true),0)
