@@ -92,16 +92,21 @@ internal object LegacyPixivInventory {
         val old=prefs(ctx).getStringSet("trees",emptySet()).orEmpty()
         prefs(ctx).edit().putStringSet("trees",old.plus(tree.toString())).apply()
     }
+    /** Some SAF providers report an unknown byte length (-1), even when
+     * the original is readable. Probe only its first byte in that case.
+     */
+    private fun readableOriginal(ctx:Context,uri:Uri):Boolean=runCatching {
+        ctx.contentResolver.openFileDescriptor(uri,"r")?.use{file->
+            if(file.statSize>0L)true
+            else if(file.statSize==0L)false
+            else java.io.FileInputStream(file.fileDescriptor).use{it.read()!=-1}
+        }?:false
+    }.getOrDefault(false)
     /** Only verified files suppress a network request, never a DB row alone. */
     fun hasPage(ctx:Context,id:String,index:Int):Boolean{
         if(id.isBlank()||index<0)return false
-        val candidates=Db(ctx).use{it.pageUris(id,index)}
-        return candidates.any{str->
-            runCatching{
-                ctx.contentResolver.openFileDescriptor(Uri.parse(str),"r")?.use{
-                    it.statSize>0L
-                }?:false
-            }.getOrDefault(false)
+        return Db(ctx).use{it.pageUris(id,index)}.any{
+            readableOriginal(ctx,Uri.parse(it))
         }
     }
     private fun readTree(ctx:Context,tree:Uri):Int{
@@ -139,8 +144,11 @@ internal object LegacyPixivInventory {
                             continue
                         }
                         val page=LegacyPixivFilename.parse(filename)?:continue
-                        val size=if(c.isNull(3))0L else c.getLong(3)
+                        val reported=if(c.isNull(3))-1L else c.getLong(3)
                         val original=DocumentsContract.buildDocumentUriUsingTree(tree,id)
+                        if(reported==0L)continue
+                        val size=if(reported>0L)reported else
+                            if(readableOriginal(ctx,original))1L else 0L
                         if(size<=0L)continue
                         db.importPage(page,filename,original,tree.toString(),size,seen)
                         files++
@@ -194,9 +202,11 @@ internal object LegacyPixivInventory {
             catch(t:Exception){failed++;lastError=t.message?:t.javaClass.simpleName}
         }
         count+=runCatching{readVisible(app)}.getOrDefault(0)
-        prefs(app).edit().putLong("checked",System.currentTimeMillis())
-            .putString("error",if(failed==0)null
-                else "$failed folder(s) unavailable: "+lastError.take(160)).apply()
+        val editor=prefs(app).edit().putString("error",if(failed==0)null
+            else "$failed folder(s) unavailable: "+lastError.take(160))
+        if(failed==0)editor.putLong("checked",System.currentTimeMillis())
+        else editor.putLong("checked",0L)
+        editor.apply()
         return count
     }
     fun refreshIfDue(ctx:Context,intervalMs:Long=12L*60*60*1000):Int{
