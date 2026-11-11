@@ -213,10 +213,12 @@ class KoikatsuCardActivity:Activity(){
         val previewUrl=card.preview ?: if(card.source=="BepisDB")card.download else null
         val preview=ImageView(this).apply{
             scaleType=ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds=true
+            maxHeight=ui.px(this@KoikatsuCardActivity,520)
             setBackgroundColor(ui.raised)
         }
-        v.addView(preview,LinearLayout.LayoutParams(-1,ui.px(this,175)))
-        if(previewUrl!=null)RemoteImageLoader.load(this,preview,previewUrl,card.page)
+        v.addView(preview,LinearLayout.LayoutParams(-1,-2))
+        if(previewUrl!=null)RemoteImageLoader.load(this,preview,previewUrl,card.page,preserveOriginal=true)
         v.addView(ui.action(this,"DOWNLOAD CARD PNG",true){
             status.text="Retrieving "+card.name
             KoikatsuCardAgents.submit(this,card){done->
