@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Asterion Downloader Test</string>
+    <!-- The new app must never write its originals into Kuroha's folders. -->
+    <string name="pixiv_download_folder">AsterionDownloader/Pixiv</string>
+    <string name="gallery_download_folder">AsterionDownloader/Gallery</string>
 </resources>
