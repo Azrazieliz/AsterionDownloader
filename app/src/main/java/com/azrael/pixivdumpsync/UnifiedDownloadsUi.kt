@@ -309,10 +309,15 @@ object UnifiedDownloadsUi {
                 item.job.sourceHost+" · "+when(state){
                     State.DONE->"Saved on device"
                     State.FAILED->when {
+                        OriginalReceiptState.get(a,item.job.id)=="STALLED" ->
+                            "No bytes received for 150s · Stopped stalled OS request · Retry"
                         receipt!=null && !receipt.valid ->
                             "Rejected invalid original · "+receipt.reason.take(100)
-                        present->"Download error "+item.reason
-                        else->"Failed or local file unavailable"
+                        item.reason in 400..599->
+                            "Provider HTTP "+item.reason+" · Connect account or retry"
+                        item.reason>0 ->
+                            "Android transfer failed · reason "+item.reason
+                        else->"No accessible original file · retry or inspect source"
                     }
                     State.ACTIVE->"Android DownloadManager · "+item.bytes+
                         " bytes received"+if(item.total>0) " / "+item.total else ""
@@ -343,6 +348,10 @@ object UnifiedDownloadsUi {
         val loading=ui.text(a,"Loading downloads…",13f,ui.secondary)
         parent.addView(loading,ui.lp(a,8))
         kotlin.concurrent.thread(name="asterion-downloads-read"){
+            val app=a.applicationContext
+            val cleared=runCatching{DirectDownloadRetry.reconcileStalled(app)}
+                .getOrDefault(0)
+            if(cleared>0)ModuleOriginalAgents.startAll(app)
             val result=runCatching{collect(a)}
             a.runOnUiThread {
                 if(a.isFinishing || a.isDestroyed || loading.parent!==parent)
