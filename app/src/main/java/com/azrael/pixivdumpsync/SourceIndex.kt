@@ -746,7 +746,6 @@ object SourceIndex {
         Triple("Anna's Archive","https://annas-archive.org/","BOOKS")
     )
     fun ensure(context:Context){
-        ProviderRetirement.disableExisting(context)
         SourceIndexDb(context).use{db->
             db.migrateOfficialSource(
                 "https://www.omg.xxx/fr/","https://www.omg.porn/fr/")
@@ -800,6 +799,9 @@ object SourceIndex {
                         "native" else "generic")
             }
         }
+        // Suppress retired hosts after all legacy migrations and custom-site
+        // enrollment have finished. Never resurrect an old OMG/Pornhits watch.
+        ProviderRetirement.disableExisting(context)
         val jobs=context.getSystemService(JobScheduler::class.java)
         if(jobs.allPendingJobs.none{it.id==RECURRING_ID})
             jobs.schedule(JobInfo.Builder(RECURRING_ID,
