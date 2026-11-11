@@ -105,8 +105,10 @@ internal object ModuleOriginalAgents {
         val category=folder(area)
         return DirectDownloadTracker.states(context,220).count{state->
             state.job.folder==category && state.status in setOf(
-                DownloadManager.STATUS_PENDING,DownloadManager.STATUS_RUNNING,
-                DownloadManager.STATUS_PAUSED)
+                // A paused OS transfer is not occupying an active network slot.
+                // Counting paused jobs here deadlocks all later requests once
+                // two transfers are waiting on a network/provider recovery.
+                DownloadManager.STATUS_PENDING,DownloadManager.STATUS_RUNNING)
         }
     }
     private fun monitor(context:Context,area:String,slot:Int,id:Long){
