@@ -144,6 +144,14 @@ object KyoraCreatorPreviews {
                         }
                         current=next
                     }else{
+                        if(response.statusCode() in setOf(401,403) &&
+                            SiteSession.bound(a.applicationContext,current)){
+                            // Only reuse a session the user already connected;
+                            // browser verification must succeed legitimately.
+                            val html=BrowserPageFetch.html(a.applicationContext,current)
+                            page=Jsoup.parse(html,current)
+                            break
+                        }
                         require(response.statusCode() in 200..299){
                             "Provider HTTP "+response.statusCode()+
                                 "; connect an authorized account if required"
