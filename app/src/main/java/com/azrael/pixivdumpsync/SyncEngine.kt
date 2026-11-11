@@ -73,10 +73,15 @@ class SyncEngine(private val context: Context) {
         }
         val status=legacy.getOrNull()
         val unavailable=legacy.exceptionOrNull()?.message ?:
-            if(status!=null && status.linkedFolders>0){
+            if(status!=null){
                 when{
-                    status.scanning->"The Kuroha inventory is still scanning"
-                    status.lastError!=null->status.lastError
+                    status.linkedFolders==0 &&
+                        LegacyPixivInventory.legacyKurohaInstalled(context)->
+                        "Kuroha is installed; link its saved Pixiv folder in Settings first"
+                    status.linkedFolders>0 && status.scanning->
+                        "The Kuroha inventory is still scanning"
+                    status.linkedFolders>0 && status.lastError!=null->
+                        status.lastError
                     else->null
                 }
             }else null
