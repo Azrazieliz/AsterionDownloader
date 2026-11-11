@@ -225,8 +225,18 @@ object NovelEpubParser {
      * Caller commits this output to MediaStore only after all chapters succeeded.
      */
     fun writeEpub(output:OutputStream,bookTitle:String,source:String,
-                  chapters:List<NovelText>){
-        require(chapters.isNotEmpty() && chapters.size<=10000)
+                  chapters:List<NovelText>) =
+        writeEpubStreaming(output,bookTitle,source,
+            chapters.map{it.title}){chapters[it]}
+
+    /**
+     * Stream each chapter separately into the EPUB. A multi-thousand-chapter
+     * book must never hold every chapter's text in Android's Java heap.
+     */
+    fun writeEpubStreaming(output:OutputStream,bookTitle:String,source:String,
+                           chapterTitles:List<String>,
+                           readChapter:(Int)->NovelText){
+        require(chapterTitles.isNotEmpty() && chapterTitles.size<=10000)
         val title=quote(bookTitle)
         val identifier=UUID.nameUUIDFromBytes(source.toByteArray(StandardCharsets.UTF_8))
         ZipOutputStream(output.buffered()).use{zip->
@@ -246,7 +256,12 @@ object NovelEpubParser {
             val manifest=StringBuilder()
             val spine=StringBuilder()
             val nav=StringBuilder()
-            for((i,chapter) in chapters.withIndex()){
+            for((i,heading) in chapterTitles.withIndex()){
+                val chapter=readChapter(i)
+                require(chapter.paragraphs.isNotEmpty() &&
+                    chapter.paragraphs.sumOf{it.length}>=20){
+                    "EPUB chapter text missing for "+heading
+                }
                 val n=i+1
                 val id="ch"+n
                 val path="chapter-"+n+".xhtml"
