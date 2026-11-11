@@ -35,7 +35,7 @@ object AsterionInAppUpdater {
     private const val MAX_APK = 550L * 1024 * 1024
     private val lock = AtomicBoolean(false)
     private val versionPattern = Regex(
-        """^asterion-downloader-v(\d+)\.(\d+)\.(\d+)-(preview|release|production)-[a-f0-9]{8,40}$""",
+        """^asterion-downloader-v(\d+)\.(\d+)\.(\d+)-(preview|release|production|acceptance)-[a-f0-9]{8,40}$""",
         RegexOption.IGNORE_CASE
     )
     private val hashPattern = Regex("""^([A-Fa-f0-9]{64})\s+\*?(.+)$""")
@@ -132,8 +132,20 @@ object AsterionInAppUpdater {
         }
     }
 
+    /** Acceptance is a separate fixed-signature channel. Never offer an
+     * unrelated production or ephemeral CI pilot APK to this package.
+     */
+    internal fun channelForPackage(packageName:String):String=when {
+        packageName.endsWith(".nocturne")->"preview"
+        packageName.endsWith(".acceptance")->"acceptance"
+        else->"release"
+    }
+    internal fun matchesChannel(expected:String,actual:String):Boolean=
+        if(expected=="release")actual in setOf("release","production")
+        else expected==actual
+
     private fun discover(context: Context): Update? {
-        val isPreview = context.packageName.endsWith(".nocturne")
+        val expectedChannel = channelForPackage(context.packageName)
         val current = parts(currentVersion(context)) ?: listOf(0, 0, 0)
         val results = JSONArray(readBounded(REPO + "/releases?per_page=40", 450_000))
         var best: Update? = null
@@ -143,12 +155,16 @@ object AsterionInAppUpdater {
             val tag = release.optString("tag_name")
             val match = versionPattern.matchEntire(tag) ?: continue
             val channel = match.groupValues[4].lowercase(Locale.ROOT)
-            if (isPreview != (channel == "preview")) continue
+            if (!matchesChannel(expectedChannel,channel)) continue
             val v = match.groupValues.subList(1, 4).map { it.toInt() }
             if (!newer(v, current) || (best != null && !newer(v, best.versionParts))) continue
             val version = v.joinToString(".")
             val filename = "Asterion-Downloader-v" + version +
-                if (isPreview) "-Preview.apk" else "-Release.apk"
+                when(expectedChannel){
+                    "preview" -> "-Preview.apk"
+                    "acceptance" -> "-Acceptance.apk"
+                    else -> "-Release.apk"
+                }
             val assets = release.optJSONArray("assets") ?: continue
             var apkUrl: String? = null
             var checksumUrl: String? = null
