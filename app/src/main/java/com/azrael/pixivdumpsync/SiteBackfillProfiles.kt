@@ -164,8 +164,12 @@ internal object SiteBackfillProfiles {
                 if(results.size>=3000)break
             }
             for(image in content.select("img")){
+                // A listing's lazy data-src and ordinary img[src] are usually
+                // preview images. Download originals only when the publisher
+                // explicitly supplies a full-resolution attribute or an
+                // image link (handled in the anchor loop above).
                 for(attr in listOf("data-full","data-original","data-full-src",
-                    "data-highres","data-src","src")){
+                    "data-highres")){
                     val raw=image.attr(attr)
                     if(raw.isBlank())continue
                     record(raw,image.attr("alt"))
