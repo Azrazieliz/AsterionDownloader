@@ -8,6 +8,18 @@ import org.junit.Test
  * Device acceptance must separately confirm simultaneous saved receipts.
  */
 class ModuleAgentTopologyTest {
+    @Test fun pausedOrFailedTransferDoesNotStarveThePair(){
+        assertTrue(ModuleOriginalAgents.occupiesActiveSlot(
+            android.app.DownloadManager.STATUS_RUNNING))
+        assertTrue(ModuleOriginalAgents.occupiesActiveSlot(
+            android.app.DownloadManager.STATUS_PENDING))
+        assertFalse(ModuleOriginalAgents.occupiesActiveSlot(
+            android.app.DownloadManager.STATUS_PAUSED))
+        assertFalse(ModuleOriginalAgents.occupiesActiveSlot(
+            android.app.DownloadManager.STATUS_FAILED))
+        assertFalse(ModuleOriginalAgents.occupiesActiveSlot(
+            android.app.DownloadManager.STATUS_SUCCESSFUL))
+    }
     @Test fun exactlyTwoWorkersPerModule(){
         assertEquals(2,ModuleOriginalAgents.AGENTS_PER_MODULE)
         assertTrue(ModuleOriginalAgents.MODULES.size>=16)
