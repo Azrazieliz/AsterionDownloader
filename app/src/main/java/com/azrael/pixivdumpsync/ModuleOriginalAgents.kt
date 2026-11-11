@@ -166,9 +166,11 @@ internal object ModuleOriginalAgents {
         lane.remaining.set(AGENTS_PER_MODULE)
         repeat(AGENTS_PER_MODULE){slot->
             lane.executor.submit {
-                BackfillPerformance.backgroundWorker()
-                status(app,area,slot,"STARTED")
+                // The module must release its active flag even if Android
+                // rejects thread-priority initialization or status logging.
                 try {
+                    BackfillPerformance.backgroundWorker()
+                    status(app,area,slot,"STARTED")
                     var handled=0
                     while(AppPower.enabled(app) && handled<40 &&
                         !Thread.currentThread().isInterrupted){
