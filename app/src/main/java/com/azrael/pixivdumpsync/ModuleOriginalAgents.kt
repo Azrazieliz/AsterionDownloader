@@ -135,8 +135,9 @@ internal object ModuleOriginalAgents {
             // The monitor owns no byte transfers. It does own liveness:
             // release a genuinely zero-byte OS stall even when the user is
             // not keeping the Downloads page open on the phone.
-            if(statusValue in setOf(DownloadManager.STATUS_PENDING,
-                    DownloadManager.STATUS_RUNNING) && system?.second==0L){
+            if((statusValue==DownloadManager.STATUS_PENDING ||
+                    statusValue==DownloadManager.STATUS_RUNNING) &&
+                system?.second==0L){
                 val recovered=DirectDownloadRetry.reconcileStalled(context)
                 if(recovered>0){
                     status(context,area,slot,"ZERO_BYTE_STALL_NEEDS_RETRY")
