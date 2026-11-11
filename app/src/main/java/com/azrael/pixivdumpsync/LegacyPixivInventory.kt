@@ -80,6 +80,15 @@ internal object LegacyPixivInventory {
     data class Status(val savedPages:Int,val linkedFolders:Int,
                       val lastError:String?,val scanning:Boolean)
     private fun prefs(ctx:Context)=ctx.getSharedPreferences(PREF,0)
+    /** A separate app must not assume it can inspect Kuroha's private DB. */
+    fun legacyKurohaInstalled(ctx:Context):Boolean{
+        if(ctx.packageName=="com.azrael.pixivdumpsync")return false
+        return runCatching{
+            @Suppress("DEPRECATION")
+            ctx.packageManager.getPackageInfo("com.azrael.pixivdumpsync",0)
+            true
+        }.getOrDefault(false)
+    }
     fun status(ctx:Context):Status=Db(ctx).use{db->
         Status(db.count(),prefs(ctx).getStringSet("trees",emptySet())
             .orEmpty().size,prefs(ctx).getString("error",null),refreshing.get())
