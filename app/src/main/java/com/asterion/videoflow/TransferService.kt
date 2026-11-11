@@ -93,9 +93,15 @@ object VideoEngine {
             val db=VideoDb(context)
             db.recover()
             try { YtDlp.init(context.applicationContext) }
-            catch(t:Exception) {
-                db.next()?.let { db.update(it.id,"error",error="Video engine unavailable: ${t.message}") }
-                onStatus("Video engine initialization failed")
+            catch(t:Throwable) {
+                // Native Android loader failures are LinkageError, NOT
+                // Exception. Uncaught errors previously killed the entire
+                // worker, leaving unrelated queued jobs apparently idle.
+                if(t is VirtualMachineError || t is ThreadDeath)throw t
+                val reason=t.message?:t.javaClass.simpleName
+                db.next()?.let { db.update(it.id,"error",
+                    error="Video engine unavailable: "+reason.take(180)) }
+                onStatus("Video engine failed to initialize: "+reason.take(70))
                 return
             }
             fun drainQueued(maxItems:Int) {
@@ -134,7 +140,11 @@ object VideoEngine {
                         com.azrael.pixivdumpsync.NduUploadService.launch(context)
                     }
                     onStatus("Saved ${next.title}")
-                } catch(t:Exception) {
+                } catch(t:Throwable) {
+                    // Preserve VM-fatal conditions, but convert extractor JNI
+                    // linkage errors into a durable per-file error instead of
+                    // crashing the process and stranding all other transfers.
+                    if(t is VirtualMachineError || t is ThreadDeath)throw t
                     if(!db.ownsClaim(next.id,next.lease)){
                         // Another process, pause or restart owns the current
                         // state. Do not overwrite that state from this worker.
