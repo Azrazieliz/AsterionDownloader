@@ -457,20 +457,7 @@ class AsterionHomeActivity:Activity(){
             "Books"->renderBooks()
             "Toonily"->renderToonily()
             "Torrents"->renderTorrents()
-            "Assets"->{
-                AssetsPanel.render(this,body){render()}
-                SourceIndexPanel.render(this,body,"ASSETS")
-                val expanded=getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
-                    .getBoolean("asset_families",false)
-                put(body,button(if(expanded)"HIDE STUDIO / MMD / LIVE2D"
-                    else "STUDIO / MMD / LIVE2D / ANIMATION"){
-                    getSharedPreferences("asterion_extra_categories",MODE_PRIVATE)
-                        .edit().putBoolean("asset_families",!expanded).apply()
-                    render()
-                },10)
-                if(expanded)ContentVerticalsPanel.render(
-                    this,body,ContentVerticalsPanel.Group.ASSETS){render()}
-            }
+            "Assets"->AssetsPanel.render(this,body){render()}
             "Search"->AsterionSearchHub.render(this,body,{render()})
             "Recommend"->AsterionSuggestedUi.render(this,body)
             "CreatorDiscovery"->AsterionRecommendations.render(this,body){render()}
