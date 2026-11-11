@@ -53,15 +53,25 @@ object BrowserPageFetch {
                             const anchors=[...document.querySelectorAll('a[href],option[value]')]
                                 .slice(0,10000).map(el=>{
                                     const img=el.querySelector('img');
+                                    const poster=el.querySelector('video[poster]');
                                     const keys=['src','data-src','data-original','data-lazy-src',
-                                        'data-cfsrc','data-lazy','data-full','srcset'];
+                                        'data-cfsrc','data-lazy','data-full','data-full-src',
+                                        'data-highres','srcset'];
                                     const cover=img?'<img '+keys.map(k=>k+'="'+
-                                        esc(img.getAttribute(k)||'')+'"').join(' ')+'/>':'';
-                                    return '<a href="'+esc(el.getAttribute('href')||
-                                        el.getAttribute('value')||'')+'" class="'+
-                                        esc(el.className||'')+'" rel="'+
-                                        esc(el.getAttribute('rel')||'')+'">'+cover+
+                                        esc(img.getAttribute(k)||'')+'"').join(' ')+'/>':
+                                        poster?'<img src="'+esc(poster.getAttribute('poster'))+'"/>':'';
+                                    const link='<a href="'+esc(el.getAttribute('href')||
+                                        el.getAttribute('value')||'')+'" id="'+esc(el.id||'')+
+                                        '" class="'+esc(el.className||'')+'" rel="'+
+                                        esc(el.getAttribute('rel')||'')+'" title="'+
+                                        esc(el.getAttribute('title')||'')+'">'+cover+
                                         esc((el.innerText||el.textContent||'').slice(0,220))+'</a>';
+                                    // Preserve enough original DOM context for
+                                    // native provider-specific gallery selectors.
+                                    const tile=el.closest('article,.post-card,.video-item,'+
+                                        '.gallery-item,.post-item,.media-item,.card');
+                                    return tile?'<article class="'+esc(tile.className||'')+
+                                        '">'+link+'</article>':link;
                                 }).join('');
                             const reader=document.querySelectorAll(
                                 '.reading-content img,.chapter-content img,#reader img,'+
@@ -71,12 +81,26 @@ object BrowserPageFetch {
                                 document.querySelectorAll('main img,article img,img[data-src]'))]
                                 .slice(0,2500).map(el=>{
                                 const keys=['src','data-src','data-original','data-lazy-src',
-                                    'data-cfsrc','data-lazy','data-full','srcset'];
+                                    'data-cfsrc','data-lazy','data-full','data-full-src',
+                                    'data-highres','srcset'];
                                 return '<img class="'+esc(el.className||'')+'" '+keys.map(k=>
                                     k+'="'+esc(el.getAttribute(k)||'')+'"').join(' ')+'/>';
                             }).join('');
-                            return '<html><head><title>'+esc(title)+'</title></head><body>'+
-                                anchors+'<div id="reader">'+images+'</div></body></html>';
+                            const chapter=document.querySelector(
+                                '#article,#chapter-content,.chapter-content,'+
+                                '#chapterContent,.reading-content,.read-content,'+
+                                '.novel-content,#chapter-body,#readerarea');
+                            const chapterTitle=chapter?.querySelector('h1,h2,h3,h4')?.innerText||
+                                document.querySelector('h1,h2,h3,h4')?.innerText||'';
+                            const paragraphs=chapter?[...chapter.querySelectorAll('p')]
+                                .slice(0,1000).map(p=>'<p>'+
+                                    esc((p.innerText||p.textContent||'').slice(0,20000))+
+                                    '</p>').join(''):'';
+                            return '<html><head><title>'+esc(title)+
+                                '</title></head><body><h4>'+esc(chapterTitle)+
+                                '</h4>'+anchors+'<main><div id="article">'+
+                                paragraphs+'</div><div id="reader">'+images+
+                                '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
                                 .getOrNull()
