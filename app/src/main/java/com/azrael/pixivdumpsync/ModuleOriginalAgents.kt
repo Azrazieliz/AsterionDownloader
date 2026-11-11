@@ -120,12 +120,28 @@ internal object ModuleOriginalAgents {
         while(AppPower.enabled(context) &&
             !Thread.currentThread().isInterrupted &&
             SystemClock.elapsedRealtime()<deadline){
-            val statusValue=manager.query(
+            val system=manager.query(
                 DownloadManager.Query().setFilterById(id))?.use{cursor->
                 if(cursor.moveToFirst()){
-                    val index=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                    if(index>=0)cursor.getInt(index) else null
+                    val statusIndex=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val bytesIndex=cursor.getColumnIndex(
+                        DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                    if(statusIndex>=0)Pair(cursor.getInt(statusIndex),
+                        if(bytesIndex>=0)cursor.getLong(bytesIndex) else -1L)
+                    else null
                 }else null
+            }
+            val statusValue=system?.first
+            // The monitor owns no byte transfers. It does own liveness:
+            // release a genuinely zero-byte OS stall even when the user is
+            // not keeping the Downloads page open on the phone.
+            if(statusValue in setOf(DownloadManager.STATUS_PENDING,
+                    DownloadManager.STATUS_RUNNING) && system?.second==0L){
+                val recovered=DirectDownloadRetry.reconcileStalled(context)
+                if(recovered>0){
+                    status(context,area,slot,"ZERO_BYTE_STALL_NEEDS_RETRY")
+                    return
+                }
             }
             if(statusValue==DownloadManager.STATUS_FAILED){
                 status(context,area,slot,"SYSTEM_FAILED")
