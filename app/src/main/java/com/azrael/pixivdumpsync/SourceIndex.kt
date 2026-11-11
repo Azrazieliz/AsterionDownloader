@@ -493,27 +493,36 @@ internal object SourceIndexParser {
         val out=LinkedHashMap<String,IndexedItem>()
         val scoped=doc.select("article a[href],main a[href],.post a[href],.posts a[href],"+
             ".gallery a[href],.entry a[href],.item a[href],.content a[href],"+
-            ".video a[href],.thumb a[href],a[href*='/post/'],a[href*='/view/']")
+            ".video a[href],.thumb a[href],.video-preview-item a[href],"+
+            ".card__cover a[href],.card__content a[href],.card__title a[href],"+
+            "a[href*='/post/'],a[href*='/view/']")
         val candidates=if(scoped.isEmpty())doc.select("a[href]") else scoped
         for(link in candidates.take(8000)){
             val url=link.absUrl("href").substringBefore('#')
             if(!safe(url)||!sameSite(base,url)||junk.containsMatchIn(url))continue
             val path=URI(url).path.orEmpty()
             val direct=media.containsMatchIn(url)
+            val knownVideo=area in setOf("ADULT","HENTAI","VIDEOS","CREATORS") &&
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url)
             val detail=path.count{it=='/'}>=2 || path.endsWith(".html") ||
                 path.contains("/view")||path.contains("/post")||path.contains("/watch") ||
                 path.contains("/video")||path.contains("/product")||path.contains("/gallery")
-            if(!direct && !detail)continue
-            val type=kind(url,area)
+            if(!direct && !detail && !knownVideo)continue
+            val type=if(knownVideo)"video" else kind(url,area)
             if(area=="BOOKS" && type!="epub" && !(path.contains("novel")||path.contains("book")))continue
             if(area=="GAMES" && type !in listOf("torrent","apk","archive") &&
                 !(path.contains("game")||path.contains("view")))continue
             val title=link.attr("title").ifBlank{link.text()}.ifBlank{
                 link.selectFirst("img")?.attr("alt").orEmpty()
             }.trim().take(180)
-            if(title.length<3 || title.equals("next",true) || title.equals("previous",true))continue
-            val image=preview(link)
-            if(!IndexedMediaQuality.isMedia(url,title,image,area))continue
+            if(title.length<3 || IndexedMediaQuality.navigationTitle(title))continue
+            val image=preview(link)?:link.closest(".card,.video-preview-item")
+                ?.selectFirst("img")?.let{SitePreviewImage.best(it)}
+            // Exact native video-page recognition is stronger evidence than
+            // the generic multi-segment/thumbnail heuristic. JAVIDEO uses
+            // localized /en/fc2ppv-... links and HentaiBros uses one slug.
+            if(!IndexedMediaQuality.isMedia(url,title,image,area) &&
+                !knownVideo)continue
             out.putIfAbsent(url,IndexedItem(url,title,image,base,area,type,clock,false))
             require(out.size<5000){
                 "Provider page exceeds 5000 discovered originals; cursor is not advanced"
