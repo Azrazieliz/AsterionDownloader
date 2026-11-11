@@ -102,7 +102,11 @@ object AsterionAdultHub {
         }
         val indexed=SourceIndex.items(a,area,1000)
             .asSequence()
-            .filter{realMedia(it) && !it.preview.isNullOrBlank() &&
+            // A provider redirect must never relabel another website's
+            // videos as its own. In particular, OMG and FreePornVideos
+            // must not share thumbnails merely because a redirect succeeded.
+            .filter{SourceIndexParser.sameSite(it.source,it.url) &&
+                realMedia(it) && !it.preview.isNullOrBlank() &&
                 SearchRanking.validUrl(it.preview)}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .sortedByDescending{it.discoveredAt}
@@ -125,7 +129,8 @@ object AsterionAdultHub {
         // authenticated native index has discovered the originals.
         val publicBySite=sources.associate{site->
             site.host to KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
-                .filter{publicMedia(it.url,it.title,it.cover)}
+                .filter{SourceIndexParser.sameSite(site.url,it.url) &&
+                    publicMedia(it.url,it.title,it.cover)}
         }
         val hasVisual=bySite.values.any{it.isNotEmpty()} ||
             searchBySite.values.any{it.isNotEmpty()} ||
