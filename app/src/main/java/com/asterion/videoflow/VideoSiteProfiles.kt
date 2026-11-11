@@ -27,10 +27,10 @@ internal object VideoSiteProfiles {
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
-        Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:video|videos|watch)/[^/?#]+""")),
-        Route("hentaibros.net",Regex("""(?i)^/[a-z0-9][a-z0-9_-]{5,180}/?$""")),
+        Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
+        // Keep native title slugs and /watch/ routes in one provider profile.
+        Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
         Route("mp4hentai.com",Regex("""(?i)^/(?!category/)(?:video|watch|hentai)/[^/?#]+""")),
-        Route("hentaibros.net",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("onlyhentaistuff.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("3dhentaix.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
@@ -63,6 +63,10 @@ internal object VideoSiteProfiles {
         val path=uri.rawPath.orEmpty()+uri.rawQuery?.let{"?"+it}.orEmpty()
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
+        if(domain(url)=="hentaibros.net" &&
+            uri.path.orEmpty().trim('/') in setOf(
+                "latest-videos","longest-videos","random-videos",
+                "register","login","about","privacy","contact"))return false
         return rule.video.containsMatchIn(path)
     }
     fun next(doc:Document,source:String,current:String):String? {
