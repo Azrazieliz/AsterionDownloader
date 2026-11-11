@@ -88,6 +88,16 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return writableDatabase.insertWithOnConflict("videos", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
     }
+    /** Per-row authorization: crawling a followed website is not an
+     * explicit selection by the user, even if the crawl found a valid page.
+     */
+    fun requestOrigin(id:Long):String? =
+        readableDatabase.rawQuery(
+            "SELECT request_origin FROM videos WHERE id=? LIMIT 1",
+            arrayOf(id.toString())).use { cursor ->
+            if(cursor.moveToFirst())cursor.getString(0) else null
+        }
+
     fun hasVideo(url:String):Boolean {
         val normalized=WebDiscovery.normalize(url)?:return false
         return readableDatabase.rawQuery(
