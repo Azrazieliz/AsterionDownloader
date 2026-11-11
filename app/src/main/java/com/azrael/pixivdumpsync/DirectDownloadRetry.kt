@@ -199,10 +199,13 @@ object DirectDownloadRetry {
             // pages require the owner to reconnect the provider manually.
             val loginPage=badReceipt && receipt!!.reason.contains(
                 "HTML/XML error or access page")
+            val manualResume=forceId==record.id &&
+                (state.status==DownloadManager.STATUS_PAUSED ||
+                    OriginalReceiptState.get(ctx,record.id)=="STALLED")
             val due=if(badReceipt)
                 forceId==record.id ||
                     (!loginPage && record.attempts<2 && now>=record.after)
-                else DirectRetryPolicy.shouldAttempt(
+                else manualResume || DirectRetryPolicy.shouldAttempt(
                     state.status==DownloadManager.STATUS_FAILED,state.reason,
                     record.attempts,record.after,now,forceId==record.id)
             if(!due)continue
