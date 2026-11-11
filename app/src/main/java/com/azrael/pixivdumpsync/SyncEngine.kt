@@ -64,6 +64,9 @@ class SyncEngine(private val context: Context) {
             return stats
         }
 
+        // Import owner-authorized Kuroha/PixiFlow originals BEFORE any Pixiv
+        // requests are planned. The old app/database is never modified.
+        LegacyPixivInventory.refreshIfDue(context)
         NetworkCookies.install(context)
         val db = AppDb(context)
         db.clearTransientNetworkErrors()
@@ -794,7 +797,8 @@ class SyncEngine(private val context: Context) {
 
             val ext = FileStore.extensionFromUrl(imageUrl)
             val filename = "${id}_p${pageIndex}.$ext"
-            val onDisk = FileStore.exists(context, filename)
+            val onDisk = FileStore.exists(context, filename) ||
+                LegacyPixivInventory.hasPage(context,id,pageIndex)
 
             if (db.isPageSaved(id, pageIndex) && onDisk) {
                 continue
@@ -867,8 +871,11 @@ class SyncEngine(private val context: Context) {
             return false
         }
 
-        return files.all {
-            FileStore.exists(context, it)
+        return files.all { filename ->
+            val page=LegacyPixivFilename.parse(filename)
+            FileStore.exists(context,filename) ||
+                (page!=null && page.illustId==illustId &&
+                    LegacyPixivInventory.hasPage(context,illustId,page.index))
         }
     }
 
