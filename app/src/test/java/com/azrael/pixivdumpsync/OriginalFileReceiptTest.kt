@@ -36,4 +36,27 @@ class OriginalFileReceiptTest {
         assertTrue(OriginalFileReceipt.inspect("anim.gif",gif,ByteArray(0),2048).valid)
         assertFalse(OriginalFileReceipt.inspect("anim.webp",gif,ByteArray(0),2048).valid)
     }
+    @Test fun realArchivePassesAndTruncationFails(){
+        val output=java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(output).use{zip->
+            zip.putNextEntry(java.util.zip.ZipEntry("mimetype"))
+            zip.write("application/epub+zip".toByteArray())
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("OEBPS/chapter.xhtml"))
+            zip.write("<html>Chapter one</html>".toByteArray())
+            zip.closeEntry()
+        }
+        val bytes=output.toByteArray()
+        fun inspect(data:ByteArray)=OriginalFileReceipt.inspect("real.epub",
+            data.copyOfRange(0,minOf(512,data.size)),
+            data.copyOfRange(maxOf(0,data.size-65557),data.size),data.size.toLong())
+        assertTrue(inspect(bytes).valid)
+        assertFalse(inspect(bytes.copyOf(bytes.size-15)).valid)
+    }
+    @Test fun errorJsonIsNotAnAssetOriginal(){
+        val body="""{"error":"authentication required"}"""
+            .padEnd(4096,' ').toByteArray()
+        assertFalse(OriginalFileReceipt.inspect("source.bin",
+            body.copyOf(512),ByteArray(0),body.size.toLong()).valid)
+    }
 }
