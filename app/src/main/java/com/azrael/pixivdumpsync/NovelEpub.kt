@@ -258,8 +258,7 @@ object NovelEpubParser {
             val nav=StringBuilder()
             for((i,heading) in chapterTitles.withIndex()){
                 val chapter=readChapter(i)
-                require(chapter.paragraphs.isNotEmpty() &&
-                    chapter.paragraphs.sumOf{it.length}>=20){
+                require(chapter.paragraphs.isNotEmpty()){
                     "EPUB chapter text missing for "+heading
                 }
                 val n=i+1
