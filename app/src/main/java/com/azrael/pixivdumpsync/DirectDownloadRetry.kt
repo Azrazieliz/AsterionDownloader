@@ -159,7 +159,9 @@ object DirectDownloadRetry {
                     }?:false
             }.getOrDefault(false)
             if(!stillEmpty)continue
-            if(runCatching{manager.remove(state.job.id)}.isFailure)continue
+            // Android returns 0 when the request was already gone; never
+            // label a completed/unrelated file stalled in that race.
+            if(runCatching{manager.remove(state.job.id)}.getOrDefault(0)<=0)continue
             DirectRetryVault.remember(ctx,original.copy(
                 attempts=DirectTransferStallPolicy.TERMINAL_RETRY_ATTEMPTS,
                 after=Long.MAX_VALUE))
