@@ -21,6 +21,7 @@
     </queries>
 
     <application
+        android:name=".AsterionApplication"
         android:allowBackup="false"
         android:icon="@drawable/ic_asterion_downloader"
         android:roundIcon="@drawable/ic_asterion_downloader"
