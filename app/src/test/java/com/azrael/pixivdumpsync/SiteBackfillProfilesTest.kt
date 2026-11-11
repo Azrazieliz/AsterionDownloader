@@ -76,6 +76,35 @@ class SiteBackfillProfilesTest {
         assertEquals(1,SiteBackfillProfiles.entries(doc,base,"COSPLAY",0L)!!.size)
         assertEquals(base+"page/2/",SiteBackfillProfiles.next(doc,base,base))
     }
+    @Test fun nativeSingleSlugAndNumericCosplayGalleriesSurviveGenericMediaFiltering(){
+        val tele="https://cosplaytele.com/"
+        val telePage=Jsoup.parse("""<article class="post-card">
+           <h2><a href="/scheherazade/">
+             <img src="https://cosplaytele.com/wp-content/uploads/photo.webp"
+                  alt="Scheherazade cosplay photo collection"/>
+             Scheherazade Cosplay Collection</a></h2></article>""",tele)
+        val cards=SourceIndexParser.entries(telePage,tele,"COSPLAY",100L)
+        assertEquals("Valid single-slug native gallery must not be discarded",
+            1,cards.size)
+        assertEquals("https://cosplaytele.com/scheherazade/",cards.single().url)
+        val kiutaku="https://kiutaku.com/"
+        val kiutakuPage=Jsoup.parse("""<main><article class="post-card">
+            <a href="/4495"><img src="https://kiutaku.com/photo.webp"
+                 alt="Original cosplay photo gallery"/></a>
+            </article></main>""",kiutaku)
+        val numeric=SourceIndexParser.entries(kiutakuPage,kiutaku,"COSPLAY",100L)
+        assertEquals(1,numeric.size)
+        assertEquals("https://kiutaku.com/4495/",numeric.single().url)
+    }
+    @Test fun nativeGalleryPathRejectsExternalOrNavigationLinks(){
+        val home="https://cosplaytele.com/"
+        val page=Jsoup.parse("""<main>
+           <a href="/login/">Log in</a>
+           <a href="https://unknown.invalid/other-post/">Off-site gallery</a>
+           <a href="/page/5/">Navigation</a>
+           </main>""",home)
+        assertTrue(SourceIndexParser.entries(page,home,"COSPLAY",100L).isEmpty())
+    }
     @Test fun otherProvidersStillUseOriginalGenericPath(){
         assertNull(SiteBackfillProfiles.entries(
             Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),
