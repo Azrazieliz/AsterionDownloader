@@ -15,6 +15,21 @@ class AsterionInAppUpdaterTest {
         assertNull(AsterionInAppUpdater.parts("unknown"))
     }
 
+    @Test fun acceptanceUsesOnlyItsOwnVersionedUpdateChannel(){
+        assertEquals("acceptance",AsterionInAppUpdater.channelForPackage(
+            "com.azrael.pixivdumpsync.acceptance"))
+        assertEquals("preview",AsterionInAppUpdater.channelForPackage(
+            "com.azrael.pixivdumpsync.nocturne"))
+        assertEquals("release",AsterionInAppUpdater.channelForPackage(
+            "com.azrael.pixivdumpsync"))
+        assertTrue(AsterionInAppUpdater.matchesChannel("acceptance","acceptance"))
+        assertFalse(AsterionInAppUpdater.matchesChannel("acceptance","preview"))
+        assertFalse(AsterionInAppUpdater.matchesChannel("acceptance","release"))
+        assertFalse(AsterionInAppUpdater.matchesChannel("preview","acceptance"))
+        assertTrue(AsterionInAppUpdater.matchesChannel("release","production"))
+        assertFalse(AsterionInAppUpdater.matchesChannel("release","acceptance"))
+    }
+
     @Test fun updateDownloadOnlyAcceptsTrustedHttpsDomains() {
         assertTrue(AsterionInAppUpdater.trusted(
             "https://github.com/Azrazieliz/AsterionDownloader/releases/download/a/b.apk"))
