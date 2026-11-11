@@ -88,6 +88,32 @@ class NovelEpubTest {
             NovelEpubParser.nextReader(doc,
                 "https://freewebnovel.com/novel/i-am-the-fated-villain",current))
     }
+    @Test fun dualCultivationReaderUsesRealBrowserTitleWhenHeadingOnlyShowsNovel(){
+        val sourceUrl="https://freewebnovel.com/novel/dual-cultivation-novel"
+        val chapterUrl=sourceUrl+"/chapter-1"
+        val html="""<html><head>
+           <title>Dual Cultivation - Chapter 1 Su Yang | Free Web Novel</title>
+           <meta property="og:title" content="Chapter 1 Su Yang"/>
+           </head><body><h1>Dual Cultivation</h1>
+           <div id="article"><p>This is an authentic chapter paragraph with a
+             sufficiently long text body, the current source may render chapter
+             numbers in document title rather than a heading element.</p></div>
+           <a id="next_url" href="/novel/dual-cultivation-novel/chapter-2">
+             Next Chapter</a></body></html>"""
+        val document=Jsoup.parse(html,chapterUrl)
+        val chapter=NovelEpubParser.readerChapter(document,chapterUrl)
+        assertEquals(1.0,chapter.number,0.0)
+        assertTrue(chapter.title.contains("Chapter 1"))
+        assertEquals(1,NovelEpubParser.chapterText(document).paragraphs.size)
+        assertEquals(sourceUrl+"/chapter-2",
+            NovelEpubParser.nextReader(document,sourceUrl,chapterUrl))
+    }
+    @Test fun freeWebNovelUsesDisplayedNumberNotOpaqueUrlIdInMetadata(){
+        val url="https://freewebnovel.com/novel/example/chapter-1596"
+        val page=Jsoup.parse("""<html><head><title>Book - Chapter 1314: Agreement | Free Web Novel</title>
+          </head><body><h1>Book</h1></body></html>""",url)
+        assertEquals(1314.0,NovelEpubParser.readerChapter(page,url).number,0.0)
+    }
     @Test fun readerFollowsTrueNextLinkAndUsesChapterHeading(){
         val doc=Jsoup.parse("""<h1>I Am the Fated Villain</h1>
             <h4>Chapter 1314: My Chapter</h4>
