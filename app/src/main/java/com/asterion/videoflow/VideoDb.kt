@@ -156,13 +156,17 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     fun next(): Video? {
         val now=System.currentTimeMillis().toString()
         // Enforce explicit episode order inside ONE recognisable series only.
-        // A queued, failed, paused or retry-waiting earlier episode blocks its
-        // own later episode, not unrelated videos or ordinary photo albums.
+        // Only episodes actually eligible to transfer now block later
+        // episodes in the same series. A paused/failed/held episode or a
+        // not-yet-due retry previously prevented every subsequent episode
+        // from being claimed, leaving the queue idle indefinitely.
         val firstUnfinished=HashMap<String,com.azrael.pixivdumpsync.SequenceOrder.Index>()
         readableDatabase.rawQuery(
             """SELECT url,title,watch_id FROM videos
-               WHERE state NOT IN ('done','full_only_hold')
-               ORDER BY updated ASC LIMIT 10000""",null).use{scan->
+               WHERE state IN ('queued','running')
+                  OR (state='retry_wait' AND retry_after<=?)
+               ORDER BY updated ASC LIMIT 10000""",
+            arrayOf(now)).use{scan->
             while(scan.moveToNext()){
                 val title=scan.getString(1)
                 val series=com.azrael.pixivdumpsync.SequenceOrder
