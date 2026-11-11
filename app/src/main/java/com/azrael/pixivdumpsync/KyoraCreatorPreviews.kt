@@ -20,6 +20,34 @@ object KyoraCreatorPreviews {
     private const val PREF="asterion_kyora_site_previews"
     private val inflight=ConcurrentHashMap.newKeySet<String>()
     private val pool=Executors.newFixedThreadPool(5)
+    // A full provider sweep can finish dozens of previews almost together.
+    // Rebuilding the entire Android source grid for each completion causes
+    // repeated view allocation and can exhaust the UI heap. Coalesce only
+    // redraw callbacks; every provider's actual cache entry remains separate.
+    private class PendingRedraw(var snapshot:Snapshot,
+        var callback:(Snapshot)->Unit)
+    private val pendingRedraws=java.util.WeakHashMap<Activity,PendingRedraw>()
+    private val main=android.os.Handler(android.os.Looper.getMainLooper())
+    private fun deliver(a:Activity,snapshot:Snapshot,onReady:(Snapshot)->Unit){
+        main.post {
+            if(a.isFinishing || a.isDestroyed)return@post
+            val pending=pendingRedraws[a]
+            if(pending!=null){
+                pending.snapshot=snapshot
+                pending.callback=onReady
+            }else{
+                val next=PendingRedraw(snapshot,onReady)
+                pendingRedraws[a]=next
+                main.postDelayed({
+                    if(pendingRedraws[a]===next){
+                        pendingRedraws.remove(a)
+                        if(!a.isFinishing && !a.isDestroyed)
+                            next.callback(next.snapshot)
+                    }
+                },350L)
+            }
+        }
+    }
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
         val obj=JSONObject(raw)
@@ -127,7 +155,7 @@ object KyoraCreatorPreviews {
             }
             a.getSharedPreferences(PREF,0).edit().putString(url,obj.toString()).apply()
             inflight.remove(url)
-            a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)onReady(snapshot)}
+            deliver(a,snapshot,onReady)
         }
     }
 }
