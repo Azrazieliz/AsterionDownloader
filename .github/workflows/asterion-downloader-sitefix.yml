@@ -42,7 +42,7 @@ jobs:
           sed -n '/^        val pref=a.getSharedPreferences("asterion_downloads_ui"/,$p' "$UI" > /tmp/current-downloads-layout
           test -s /tmp/frozen-downloads-layout
           cmp /tmp/frozen-downloads-layout /tmp/current-downloads-layout
-          grep -q 'ModuleOriginalAgents.startAll(a)' "$UI"
+          grep -q 'ModuleOriginalAgents.startAll(a.applicationContext)' "$UI"
           grep -q 'OriginalFileReceipt.verify(a,dm' "$UI"
           grep -q 'KurohaMediaPreview.render' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
           grep -q 'for(site in active+inactive)' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
