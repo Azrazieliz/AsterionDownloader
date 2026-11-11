@@ -17,7 +17,9 @@ import kotlin.concurrent.thread
  * completion indicators.
  */
 object AsterionAdultHub {
-    private val ui=NocturneDesign
+    // Lazy: pure provider-route regression tests must not initialize Android
+    // Color resources before a real Activity exists.
+    private val ui by lazy { NocturneDesign }
     private data class Site(val name:String,val url:String,val source:IndexedSource?){
         val host:String get()=SiteControls.key(url)
     }
