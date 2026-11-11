@@ -101,14 +101,17 @@ internal object ModuleOriginalAgents {
         "STUDY"->"Study";else->"Assets"
 
     }
+    /** Only pending/running OS transfers consume a live transfer quota.
+     * Paused transfers keep their durable queue rows for explicit recovery.
+     */
+    internal fun occupiesActiveSlot(status:Int):Boolean=
+        status==DownloadManager.STATUS_PENDING ||
+        status==DownloadManager.STATUS_RUNNING
+
     private fun activeDirect(context:Context,area:String):Int{
         val category=folder(area)
         return DirectDownloadTracker.states(context,220).count{state->
-            state.job.folder==category && state.status in setOf(
-                // A paused OS transfer is not occupying an active network slot.
-                // Counting paused jobs here deadlocks all later requests once
-                // two transfers are waiting on a network/provider recovery.
-                DownloadManager.STATUS_PENDING,DownloadManager.STATUS_RUNNING)
+            state.job.folder==category && occupiesActiveSlot(state.status)
         }
     }
     private fun monitor(context:Context,area:String,slot:Int,id:Long){
