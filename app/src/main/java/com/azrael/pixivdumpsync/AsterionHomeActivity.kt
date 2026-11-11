@@ -252,7 +252,8 @@ class AsterionHomeActivity:Activity(){
         }
         head.addView(settings,LinearLayout.LayoutParams(dp(43),dp(47)))
         emergencyLabel=text(if(AppPower.enabled(this))"PAUSE" else "RESUME",
-            11f,theme.danger,true).apply{
+            11f,if(AppPower.enabled(this))theme.secondary
+                else android.graphics.Color.rgb(105,212,162),true).apply{
             contentDescription="Pause all sync or resume downloads"
             isClickable=true;isFocusable=true
             setPadding(dp(7),dp(11),dp(7),dp(11))
@@ -401,8 +402,14 @@ class AsterionHomeActivity:Activity(){
     }
     private fun render(){
         navButtons["Queue"]?.text="Downloads"
-        if(::emergencyLabel.isInitialized)
-            emergencyLabel.text=if(AppPower.enabled(this))"PAUSE" else "RESUME"
+        if(::emergencyLabel.isInitialized){
+            val isActive=AppPower.enabled(this)
+            emergencyLabel.text=if(isActive)"PAUSE" else "RESUME"
+            emergencyLabel.setTextColor(if(isActive)theme.secondary
+                else android.graphics.Color.rgb(105,212,162))
+            emergencyLabel.contentDescription=if(isActive)
+                "Pause all downloads and sync" else "Resume downloads and sync"
+        }
         backControl.visibility=if(page in pages && history.isEmpty())View.GONE else View.VISIBLE
         pageContext.text=when(page){
             "Queue"->"Downloads"
