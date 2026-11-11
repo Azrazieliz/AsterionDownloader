@@ -29,8 +29,9 @@ try {
  catch{if([int]$_.Exception.Response.StatusCode -ne 404){throw}}
  if($existing){throw 'Release already exists; refusing to replace signed asset'}
  $note='First install of persistently Windows-signed com.azrael.pixivdumpsync.acceptance. Prior app data is preserved in the older package. Verified build, tests, signer and SHA256. Samsung live downloads and all providers are not yet fully accepted. No access controls bypassed.'
- $body=@{tag_name=$tag;target_commitish=$Commit;name='Asterion Downloader v1.3.51 — Acceptance';draft=$false;prerelease=$true;body=$note} | ConvertTo-Json -Depth 5
- $release=Invoke-RestMethod ($api+'/releases') -Method Post -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 40
+ $body=@{tag_name=$tag;target_commitish=$Commit;name='Asterion Downloader v1.3.51 Acceptance';draft=$false;prerelease=$true;body=$note} | ConvertTo-Json -Compress -Depth 5
+ $utf8=[System.Text.Encoding]::UTF8.GetBytes($body)
+ $release=Invoke-RestMethod ($api+'/releases') -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $utf8 -TimeoutSec 40
  $upload=$release.upload_url -replace '\{\?.*$',''
  foreach($asset in @(@{name=$name;path=$Apk;mime='application/vnd.android.package-archive'},@{name=$shaName;path=$ShaFile;mime='text/plain'})){
   $url=$upload+'?name='+[uri]::EscapeDataString($asset.name)
