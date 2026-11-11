@@ -114,7 +114,7 @@ object DirectDownloadTracker {
                 card.addView(ui.action(a,"OPEN FILE",false){
                     val manager=a.getSystemService(DownloadManager::class.java)
                     val checked=OriginalFileReceipt.verify(
-                        a,manager,item.job.id,item.job.filename)
+                        a,manager,item.job.id,item.job.filename,item.total)
                     OriginalReceiptState.set(a,item.job.id,
                         if(checked.valid)"VERIFIED" else "INVALID")
                     val file=if(checked.valid)
