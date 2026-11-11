@@ -300,6 +300,7 @@ object UnifiedDownloadsUi {
                     receipt?.valid==true -> State.DONE
                 item.status==DownloadManager.STATUS_SUCCESSFUL -> State.FAILED
                 item.status==DownloadManager.STATUS_RUNNING->State.ACTIVE
+                item.status==DownloadManager.STATUS_PAUSED->State.HELD
                 else->State.QUEUED
             }
             val percent=if(state==State.ACTIVE && item.total>0)
@@ -313,10 +314,11 @@ object UnifiedDownloadsUi {
                         present->"Download error "+item.reason
                         else->"Failed or local file unavailable"
                     }
-                    State.ACTIVE->"Android DownloadManager transferring"
-                    else->if(item.status==DownloadManager.STATUS_PAUSED)
-                        "Waiting for Android network / retry"
-                        else "Queued with Android DownloadManager"
+                    State.ACTIVE->"Android DownloadManager · "+item.bytes+
+                        " bytes received"+if(item.total>0) " / "+item.total else ""
+                    State.HELD->"Waiting for Android network / retry · "+
+                        item.bytes+" bytes received"
+                    else->"Queued with Android DownloadManager"
                 },state,percent,item.job.created,{
                     when(state){
                         State.DONE->original?.let{open(a,it,a.contentResolver.getType(Uri.parse(it))?:"*/*")}
@@ -371,7 +373,10 @@ object UnifiedDownloadsUi {
         }
     }
     private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,rows:List<Row>){
-        val transferring=rows.count{it.state==State.ACTIVE}
+        val active=rows.count{it.state==State.ACTIVE}
+        val transferring=rows.count{it.state==State.ACTIVE &&
+            (it.percent?:0)>0}
+        val preparing=active-transferring
         val queued=rows.count{it.state==State.QUEUED}
         val paused=rows.count{it.state==State.PAUSED}
         val attention=rows.count{it.state==State.HELD}
@@ -402,7 +407,7 @@ object UnifiedDownloadsUi {
             parent.addView(notice,ui.lp(a,9))
         }
         parent.addView(ui.text(a,
-            "$transferring transferring · $queued queued · $paused paused · "+
+            "$transferring progressing · $preparing connecting · $queued queued · $paused paused · "+
                 "$attention need action · $failed failed · $saved saved (recent)",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
         val shortcuts=ui.row(a)
@@ -487,15 +492,23 @@ object UnifiedDownloadsUi {
                     "Transferring · "+item.percent+"%"
                     else "Preparing / connecting"
             }
-            main.addView(ui.text(a,label,12f,if(item.state==State.FAILED)
-                ui.danger else ui.primary,true),ui.lp(a,4))
+            val stateColor=when(item.state){
+                State.FAILED->ui.danger
+                State.ACTIVE->android.graphics.Color.rgb(104,214,164)
+                State.PAUSED->ui.secondary
+                State.DONE->ui.primary
+                State.HELD->android.graphics.Color.rgb(242,194,116)
+                State.QUEUED->ui.secondary
+            }
+            main.addView(ui.text(a,label,12f,stateColor,true),ui.lp(a,4))
             main.addView(ui.text(a,item.info.take(110),11f,ui.secondary).apply{
                 maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
             },ui.lp(a,3))
             if(item.state==State.ACTIVE && item.percent!=null){
                 main.addView(ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal).apply{
                     max=100;progress=item.percent
-                    progressTintList=ColorStateList.valueOf(ui.primary)
+                    progressTintList=ColorStateList.valueOf(
+                        android.graphics.Color.rgb(104,214,164))
                 },LinearLayout.LayoutParams(-1,ui.px(a,3)).apply{topMargin=ui.px(a,7)})
             }
             card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
@@ -506,10 +519,24 @@ object UnifiedDownloadsUi {
                     State.HELD->item.actionText?:"SIGN IN"
                     State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText.orEmpty()
                 }
-                card.addView(ui.action(a,command,false){
+                val action=ui.action(a,command,false){
                     item.action()
                     if(item.state!=State.DONE)refresh()
-                },LinearLayout.LayoutParams(ui.px(a,82),-2).apply{
+                }
+                // Pausing is a neutral stop; resuming is a positive action.
+                // Red is reserved exclusively for actual failed transfers.
+                val actionColor=when(command){
+                    "RESUME","START"->android.graphics.Color.rgb(38,105,79)
+                    "RETRY"->android.graphics.Color.rgb(113,83,39)
+                    "PAUSE","HOLD"->ui.raised
+                    else->ui.raised
+                }
+                action.background=ui.touch(a,actionColor,15,
+                    if(command=="RESUME")android.graphics.Color.rgb(92,182,139)
+                    else ui.border)
+                action.setTextColor(if(command=="RESUME")
+                    android.graphics.Color.rgb(226,255,239) else ui.white)
+                card.addView(action,LinearLayout.LayoutParams(ui.px(a,82),-2).apply{
                     leftMargin=ui.px(a,6)
                 })
             }
