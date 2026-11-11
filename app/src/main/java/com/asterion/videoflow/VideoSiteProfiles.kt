@@ -25,7 +25,6 @@ internal object VideoSiteProfiles {
         Route("porntrex.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("tnaflix.com",Regex("""(?i)^/(?:video|videos|hd-videos)/[^/?#]+""")),
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
-        Route("pornhits.com",Regex("""(?i)^/(?:video|watch|videos)/[^/?#]+""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:video|videos|watch)/[^/?#]+""")),
