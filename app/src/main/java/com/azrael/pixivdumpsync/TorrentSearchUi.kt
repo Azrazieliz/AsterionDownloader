@@ -26,7 +26,7 @@ object TorrentSearchUi {
             textSize=15f
         }
         card.addView(field,ui.lp(a,7))
-        val status=ui.text(a,"Native torrent transfer · original files go to Downloads",12f,ui.secondary)
+        val status=ui.text(a,"No torrent transfer started",12f,ui.secondary)
         val magnetOpen=pref.getBoolean(area.name+"_magnet_open",false)
         card.addView(ui.action(a,
             if(magnetOpen)"HIDE MAGNET / .TORRENT IMPORT"
@@ -80,6 +80,7 @@ object TorrentSearchUi {
                     },ui.lp(a,4))
                 item.addView(details,LinearLayout.LayoutParams(0,-2,1f))
                 item.addView(ui.action(a,"FILES",false){
+                    status.text="Retrieving torrent metadata; select files before transfer"
                     ResourceDownloads.route(a,hit.url,when(area){
                         TorrentArea.GAMES->"Games"
                         TorrentArea.BOOKS->"Books"
@@ -124,9 +125,11 @@ object TorrentSearchUi {
         val settings=a.getSharedPreferences("asterion_torrent_source_ui",0)
         val sourcesOpen=settings.getBoolean("sources_"+area.name,false)
         if(shown.isNotEmpty()){
+            val issues=shown.count{!it.error.isNullOrBlank()}
             body.addView(ui.action(a,
                 if(sourcesOpen)"HIDE SOURCES & BACKFILL"
-                else "SOURCES & BACKFILL · "+shown.size,false){
+                else "SOURCES & BACKFILL · "+shown.size+
+                    (if(issues>0)" · "+issues+" issues" else ""),false){
                 settings.edit().putBoolean("sources_"+area.name,!sourcesOpen)
                     .apply()
                 refresh()
