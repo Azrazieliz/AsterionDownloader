@@ -80,7 +80,9 @@ object VideoEngine {
         }
         // The primary PollJobService starts its own work() when FGS startup
         // was denied; secondary also has an independent secondary-process job.
-        return primaryStarted
+        // Either isolated process can continue transferring on its own.
+        // Do not report a failed launch when the second process started.
+        return primaryStarted || secondaryStarted
     }
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
              targetHost:String?=null) {
