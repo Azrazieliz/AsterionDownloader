@@ -243,7 +243,7 @@ object UnifiedDownloadsUi {
             android.provider.MediaStore.MediaColumns.SIZE,
             android.provider.MediaStore.MediaColumns.DATE_ADDED)
         val folders=listOf("Kuroha","PixiFlow","NocturnePixiv",
-            "GalleryFlow","NocturneGallery")
+            "GalleryFlow","NocturneGallery","AsterionDownloader")
         val where=folders.joinToString(" OR "){
             android.provider.MediaStore.MediaColumns.RELATIVE_PATH+" LIKE ?"
         }
