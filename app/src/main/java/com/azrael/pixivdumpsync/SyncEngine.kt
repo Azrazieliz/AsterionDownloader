@@ -797,8 +797,11 @@ class SyncEngine(private val context: Context) {
 
             val ext = FileStore.extensionFromUrl(imageUrl)
             val filename = "${id}_p${pageIndex}.$ext"
-            val onDisk = FileStore.exists(context, filename) ||
+            val savedHere = runCatching{FileStore.exists(context, filename)}
+                .getOrDefault(false)
+            val savedInKuroha = if(savedHere)false else
                 LegacyPixivInventory.hasPage(context,id,pageIndex)
+            val onDisk = savedHere || savedInKuroha
 
             if (db.isPageSaved(id, pageIndex) && onDisk) {
                 continue
@@ -820,7 +823,9 @@ class SyncEngine(private val context: Context) {
                 pageIndex,
                 filename
             )
-            if (TeraboxSettings.enabled(context)) {
+            // Do not queue an upload for a borrowed Kuroha file: the new
+            // package's own FileStore cannot resolve that filename.
+            if (TeraboxSettings.enabled(context) && !savedInKuroha) {
                 CloudUploadQueue(context).use { it.enqueue(filename) }
             }
         }
@@ -873,7 +878,7 @@ class SyncEngine(private val context: Context) {
 
         return files.all { filename ->
             val page=LegacyPixivFilename.parse(filename)
-            FileStore.exists(context,filename) ||
+            runCatching{FileStore.exists(context,filename)}.getOrDefault(false) ||
                 (page!=null && page.illustId==illustId &&
                     LegacyPixivInventory.hasPage(context,illustId,page.index))
         }
