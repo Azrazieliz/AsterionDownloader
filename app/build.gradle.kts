@@ -83,7 +83,7 @@ android {
         // One-off, isolated tester: a different package than the already
         // installed Agents and Acceptance apps. No uninstall/data loss.
         // Its debug signer is CI ephemeral; never offer it as an upgrade.
-        create("testphone") {
+        create("phonepilot") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".testphone1111"
             versionNameSuffix = "-phone-test"
