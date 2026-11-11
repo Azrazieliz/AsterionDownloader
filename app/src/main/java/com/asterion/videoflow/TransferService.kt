@@ -420,6 +420,9 @@ object VideoEngine {
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
         val connected=SiteSession.bound(context,item.url)
+        // Only a genuinely user-selected queued row may use the manual
+        // source-version exception to the automatic full-scene policy.
+        val userRequested=db.requestOrigin(item.id)=="user"
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
         // The Eporner watch page can serve a verification interstitial even
         // though the official embed exposes the publisher's actual player.
@@ -547,7 +550,8 @@ object VideoEngine {
             }
             val decision=FullLengthVideoPolicy.assess(item.title,
                 extracted,link,duration,expected,
-                publisherVerified=publishedRuntime!=null)
+                publisherVerified=publishedRuntime!=null,
+                userExplicitlyRequested=userRequested)
             // Collect comparison evidence even for held videos, without granting
             // full-length status to an uncorroborated provider's own metadata.
             if(duration!=null){
