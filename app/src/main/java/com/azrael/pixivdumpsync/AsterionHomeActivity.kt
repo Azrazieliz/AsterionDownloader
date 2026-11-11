@@ -603,6 +603,15 @@ class AsterionHomeActivity:Activity(){
                         "Series already followed; use its existing Sync controls")
                     render()
                 },9)
+                val snapshot=NovelEpubQueue(this).use{it.snapshot()}
+                put(archive,text(snapshot.complete.toString()+" EPUBs saved · "+
+                    snapshot.active+" collecting · "+snapshot.pending+" queued",
+                    12f,if(snapshot.active>0)android.graphics.Color.rgb(105,212,162)
+                        else theme.secondary),9)
+                if(snapshot.pending>0)put(archive,button("RESUME EPUB DOWNLOADS"){
+                    NovelEpubService.schedule(this)
+                    toast("EPUB queue requested; see Downloads for verified file status")
+                },5)
                 val recent=NovelEpubQueue(this).use{it.list(12)}
                 if(recent.isNotEmpty())
                     put(archive,text("YOUR EPUB DOWNLOADS · "+recent.size,12f,
