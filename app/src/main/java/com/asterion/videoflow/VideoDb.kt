@@ -86,7 +86,22 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             put("request_origin",origin.take(24))
             put("updated", System.currentTimeMillis())
         }
-        return writableDatabase.insertWithOnConflict("videos", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+        val db=writableDatabase
+        if(db.insertWithOnConflict("videos",null,row,
+                SQLiteDatabase.CONFLICT_IGNORE)!=-1L)return true
+        // A user tapping an already indexed video must be able to take over
+        // the previously automated/held row and request that exact original.
+        // Never replace a running transfer or overwrite a completed file.
+        if(origin!="user" || watchId!=0L)return false
+        val statement=db.compileStatement(
+            """UPDATE videos SET request_origin='user',watch_id=0,
+               state='queued',retry_after=0,error=NULL,updated=?
+               WHERE url=? AND state NOT IN ('running','done')
+                 AND (request_origin!='user' OR
+                      state IN ('full_only_hold','retry_wait','error','paused'))""")
+        statement.bindLong(1,System.currentTimeMillis())
+        statement.bindString(2,normalized)
+        return statement.executeUpdateDelete()==1
     }
     /** Per-row authorization: crawling a followed website is not an
      * explicit selection by the user, even if the crawl found a valid page.
