@@ -574,17 +574,16 @@ class AsterionHomeActivity:Activity(){
             })
         }
         put(body,switches,10)
-        // Gallery first, just like Kuroha: source-owned real previews are
-        // visible before the long chapter/EPUB queue and error controls.
-        SourceIndexPanel.render(this,body,if(bookMode=="EPUB")"BOOKS" else "COMICS")
+        // The primary book task remains above website/backfill management.
+        val bookUi=getSharedPreferences("asterion_books_compact_ui",MODE_PRIVATE)
         when(bookMode){
             "EPUB"->{
                 val archive=card()
-                put(archive,text("Whole-novel archive",16f,theme.white,true),0)
-                put(archive,text("Export chapters found at the source into one EPUB. No inferred final chapter count.",12f,theme.secondary),5)
+                put(archive,text("Download a novel · EPUB",16f,theme.white,true),0)
+                put(archive,text("All verified chapters in reading order; partial books remain queued.",12f,theme.secondary),5)
                 val link=edit("Paste a complete novel series URL")
                 put(archive,link,8)
-                put(archive,button("ARCHIVE ENTIRE NOVEL"){
+                put(archive,button("QUEUE COMPLETE EPUB"){
                     val raw=link.text.toString().trim()
                     if(!NovelEpubParser.supportedSeries(raw)){
                         toast("Enter a supported novel series page; forum and individual chapter links are not complete books")
@@ -599,12 +598,30 @@ class AsterionHomeActivity:Activity(){
                 },9)
                 val recent=NovelEpubQueue(this).use{it.list(12)}
                 if(recent.isNotEmpty())
-                    put(archive,text("RECENT NOVEL ARCHIVES",12f,theme.secondary,true),13)
-                for(item in recent){
+                    put(archive,text("YOUR EPUB DOWNLOADS · "+recent.size,12f,
+                        theme.secondary,true),13)
+                val showAll=bookUi.getBoolean("all_recent",false)
+                for(item in recent.take(if(showAll)12 else 3)){
                     val cached=NovelEpubService.cachedCount(this,item.url)
-                    put(archive,text(item.title+" · "+item.state+
-                        " · "+cached+" chapters cached",12f,
-                        if(item.state=="WAIT_LOGIN")theme.danger else theme.secondary),8)
+                    val key="expanded:"+item.url.hashCode()
+                    val expanded=bookUi.getBoolean(key,
+                        item.state in setOf("WAIT_LOGIN","WORKING") ||
+                            !item.error.isNullOrBlank())
+                    val stateColor=when(item.state){
+                        "DONE"->android.graphics.Color.rgb(105,212,162)
+                        "WAIT_LOGIN"->theme.danger
+                        "WORKING"->theme.white
+                        else->theme.secondary
+                    }
+                    put(archive,theme.action(this,
+                        (if(expanded)"▾ " else "▸ ")+item.title+
+                        " · "+item.state+" · "+cached+" chapters",false){
+                        bookUi.edit().putBoolean(key,!expanded).apply()
+                        render()
+                    },7)
+                    if(!expanded)continue
+                    put(archive,text("Current state: "+item.state,12f,
+                        stateColor,true),4)
                     val control=theme.row(this)
                     val sync=Switch(this).apply{
                         text="Sync new chapters"
@@ -652,20 +669,39 @@ class AsterionHomeActivity:Activity(){
                             }.onFailure{toast("No compatible archive reader found")}
                         },5)
                 }
+                if(recent.size>3)put(archive,button(
+                    if(showAll)"SHOW FEWER DOWNLOADS" else
+                        "VIEW ALL "+recent.size+" EPUB DOWNLOADS"){
+                    bookUi.edit().putBoolean("all_recent",!showAll).apply()
+                    render()
+                },8)
                 put(body,archive,12)
-                Mp4SeriesPanel.render(this,body){render()}
-
+                val lightNovelOpen=bookUi.getBoolean("light_novels",false)
+                put(body,button(if(lightNovelOpen)"HIDE LIGHT NOVEL LIBRARY"
+                    else "LIGHT NOVEL LIBRARY · MP4DIRECTS"){
+                    bookUi.edit().putBoolean("light_novels",!lightNovelOpen).apply()
+                    render()
+                },4)
+                if(lightNovelOpen)Mp4SeriesPanel.render(this,body){render()}
             }
             else->{
                 AsterionComicFollowing.render(this,body){render()}
                 DoujinGalleryPanel.render(this,body){render()}
             }
         }
+        val showSources=bookUi.getBoolean("sources",false)
+        put(body,button(if(showSources)"HIDE WEBSITE SYNC & BACKFILL"
+            else "WEBSITES · SYNC & BACKFILL"){
+            bookUi.edit().putBoolean("sources",!showSources).apply()
+            render()
+        },10)
+        if(showSources)SourceIndexPanel.render(this,body,
+            if(bookMode=="EPUB")"BOOKS" else "COMICS")
     }
     private fun renderTorrents(){
         section("Torrents & Games","Search actual releases, inspect files, then transfer.")
         val choices=listOf("GAMES" to TorrentArea.GAMES,
-            "ADULT VIDEO" to TorrentArea.ADULT,"EPUB" to TorrentArea.BOOKS)
+            "ADULT VIDEO" to TorrentArea.ADULT,"BOOKS" to TorrentArea.BOOKS)
         val line=theme.row(this)
         for((label,area) in choices){
             line.addView(theme.chip(this,label,torrentMode==area){
