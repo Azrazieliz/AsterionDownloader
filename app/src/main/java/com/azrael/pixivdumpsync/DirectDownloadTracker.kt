@@ -77,7 +77,16 @@ object DirectDownloadTracker {
                     str(DownloadManager.COLUMN_LOCAL_URI))
             }
         }
-        return saved.mapNotNull{byId[it.id]}
+        // The OS request was deliberately stopped after a verified
+        // zero-byte timeout. Keep the original in the native Downloads list,
+        // as a FAILED row rather than an invisible, forever-queued entry.
+        // Its encrypted metadata and dedup claim survive for manual retry.
+        return saved.mapNotNull{job->
+            byId[job.id] ?: if(OriginalReceiptState.get(c,job.id)=="STALLED")
+                State(job,DownloadManager.STATUS_FAILED,0L,-1L,
+                    DownloadManager.ERROR_UNKNOWN,null)
+            else null
+        }
     }
     fun render(a:Activity,body:LinearLayout){
         val data=states(a,35)
