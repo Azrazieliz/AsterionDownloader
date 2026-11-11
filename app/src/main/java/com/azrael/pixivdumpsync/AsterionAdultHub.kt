@@ -27,12 +27,13 @@ object AsterionAdultHub {
         val existing=SourceIndex.status(a,area)
         for(site in approved){
             val host=SiteControls.key(site.url)
-            if(host.isNotBlank())results[host]=Site(site.name,site.url,
+            if(host.isNotBlank() && !ProviderRetirement.isRetired(site.url))results[host]=Site(site.name,site.url,
                 SiteRunControl.matchingSource(site.url,area,existing))
         }
         for(site in existing){
             val host=SiteControls.key(site.url)
-            if(host.isNotBlank() && host !in results)
+            if(host.isNotBlank() && host !in results &&
+                !ProviderRetirement.isRetired(site.url))
                 results[host]=Site(site.name,site.url,site)
         }
         return results.values.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER){it.name})
