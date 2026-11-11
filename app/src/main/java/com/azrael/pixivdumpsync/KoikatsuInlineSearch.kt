@@ -58,7 +58,8 @@ object KoikatsuInlineSearch {
                                     }
                                 }
                                 val image=ImageView(a).apply{
-                                    scaleType=ImageView.ScaleType.CENTER_CROP
+                                    scaleType=ImageView.ScaleType.FIT_CENTER
+                                    adjustViewBounds=true
                                     setImageResource(R.drawable.ic_source_koikatsu)
                                     contentDescription=item.name+" preview"
                                 }
