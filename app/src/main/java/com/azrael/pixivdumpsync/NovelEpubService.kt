@@ -47,12 +47,13 @@ object NovelEpubService {
                 .setPeriodic(15*60_000L).build())
         }
     }
-    fun schedule(context:Context){
+    fun schedule(context:Context,delayMs:Long=1000L){
         if(!AppPower.enabled(context))return
+        val delay=delayMs.coerceIn(1000L,6L*60*60_000L)
         context.getSystemService(JobScheduler::class.java).schedule(
             JobInfo.Builder(JOB,ComponentName(context,NovelEpubJob::class.java))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setMinimumLatency(1000L).setOverrideDeadline(60_000L).build())
+                .setMinimumLatency(delay).setOverrideDeadline(delay+60_000L).build())
     }
     private fun page(context:Context,address:String,source:String):Document {
         var url=address
@@ -131,7 +132,160 @@ object NovelEpubService {
             check(temp.renameTo(file)){"Unable to record novel chapter catalogue"}
         }
     }
+    /**
+     * A FreeWebNovel book can contain thousands of chapters. A single Android
+     * JobService run cannot walk every page reliably. Persist a verified
+     * reader cursor after each successfully parsed/cache-written chapter.
+     * No EPUB is published until the final Next Chapter link is exhausted.
+     */
+    private class ContinueNovel(val cached:Int):
+        RuntimeException("Reader progress saved: $cached chapters; continuation scheduled")
+
+    private data class ReaderWalk(
+        val title:String,
+        val visible:String,
+        val expected:Int,
+        val chapters:LinkedHashMap<String,NovelChapter>,
+        var next:String?,
+        var finished:Boolean
+    )
+
+    private fun walkFile(context:Context,url:String):File =
+        File(cacheDir(context,url),"reader-walk-v2.json")
+
+    private fun readWalk(context:Context,url:String):ReaderWalk? = runCatching {
+        val file=walkFile(context,url)
+        if(!file.isFile)return null
+        val root=JSONObject(file.readText())
+        if(root.optInt("schema")!=2 || root.optString("source")!=url)
+            return null
+        val entries=LinkedHashMap<String,NovelChapter>()
+        val items=root.getJSONArray("chapters")
+        for(i in 0 until items.length()){
+            val ch=items.getJSONObject(i)
+            val address=ch.getString("url")
+            if(!SourceIndexParser.safe(address) ||
+                !SourceIndexParser.sameSite(url,address))return null
+            entries[address]=NovelChapter(ch.getDouble("number"),
+                ch.getString("title"),address)
+        }
+        val next=root.optString("next").takeIf{it.isNotBlank()}
+        if(next!=null && (!SourceIndexParser.safe(next) ||
+            !SourceIndexParser.sameSite(url,next)))return null
+        ReaderWalk(root.getString("title"),root.optString("visible"),
+            root.optInt("expected").coerceAtLeast(0),entries,next,
+            root.optBoolean("finished"))
+    }.getOrNull()
+
+    private fun saveWalk(context:Context,url:String,state:ReaderWalk) {
+        val root=JSONObject().apply{
+            put("schema",2);put("source",url)
+            put("title",state.title);put("visible",state.visible)
+            put("expected",state.expected)
+            put("next",state.next?:"");put("finished",state.finished)
+            put("chapters",JSONArray().apply {
+                state.chapters.values.forEach { item ->
+                    put(JSONObject().apply {
+                        put("url",item.url);put("number",item.number)
+                        put("title",item.title)
+                    })
+                }
+            })
+        }
+        val file=walkFile(context,url)
+        val part=File(file.parentFile,"reader-walk-v2.part")
+        part.writeText(root.toString())
+        if(!part.renameTo(file)){
+            // This checkpoint is only metadata; never touch completed originals.
+            file.delete()
+            check(part.renameTo(file)){"Unable to checkpoint novel chapters"}
+        }
+    }
+
+    private fun discoverFreeWebNovel(context:Context,url:String,
+                                     stop:()->Boolean):Discovery {
+        val landing=page(context,url,url)
+        val indexed=NovelEpubParser.chapters(landing,url)
+        val first=indexed.minWithOrNull(compareBy<NovelChapter>{it.number}
+            .thenBy{it.url})
+            ?:error("FreeWebNovel chapter list has no numbered starting chapter")
+        val visible=fingerprint(indexed)
+        val expected=NovelEpubParser.chapterCountHint(landing)
+        val title=landing.selectFirst("h1")?.text()?.trim()?.take(180)
+            ?.takeIf{it.isNotBlank()} ?: landing.title().take(180)
+        val saved=readWalk(context,url)
+        val state= saved ?: ReaderWalk(title,visible,expected,
+            LinkedHashMap(),first.url,false)
+        if(state.finished){
+            // A fingerprint of the first listing page cannot prove that no
+            // chapters were appended to the end of a long-running series.
+            val last=state.chapters.values.maxWithOrNull(
+                compareBy<NovelChapter>{it.number}.thenBy{it.url})
+                ?:error("Completed novel catalogue has no reader chapters")
+            val tail=page(context,last.url,url)
+            val fresh=NovelEpubParser.nextReader(tail,url,last.url)
+            if(fresh!=null && !state.chapters.containsKey(fresh)){
+                state.next=fresh
+                state.finished=false
+                saveWalk(context,url,state)
+            }else if(fresh==null){
+                // Reuse only if all persisted actual chapter texts survive.
+                val dir=cacheDir(context,url)
+                if(state.chapters.isNotEmpty() &&
+                    state.chapters.values.all{
+                        File(dir,chapterKey(it.url)+".json").isFile
+                    })return Discovery(title,state.chapters.values.sortedWith(
+                    compareBy<NovelChapter>{it.number}.thenBy{it.url}),
+                    visible,true)
+                // Missing chapter cache must never be mistaken for a completed
+                // book; recover by replaying the actual published reader links.
+                state.chapters.clear()
+                state.next=first.url
+                state.finished=false
+            }else{
+                error("FreeWebNovel reader navigation loops back into history")
+            }
+        }
+        var next=state.next ?: first.url
+        val started=android.os.SystemClock.elapsedRealtime()
+        var processed=0
+        val directory=cacheDir(context,url)
+        while(!stop() && processed<64 &&
+            android.os.SystemClock.elapsedRealtime()-started<100_000L){
+            if(state.chapters.containsKey(next))
+                error("Reader chapter cursor loops before end of series")
+            val page=page(context,next,url)
+            val chapter=NovelEpubParser.readerChapter(page,next)
+            val text=NovelEpubParser.chapterText(page)
+            storeChapterText(chapter,text,directory)
+            state.chapters[next]=chapter
+            state.next=NovelEpubParser.nextReader(page,url,next)
+            state.finished=state.next==null
+            saveWalk(context,url,state)
+            processed++
+            if(state.finished)break
+            next=state.next!!
+        }
+        if(!state.finished){
+            // A stopped/interrupted job keeps this exact cursor and cannot
+            // create a false-complete EPUB or discard completed chapter text.
+            throw ContinueNovel(state.chapters.size)
+        }
+        if(state.chapters.size<indexed.size ||
+            (expected>0 && state.chapters.size<expected)){
+            error("FreeWebNovel reader ended early: "+
+                state.chapters.size+" of at least "+
+                maxOf(indexed.size,expected)+" published chapters")
+        }
+        return Discovery(title,state.chapters.values.sortedWith(
+            compareBy<NovelChapter>{it.number}.thenBy{it.url}),
+            visible,false)
+    }
+
     private fun discover(context:Context,url:String,stop:()->Boolean):Discovery {
+        if(URI(url).host.orEmpty().removePrefix("www.")=="freewebnovel.com")
+            return discoverFreeWebNovel(context,url,stop)
+
         val seen=HashSet<String>()
         val found=LinkedHashMap<String,NovelChapter>()
         var current:String?=url
@@ -308,12 +462,11 @@ object NovelEpubService {
             FileOutputStream(part).use{output->
                 // Build only after ALL chapter texts are acquired, so a failed
                 // response cannot create a plausible-looking partial book.
-                val contents=ArrayList<NovelText>(chapters.size)
-                for(chapter in chapters){
+                NovelEpubParser.writeEpubStreaming(output,title,task.url,
+                    chapters.map{it.title}){index->
                     check(!stop()){"EPUB chapter retrieval was interrupted"}
-                    contents+=chapterText(context,task.url,chapter,cache)
+                    chapterText(context,task.url,chapters[index],cache)
                 }
-                NovelEpubParser.writeEpub(output,title,task.url,contents)
             }
             require(part.length()>2000){"Book archive content unexpectedly empty"}
             part.inputStream().use{ArchiveIntegrity.inspect(it,"EPUB")}
@@ -350,6 +503,8 @@ object NovelEpubService {
                             try{
                                 val (saved,signature)=generate(context,task,stop,db)
                                 db.completed(task.url,saved,signature)
+                            }catch(t:ContinueNovel){
+                                db.continueLater(task.url,t.cached)
                             }catch(t:Exception){
                                 db.failure(task,t.message?:t.javaClass.simpleName)
                             }
@@ -373,8 +528,10 @@ class NovelEpubJob:JobService(){
             finally{
                 jobFinished(params,false)
                 if(!stopped.get() && AppPower.enabled(applicationContext)){
-                    val more=NovelEpubQueue(applicationContext).use{it.hasDue()}
-                    if(more)NovelEpubService.schedule(applicationContext)
+                    val next=NovelEpubQueue(applicationContext).use{
+                        it.nextDueDelayMs()
+                    }
+                    if(next!=null)NovelEpubService.schedule(applicationContext,next)
                 }
             }
         }
