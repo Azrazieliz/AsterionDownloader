@@ -38,7 +38,8 @@ object FullLengthVideoPolicy {
         return clean.take(220)
     }
     fun assess(pageTitle:String,extractedTitle:String,url:String,durationSec:Long?,
-               referenceSec:Long?,publisherVerified:Boolean=false):Decision {
+               referenceSec:Long?,publisherVerified:Boolean=false,
+               userExplicitlyRequested:Boolean=false):Decision {
         if(previewWords.containsMatchIn(pageTitle)||
             previewWords.containsMatchIn(extractedTitle)||
             previewWords.containsMatchIn(runCatching{URI(url).path}.getOrDefault("")))
@@ -62,6 +63,14 @@ object FullLengthVideoPolicy {
         if(knownFullReferenceHost(url))
             return Decision(Verdict.ACCEPT,
                 "User-designated full-release provider; observed runtime retained")
+        // Manual source-file selection is not the same as unattended website
+        // crawling. Permit a user-selected original with actual extractor
+        // duration and no sample/trailer signals; check the completed file's
+        // own runtime separately before reporting a saved original.
+        // Do not infer that this proves an independently published full cut.
+        if(userExplicitlyRequested)
+            return Decision(Verdict.ACCEPT,
+                "User-selected media with validated duration; independent full-cut reference unavailable")
         return Decision(Verdict.HOLD_FOR_REFERENCE,
             "Full original runtime not established; automatic transfer held")
     }
