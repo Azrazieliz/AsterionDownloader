@@ -13,9 +13,15 @@ class TransferAgentTwoService:Service(){
     override fun onBind(intent:Intent?):IBinder?=null
 
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
-        VideoEngine.makeChannel(this)
-        startForeground(24015,
-            VideoEngine.notification(this,"Second transfer agent ready"))
+        try{
+            VideoEngine.makeChannel(this)
+            startForeground(24015,
+                VideoEngine.notification(this,"Second transfer agent ready"))
+        }catch(t:Exception){
+            runCatching{Scheduling.requestSecondaryImmediate(applicationContext)}
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         val future=VideoEngine.submit(applicationContext,false){
             getSystemService(NotificationManager::class.java)
                 .notify(24015,VideoEngine.notification(this,"Agent 2 · "+it.take(75)))
