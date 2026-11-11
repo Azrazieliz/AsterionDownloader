@@ -80,6 +80,16 @@ android {
             isDebuggable = true
             matchingFallbacks += listOf("debug")
         }
+        // One-off, isolated tester: a different package than the already
+        // installed Agents and Acceptance apps. No uninstall/data loss.
+        // Its debug signer is CI ephemeral; never offer it as an upgrade.
+        create("testphone") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1111"
+            versionNameSuffix = "-phone-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
         // Install once alongside previous differently-signed pilots; all
         // future acceptance updates use this exact package and the retained
         // Windows signer. GitHub CI never publishes self-signed updates.
