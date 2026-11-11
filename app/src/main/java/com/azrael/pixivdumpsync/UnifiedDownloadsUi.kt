@@ -391,8 +391,10 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
-                ModuleOriginalAgents.startAll(a)
-                kotlin.concurrent.thread(name="asterion-retry-due-originals"){
+                // Discovery's SQLite scan is not safe to run in a touch
+                // callback. Launch both durable queues off the main thread.
+                kotlin.concurrent.thread(name="asterion-start-original-queues"){
+                    ModuleOriginalAgents.startAll(a.applicationContext)
                     DirectDownloadRetry.retry(a.applicationContext)
                 }
                 refresh()
@@ -413,8 +415,10 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
-                ModuleOriginalAgents.startAll(a)
-                kotlin.concurrent.thread(name="asterion-retry-due-originals"){
+                // Discovery's SQLite scan is not safe to run in a touch
+                // callback. Launch both durable queues off the main thread.
+                kotlin.concurrent.thread(name="asterion-start-original-queues"){
+                    ModuleOriginalAgents.startAll(a.applicationContext)
                     DirectDownloadRetry.retry(a.applicationContext)
                 }
                 Toast.makeText(a,"Transfer workers requested; progress appears here",
