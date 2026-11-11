@@ -6,10 +6,11 @@ import org.junit.Test
 
 /** Prevents silently regressing to showing/checking only the first four sites. */
 class AllSiteGalleryCoverageTest {
-    @Test fun approvedPornCatalogStillContainsAllNineteenSites() {
+    @Test fun approvedPornCatalogExcludesRetiredProvider() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
-        assertEquals(19,sites.size)
-        assertEquals(19,sites.map{SiteControls.key(it.url)}.distinct().size)
+        assertEquals(18,sites.size)
+        assertFalse(sites.any{it.host=="pornhits.com"})
+        assertEquals(18,sites.map{SiteControls.key(it.url)}.distinct().size)
     }
 
     @Test fun publicListingRecognizesRealNestedMediaCovers() {
