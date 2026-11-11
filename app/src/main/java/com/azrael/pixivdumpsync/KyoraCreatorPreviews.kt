@@ -161,7 +161,15 @@ object KyoraCreatorPreviews {
                     }
                 }
                 val document=page?:error("Too many provider redirects")
-                val items=parse(document.outerHtml(),document.location())
+                var items=parse(document.outerHtml(),document.location())
+                // A 200 response can be a public shell/age-gate whose actual
+                // gallery is rendered only in the user's authorized browser
+                // session. Do not call it a successful listing without cards.
+                if(items.isEmpty() &&
+                    SiteSession.bound(a.applicationContext,url)){
+                    val html=BrowserPageFetch.html(a.applicationContext,url)
+                    items=parse(html,url)
+                }
                 if(items.isEmpty())error("No gallery thumbnails exposed by listing")
                 Snapshot(items,System.currentTimeMillis(),null)
             }.getOrElse{
