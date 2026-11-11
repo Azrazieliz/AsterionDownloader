@@ -15,8 +15,8 @@ object TorrentSearchUi {
         val ui=NocturneDesign
         val name=when(area){TorrentArea.GAMES->"GAMES";TorrentArea.BOOKS->"BOOKS";TorrentArea.ADULT->"ADULT VIDEO"}
         val card=ui.card(a)
-        card.addView(ui.text(a,"TORRENT DOWNLOADS · "+name,18f,ui.white,true),ui.lp(a,3))
-        card.addView(ui.text(a,"Search releases, inspect their files, and start a transfer.",12f,ui.secondary),ui.lp(a,7))
+        card.addView(ui.text(a,"Find a release · "+name,17f,ui.white,true),ui.lp(a,3))
+        card.addView(ui.text(a,"Search by title, then choose the actual files.",12f,ui.secondary),ui.lp(a,5))
         val pref=a.getSharedPreferences("asterion_torrent_search",0)
         val field=EditText(a).apply{
             hint="Name / title / keywords"
@@ -27,43 +27,68 @@ object TorrentSearchUi {
         }
         card.addView(field,ui.lp(a,7))
         val status=ui.text(a,"Native torrent transfer · original files go to Downloads",12f,ui.secondary)
-        val magnet=EditText(a).apply{
-            hint="Paste magnet or .torrent link"
-            setSingleLine(true);setTextColor(ui.white);setHintTextColor(ui.secondary)
-            textSize=14f
-        }
-        card.addView(magnet,ui.lp(a,8))
-        card.addView(ui.action(a,"ADD MAGNET / TORRENT",false){
-            val value=magnet.text.toString().trim()
-            if(!value.startsWith("magnet:?xt=urn:",true) &&
-                !(SearchRanking.validUrl(value) &&
-                    value.substringBefore('?').endsWith(".torrent",true))){
-                status.text="Paste a magnet link or direct .torrent URL"
-                return@action
-            }
-            ResourceDownloads.route(a,value,when(area){
-                TorrentArea.GAMES->"Games"
-                TorrentArea.BOOKS->"Books"
-                TorrentArea.ADULT->"Videos"
-            })
-            status.text="Retrieving torrent metadata for file selection"
+        val magnetOpen=pref.getBoolean(area.name+"_magnet_open",false)
+        card.addView(ui.action(a,
+            if(magnetOpen)"HIDE MAGNET / .TORRENT IMPORT"
+            else "IMPORT A MAGNET / .TORRENT LINK",false){
+            pref.edit().putBoolean(area.name+"_magnet_open",!magnetOpen).apply()
+            refresh()
         },ui.lp(a,7))
+        if(magnetOpen){
+            val magnet=EditText(a).apply{
+                hint="Paste magnet or direct .torrent URL"
+                setSingleLine(true);setTextColor(ui.white)
+                setHintTextColor(ui.secondary);textSize=14f
+            }
+            card.addView(magnet,ui.lp(a,6))
+            card.addView(ui.action(a,"SELECT FILES FROM LINK",false){
+                val value=magnet.text.toString().trim()
+                if(!value.startsWith("magnet:?xt=urn:",true) &&
+                    !(SearchRanking.validUrl(value) &&
+                        value.substringBefore('?').endsWith(".torrent",true))){
+                    status.text="Enter a magnet or direct .torrent URL"
+                    return@action
+                }
+                ResourceDownloads.route(a,value,when(area){
+                    TorrentArea.GAMES->"Games"
+                    TorrentArea.BOOKS->"Books"
+                    TorrentArea.ADULT->"Videos"
+                })
+                status.text="Retrieving metadata; choose files before downloading"
+            },ui.lp(a,6))
+        }
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         val records=ArrayList<CatalogHit>()
         fun draw(){
             results.removeAllViews()
             for(hit in records.take(80)){
-                val item=ui.card(a)
-                item.addView(ui.text(a,hit.title,15f,ui.white,true),ui.lp(a,3))
-                item.addView(ui.text(a,hit.source+" · "+hit.details,12f,ui.secondary),ui.lp(a,5))
-                item.addView(ui.action(a,"SELECT FILES & START TORRENT",true){
+                val item=ui.row(a).apply{
+                    gravity=android.view.Gravity.CENTER_VERTICAL
+                    setPadding(ui.px(a,12),ui.px(a,9),ui.px(a,10),ui.px(a,9))
+                    background=ui.shape(a,ui.surface,15)
+                }
+                val details=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                }
+                details.addView(ui.text(a,hit.title,14f,ui.white,true).apply{
+                    maxLines=2
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                })
+                details.addView(ui.text(a,hit.source+" · "+hit.details,
+                    11f,ui.secondary).apply{maxLines=1
+                        ellipsize=android.text.TextUtils.TruncateAt.END
+                    },ui.lp(a,4))
+                item.addView(details,LinearLayout.LayoutParams(0,-2,1f))
+                item.addView(ui.action(a,"FILES",false){
                     ResourceDownloads.route(a,hit.url,when(area){
                         TorrentArea.GAMES->"Games"
                         TorrentArea.BOOKS->"Books"
                         TorrentArea.ADULT->"Videos"
                     })
-                },ui.lp(a,7))
-                results.addView(item,ui.lp(a,7))
+                },LinearLayout.LayoutParams(-2,-2).apply{
+                    leftMargin=ui.px(a,8)
+                })
+                results.addView(item,ui.lp(a,5))
             }
         }
         card.addView(ui.action(a,"SEARCH "+name+" TORRENTS",true){
@@ -85,7 +110,7 @@ object TorrentSearchUi {
             }
         },ui.lp(a,9))
         card.addView(status,ui.lp(a,8))
-        card.addView(ui.action(a,"OPEN TORRENT TRANSFERS",false){
+        card.addView(ui.action(a,"VIEW TRANSFERS",false){
             TorrentTransfers.showQueue(a)
         },ui.lp(a,7))
         body.addView(card,ui.lp(a,12))
@@ -96,11 +121,18 @@ object TorrentSearchUi {
             TorrentArea.ADULT->registered.filter{it.source in setOf("ONEJAV","SUKEBEI")}
             TorrentArea.BOOKS->emptyList()
         }
-        if(shown.isNotEmpty()){
-            body.addView(ui.text(a,"Torrent sources",18f,ui.white,true),ui.lp(a,11))
-        }
         val settings=a.getSharedPreferences("asterion_torrent_source_ui",0)
-        for(feed in shown){
+        val sourcesOpen=settings.getBoolean("sources_"+area.name,false)
+        if(shown.isNotEmpty()){
+            body.addView(ui.action(a,
+                if(sourcesOpen)"HIDE SOURCES & BACKFILL"
+                else "SOURCES & BACKFILL · "+shown.size,false){
+                settings.edit().putBoolean("sources_"+area.name,!sourcesOpen)
+                    .apply()
+                refresh()
+            },ui.lp(a,8))
+        }
+        if(sourcesOpen)for(feed in shown){
             val home=TorrentFeedParser.home(feed.source)
             val friendly=when(feed.source){
                 "SUKEBEI"->"Sukebei"
