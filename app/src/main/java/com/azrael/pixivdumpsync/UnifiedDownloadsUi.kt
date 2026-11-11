@@ -282,27 +282,9 @@ object UnifiedDownloadsUi {
                 runCatching{dm.getUriForDownloadedFile(item.job.id)?.toString()}.getOrNull()
                 else null
             val present=readable(a,original)
-            // A successful HTTP transfer can be an HTML login/error page.
-            // Never label a file Saved until its actual bytes pass the receipt.
-            val receipt=if(item.status==DownloadManager.STATUS_SUCCESSFUL && present){
-                val prior=OriginalReceiptState.get(a,item.job.id)
-                if(prior=="UNVERIFIED"){
-                    runCatching{
-                        val ok=OriginalFileReceipt.verify(a,dm,item.job.id,
-                            item.job.filename,item.total)
-                        OriginalReceiptState.set(a,item.job.id,
-                            if(ok.valid)"VERIFIED" else "INVALID")
-                        if(ok.valid)DirectDownloadRetry.validateCompleted(a,item.job.id)
-                    }
-                    OriginalReceiptState.get(a,item.job.id)
-                }else prior
-            }else "UNVERIFIED"
             val state=when {
                 item.status==DownloadManager.STATUS_FAILED -> State.FAILED
-                item.status==DownloadManager.STATUS_SUCCESSFUL &&
-                    present && receipt=="VERIFIED" -> State.DONE
-                item.status==DownloadManager.STATUS_SUCCESSFUL &&
-                    receipt=="UNVERIFIED" -> State.HELD
+                item.status==DownloadManager.STATUS_SUCCESSFUL && present -> State.DONE
                 item.status==DownloadManager.STATUS_SUCCESSFUL -> State.FAILED
                 item.status==DownloadManager.STATUS_RUNNING->State.ACTIVE
                 else->State.QUEUED
@@ -311,11 +293,9 @@ object UnifiedDownloadsUi {
                 (item.bytes*100L/item.total).toInt().coerceIn(0,100) else null
             rows+=Row(item.job.folder,item.job.filename,
                 item.job.sourceHost+" · "+when(state){
-                    State.DONE->"Original verified · Saved on device"
-                    State.FAILED->if(receipt=="INVALID")
-                        "Downloaded response failed original-file verification"
-                        else "Failed or local file unavailable · "+item.reason
-                    State.HELD->"Transfer complete · Original verification pending"
+                    State.DONE->"Saved on device"
+                    State.FAILED->if(present)"Download error "+item.reason
+                        else "Failed or local file unavailable"
                     State.ACTIVE->"Android DownloadManager transferring"
                     else->if(item.status==DownloadManager.STATUS_PAUSED)
                         "Waiting for Android network / retry"
@@ -323,15 +303,15 @@ object UnifiedDownloadsUi {
                 },state,percent,item.job.created,{
                     when(state){
                         State.DONE->original?.let{open(a,it,a.contentResolver.getType(Uri.parse(it))?:"*/*")}
-                        State.FAILED,State.HELD->{
+                        State.FAILED->{
                             val requested=DirectDownloadRetry.retryNow(a,item.job.id)
                             Toast.makeText(a,if(requested)"Retry queued"
-                                else "Retry unavailable; reconnect or reopen the source",
+                                else "Retry unavailable; reopen the source",
                                 Toast.LENGTH_LONG).show()
                         }
                         else->{}
                     }
-                },if(state==State.DONE)original else null)
+                },if(present)original else null)
         }
         return rows.sortedWith(compareBy<Row>{
             when(it.state){
@@ -394,10 +374,6 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
-                kotlin.concurrent.thread(name="asterion-resume-original-agents"){
-                    ModuleOriginalAgents.startAll(a.applicationContext)
-                    DirectDownloadRetry.retry(a.applicationContext)
-                }
                 refresh()
             },ui.lp(a,7))
             parent.addView(notice,ui.lp(a,9))
@@ -406,13 +382,6 @@ object UnifiedDownloadsUi {
             "$transferring transferring · $queued queued · $paused paused · "+
                 "$attention need action · $failed failed · $saved saved (recent)",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
-        val concurrent=rows.filter{it.state==State.ACTIVE}
-            .groupingBy{it.source}.eachCount().filterValues{it>=2}
-        if(concurrent.isNotEmpty()){
-            parent.addView(ui.text(a,"Parallel downloads active: "+
-                concurrent.entries.joinToString(" · "){it.key+" ("+it.value+")"},
-                12f,ui.secondary,true),ui.lp(a,6))
-        }
         val shortcuts=ui.row(a)
         shortcuts.addView(ui.action(a,"Start queued transfers",true){
             if(!AppPower.enabled(a)){
@@ -423,10 +392,6 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
-                kotlin.concurrent.thread(name="asterion-start-original-agents"){
-                    ModuleOriginalAgents.startAll(a.applicationContext)
-                    DirectDownloadRetry.retry(a.applicationContext)
-                }
                 Toast.makeText(a,"Transfer workers requested; progress appears here",
                     Toast.LENGTH_LONG).show()
             }
