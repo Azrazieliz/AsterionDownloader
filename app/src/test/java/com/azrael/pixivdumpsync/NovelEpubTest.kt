@@ -144,4 +144,28 @@ class NovelEpubTest {
         assertTrue(entries["OEBPS/nav.xhtml"]!!.contains("Chapter 2"))
         assertTrue(entries["OEBPS/chapter-1.xhtml"]!!.contains("&amp; &lt;second&gt;"))
     }
+    @Test fun streamedEpubWritesEveryChapterInOrderWithoutAWholeBookList(){
+        val titles=listOf("Chapter 1","Chapter 2","Chapter 3")
+        val accessed=ArrayList<Int>()
+        val output=ByteArrayOutputStream()
+        NovelEpubParser.writeEpubStreaming(output,"Streaming book",source,titles){i->
+            accessed.add(i)
+            NovelText(titles[i],listOf("Text body for chapter "+(i+1)))
+        }
+        assertEquals(listOf(0,1,2),accessed)
+        val names=ArrayList<String>()
+        ZipInputStream(ByteArrayInputStream(output.toByteArray())).use{zip->
+            while(true){
+                val entry=zip.nextEntry?:break
+                names.add(entry.name)
+                zip.closeEntry()
+            }
+        }
+        assertEquals("mimetype",names.first())
+        assertTrue(names.contains("OEBPS/chapter-1.xhtml"))
+        assertTrue(names.contains("OEBPS/chapter-2.xhtml"))
+        assertTrue(names.contains("OEBPS/chapter-3.xhtml"))
+        assertEquals("OEBPS/content.opf",names.last())
+    }
+
 }
