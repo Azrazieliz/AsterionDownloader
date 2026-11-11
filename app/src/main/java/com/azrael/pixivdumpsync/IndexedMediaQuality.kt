@@ -32,6 +32,13 @@ object IndexedMediaQuality {
         val cleaned=title.trim().replace(Regex("\\s+")," ").lowercase(Locale.ROOT)
         return cleaned.isBlank() || cleaned.length<3 ||
             siteMenu.matches(cleaned) || localeMenu.matches(cleaned) ||
+            cleaned in setOf("ad information","notice to users",
+                "advertising information","cookie policy","user agreement") ||
+            // Release calendars and account listings are not downloadable
+            // individual originals, even when an image appears beside them.
+            Regex("""(?i)^permanent link to upcoming .{3,100} (?:hentai )?release$""")
+                .matches(cleaned) ||
+            Regex("""(?i)^[a-z0-9_]{3,28}\s+videos$""").matches(cleaned) ||
             cleaned.startsWith("choose your language") ||
             cleaned.startsWith("site language")
     }
