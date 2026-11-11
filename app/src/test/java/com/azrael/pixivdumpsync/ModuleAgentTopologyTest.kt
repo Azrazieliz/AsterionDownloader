@@ -12,6 +12,11 @@ class ModuleAgentTopologyTest {
         assertEquals(2,ModuleOriginalAgents.AGENTS_PER_MODULE)
         assertTrue(ModuleOriginalAgents.MODULES.size>=16)
     }
+    @Test fun moduleTransferLimitsHaveIndependentDestinations(){
+        val folders=ModuleOriginalAgents.MODULES.map(ModuleOriginalAgents::folder)
+        assertEquals("Two modules share the same DownloadManager quota",folders.size,
+            folders.toSet().size)
+    }
     @Test fun everyRegisteredDirectOriginalModuleHasDedicatedPair(){
         val areas=listOf(
             "ADULT","HENTAI","VIDEOS","CREATORS","COSPLAY","ARTWORK",
