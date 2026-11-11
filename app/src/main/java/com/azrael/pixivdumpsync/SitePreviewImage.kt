@@ -29,7 +29,9 @@ internal object SitePreviewImage {
     }
 
     fun best(image:Element):String? {
-        for(attribute in listOf("data-original","data-full","data-large")){
+        for(attribute in listOf("data-original","data-full","data-large",
+                "data-lazy","data-lazyload","data-thumb","data-thumbnail",
+                "data-echo","data-cfsrc")){
             resolve(image,image.attr(attribute))?.let{return it}
         }
         val picture=image.closest("picture")
@@ -38,7 +40,8 @@ internal object SitePreviewImage {
                 srcset(image,node.attr(attribute))?.let{return it}
             }
         }
-        for(attribute in listOf("data-src","data-lazy-src","data-original-src","src")){
+        for(attribute in listOf("data-src","data-lazy-src",
+                "data-original-src","data-flickity-lazyload","src")){
             resolve(image,image.attr(attribute))?.let{return it}
         }
         return null
