@@ -49,11 +49,15 @@ jobs:
               /^        head.addView\(emergencyLabel\)/ {header=0}
               /^        if\(::emergencyLabel.isInitialized\)/ {power=1;next}
               /^        backControl.visibility=/ {power=0}
+              /^        if\(requestCode==5222\)\{/ {pixivImport=1;next}
+              /^        if\(requestCode==5221\)\{/ {pixivImport=0}
+              /^        section\("Storage & cloud backup"/ {inventoryUi=1;next}
+              /^        RounderDispatch.render\(/ {inventoryUi=0}
               /^    private fun renderBooks\(\)\{/ {allowed=1;next}
               /^    private fun renderToonily\(\)\{/ {allowed=0}
               /^            "Assets"->/ {assets=1;next}
               assets && /^            "Search"->/ {assets=0}
-              !allowed && !header && !power && !assets {print}
+              !allowed && !header && !power && !assets && !pixivImport && !inventoryUi {print}
             ' > "/tmp/${side}-home-guard"
           done
           cp /tmp/baseline-home-guard /tmp/approved-home-outside-books-torrents
@@ -64,6 +68,9 @@ jobs:
           grep -q 'TorrentSearchUi.render' "$HOME"
           grep -q 'Mp4SeriesPanel.render' "$HOME"
           grep -q 'AssetsPanel.render(this,body)' "$HOME"
+          grep -q 'LegacyPixivInventory.addTree' "$HOME"
+          grep -q 'LegacyPixivInventory.hasPage' app/src/main/java/com/azrael/pixivdumpsync/SyncEngine.kt
+          grep -q 'openFileDescriptor' app/src/main/java/com/azrael/pixivdumpsync/LegacyPixivInventory.kt
           grep -q 'KoikatsuInlineSearch.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
           grep -q 'ContentVerticalsPanel.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
           grep -q 'SourceIndexPanel.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
