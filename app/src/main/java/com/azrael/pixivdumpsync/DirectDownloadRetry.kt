@@ -139,8 +139,26 @@ object DirectDownloadRetry {
                     state.status==DownloadManager.STATUS_RUNNING,
                     state.bytes,state.job.created,now))continue
             val original=pending[state.job.id]?:continue
-            // Never cancel a transfer with any real bytes; capture the
-            // terminal state before unlinking the OS request.
+            // Recheck right before cancellation: the OS could have started
+            // receiving bytes after the first snapshot. Never remove it then.
+            val stillEmpty=runCatching{
+                manager.query(DownloadManager.Query().setFilterById(state.job.id))
+                    ?.use{cursor->
+                        if(!cursor.moveToFirst())false
+                        else {
+                            val statusColumn=cursor.getColumnIndex(
+                                DownloadManager.COLUMN_STATUS)
+                            val bytesColumn=cursor.getColumnIndex(
+                                DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                            statusColumn>=0 && bytesColumn>=0 &&
+                                cursor.getInt(statusColumn) in setOf(
+                                    DownloadManager.STATUS_PENDING,
+                                    DownloadManager.STATUS_RUNNING) &&
+                                cursor.getLong(bytesColumn)==0L
+                        }
+                    }?:false
+            }.getOrDefault(false)
+            if(!stillEmpty)continue
             if(runCatching{manager.remove(state.job.id)}.isFailure)continue
             DirectRetryVault.remember(ctx,original.copy(
                 attempts=DirectTransferStallPolicy.TERMINAL_RETRY_ATTEMPTS,
