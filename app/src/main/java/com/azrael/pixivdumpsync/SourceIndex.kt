@@ -1334,14 +1334,7 @@ object SourceIndex {
         val filename=(suppliedName?:URI(item.url).path.substringAfterLast('/'))
             .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
             .ifBlank{"original_"+System.currentTimeMillis()+suffix}
-        val folder=when(item.area){
-            "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
-            "CREATORS"->"Creators";"COSPLAY"->"Cosplay"
-            "ARTWORK"->"Artwork";"STUDIO"->"Assets/Koikatsu Studio"
-            "MMD"->"Assets/MMD";"LIVE2D"->"Assets/Live2D"
-            "ANIMATION"->"Assets/Animation";"MODS"->"Games/Mods"
-            "VOICE"->"Audio/Doujin Voice";else->"Assets"
-        }
+        val folder=ModuleOriginalAgents.folder(item.area)
         if(!CrossSourceDedup(context).use{it.reserve(item.url)}){
             // Existing accepted transfers are already owned by DownloadManager.
             // An unattached lease is different: keep that file in retry state.
