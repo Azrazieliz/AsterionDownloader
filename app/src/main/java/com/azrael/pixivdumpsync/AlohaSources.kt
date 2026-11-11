@@ -15,7 +15,7 @@ import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import kotlin.concurrent.thread
 
-/** User-approved provider subset (Pornhits retired) from the four identical Aloha exports.
+/** User-approved provider subset (Pornhits and duplicate OMG retired) from the four identical Aloha exports.
  * Previously supported sources remain in their original native engines. Rejected
  * personal, utilities, reference and unrelated bookmarks are not registered.
  */
@@ -39,7 +39,6 @@ Pornhub|https://www.pornhub.com/|ADULT
 EPORNER|https://www.eporner.com/|ADULT
 XVIDEOS|https://fr.xvideos.com/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
-OMG.xxx|https://www.omg.porn/fr/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
@@ -72,7 +71,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==42 && sites.distinctBy{it.url}.size==42){"Incorrect approved Aloha source set"}
+            require(sites.size==41 && sites.distinctBy{it.url}.size==41){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
