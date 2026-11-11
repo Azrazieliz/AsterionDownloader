@@ -91,11 +91,21 @@ internal object OriginalFileReceipt {
         return if(ok)Check(true,"Verified downloaded original signature",total)
         else failed("Downloaded bytes do not match the requested original format",total)
     }
+    /** Independently compare the persisted file's length to the HTTP transfer
+     * size when Android reports it. A plausible header is not a complete file.
+     */
+    internal fun expectedSize(check:Check,declared:Long):Check=
+        if(check.valid && declared>0L && check.bytes!=declared)
+            failed("Original is incomplete: saved bytes differ from expected transfer size",
+                check.bytes)
+        else check
+
     fun verify(context:Context,manager:DownloadManager,id:Long,
-               filename:String):Check {
+               filename:String,expectedBytes:Long=-1L):Check {
         val uri=runCatching{manager.getUriForDownloadedFile(id)}.getOrNull()
             ?:return failed("DownloadManager returned no saved original")
-        return verifyUri(context,uri,filename)
+        val receipt=verifyUri(context,uri,filename)
+        return expectedSize(receipt,expectedBytes)
     }
     /** Also validate already-persisted MediaStore originals before passing
      * them to Rounder. No queued request or cloud-upload receipt is implied.
