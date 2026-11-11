@@ -1196,11 +1196,14 @@ object SourceIndex {
             do {
                 if(stop() || Thread.currentThread().isInterrupted ||
                     !AppPower.enabled(context))return
-                val result=VerifiedSiteCatalogApi.fetch(context,source,cursor)
-                    ?:error("Provider catalog adapter unavailable")
-                if(pageCount==0 && result.media.isEmpty()){
-                    error("Provider published no supported catalog media")
-                }
+                // A provider may disable its JSON catalog while leaving
+                // legitimate first-party HTML listing cards accessible.
+                // 403/empty JSON must not prevent the HTML/browser fallback.
+                val result=runCatching{
+                    VerifiedSiteCatalogApi.fetch(context,source,cursor)
+                }.getOrNull()
+                if(result==null || (pageCount==0 && result.media.isEmpty()))
+                    break
                 synchronized(previewDbLock){
                     SourceIndexDb(context).use{db->
                         for(item in result.media){
@@ -1217,10 +1220,14 @@ object SourceIndex {
                 }
             }while(!previewOnly && manual && more!=null &&
                 pageCount<8 && !stop())
-            if(previewOnly)SourceIndexDb(context).use{db->
-                db.update(source.url,source.cursor,null,source.discovered+fresh)
+            if(pageCount>0){
+                if(previewOnly)SourceIndexDb(context).use{db->
+                    db.update(source.url,source.cursor,null,source.discovered+fresh)
+                }
+                return
             }
-            return
+            // The API was inaccessible or empty: scan the real website
+            // through the normal same-site, authorized-session HTML adapter.
         }
         var cursor=source.cursor
         var fresh=0
