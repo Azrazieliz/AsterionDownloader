@@ -1306,7 +1306,10 @@ object SourceIndex {
                                  onDirectEnqueued:(Long)->Unit={}):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
         if(item.kind=="video"){
-            val queued=VideoDb(context).use{it.addVideo(item.url,item.title)}
+            // A website indexing original is not an explicit manual selection.
+            val queued=VideoDb(context).use{
+                it.addVideo(item.url,item.title,origin="website")
+            }
             if(queued)VideoEngine.launch(context,false)
             // Existing downloads, including strict full-length holds, are owned by
             // VideoFlow and must not be enqueued repeatedly by the source scanner.
