@@ -38,6 +38,14 @@ class VideoSiteProfilesTest {
         }
         assertEquals(24,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://hentaibros.net/muramata-san-no-aijou-episode-2/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://hentaibros.net/latest-videos/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://www.omg.porn/fr/2257/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.omg.porn/fr/"))
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.xvideos.com/"
