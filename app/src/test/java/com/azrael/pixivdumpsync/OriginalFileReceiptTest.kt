@@ -36,6 +36,16 @@ class OriginalFileReceiptTest {
         assertTrue(OriginalFileReceipt.inspect("anim.gif",gif,ByteArray(0),2048).valid)
         assertFalse(OriginalFileReceipt.inspect("anim.webp",gif,ByteArray(0),2048).valid)
     }
+    @Test fun declaredTransferSizeMustMatchPersistedOriginalBytes(){
+        val valid=OriginalFileReceipt.Check(true,"Header verified",1024L)
+        assertTrue(OriginalFileReceipt.expectedSize(valid,1024L).valid)
+        assertTrue(OriginalFileReceipt.expectedSize(valid,-1L).valid)
+        val truncated=OriginalFileReceipt.expectedSize(valid,2048L)
+        assertFalse(truncated.valid)
+        assertTrue(truncated.reason.contains("incomplete"))
+        assertFalse(OriginalFileReceipt.expectedSize(
+            OriginalFileReceipt.Check(false,"Invalid bytes",1024L),1024L).valid)
+    }
     @Test fun realArchivePassesAndTruncationFails(){
         val output=java.io.ByteArrayOutputStream()
         java.util.zip.ZipOutputStream(output).use{zip->
