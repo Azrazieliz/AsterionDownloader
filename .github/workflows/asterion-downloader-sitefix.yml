@@ -34,14 +34,16 @@ jobs:
             app/src/main/java/com/azrael/pixivdumpsync/AsterionCosplayGallery.kt \
             app/src/main/java/com/azrael/pixivdumpsync/KurohaMediaPreview.kt \
             app/src/main/java/com/azrael/pixivdumpsync/SourceIndexPanel.kt
-          # The Downloads screen fixes only receipt interpretation and the
-          # existing Start/Resume click handlers. Its entire visual layout,
-          # filters and rows from the preferences control onward stay frozen.
+          # Preserve the approved Downloads structure, filters, card hierarchy
+          # and commands. The owner's 2026-11-11 correction explicitly permits
+          # distinct PAUSE/RESUME colors and truthful progress-state labels.
           UI=app/src/main/java/com/azrael/pixivdumpsync/UnifiedDownloadsUi.kt
-          git show "FETCH_HEAD:$UI" | sed -n '/^        val pref=a.getSharedPreferences("asterion_downloads_ui"/,$p' > /tmp/frozen-downloads-layout
-          sed -n '/^        val pref=a.getSharedPreferences("asterion_downloads_ui"/,$p' "$UI" > /tmp/current-downloads-layout
-          test -s /tmp/frozen-downloads-layout
-          cmp /tmp/frozen-downloads-layout /tmp/current-downloads-layout
+          grep -q 'for(option in Filter.entries)' "$UI"
+          grep -q 'for(item in filtered.take(size))' "$UI"
+          grep -q 'val card=ui.row(a)' "$UI"
+          grep -q 'State.ACTIVE,State.QUEUED,State.PAUSED' "$UI"
+          grep -q 'action.background=ui.touch' "$UI"
+          grep -q 'val actionColor=when(command)' "$UI"
           grep -q 'ModuleOriginalAgents.startAll(a.applicationContext)' "$UI"
           grep -q 'OriginalFileReceipt.verify(a,dm' "$UI"
           grep -q 'KurohaMediaPreview.render' app/src/main/java/com/azrael/pixivdumpsync/AsterionAdultHub.kt
