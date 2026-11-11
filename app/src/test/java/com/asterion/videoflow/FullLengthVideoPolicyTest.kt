@@ -28,6 +28,27 @@ class FullLengthVideoPolicyTest {
             "Studio Actress Scene",url,800L,null)
         assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,preview.verdict)
     }
+    @Test fun manualOriginalRequestCanProceedWithoutExistingReference(){
+        val direct="https://www.pornhub.com/view_video.php?viewkey=ab"
+        val decision=FullLengthVideoPolicy.assess(
+            "Original Scene","Original Scene",direct,
+            1800L,null,userExplicitlyRequested=true)
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,decision.verdict)
+        val automatic=FullLengthVideoPolicy.assess(
+            "Original Scene","Original Scene",direct,1800L,null)
+        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,automatic.verdict)
+    }
+    @Test fun manualChoiceNeverAuthorizesPreviewOrUnknownRuntime(){
+        val url="https://www.pornhub.com/view_video.php?viewkey=ab"
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.assess(
+                "Original Scene teaser","Original Scene",url,900L,null,
+                userExplicitlyRequested=true).verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
+            FullLengthVideoPolicy.assess(
+                "Original Scene","Original Scene",url,null,null,
+                userExplicitlyRequested=true).verdict)
+    }
     @Test fun onlyExplicitFullReleaseProvidersCanSeedRuntimes(){
         val designated=listOf(
             "https://watchporn.to/video/12/example",
