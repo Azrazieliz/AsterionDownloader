@@ -8,11 +8,13 @@ class ProviderRetirementTest {
         assertTrue(ProviderRetirement.isRetired("https://www.pornhits.com/main/"))
         assertTrue(ProviderRetirement.isRetired("https://m.pornhits.com/video/example"))
         assertTrue(ProviderRetirement.isRetired("https://pornhits.com/video/example"))
+        assertTrue(ProviderRetirement.isRetired("https://www.omg.porn/fr/"))
+        assertTrue(ProviderRetirement.isRetired("https://www.omg.xxx/fr/"))
     }
     @Test fun lookalikeAndUnrelatedHostsRemainIndependent(){
         assertFalse(ProviderRetirement.isRetired("https://pornhits.com.evil.example/"))
         assertFalse(ProviderRetirement.isRetired("https://mypornhits.com/"))
-        assertFalse(ProviderRetirement.isRetired("https://www.omg.porn/"))
+        assertFalse(ProviderRetirement.isRetired("https://omg.porn.attacker.example/"))
         assertFalse(ProviderRetirement.isRetired("https://hentaibros.net/"))
     }
 }
