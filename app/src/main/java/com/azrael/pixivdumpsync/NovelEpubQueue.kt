@@ -173,7 +173,9 @@ class NovelEpubQueue(context:Context):
     fun requestedRefresh(url:String):Boolean =
         writableDatabase.update("novels",ContentValues().apply{
             put("state","PENDING");put("retry_after",0L)
-        },"url=? AND state='DONE'",arrayOf(url))>0
+            put("last_update",System.currentTimeMillis())
+            putNull("last_error")
+        },"url=? AND state IN ('DONE','RETRY','ERROR')",arrayOf(url))>0
 
     fun previous(url:String):Pair<String,String>?=readableDatabase.rawQuery(
         "SELECT saved_uri,fingerprint FROM novels WHERE url=? AND state='WORKING'",
