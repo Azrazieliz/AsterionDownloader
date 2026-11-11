@@ -91,10 +91,31 @@ object AssetsPanel {
         }
     }
     fun render(a:Activity,body:LinearLayout,refresh:()->Unit={}){
-        // Character-card LOOKUP, not a creator-follow subscription.
-        // Manual card search works with the global sync/backfill paused.
-        KoikatsuInlineSearch.render(a,body)
-        body.addView(ui.text(a,"GENERAL 3D MODELS",22f,ui.white,true),ui.lp(a,12))
+        // A focused workspace, not three independent galleries and provider
+        // administration panels stacked on the same phone screen.
+        val pref=a.getSharedPreferences("asterion_asset_workspace_v2",0)
+        val section=pref.getString("section","CARDS").orEmpty()
+            .takeIf{it in setOf("CARDS","MODELS","FILES")} ?:"CARDS"
+        val tabs=ui.row(a)
+        for((name,key) in listOf("Koikatsu" to "CARDS",
+            "3D models" to "MODELS","Files & sources" to "FILES")){
+            tabs.addView(ui.chip(a,name,section==key){
+                pref.edit().putString("section",key).apply()
+                refresh()
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                rightMargin=ui.px(a,5)
+            })
+        }
+        body.addView(tabs,ui.lp(a,9))
+        when(section){
+            "CARDS"->{
+                // Character-card LOOKUP, not an unrequested follow.
+                KoikatsuInlineSearch.render(a,body)
+                return
+            }
+            "FILES"->{renderFilesAndSources(a,body,refresh);return}
+        }
+        body.addView(ui.text(a,"3D models & materials",19f,ui.white,true),ui.lp(a,12))
         body.addView(ui.text(a,"Download original model files and their textures. Blender and Windows assets require compatible tools, not automatic Android conversion.",12f,ui.secondary),ui.lp(a,7))
         val input=CreatorNames.input(a,"Search model or material","ASSETS")
         body.addView(input,ui.lp(a,8))
@@ -110,6 +131,7 @@ object AssetsPanel {
                 val ambient=runCatching{JSONObject(fetch("https://ambientcg.com/api/v3/assets?q="+
                     java.net.URLEncoder.encode(q,"UTF-8")+"&limit=12&include=title,tags,downloads"))}
                 a.runOnUiThread{
+                    if(a.isDestroyed || a.isFinishing)return@runOnUiThread
                     outcome.onSuccess{data->
                         var found=0
                         for(id in data.keys()){
@@ -119,7 +141,11 @@ object AssetsPanel {
                             val terms=q.split(Regex("\\s+"))
                             if(terms.any{it !in (name+" "+id+" "+item.optJSONArray("tags")).lowercase()})continue
                             val tile=ui.card(a)
-                            val image=ImageView(a).apply{scaleType=ImageView.ScaleType.CENTER_CROP}
+                            val image=ImageView(a).apply{
+                                scaleType=ImageView.ScaleType.FIT_CENTER
+                                adjustViewBounds=true
+                                setBackgroundColor(ui.raised)
+                            }
                             tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,155)))
                             RemoteImageLoader.load(a,image,"https://cdn.polyhaven.com/asset_img/primary/"+id+".png?height=256",
                                 "https://polyhaven.com/a/"+id)
@@ -144,7 +170,11 @@ object AssetsPanel {
                                 f.optString("attributes","pack")+".zip" to url
                             }
                             val tile=ui.card(a)
-                            val image=ImageView(a).apply{scaleType=ImageView.ScaleType.CENTER_CROP}
+                            val image=ImageView(a).apply{
+                                scaleType=ImageView.ScaleType.FIT_CENTER
+                                adjustViewBounds=true
+                                setBackgroundColor(ui.raised)
+                            }
                             tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,145)))
                             CreatorPreviews.sourceThumbnail(a,image,"https://ambientcg.com/a/"+id)
                             tile.addView(ui.text(a,item.optString("title",id),16f,ui.white,true),ui.lp(a,6))
@@ -166,10 +196,17 @@ object AssetsPanel {
             }
         },ui.lp(a,8))
         body.addView(status,ui.lp(a,6));body.addView(results,ui.lp(a,6))
-        body.addView(ui.action(a,"GUMROAD · SEARCH & DOWNLOAD ORIGINAL ASSETS",true){
-            val q=input.text.toString().trim()
-            val address=if(q.startsWith("https://"))q
-                else "https://gumroad.com/discover?query="+Uri.encode(q.ifBlank{"3d model"})
+    }
+    private fun renderFilesAndSources(
+        a:Activity,body:LinearLayout,refresh:()->Unit
+    ){
+        body.addView(ui.text(a,"Files & source libraries",19f,ui.white,true),
+            ui.lp(a,10))
+        body.addView(ui.text(a,
+            "Open a local model or manage your approved 3D and Studio libraries.",
+            12f,ui.secondary),ui.lp(a,6))
+        body.addView(ui.action(a,"GUMROAD · ORIGINAL ASSETS",true){
+            val address="https://gumroad.com/discover?query="+Uri.encode("3d model")
             a.startActivity(Intent(a,AssetMarketplaceActivity::class.java)
                 .putExtra(AssetMarketplaceActivity.EXTRA_URL,address))
         },ui.lp(a,7))
@@ -178,8 +215,21 @@ object AssetsPanel {
                 type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
             },5204)
         },ui.lp(a,7))
-        // General creator archives belong to the creator/media module, not Koikatsu.
-        AlohaSources.render(a,body,listOf(AlohaArea.ASSETS),"ASSETS · MODELS & CONVERTERS")
+        val pref=a.getSharedPreferences("asterion_asset_workspace_v2",0)
+        val open=pref.getBoolean("provider_tools",false)
+        body.addView(ui.action(a,
+            if(open)"HIDE 3D WEBSITE CONTROLS" else "3D SOURCES · SYNC & BACKFILL",
+            false){
+            pref.edit().putBoolean("provider_tools",!open).apply()
+            refresh()
+        },ui.lp(a,8))
+        if(open){
+            // No duplicate source controls on unrelated screens.
+            SourceIndexPanel.render(a,body,"ASSETS")
+            AlohaSources.render(a,body,listOf(AlohaArea.ASSETS),
+                "ASSETS · MODELS & CONVERTERS")
+        }
+        ContentVerticalsPanel.render(a,body,ContentVerticalsPanel.Group.ASSETS,refresh)
     }
     fun localFile(a:Activity,uri:Uri?){
         if(uri==null)return
