@@ -65,7 +65,12 @@ object AsterionAdultHub {
         if(!SourceIndexParser.safe(url) ||
             !SearchRanking.validUrl(cover) ||
             IndexedMediaQuality.navigationTitle(title))return false
-        if(SearchRanking.isVideoUrl(url) ||
+        // The native provider contract recognizes first-party video slugs
+        // without /video/ (HentaiBros) and localized catalog URLs (JAVIDEO).
+        // The generic media heuristic rejects these legitimate single-segment
+        // pages, leaving dozens of indexed covers invisible in the UI.
+        if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
+            SearchRanking.isVideoUrl(url) ||
             IndexedMediaQuality.isMedia(url,title,cover,"ADULT"))return true
         val path=runCatching{Uri.parse(url).path.orEmpty()}.getOrDefault("")
         return Regex("^/[0-9]{4,}[-/][a-zA-Z0-9_-]{4,}").containsMatchIn(path)
