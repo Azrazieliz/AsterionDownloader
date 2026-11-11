@@ -79,7 +79,13 @@ object UnifiedMediaGrid {
                 }
                 if(ui.showPreviews(a)){
                     val cover=ImageView(a).apply{
-                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        // Character-card PNGs must remain uncropped and preserve
+                        // their source proportions in the existing card frame.
+                        scaleType=if(item.kind=="model" ||
+                            item.source.contains("koikatsu",true) ||
+                            item.source.contains("bepis.moe",true))
+                            ImageView.ScaleType.FIT_CENTER
+                            else ImageView.ScaleType.CENTER_CROP
                         setBackgroundColor(ui.surface)
                         contentDescription=item.title+" thumbnail"
                         setImageResource(when(item.kind){
