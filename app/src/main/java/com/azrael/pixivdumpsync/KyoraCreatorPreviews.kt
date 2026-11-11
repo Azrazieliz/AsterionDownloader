@@ -71,19 +71,34 @@ object KyoraCreatorPreviews {
             ".video-card a:has(img),.thumb a:has(img),.thumbs a:has(img),"+
             ".video-thumb a:has(img),.clip a:has(img),.movie a:has(img),"+
             ".items a:has(img),.post-item a:has(img)")
+        val rich=doc.select("a:has(video[poster]),a:has([style*=background-image])")
         val anchors=if(sections.isEmpty())doc.select("a:has(img)") else sections
-        for(anchor in anchors.take(1500)){
+        for(anchor in (anchors+rich).distinct().take(1500)){
             val page=anchor.absUrl("href")
             if(!SearchRanking.validUrl(page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
             if(target.scheme!="https" ||
                 !SourceIndexParser.sameSite(base,page))continue
-            val img=anchor.selectFirst("img")?:continue
-            val cover=SitePreviewImage.best(img)?:continue
+            val img=anchor.selectFirst("img")
+            val video=anchor.selectFirst("video[poster],video[data-poster]")
+            val poster=video?.let {
+                val raw=it.attr("poster").ifBlank{it.attr("data-poster")}
+                runCatching{URI(doc.location()).resolve(raw).toString()}.getOrNull()
+                    ?.takeIf{url->SourceIndexParser.safe(url)}
+            }
+            val background=anchor.selectFirst("[style*=background-image]")
+                ?.attr("style")?.let{style->
+                    Regex("""(?i)background-image\\s*:\\s*url\\s*\\(\\s*['"]?([^)'"]+)""")
+                        .find(style)?.groupValues?.getOrNull(1)
+                }?.let{raw->
+                    runCatching{URI(doc.location()).resolve(raw).toString()}.getOrNull()
+                        ?.takeIf{url->SourceIndexParser.safe(url)}
+                }
+            val cover=img?.let{SitePreviewImage.best(it)}?:poster?:background?:continue
             val imgPath=URI(cover).path.lowercase()
             if(listOf("logo","icon","avatar","sprite","banner","pixel","advert")
                 .any{imgPath.contains(it)})continue
-            val title=anchor.attr("title").ifBlank{img.attr("alt")}
+            val title=anchor.attr("title").ifBlank{img?.attr("alt").orEmpty()}
                 .ifBlank{anchor.text()}
                 .ifBlank{anchor.closest("article,.post,.video,.item")?.selectFirst("h2,h3")?.text().orEmpty()}
                 .ifBlank{runCatching{
