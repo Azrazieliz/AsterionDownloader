@@ -15,53 +15,94 @@ object Scheduling {
     private const val ID=42681
     private const val DOWNLOAD_NOW=42682
     private const val DOWNLOAD_RETRY=42683
-    /** Wake the durable retry queue when the earliest backoff expires.
-     * This is separate from immediate jobs so the next manual launch cannot
-     * overwrite an already scheduled retry or vice versa.
+    private const val SECONDARY_PERIODIC=42684
+    private const val SECONDARY_NOW=42685
+    private const val SECONDARY_RETRY=42686
+
+    /** Schedule BOTH independently claimed transfers, not just the primary
+     * process. Android may reject foreground-service startup from background
+     * callbacks, so both processes need their own JobScheduler fallback.
      */
     fun requestRetry(context:Context,delayMs:Long):Boolean{
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val delay=delayMs.coerceIn(2_000L,60L*60_000L)
-        val job=JobInfo.Builder(DOWNLOAD_RETRY,
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        val primary=jobs.schedule(JobInfo.Builder(DOWNLOAD_RETRY,
             ComponentName(context,PollJobService::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setMinimumLatency(delay).setOverrideDeadline(delay+30_000L)
-            .build()
-        return context.getSystemService(JobScheduler::class.java).schedule(job)>0
+            .build())>0
+        val secondary=jobs.schedule(JobInfo.Builder(SECONDARY_RETRY,
+            ComponentName(context,SecondaryPollJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(delay).setOverrideDeadline(delay+30_000L)
+            .build())>0
+        return primary && secondary
     }
-    fun requestImmediate(context:Context,scan:Boolean=false,targetHost:String?=null):Boolean {
+    fun requestPrimaryImmediate(context:Context,scan:Boolean=false,
+                                targetHost:String?=null):Boolean{
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
-        val extras=PersistableBundle().apply {
+        val extras=PersistableBundle().apply{
             putBoolean("scan",scan)
             targetHost?.let{putString("target_site_host",it)}
         }
-        val job=JobInfo.Builder(DOWNLOAD_NOW,ComponentName(context,PollJobService::class.java))
+        val job=JobInfo.Builder(DOWNLOAD_NOW,
+            ComponentName(context,PollJobService::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setMinimumLatency(1000L)
-            .setOverrideDeadline(10_000L)
-            .setExtras(extras)
+            .setMinimumLatency(1000L).setOverrideDeadline(10_000L)
+            .setExtras(extras).build()
+        return context.getSystemService(JobScheduler::class.java).schedule(job)>0
+    }
+    fun requestSecondaryImmediate(context:Context):Boolean{
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
+        val job=JobInfo.Builder(SECONDARY_NOW,
+            ComponentName(context,SecondaryPollJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(1000L).setOverrideDeadline(10_000L)
             .build()
         return context.getSystemService(JobScheduler::class.java).schedule(job)>0
     }
-    fun configure(context: Context, enabled: Boolean) {
-        context.getSharedPreferences("video_options",Context.MODE_PRIVATE).edit().putBoolean("auto",enabled).apply()
-        val scheduler=context.getSystemService(JobScheduler::class.java)
-        scheduler.cancel(ID)
-        if(enabled && com.azrael.pixivdumpsync.AppPower.enabled(context))
-            scheduler.schedule(JobInfo.Builder(ID,ComponentName(context,PollJobService::class.java))
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setPersisted(true)
-            .setPeriodic(15*60*1000L)
-            .setBackoffCriteria(60*1000L,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build())
+    fun requestImmediate(context:Context,scan:Boolean=false,
+                         targetHost:String?=null):Boolean{
+        val primary=requestPrimaryImmediate(context,scan,targetHost)
+        val secondary=requestSecondaryImmediate(context)
+        return primary && secondary
+    }
+    fun configure(context:Context,enabled:Boolean){
+        context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
+            .edit().putBoolean("auto",enabled).apply()
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        jobs.cancel(ID)
+        jobs.cancel(SECONDARY_PERIODIC)
+        if(enabled && com.azrael.pixivdumpsync.AppPower.enabled(context)){
+            jobs.schedule(JobInfo.Builder(ID,
+                ComponentName(context,PollJobService::class.java))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPersisted(true).setPeriodic(15*60*1000L)
+                .setBackoffCriteria(60*1000L,
+                    JobInfo.BACKOFF_POLICY_EXPONENTIAL).build())
+            jobs.schedule(JobInfo.Builder(SECONDARY_PERIODIC,
+                ComponentName(context,SecondaryPollJobService::class.java))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPersisted(true).setPeriodic(15*60*1000L)
+                .setBackoffCriteria(60*1000L,
+                    JobInfo.BACKOFF_POLICY_EXPONENTIAL).build())
+        }
     }
     fun cancel(context:Context){
-        context.getSystemService(JobScheduler::class.java).cancel(ID)
+        val jobs=context.getSystemService(JobScheduler::class.java)
+        jobs.cancel(ID)
+        jobs.cancel(SECONDARY_PERIODIC)
     }
-    fun ensure(context: Context) {
-        if(!com.azrael.pixivdumpsync.AppPower.enabled(context)){cancel(context);return}
-        if(context.getSharedPreferences("video_options",Context.MODE_PRIVATE).getBoolean("auto",true)) {
-            val scheduler=context.getSystemService(JobScheduler::class.java)
-            if(scheduler.allPendingJobs.none { it.id==ID }) configure(context,true)
+    fun ensure(context:Context){
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context)){
+            cancel(context);return
+        }
+        if(context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
+                .getBoolean("auto",true)){
+            val ids=context.getSystemService(JobScheduler::class.java)
+                .allPendingJobs.map{it.id}.toSet()
+            if(ID !in ids || SECONDARY_PERIODIC !in ids)configure(context,true)
         }
     }
 }
@@ -89,6 +130,30 @@ class PollJobService: JobService() {
     }
     override fun onStopJob(params: JobParameters?): Boolean = true
 }
+// Runs in :videoflow_secondary, independently of the primary process.
+// Both agents rely on VideoDb.claimNext() leases; a queued original is owned
+// by only one process. Download job completion is not treated as file receipt.
+class SecondaryPollJobService:JobService(){
+    private val executor=Executors.newSingleThreadExecutor()
+    @Volatile private var active:java.util.concurrent.Future<*>?=null
+    override fun onStartJob(params:JobParameters?):Boolean{
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(this))return false
+        val manual=params?.jobId==42685 || params?.jobId==42686
+        if(!manual && !getSharedPreferences("video_options",MODE_PRIVATE)
+                .getBoolean("auto",true))return false
+        active=executor.submit{
+            try{
+                runCatching{VideoEngine.work(applicationContext,false)}
+            }finally{jobFinished(params,false)}
+        }
+        return true
+    }
+    override fun onStopJob(params:JobParameters?):Boolean{
+        active?.cancel(true)
+        return true
+    }
+}
+
 class BootReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if(intent?.action==Intent.ACTION_BOOT_COMPLETED) Scheduling.ensure(context)
