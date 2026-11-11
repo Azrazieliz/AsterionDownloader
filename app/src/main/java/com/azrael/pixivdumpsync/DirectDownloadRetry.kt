@@ -109,11 +109,11 @@ object DirectDownloadRetry {
         val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}
             ?:return false
         val manager=ctx.getSystemService(DownloadManager::class.java)
-        val done=DirectDownloadTracker.states(ctx,250).any{
+        val done=DirectDownloadTracker.states(ctx,250).firstOrNull{
             it.job.id==id && it.status==DownloadManager.STATUS_SUCCESSFUL
-        }
-        if(!done)return false
-        val receipt=OriginalFileReceipt.verify(ctx,manager,id,record.name)
+        }?:return false
+        val receipt=OriginalFileReceipt.verify(ctx,manager,id,
+            record.name,done.total)
         OriginalReceiptState.set(ctx,id,
             if(receipt.valid)"VERIFIED" else "INVALID")
         if(!receipt.valid)return false
@@ -133,7 +133,7 @@ object DirectDownloadRetry {
             val state=status[record.id]?:continue
             val systemSuccess=state.status==DownloadManager.STATUS_SUCCESSFUL
             val receipt=if(systemSuccess)
-                OriginalFileReceipt.verify(ctx,manager,record.id,record.name)
+                OriginalFileReceipt.verify(ctx,manager,record.id,record.name,state.total)
                 else null
             if(receipt?.valid==true){
                 OriginalReceiptState.set(ctx,record.id,"VERIFIED")
