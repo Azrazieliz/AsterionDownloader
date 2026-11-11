@@ -36,7 +36,8 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(25,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(24,VideoSiteProfiles.coveredHosts.size)
+        assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.xvideos.com/"
