@@ -57,25 +57,30 @@ object VideoEngine {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return false
         val intent=Intent(context,TransferService::class.java).putExtra("scan",scan)
             .putExtra("target_site_host",targetHost)
-        return try {
+        // Attempt each independent process even if the other one fails.
+        // A previously swallowed secondary-process exception silently reduced
+        // the engine to one downloader on Android's FGS-restricted paths.
+        val primaryStarted=try{
             if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
             else context.startService(intent)
-            // Real parallel transfers run in a second isolated Android
-            // process. Separate Python interpreters and working directories
-            // prevent the embedded yt-dlp chdir() from corrupting each other.
-            runCatching{
-                val secondary=Intent(context,TransferAgentTwoService::class.java)
-                if(Build.VERSION.SDK_INT>=26)context.startForegroundService(secondary)
-                else context.startService(secondary)
-            }
             true
-        } catch (_: Exception) {
-            // Android 14+ often forbids starting a foreground service from a
-            // source-scan callback or background receiver. Persist an imminent
-            // JobScheduler request instead of silently abandoning the queue.
-            if(allowJobFallback)Scheduling.requestImmediate(context,scan,targetHost)
+        }catch(_:Exception){
+            if(allowJobFallback)
+                Scheduling.requestPrimaryImmediate(context,scan,targetHost)
             false
         }
+        val secondaryStarted=try{
+            val second=Intent(context,TransferAgentTwoService::class.java)
+            if(Build.VERSION.SDK_INT>=26)context.startForegroundService(second)
+            else context.startService(second)
+            true
+        }catch(_:Exception){
+            if(allowJobFallback)Scheduling.requestSecondaryImmediate(context)
+            false
+        }
+        // The primary PollJobService starts its own work() when FGS startup
+        // was denied; secondary also has an independent secondary-process job.
+        return primaryStarted
     }
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
              targetHost:String?=null) {
