@@ -116,7 +116,8 @@ internal object ModuleOriginalAgents {
     }
     private fun monitor(context:Context,area:String,slot:Int,id:Long){
         val manager=context.getSystemService(DownloadManager::class.java)
-        val deadline=SystemClock.elapsedRealtime()+15L*60_000L
+        val startTick=SystemClock.elapsedRealtime()
+        val deadline=startTick+15L*60_000L
         while(AppPower.enabled(context) &&
             !Thread.currentThread().isInterrupted &&
             SystemClock.elapsedRealtime()<deadline){
@@ -137,7 +138,9 @@ internal object ModuleOriginalAgents {
             // not keeping the Downloads page open on the phone.
             if((statusValue==DownloadManager.STATUS_PENDING ||
                     statusValue==DownloadManager.STATUS_RUNNING) &&
-                system?.second==0L){
+                system?.second==0L &&
+                SystemClock.elapsedRealtime()-startTick>=
+                    DirectTransferStallPolicy.ZERO_BYTE_TIMEOUT_MS){
                 val recovered=DirectDownloadRetry.reconcileStalled(context)
                 if(recovered>0){
                     status(context,area,slot,"ZERO_BYTE_STALL_NEEDS_RETRY")
