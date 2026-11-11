@@ -121,7 +121,39 @@ object DirectDownloadRetry {
         DirectRetryVault.remove(ctx,id)
         return true
     }
-    fun retry(ctx:Context):Int=retrySelected(ctx,null)
+    /** Turn a genuine 150-second zero-byte OS transfer into a durable,
+     * explicitly retryable failure. Stalled jobs never reserve both module
+     * slots indefinitely, and progressing transfers are untouched.
+     */
+    fun reconcileStalled(ctx:Context):Int {
+        if(!AppPower.enabled(ctx))return 0
+        val now=System.currentTimeMillis()
+        val pending=runCatching{DirectRetryVault.all(ctx).associateBy{it.id}}
+            .getOrDefault(emptyMap())
+        val manager=ctx.getSystemService(DownloadManager::class.java)
+        var stalled=0
+        for(state in DirectDownloadTracker.states(ctx,250)){
+            if(state.job.id !in pending)continue
+            if(!DirectTransferStallPolicy.stalled(
+                    state.status==DownloadManager.STATUS_PENDING ||
+                    state.status==DownloadManager.STATUS_RUNNING,
+                    state.bytes,state.job.created,now))continue
+            val original=pending[state.job.id]?:continue
+            // Never cancel a transfer with any real bytes; capture the
+            // terminal state before unlinking the OS request.
+            if(runCatching{manager.remove(state.job.id)}.isFailure)continue
+            DirectRetryVault.remember(ctx,original.copy(
+                attempts=DirectTransferStallPolicy.TERMINAL_RETRY_ATTEMPTS,
+                after=Long.MAX_VALUE))
+            OriginalReceiptState.set(ctx,state.job.id,"STALLED")
+            stalled++
+        }
+        return stalled
+    }
+    fun retry(ctx:Context):Int{
+        reconcileStalled(ctx)
+        return retrySelected(ctx,null)
+    }
     private fun retrySelected(ctx:Context,forceId:Long?):Int{
         if(!AppPower.enabled(ctx))return 0
         val manager=ctx.getSystemService(DownloadManager::class.java)
