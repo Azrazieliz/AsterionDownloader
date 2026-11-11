@@ -29,7 +29,7 @@ object ProviderRetirement {
         for(domain in retired){
             val key=if(domain=="pornhits.com")"pornhits-disabled"
                 else "$domain-disabled"
-            if(pref.getBoolean(key,false))continue
+            // Recheck every enrollment pass, including previously retired hosts.
             fun belongs(address:String):Boolean {
                 val host=runCatching{URI(address).host.orEmpty()
                     .lowercase(Locale.ROOT)}.getOrDefault("")
