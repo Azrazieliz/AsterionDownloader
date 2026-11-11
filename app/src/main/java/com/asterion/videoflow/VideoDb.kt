@@ -54,6 +54,33 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         writableDatabase.execSQL("UPDATE watches SET last_check=0,error=NULL,cursor=NULL,backfill_complete=0 WHERE id=?",arrayOf(id))
     }
     fun removeWatch(id: Long) { writableDatabase.delete("watches", "id=?", arrayOf("$id")) }
+    /** Preserve video history and completed originals; suspend every pending
+     * transfer from the provider removed by the user.
+     */
+    fun pauseProvider(domain:String):Int {
+        val pending=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id,url FROM videos WHERE state NOT IN ('done','paused')",null
+        ).use { cursor ->
+            while(cursor.moveToNext()) {
+                val address=cursor.getString(1)
+                val host=runCatching { java.net.URI(address).host.orEmpty().lowercase() }
+                    .getOrDefault("")
+                if(host==domain || host.endsWith("."+domain))
+                    pending.add(cursor.getLong(0))
+            }
+        }
+        for(id in pending) {
+            writableDatabase.update("videos",ContentValues().apply {
+                put("state","paused")
+                put("error","Source retired by user; historical record preserved")
+                put("lease",android.database.DatabaseUtils.longForQuery(
+                    readableDatabase,"SELECT lease FROM videos WHERE id=?",
+                    arrayOf(id.toString()))+1L)
+            },"id=?",arrayOf(id.toString()))
+        }
+        return pending.size
+    }
     fun enableWatch(id: Long, enabled: Boolean) {
         writableDatabase.update("watches", ContentValues().apply { put("enabled", if(enabled) 1 else 0) }, "id=?", arrayOf("$id"))
     }
@@ -80,6 +107,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     fun addVideo(url: String, title: String = url, watchId: Long = 0,
                  origin:String=if(watchId==0L)"user" else "website"): Boolean {
         val normalized = WebDiscovery.normalize(url) ?: return false
+        if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(normalized))return false
         val row = ContentValues().apply {
             put("url", normalized); put("title", title.take(220))
             put("watch_id", watchId); put("state", "queued")
@@ -161,6 +189,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             ORDER BY CASE WHEN v.watch_id=0 THEN 0 ELSE 1 END,
                 v.updated ASC LIMIT 15000""",arrayOf(now)).use { c ->
             while(c.moveToNext()){
+                if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(c.getString(1)))
+                    continue
                 val watchId=c.getLong(7)
                 if(watchId!=0L){
                     val origin=c.getString(8)
@@ -268,6 +298,12 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             arrayOf(id))
     }
     fun retry(id: Long) {
+        val target=readableDatabase.rawQuery(
+            "SELECT url FROM videos WHERE id=?",arrayOf(id.toString())).use{
+            if(it.moveToFirst())it.getString(0) else null
+        }
+        if(target!=null && com.azrael.pixivdumpsync.ProviderRetirement.isRetired(target))
+            return
         update(id,"queued")
         writableDatabase.execSQL(
             "UPDATE videos SET attempts=0,retry_after=0,request_origin='user' WHERE id=?",
