@@ -282,9 +282,22 @@ object UnifiedDownloadsUi {
                 runCatching{dm.getUriForDownloadedFile(item.job.id)?.toString()}.getOrNull()
                 else null
             val present=readable(a,original)
+            // DownloadManager can save a provider login page, redirect notice
+            // or truncated archive and still report STATUS_SUCCESSFUL. Check
+            // persisted bytes before showing a saved original in the queue.
+            val receipt=if(item.status==DownloadManager.STATUS_SUCCESSFUL && present)
+                OriginalFileReceipt.verify(a,dm,item.job.id,
+                    item.job.filename,item.total)
+                else null
+            if(receipt!=null){
+                val next=if(receipt.valid)"VERIFIED" else "INVALID"
+                if(OriginalReceiptState.get(a,item.job.id)!=next)
+                    OriginalReceiptState.set(a,item.job.id,next)
+            }
             val state=when {
                 item.status==DownloadManager.STATUS_FAILED -> State.FAILED
-                item.status==DownloadManager.STATUS_SUCCESSFUL && present -> State.DONE
+                item.status==DownloadManager.STATUS_SUCCESSFUL &&
+                    receipt?.valid==true -> State.DONE
                 item.status==DownloadManager.STATUS_SUCCESSFUL -> State.FAILED
                 item.status==DownloadManager.STATUS_RUNNING->State.ACTIVE
                 else->State.QUEUED
@@ -294,8 +307,12 @@ object UnifiedDownloadsUi {
             rows+=Row(item.job.folder,item.job.filename,
                 item.job.sourceHost+" · "+when(state){
                     State.DONE->"Saved on device"
-                    State.FAILED->if(present)"Download error "+item.reason
-                        else "Failed or local file unavailable"
+                    State.FAILED->when {
+                        receipt!=null && !receipt.valid ->
+                            "Rejected invalid original · "+receipt.reason.take(100)
+                        present->"Download error "+item.reason
+                        else->"Failed or local file unavailable"
+                    }
                     State.ACTIVE->"Android DownloadManager transferring"
                     else->if(item.status==DownloadManager.STATUS_PAUSED)
                         "Waiting for Android network / retry"
@@ -311,7 +328,7 @@ object UnifiedDownloadsUi {
                         }
                         else->{}
                     }
-                },if(present)original else null)
+                },if(state==State.DONE)original else null)
         }
         return rows.sortedWith(compareBy<Row>{
             when(it.state){
@@ -374,6 +391,10 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
+                ModuleOriginalAgents.startAll(a)
+                kotlin.concurrent.thread(name="asterion-retry-due-originals"){
+                    DirectDownloadRetry.retry(a.applicationContext)
+                }
                 refresh()
             },ui.lp(a,7))
             parent.addView(notice,ui.lp(a,9))
@@ -392,6 +413,10 @@ object UnifiedDownloadsUi {
                 XPhotoEngine.start(a)
                 ChapterArchives.start(a)
                 NovelEpubService.schedule(a)
+                ModuleOriginalAgents.startAll(a)
+                kotlin.concurrent.thread(name="asterion-retry-due-originals"){
+                    DirectDownloadRetry.retry(a.applicationContext)
+                }
                 Toast.makeText(a,"Transfer workers requested; progress appears here",
                     Toast.LENGTH_LONG).show()
             }
