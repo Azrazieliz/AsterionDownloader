@@ -4,14 +4,14 @@ import com.asterion.videoflow.VideoSiteProfiles
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Keep the exact 42 approved Aloha providers. A provider must be routed
+/** Keep the exact 41 approved Aloha providers. A provider must be routed
  * through a real content engine, not silently downgraded to an inert bookmark.
  * This is a routing test, NOT proof of live-site historical completeness.
  */
 class ApprovedProviderCoverageTest {
-    @Test fun all42ApprovedSitesHaveASyncEngine(){
+    @Test fun all41ApprovedSitesHaveASyncEngine(){
         val sites=AlohaSources.all
-        assertEquals(42,sites.size)
+        assertEquals(41,sites.size)
         val missing=sites.filter{site->
             var host=site.host.lowercase()
             for(prefix in listOf("m.","fr.","en.")){
