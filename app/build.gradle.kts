@@ -31,8 +31,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 79
-        versionName = "1.3.50"
+        versionCode = 80
+        versionName = "1.3.51"
 
         testInstrumentationRunner = "android.app.Instrumentation"
     }
@@ -77,6 +77,16 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".pilotagents"
             versionNameSuffix = "-pilot"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // Install once alongside previous differently-signed pilots; all
+        // future acceptance updates use this exact package and the retained
+        // Windows signer. GitHub CI never publishes self-signed updates.
+        create("acceptance") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".acceptance"
+            versionNameSuffix = "-acceptance"
             isDebuggable = true
             matchingFallbacks += listOf("debug")
         }
