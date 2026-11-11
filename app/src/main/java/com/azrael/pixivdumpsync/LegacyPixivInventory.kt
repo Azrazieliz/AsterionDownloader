@@ -113,6 +113,11 @@ internal object LegacyPixivInventory {
         val seen=System.currentTimeMillis()
         var files=0
         Db(ctx).use{db->
+            // Bulk transactions keep large historical Pixiv folders fast.
+            // Failed scans roll back instead of marking a partial index complete.
+            val writable=db.writableDatabase
+            writable.beginTransactionNonExclusive()
+            try {
             while(queue.isNotEmpty()){
                 val (parent,depth)=queue.removeFirst()
                 if(!visited.add(parent))continue
@@ -146,6 +151,8 @@ internal object LegacyPixivInventory {
             // A completed scan is authoritative for this source. A failed
             // scan never deletes earlier verified receipts.
             db.purge(tree.toString(),seen)
+            writable.setTransactionSuccessful()
+            } finally { writable.endTransaction() }
         }
         return files
     }
