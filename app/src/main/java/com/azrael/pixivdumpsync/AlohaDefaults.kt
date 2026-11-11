@@ -28,6 +28,7 @@ object AlohaDefaults {
     fun ensure(context:Context){
         val app=context.applicationContext
         thread(name="asterion-approved-source-seed"){
+            ProviderRetirement.disableExisting(app)
             val prefs=app.getSharedPreferences(PREF,Context.MODE_PRIVATE)
             var newVideo=false
             var newGallery=false
