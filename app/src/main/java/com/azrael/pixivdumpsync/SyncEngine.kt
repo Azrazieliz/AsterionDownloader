@@ -65,8 +65,28 @@ class SyncEngine(private val context: Context) {
         }
 
         // Import owner-authorized Kuroha/PixiFlow originals BEFORE any Pixiv
-        // requests are planned. The old app/database is never modified.
-        LegacyPixivInventory.refreshIfDue(context)
+        // requests are planned. Never re-download blindly while a linked
+        // legacy folder is unavailable or its first scan is still running.
+        val legacy=runCatching {
+            LegacyPixivInventory.refreshIfDue(context)
+            LegacyPixivInventory.status(context)
+        }
+        val status=legacy.getOrNull()
+        val unavailable=legacy.exceptionOrNull()?.message ?:
+            if(status!=null && status.linkedFolders>0){
+                when{
+                    status.scanning->"The Kuroha inventory is still scanning"
+                    status.lastError!=null->status.lastError
+                    else->null
+                }
+            }else null
+        if(unavailable!=null){
+            stats.errors++
+            progress("Pixiv sync held to avoid duplicate downloads: "+
+                unavailable.take(160))
+            SyncControl.forceFinish("Kuroha inventory needs attention")
+            return stats
+        }
         NetworkCookies.install(context)
         val db = AppDb(context)
         db.clearTransientNetworkErrors()
