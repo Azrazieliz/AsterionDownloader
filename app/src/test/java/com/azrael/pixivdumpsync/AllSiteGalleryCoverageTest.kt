@@ -29,6 +29,35 @@ class AllSiteGalleryCoverageTest {
         assertEquals("https://example.com/media/example-cover.jpg",results.single().cover)
     }
 
+    @Test fun hentaibrosNativeSingleSlugCardsRemainVisible() {
+        val base="https://hentaibros.net/"
+        val html="""<article class="loop-video thumb-block video-preview-item">
+          <a href="/muramata-san-no-aijou-episode-2/"
+             title="Muramata-san no Aijou episode 2">
+            <div class="post-thumbnail">
+              <div class="post-thumbnail-container">
+                <img class="video-main-thumb"
+                     src="/wp-content/uploads/2026/10/Muramata-san-no-Aijou-02.jpg"
+                     alt="Muramata-san no Aijou episode 2">
+              </div>
+            </div>
+          </a>
+        </article>"""
+        val covers=KyoraCreatorPreviews.parse(html,base)
+        assertEquals(1,covers.size)
+        assertTrue(AsterionAdultHub.publicMedia(
+            covers.single().url,covers.single().title,covers.single().cover))
+        assertTrue(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(
+            covers.single().url))
+    }
+
+    @Test fun javideoLocalizedMovieSlugIsARecognizedPage() {
+        val url="https://javideo.net/en/fc2ppv-4994295"
+        assertTrue(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url))
+        assertTrue(AsterionAdultHub.publicMedia(url,"FC2PPV-4994295",
+            "https://cdn.javideo.net/preview/real-cover.jpg"))
+    }
+
     @Test fun failedPageStillHasItsOwnSourceIdentity() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
         assertTrue(sites.any{it.name=="CUMS"})
