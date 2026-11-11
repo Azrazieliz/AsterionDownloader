@@ -51,7 +51,9 @@ jobs:
               /^        backControl.visibility=/ {power=0}
               /^    private fun renderBooks\(\)\{/ {allowed=1;next}
               /^    private fun renderToonily\(\)\{/ {allowed=0}
-              !allowed && !header && !power {print}
+              /^            "Assets"->/ {assets=1;next}
+              assets && /^            "Search"->/ {assets=0}
+              !allowed && !header && !power && !assets {print}
             ' > "/tmp/${side}-home-guard"
           done
           cp /tmp/baseline-home-guard /tmp/approved-home-outside-books-torrents
@@ -61,6 +63,10 @@ jobs:
           grep -q 'QUEUE COMPLETE EPUB' "$HOME"
           grep -q 'TorrentSearchUi.render' "$HOME"
           grep -q 'Mp4SeriesPanel.render' "$HOME"
+          grep -q 'AssetsPanel.render(this,body)' "$HOME"
+          grep -q 'KoikatsuInlineSearch.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
+          grep -q 'ContentVerticalsPanel.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
+          grep -q 'SourceIndexPanel.render' app/src/main/java/com/azrael/pixivdumpsync/AssetsPanel.kt
           # Preserve the approved Downloads structure, filters, card hierarchy
           # and commands. The owner's 2026-11-11 correction explicitly permits
           # distinct PAUSE/RESUME colors and truthful progress-state labels.
