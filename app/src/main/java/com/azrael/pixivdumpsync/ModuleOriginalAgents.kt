@@ -87,13 +87,19 @@ internal object ModuleOriginalAgents {
             }
         }.toMap()
     }
-    private fun folder(area:String):String=when(area){
+    /** Distinct file destinations double as independent two-transfer quotas.
+     * Never let PIXIV, X, HENTAI and unrelated modules collide under "Assets".
+     */
+    internal fun folder(area:String):String=when(area){
         "BOOKS"->"Books";"COMICS"->"Comics";"GAMES"->"Games"
         "CREATORS"->"Creators";"COSPLAY"->"Cosplay";"ARTWORK"->"Artwork"
         "STUDIO"->"Assets/Koikatsu Studio";"MMD"->"Assets/MMD"
         "LIVE2D"->"Assets/Live2D";"ANIMATION"->"Assets/Animation"
         "MODS"->"Games/Mods";"VOICE"->"Audio/Doujin Voice"
-        else->"Assets"
+        "ADULT"->"Porn";"HENTAI"->"Hentai";"VIDEOS"->"Videos"
+        "PIXIV"->"Pixiv";"X"->"X";"REFERENCE"->"Reference"
+        "STUDY"->"Study";else->"Assets"
+
     }
     private fun activeDirect(context:Context,area:String):Int{
         val category=folder(area)
