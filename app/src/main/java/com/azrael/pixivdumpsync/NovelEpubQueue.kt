@@ -118,6 +118,32 @@ class NovelEpubQueue(context:Context):
         }
         return results
     }
+    /** Progress is neither a failed transfer nor a completed book. Reclaim
+     * the same series after a bounded JobService time slice, preserving all
+     * downloaded chapter caches and its precise saved reader cursor.
+     */
+    fun continueLater(url:String,cached:Int){
+        val now=System.currentTimeMillis()
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","RETRY");put("retry_after",now+20_000L)
+            put("last_error","Chapter extraction continuing: $cached cached")
+            put("last_update",now)
+        },"url=? AND state='WORKING'",arrayOf(url))
+    }
+
+    /** Schedule future partial books as well as already-due books. */
+    fun nextDueDelayMs(now:Long=System.currentTimeMillis()):Long? {
+        if(hasDue())return 1_000L
+        val next=readableDatabase.rawQuery(
+            "SELECT MIN(retry_after) FROM novels "+
+                "WHERE state='RETRY' AND retry_after>?",
+            arrayOf(now.toString())
+        ).use { c->
+            if(c.moveToFirst()&&!c.isNull(0))c.getLong(0) else null
+        }
+        return next?.let{(it-now).coerceAtLeast(1_000L)}
+    }
+
     fun hasDue():Boolean=readableDatabase.rawQuery(
         "SELECT 1 FROM novels WHERE state IN ('PENDING','RETRY') AND retry_after<=? LIMIT 1",
         arrayOf(System.currentTimeMillis().toString())).use{it.moveToFirst()}
