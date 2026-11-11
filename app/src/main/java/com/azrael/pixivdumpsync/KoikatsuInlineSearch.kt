@@ -60,14 +60,15 @@ object KoikatsuInlineSearch {
                                 val image=ImageView(a).apply{
                                     scaleType=ImageView.ScaleType.FIT_CENTER
                                     adjustViewBounds=true
+                                    maxHeight=ui.px(a,360)
                                     setImageResource(R.drawable.ic_source_koikatsu)
                                     contentDescription=item.name+" preview"
                                 }
-                                tile.addView(image,LinearLayout.LayoutParams(-1,ui.px(a,156)))
+                                tile.addView(image,LinearLayout.LayoutParams(-1,-2))
                                 val cover=item.preview
                                     ?:item.download.takeIf{item.source=="BepisDB"}
                                 if(!cover.isNullOrBlank())
-                                    RemoteImageLoader.load(a,image,cover,item.page)
+                                    RemoteImageLoader.load(a,image,cover,item.page,preserveOriginal=true)
                                 tile.addView(ui.text(a,item.name,13f,ui.white,true).apply{
                                     maxLines=2
                                     ellipsize=android.text.TextUtils.TruncateAt.END
