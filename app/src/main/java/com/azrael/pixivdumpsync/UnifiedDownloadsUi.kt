@@ -327,15 +327,17 @@ object UnifiedDownloadsUi {
                 },state,percent,item.job.created,{
                     when(state){
                         State.DONE->original?.let{open(a,it,a.contentResolver.getType(Uri.parse(it))?:"*/*")}
-                        State.FAILED->{
+                        State.FAILED,State.HELD->{
                             val requested=DirectDownloadRetry.retryNow(a,item.job.id)
-                            Toast.makeText(a,if(requested)"Retry queued"
-                                else "Retry unavailable; reopen the source",
+                            Toast.makeText(a,if(requested)
+                                "Re-requesting original; watch actual received bytes"
+                                else "Retry unavailable; reconnect source or resume network",
                                 Toast.LENGTH_LONG).show()
                         }
                         else->{}
                     }
-                },if(state==State.DONE)original else null)
+                },if(state==State.DONE)original else null,
+                    actionText=if(state==State.HELD)"RETRY" else null)
         }
         return rows.sortedWith(compareBy<Row>{
             when(it.state){
