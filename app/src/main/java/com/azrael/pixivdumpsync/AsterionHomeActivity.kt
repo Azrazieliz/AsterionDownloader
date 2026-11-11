@@ -621,7 +621,7 @@ class AsterionHomeActivity:Activity(){
                     control.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
                     control.addView(button("CHECK NEW"){
                         val requested=NovelEpubQueue(this).use{
-                            it.requestedRefresh(item.url)
+                            it.requestedRefresh(item.url) || it.retryNow(item.url)
                         }
                         if(requested)NovelEpubService.schedule(this)
                         else if(item.state=="WAIT_LOGIN")toast("Reconnect the website account")
