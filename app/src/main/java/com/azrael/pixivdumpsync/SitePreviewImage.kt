@@ -13,6 +13,14 @@ internal object SitePreviewImage {
         val uri=runCatching{
             URI(image.baseUri()).resolve(candidate).toString()
         }.getOrNull()?:return null
+        // Never present a provider's lazy-load placeholder as an authentic
+        // thumbnail. JAVIDEO currently serves /images/default-cover.* on
+        // some list responses even though the movie page is real.
+        val path=runCatching{URI(uri).path.orEmpty().lowercase()}
+            .getOrDefault("")
+        if(listOf("default-cover","placeholder","no-image","noimage",
+                "blank.gif","spacer.gif","loading.gif")
+                .any{it in path})return null
         return uri.takeIf{SourceIndexParser.safe(it)}
     }
 
