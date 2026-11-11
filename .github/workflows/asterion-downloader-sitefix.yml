@@ -30,10 +30,26 @@ jobs:
           # AdultHub source has a narrowly scoped thumbnail click callback
           # correction (queue the chosen original, not the entire site).
           git diff --exit-code FETCH_HEAD HEAD -- \
-            app/src/main/java/com/azrael/pixivdumpsync/AsterionHomeActivity.kt \
             app/src/main/java/com/azrael/pixivdumpsync/AsterionCosplayGallery.kt \
             app/src/main/java/com/azrael/pixivdumpsync/KurohaMediaPreview.kt \
             app/src/main/java/com/azrael/pixivdumpsync/SourceIndexPanel.kt
+          # Owner approved targeted Books and Torrents simplification only.
+          # Prove the rest of the frozen home/navigation/activity implementation
+          # stayed byte-identical to its approved baseline.
+          HOME=app/src/main/java/com/azrael/pixivdumpsync/AsterionHomeActivity.kt
+          git show "FETCH_HEAD:$HOME" | awk '
+            /^    private fun renderBooks\(\)\{/ {allowed=1;next}
+            /^    private fun renderToonily\(\)\{/ {allowed=0}
+            !allowed {print}' > /tmp/approved-home-outside-books-torrents
+          awk '
+            /^    private fun renderBooks\(\)\{/ {allowed=1;next}
+            /^    private fun renderToonily\(\)\{/ {allowed=0}
+            !allowed {print}' "$HOME" > /tmp/current-home-outside-books-torrents
+          cmp /tmp/approved-home-outside-books-torrents /tmp/current-home-outside-books-torrents
+          grep -q 'WEBSITES · SYNC & BACKFILL' "$HOME"
+          grep -q 'QUEUE COMPLETE EPUB' "$HOME"
+          grep -q 'TorrentSearchUi.render' "$HOME"
+          grep -q 'Mp4SeriesPanel.render' "$HOME"
           # Preserve the approved Downloads structure, filters, card hierarchy
           # and commands. The owner's 2026-11-11 correction explicitly permits
           # distinct PAUSE/RESUME colors and truthful progress-state labels.
