@@ -131,13 +131,27 @@ object NovelEpubParser {
     }
     /** The visible title is authoritative: chapter-N URLs can use different IDs. */
     fun readerChapter(doc:Document,address:String):NovelChapter {
-        val heading=doc.select("h1,h2,h3,h4,.chapter-title")
-            .map{it.text().trim()}
+        // FreeWebNovel's rendered chapter title is not always an H1-H4:
+        // some templates put only the book title in H1 and identify the
+        // numbered chapter in document <title> / og:title or reader blocks.
+        // Prefer visible reader headings first; retain the displayed number,
+        // which may differ from the site's opaque chapter-N URL ID.
+        val headings=doc.select(
+            "h1,h2,h3,h4,h5,h6,.chapter-title,.chapter-name,"+
+            ".reader-title,.entry-title,[itemprop=headline]")
+            .map{it.text().trim()}.filter{it.isNotBlank()}
+        val metadata=doc.select("meta[property=og:title],meta[name=twitter:title]")
+            .map{it.attr("content").trim()}.filter{it.isNotBlank()}
+        val heading=(headings+metadata+listOf(doc.title().trim()))
             .firstOrNull{parseChapterNumber(it)!=null}
-            ?:throw IllegalStateException("Reader chapter number not visible")
+            ?:throw IllegalStateException(
+                "Reader chapter number missing from headings and page title")
         val number=parseChapterNumber(heading)
             ?:throw IllegalStateException("Reader chapter number missing")
-        return NovelChapter(number,heading.take(180),address)
+        // Strip only site suffixes when the title came from browser metadata.
+        val clean=heading.substringBefore(" | ").substringBefore(" - Free Web Novel")
+            .trim().take(180)
+        return NovelChapter(number,clean,address)
     }
     fun chapterText(doc:Document):NovelText {
         // FreeWebNovel's live reader wraps its text in #article, with the
