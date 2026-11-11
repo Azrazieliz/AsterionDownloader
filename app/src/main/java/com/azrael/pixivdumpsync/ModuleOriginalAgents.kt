@@ -110,10 +110,11 @@ internal object ModuleOriginalAgents {
                 return
             }
             if(statusValue==DownloadManager.STATUS_SUCCESSFUL){
-                val filename=DirectDownloadTracker.states(context,250)
-                    .firstOrNull{it.job.id==id}?.job?.filename
+                val tracked=DirectDownloadTracker.states(context,250)
+                    .firstOrNull{it.job.id==id}
                     ?:return status(context,area,slot,"RECEIPT_FILE_NOT_TRACKED")
-                val result=OriginalFileReceipt.verify(context,manager,id,filename)
+                val result=OriginalFileReceipt.verify(context,manager,id,
+                    tracked.job.filename,tracked.total)
                 OriginalReceiptState.set(context,id,
                     if(result.valid)"VERIFIED" else "INVALID")
                 status(context,area,slot,
