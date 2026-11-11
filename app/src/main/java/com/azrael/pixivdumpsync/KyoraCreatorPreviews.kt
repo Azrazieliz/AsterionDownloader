@@ -88,7 +88,7 @@ object KyoraCreatorPreviews {
             }
             val background=anchor.selectFirst("[style*=background-image]")
                 ?.attr("style")?.let{style->
-                    Regex("""(?i)background-image\\s*:\\s*url\\s*\\(\\s*['"]?([^)'"]+)""")
+                    Regex("""(?i)background-image\s*:\s*url\s*\(\s*['"]?([^)'"]+)""")
                         .find(style)?.groupValues?.getOrNull(1)
                 }?.let{raw->
                     runCatching{URI(doc.location()).resolve(raw).toString()}.getOrNull()
