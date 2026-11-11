@@ -484,7 +484,14 @@ internal object SourceIndexParser {
         // navigation links. Generic indexing remains for other providers.
         val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
         if(!dedicated.isNullOrEmpty())return dedicated.filter{
-            IndexedMediaQuality.isMedia(it.url,it.title,it.preview,area)
+            // The dedicated adapter has already validated its host, HTML
+            // selector and provider-specific media URL shape. Applying the
+            // generic >=2-path-segment heuristic again silently deletes real
+            // single-slug CosplayTele galleries and numeric Kiutaku albums.
+            SourceIndexParser.safe(it.url) &&
+                SourceIndexParser.sameSite(base,it.url) &&
+                !IndexedMediaQuality.navigationTitle(it.title) &&
+                !ProviderRetirement.isRetired(it.url)
         }
         val creatorPosts=CreatorSiteBackfill.entries(doc,base,area,clock)
         if(!creatorPosts.isNullOrEmpty())return creatorPosts.filter{
