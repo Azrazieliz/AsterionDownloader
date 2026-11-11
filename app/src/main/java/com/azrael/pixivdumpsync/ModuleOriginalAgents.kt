@@ -31,9 +31,20 @@ internal object ModuleOriginalAgents {
         val requested=AtomicBoolean(false)
         val active=AtomicBoolean(false)
         val remaining=AtomicInteger(0)
+        // These two threads execute real user-selected transfers. Never
+        // occupy them with DownloadManager status polling: a pair of lengthy
+        // downloads previously starved every manual request in this module.
         val executor:ExecutorService=Executors.newFixedThreadPool(
             AGENTS_PER_MODULE){r->
                 Thread(r,"asterion-"+area.lowercase()+"-original-agent").apply{
+                    isDaemon=true
+                }
+            }
+        // Independent, bounded observers only track OS-owned HTTP transfers.
+        // They do not fetch bytes or count as download agents.
+        val monitorExecutor:ExecutorService=Executors.newFixedThreadPool(
+            AGENTS_PER_MODULE){r->
+                Thread(r,"asterion-"+area.lowercase()+"-receipt-monitor").apply{
                     isDaemon=true
                 }
             }
@@ -198,7 +209,25 @@ internal object ModuleOriginalAgents {
                                 SourceIndexDb(app).use{it.releaseDirect(item.url)}
                             }
                             if(accepted && downloadId!=null){
-                                monitor(app,area,slot,downloadId!!)
+                                // HTTP work already runs inside DownloadManager.
+                                // Observe its result off the dispatch executor;
+                                // otherwise two long-lived monitor() calls block
+                                // all subsequent explicit original requests.
+                                val trackedId=downloadId!!
+                                lane.monitorExecutor.execute {
+                                    try {
+                                        monitor(app,area,slot,trackedId)
+                                    }catch(_:InterruptedException){
+                                        Thread.currentThread().interrupt()
+                                    }catch(_:Exception){
+                                        status(app,area,slot,"RECEIPT_MONITOR_ERROR")
+                                    }finally{
+                                        // Wake the durable queue when a slot
+                                        // becomes available, rather than waiting
+                                        // for another periodic background scan.
+                                        if(AppPower.enabled(app)) start(app,area)
+                                    }
+                                }
                             }else if(!accepted && downloadId==null &&
                                 activeDirect(app,area)>=AGENTS_PER_MODULE){
                                 status(app,area,slot,"TWO_DOWNLOADS_ALREADY_ACTIVE")
