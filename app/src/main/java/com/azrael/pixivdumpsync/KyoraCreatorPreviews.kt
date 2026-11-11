@@ -27,7 +27,7 @@ object KyoraCreatorPreviews {
     private class PendingRedraw(var snapshot:Snapshot,
         var callback:(Snapshot)->Unit)
     private val pendingRedraws=java.util.WeakHashMap<Activity,PendingRedraw>()
-    private val main=android.os.Handler(android.os.Looper.getMainLooper())
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
     private fun deliver(a:Activity,snapshot:Snapshot,onReady:(Snapshot)->Unit){
         main.post {
             if(a.isFinishing || a.isDestroyed)return@post
