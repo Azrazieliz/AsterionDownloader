@@ -37,14 +37,11 @@ FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
 Pornhub|https://www.pornhub.com/|ADULT
 EPORNER|https://www.eporner.com/|ADULT
-XVIDEOS|https://fr.xvideos.com/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 CUMS|https://cums.net/|ADULT
-PeekVids|https://www.peekvids.com/|ADULT
-TNAFLIX|https://www.tnaflix.com/|ADULT
 XXXClub|https://xxxclub.to/|ADULT
 OneJAV|https://onejav.com/|ADULT
 MP4Hentai|https://mp4hentai.com/|HENTAI
@@ -69,15 +66,14 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==39 && sites.distinctBy{it.url}.size==39){"Incorrect approved Aloha source set"}
+            require(sites.size==36 && sites.distinctBy{it.url}.size==36){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
     // Native Pixiv/Kyora/VideoFlow/Koikatsu/torrent sources are not duplicated as
     // supplemental bookmark rows. Their original engines and saved data stay intact.
     internal val alreadyIntegratedHosts=setOf("4khd.com","buondua.com","cosplaytele.com",
-        "kiutaku.com","watchporn.to","pornhub.com","eporner.com","xvideos.com",
-        "peekvids.com","tnaflix.com",
+        "kiutaku.com","watchporn.to","pornhub.com","eporner.com",
         "hentaihaven.xxx","sukebei.nyaa.si","db.bepis.moe")
     val additions:List<AlohaSite> get()=all.filterNot{
         val siteHost=it.host.removePrefix("m.").removePrefix("fr.")

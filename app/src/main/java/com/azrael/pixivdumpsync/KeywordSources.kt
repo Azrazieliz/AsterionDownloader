@@ -32,14 +32,9 @@ object KeywordSources {
     )
     private val pornSites=listOf(
         "html|https://watchporn.to/search/{query}/|WatchPorn",
-        "html|https://www.porntrex.com/search/{query}/|PornTrex",
-        "html|https://www.peekvids.com/search/{query}/|PeekVids",
         "html|https://www.pornhub.com/video/search?search={query}|Pornhub",
-        "html|https://www.xvideos.com/?k={query}|XVideos",
         "html|https://xhamster.com/search/{query}|xHamster",
-        "html|https://www.xnxx.com/search/{query}|XNXX",
         "html|https://www.eporner.com/search/{query}/|Eporner",
-        "html|https://www.tnaflix.com/search.php?what={query}|TNAFlix",
         "html|https://spankbang.com/s/{query}/|SpankBang",
         "html|https://www.redtube.com/?search={query}|RedTube"
     )

@@ -13,7 +13,6 @@ internal object VideoSiteProfiles {
                              val listing:String="a[href]")
     private val routes=listOf(
         Route("pornhub.com",Regex("""(?i)^/view_video\.php\?[^#]*\bviewkey=[^&#]+""")),
-        Route("xvideos.com",Regex("""(?i)^/(?:video\d{2,14}|video\.[a-z0-9]{7,18})(?:/|$)""")),
         // Explicit user removal: XNXX is not an approved video source.
         Route("eporner.com",Regex("""(?i)^/(?:hd-porn/[a-z0-9]+|video-[a-z0-9]+)(?:/|$)""")),
         Route("hqpornerxxx.com",Regex("""(?i)^/(?:hdporn|video|videos)/[^/?#]+""")),
@@ -21,8 +20,6 @@ internal object VideoSiteProfiles {
         Route("javideo.net",Regex("""(?i)^/(?:en/)?[a-z0-9]{1,20}-[0-9]{5,9}(?:-[0-9]{1,5})?/?$""")),
         Route("roshy.tv",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("cums.net",Regex("""(?i)^/(?:video|watch|v)/[^/?#]+""")),
-        Route("peekvids.com",Regex("""(?i)^/(?:v|video|videos)/[^/?#]+""")),
-        Route("tnaflix.com",Regex("""(?i)^/(?:video|videos|hd-videos)/[^/?#]+""")),
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),

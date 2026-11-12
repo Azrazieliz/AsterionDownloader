@@ -22,7 +22,7 @@ class VideoProviderRoutingTest {
             "https://www.eporner.com/hd-porn/abc123/example"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.pornhub.com/view_video.php?viewkey=ph123456"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://fr.xvideos.com/video123456/example"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.xnxx.com/video-abc123/example"))
@@ -51,10 +51,10 @@ class VideoProviderRoutingTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://javideo.net/en/category/jav"))
     }
-    @Test fun xvideosActualDotIdUrlsAreVideosNotCategoryPages(){
-        assertTrue(VideoSiteProfiles.isVideoPage(
+    @Test fun retiredXvideosRoutesCannotReturnToQueue(){
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://fr.xvideos.com/video.oupkhvt9b50/hsf-straight/0/example"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.xvideos.com/video123456/example"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://fr.xvideos.com/c/Cam_Porn-58"))
