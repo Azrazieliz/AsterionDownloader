@@ -374,9 +374,11 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         val statement=writableDatabase.compileStatement(
             """UPDATE videos SET state='queued',progress=0,error=NULL,
                retry_after=0,attempts=0,updated=?
-               WHERE state='error' AND error LIKE 'Video engine unavailable:%'
+               WHERE state='error' AND (error LIKE 'Video engine unavailable:%' OR
+                    error LIKE 'Video extractor unavailable:%')
                  AND id IN (SELECT id FROM videos
-                    WHERE state='error' AND error LIKE 'Video engine unavailable:%'
+                    WHERE state='error' AND (error LIKE 'Video engine unavailable:%' OR
+                    error LIKE 'Video extractor unavailable:%')
                     ORDER BY updated ASC LIMIT 100)""")
         statement.bindLong(1,now)
         return statement.executeUpdateDelete()

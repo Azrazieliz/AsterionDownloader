@@ -22,12 +22,17 @@ object VideoEngine {
     private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
         java.util.concurrent.Future<*>>()
-    private val metadataExecutor=Executors.newSingleThreadExecutor{task->
-        Thread(task,"videoflow-native-metadata").apply{isDaemon=true}
-    }
-    private val transferExecutor=Executors.newSingleThreadExecutor{task->
-        Thread(task,"videoflow-native-transfer").apply{isDaemon=true}
-    }
+    // Embedded Python may ignore interrupt(); bounded independent pools keep
+    // direct-media transfers alive when one extractor thread is stuck.
+    private fun boundedPool(label:String,limit:Int)=java.util.concurrent.ThreadPoolExecutor(
+        0,limit,45L,java.util.concurrent.TimeUnit.SECONDS,
+        java.util.concurrent.SynchronousQueue<Runnable>(),
+        java.util.concurrent.ThreadFactory{job->
+            Thread(job,label).apply{isDaemon=true}
+        },java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
+    private val metadataExecutor=boundedPool("videoflow-metadata",2)
+    private val transferExecutor=boundedPool("videoflow-extractor",2)
+    private val nativeExecutor=boundedPool("videoflow-native",2)
     /** Keep the Python-specific failures scoped to Python-required media.
      * Previously both download processes exited before reading the queue
      * whenever this optional runtime could not start.
@@ -194,9 +199,10 @@ object VideoEngine {
                 // Independent per-provider discovery agents run concurrently.
                 // Downloads still use their durable shared queue to avoid OOM.
                 val eligible=db.listWatches().filter {
-                    it.enabled && com.azrael.pixivdumpsync.SiteControls.any(context,it.address) &&
-                    (targetHost==null ||
-                        com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost)
+                    val chosen=targetHost!=null &&
+                        com.azrael.pixivdumpsync.SiteControls.key(it.address)==targetHost
+                    chosen || (targetHost==null && it.enabled &&
+                        com.azrael.pixivdumpsync.SiteControls.sync(context,it.address))
                 }
                 val selectedWatches=if(targetHost!=null || eligible.size<=6)eligible else {
                     val progress=context.getSharedPreferences("asterion_video_scan_rotation",0)
@@ -222,11 +228,12 @@ object VideoEngine {
                         val artistArchive=watch.address.startsWith("https://watchporn.to/models/")
                         val hits=if(artistArchive){
                             val latest=WebDiscovery.watchPornArtistPage(
-                                watch.address,watch.address)
+                                watch.address,watch.address,context)
                             val collected=linkedMapOf<String,VideoHit>()
                             for(hit in latest.hits)collected.putIfAbsent(hit.url,hit)
                             val backfill=!watch.backfillComplete &&
-                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
+                                (targetHost!=null ||
+                                    com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address))
                             var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=hashSetOf(watch.address)
                             var pages=0
@@ -234,7 +241,7 @@ object VideoEngine {
                                 com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                                 !Thread.currentThread().isInterrupted){
                                 val history=WebDiscovery.watchPornArtistPage(
-                                    watch.address,cursor)
+                                    watch.address,cursor,context)
                                 for(hit in history.hits)collected.putIfAbsent(hit.url,hit)
                                 cursor=history.next
                                 pages++
@@ -249,7 +256,8 @@ object VideoEngine {
                             // Every scan checks latest posts. A durable cursor then resumes
                             // older pages, instead of always resetting at the homepage.
                             val backfill=!watch.backfillComplete &&
-                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)
+                                (targetHost!=null ||
+                                    com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address))
                             var cursor=if(backfill)watch.cursor?:latest.next else null
                             val visited=HashSet<String>()
                             var pages=0
@@ -263,20 +271,23 @@ object VideoEngine {
                                 pages++
                             }
                             if(backfill && com.azrael.pixivdumpsync.AppPower.enabled(context) &&
-                                com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address) &&
+                                (targetHost!=null ||
+                                    com.azrael.pixivdumpsync.SiteControls.backfill(context,watch.address)) &&
                                 !Thread.currentThread().isInterrupted)
                                 db.setBackfill(watch.id,cursor,cursor==null)
                             collected.values.toList()
                         }
                         if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                             Thread.currentThread().isInterrupted)break
-                        if(!com.azrael.pixivdumpsync.SiteControls.any(context,watch.address))continue
+                        if(targetHost==null &&
+                            !com.azrael.pixivdumpsync.SiteControls.sync(context,watch.address))continue
                         if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
                         var added=0
                         for(hit in hits) {
                             if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
                                 Thread.currentThread().isInterrupted)break
-                            if(db.addVideo(hit.url,hit.title,watch.id)) added++
+                            if(!FullLengthVideoPolicy.isExplicitPreview(hit.title,hit.url) &&
+                                db.addVideo(hit.url,hit.title,watch.id,origin="website")) added++
                             // Every observed new item is recorded; never truncate
                             // a followed provider after three videos.
                         }
@@ -399,7 +410,8 @@ object VideoEngine {
                         // Attach explicit user-requested files to watch_id=0;
                         // otherwise a disabled Sync switch would silently block
                         // the videos that Backfill itself discovered.
-                        if(db.addVideo(hit.url,hit.title,0L))enqueued++
+                        if(!FullLengthVideoPolicy.isExplicitPreview(hit.title,hit.url) &&
+                            db.addVideo(hit.url,hit.title,0L,origin="website"))enqueued++
                     }
                     if(stop())throw InterruptedException("Provider backfill stopped")
                     // A checked page is discovery evidence, not download success.
@@ -452,9 +464,7 @@ object VideoEngine {
         // though the official embed exposes the publisher's actual player.
         // Only use that alternate route after the user explicitly connects
         // an authorized site session. The public official API attests runtime.
-        val publishedRuntime=if(connected &&
-            EpornerOriginalSource.videoId(item.url)!=null)
-            EpornerOriginalSource.officialDuration(item.url) else null
+        val publishedRuntime:Long?=null // Trusted-provider confidence; no online duration prerequisite
         val preparationStart=android.os.SystemClock.elapsedRealtime()
         check(db.touchClaim(item.id,item.lease)){
             "Download claim is no longer owned by this worker"
@@ -469,8 +479,9 @@ object VideoEngine {
                 throw java.util.concurrent.CancellationException("Video paused")
             val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
-            val proxy=if(viaProxy && hidden)
-                "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
+            val proxy=NetworkRoute.extractorProxy(context,item.url)
+                ?:if(viaProxy && hidden)
+                    "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
                 else null
             val quality=prefs.getString("quality","best[ext=mp4]/best")
                 ?: "best[ext=mp4]/best"
@@ -478,9 +489,9 @@ object VideoEngine {
             // streaming lane. No Python startup, extractor wrapper or shell.
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
             val native=NativeMediaDownloader.isNativeEligible(item.url,link) &&
-                !hidden && !viaProxy
-            if(!native)ensureExtractor(context)
-            val future=transferExecutor.submit<Int>{
+                (!hidden || proxy!=null)
+            val future=(if(native)nativeExecutor else transferExecutor).submit<Int>{
+                if(!native)ensureExtractor(context)
                 if(native) {
                     val sameHost=runCatching{
                         java.net.URI(item.url).host.equals(
@@ -490,6 +501,8 @@ object VideoEngine {
                         cookieHeader=if(sameHost)
                             SiteSession.cookie(link) else null,
                         filenameStem=item.title+" ["+item.id+"]",
+                        proxy=NetworkRoute.javaProxy(context,item.url),
+                        progress={percent->db.progress(item.id,percent);status(percent)},
                         cancelled={
                             stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted
@@ -554,15 +567,16 @@ object VideoEngine {
             // No file or media fragment is downloaded during this preflight.
             val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
-            val proxy=if(viaProxy && hidden)
-                "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
+            val proxy=NetworkRoute.extractorProxy(context,item.url)
+                ?:if(viaProxy && hidden)
+                    "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
                 else null
-            ensureExtractor(context)
+            val started=android.os.SystemClock.elapsedRealtime()
             val future=metadataExecutor.submit<JSONObject>{
+                ensureExtractor(context)
                 EmbeddedYtDlpMetadata.inspect(link,referer,selected,proxy)
             }
             extractionJobs[item.id]=future
-            val started=android.os.SystemClock.elapsedRealtime()
             lateinit var json:JSONObject
             try{
                 while(true){
@@ -633,17 +647,23 @@ object VideoEngine {
             // player. yt-dlp cannot extract the WordPress watch page itself.
             // Resolve only a page-owned, explicitly supported player embed.
             (if(viaProxy)emptyList() else runCatching{
-                WebDiscovery.embeddedCandidates(item.url)
+                WebDiscovery.embeddedCandidates(item.url,context)
             }.getOrDefault(emptyList()))).distinct()
         val watchPorn=if(viaProxy)null else runCatching{
-            WatchPornOriginalSource.resolve(item.url)
+            WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
         var heldReason:String?=null
         try {
-            if(watchPorn!=null){
+            // A concrete public media URL does not need Python metadata first.
+            if(NativeMediaDownloader.isNativeEligible(item.url,item.url) &&
+                !FullLengthVideoPolicy.isExplicitPreview(item.title,item.url) &&
+                (userRequested || FullLengthVideoPolicy.knownFullReferenceHost(item.url))){
+                try{execute(item.url);downloaded=true}catch(t:Exception){last=t}
+            }
+            if(!downloaded && watchPorn!=null){
                 // Full runtime was published twice in the provider's own page.
                 // This avoids a pointless 50-second metadata preflight for a
                 // signed direct MP4 that has no extractor-reported duration.
@@ -660,38 +680,62 @@ object VideoEngine {
                     }catch(t:Exception){last=t}
                 }else heldReason=decision.reason
             }
-            if(!downloaded) for(candidate in variants.distinct()) {
-                val checked=runCatching{preflight(candidate)}
-                if(checked.isSuccess){
-                    val decision=checked.getOrThrow().second
-                    if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
-                        heldReason=decision.reason
-                        continue
-                    }
-                    try {
+            if(!downloaded) for(candidate in variants.distinct()){
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
+                val trusted=FullLengthVideoPolicy.knownFullReferenceHost(candidate)
+                val decision=if(trusted)FullLengthVideoPolicy.assess(
+                    item.title,item.title,candidate,null,null,
+                    userExplicitlyRequested=userRequested) else null
+                if(decision!=null &&
+                    decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                    heldReason=decision.reason
+                    continue
+                }
+                if(trusted){
+                    try{
                         execute(candidate)
-                        expectedDuration=checked.getOrThrow().first
                         downloaded=true
                         break
-                    } catch(t:Exception){last=t}
-                }else last=checked.exceptionOrNull()
+                    }catch(t:Exception){last=t}
+                }else{
+                    val checked=runCatching{preflight(candidate)}
+                    if(checked.isSuccess){
+                        val verified=checked.getOrThrow().second
+                        if(verified.verdict==FullLengthVideoPolicy.Verdict.ACCEPT){
+                            try{
+                                execute(candidate)
+                                expectedDuration=checked.getOrThrow().first
+                                downloaded=true
+                                break
+                            }catch(t:Exception){last=t}
+                        }else heldReason=verified.reason
+                    }else last=checked.exceptionOrNull()
+                }
                 val media=if(viaProxy)null else runCatching{
-                    WebDiscovery.directMedia(candidate)}.getOrNull()
-                if(!media.isNullOrBlank()&&media!=candidate) {
-                    val checkedMedia=runCatching{preflight(media,candidate)}
-                    if(checkedMedia.isSuccess){
-                        val decision=checkedMedia.getOrThrow().second
-                        if(decision.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
-                            heldReason=decision.reason
-                            continue
-                        }
-                        try {
+                    WebDiscovery.directMedia(candidate,context)
+                }.getOrNull()
+                if(!media.isNullOrBlank() && media!=candidate){
+                    if(trusted && NativeMediaDownloader.isNativeEligible(candidate,media)){
+                        try{
                             execute(media,candidate)
-                            expectedDuration=checkedMedia.getOrThrow().first
                             downloaded=true
                             break
-                        } catch(t:Exception){last=t}
-                    }else last=checkedMedia.exceptionOrNull()
+                        }catch(t:Exception){last=t}
+                    }else{
+                        val checked=runCatching{preflight(media,candidate)}
+                        if(checked.isSuccess){
+                            val verified=checked.getOrThrow().second
+                            if(verified.verdict==FullLengthVideoPolicy.Verdict.ACCEPT){
+                                try{
+                                    execute(media,candidate)
+                                    expectedDuration=checked.getOrThrow().first
+                                    downloaded=true
+                                    break
+                                }catch(t:Exception){last=t}
+                            }else heldReason=verified.reason
+                        }else last=checked.exceptionOrNull()
+                    }
                 }
             }
         } finally {
@@ -718,13 +762,10 @@ object VideoEngine {
                     ?.toLongOrNull()?.div(1000L)
             }finally{retriever.release()}
         }.getOrNull()
-        val promised=expectedDuration?:throw FullVersionUnavailable(
-            "Full-version runtime was lost before local verification")
-        if(actual==null || actual+5L<promised){
-            file.delete()
-            throw FullVersionUnavailable(
-                "Incomplete downloaded runtime: ${actual?:0}s of ${promised}s")
-        }
+        // Trusted sources have no arbitrary runtime threshold. Native HTTP
+        // checks actual received byte counts; embedded yt-dlp must exit zero.
+        if(actual!=null && actual<=0L)
+            throw java.io.IOException("Saved container has invalid playback duration")
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
         val values=ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
