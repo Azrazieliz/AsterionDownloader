@@ -20,19 +20,15 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.eporner.com/"))
     }
-    @Test fun retiredProvidersAreNotAdmittedButReplacementPostRoutesWork(){
+    @Test fun ownerRetiredProvidersAreNoLongerAdmitted(){
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.xnxx.com/video-abc123/a-video"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.porntrex.com/video/an-episode"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
-            "https://pornone.com/dirty-talk/missax-rissa-may-my-virginity-is-a-burden-ix/279567143/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
-            "https://pornone.com/shorts/video-example/280287537/"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
-            "https://www.sunporno.com/v/115776/stepmommy-is-fucked-by-the-young-cock/"))
+            "https://pornone.com/dirty-talk/example-video/279567143/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
-            "https://www.sunporno.com/category/uncensored/"))
+            "https://www.sunporno.com/v/115776/example-video/"))
     }
     @Test fun javGuruBlogPostIsDetectedButCategoryIsNot(){
         assertTrue(VideoSiteProfiles.isVideoPage(
@@ -44,12 +40,11 @@ class VideoSiteProfilesTest {
         for(url in listOf(
             "https://rule34video.com/video/example",
             "https://mp4hentai.com/video/example",
-            "https://porntrex.com/video/example",
             "https://watchporn.to/video/1234/name",
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(24,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(22,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://hentaibros.net/muramata-san-no-aijou-episode-2/"))

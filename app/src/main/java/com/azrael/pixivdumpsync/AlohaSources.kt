@@ -44,9 +44,7 @@ Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 CUMS|https://cums.net/|ADULT
 PeekVids|https://www.peekvids.com/|ADULT
-PornOne|https://pornone.com/|ADULT
 TNAFLIX|https://www.tnaflix.com/|ADULT
-SunPorno|https://www.sunporno.com/|ADULT
 XXXClub|https://xxxclub.to/|ADULT
 OneJAV|https://onejav.com/|ADULT
 MP4Hentai|https://mp4hentai.com/|HENTAI
@@ -71,7 +69,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==41 && sites.distinctBy{it.url}.size==41){"Incorrect approved Aloha source set"}
+            require(sites.size==39 && sites.distinctBy{it.url}.size==39){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
@@ -79,7 +77,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
     // supplemental bookmark rows. Their original engines and saved data stay intact.
     internal val alreadyIntegratedHosts=setOf("4khd.com","buondua.com","cosplaytele.com",
         "kiutaku.com","watchporn.to","pornhub.com","eporner.com","xvideos.com",
-        "pornone.com","peekvids.com","tnaflix.com","sunporno.com",
+        "peekvids.com","tnaflix.com",
         "hentaihaven.xxx","sukebei.nyaa.si","db.bepis.moe")
     val additions:List<AlohaSite> get()=all.filterNot{
         val siteHost=it.host.removePrefix("m.").removePrefix("fr.")
