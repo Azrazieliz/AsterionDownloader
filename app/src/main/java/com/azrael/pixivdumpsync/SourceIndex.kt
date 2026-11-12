@@ -475,6 +475,19 @@ internal object SourceIndexParser {
         "VIDEOS","ADULT","HENTAI"->item.kind=="video"
         else->false
     }
+    /** Reuse proven first-party thumbnail cards when provider HTML differs
+     * from the generic parser. Only actual native-recognized video pages
+     * can be admitted; categories, search pages and redirects cannot.
+     */
+    internal fun authenticVideoPreviews(doc:Document,base:String,area:String,stamp:Long):List<IndexedItem>{
+        if(area !in setOf("ADULT","HENTAI","VIDEOS"))return emptyList()
+        return KyoraCreatorPreviews.parse(doc.outerHtml(),doc.location())
+            .asSequence().filter{safe(it.url) && sameSite(base,it.url) &&
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
+                safe(it.cover) && !IndexedMediaQuality.navigationTitle(it.title)}
+            .map{IndexedItem(it.url,it.title,it.cover,base,area,"video",stamp,false)}
+            .distinctBy{SearchRanking.canonicalKey(it.url)}.take(80).toList()
+    }
     private fun preview(link:Element):String?{
         val image=link.selectFirst("img")?:link.parent()?.selectFirst("img")?:return null
         return SitePreviewImage.best(image)
@@ -1279,7 +1292,9 @@ object SourceIndex {
                     it.observe(links)
                 }
             }
-            val records=SourceIndexParser.entries(doc,source.url,source.area,System.currentTimeMillis())
+            val stamp=System.currentTimeMillis()
+            val records=SourceIndexParser.entries(doc,source.url,source.area,stamp)+
+                SourceIndexParser.authenticVideoPreviews(doc,source.url,source.area,stamp)
             synchronized(previewDbLock){
                 SourceIndexDb(context).use{db->
                     for(item in records){

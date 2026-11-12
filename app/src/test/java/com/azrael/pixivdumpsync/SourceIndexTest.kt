@@ -5,6 +5,22 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SourceIndexTest {
+    @Test fun firstPartyHentaiCardRecoveryRejectsNavigationAndForeignLinks(){
+        val base="https://hentaibros.net/"
+        val page=Jsoup.parse("""<main>
+          <a href="/muramata-san-no-aijou-episode-2/"><img
+            src="/images/episode2.jpg" alt="Muramata Episode 2"/></a>
+          <a href="/category/romance/"><img src="/images/cat.jpg" alt="Romance"/></a>
+          <a href="https://foreign.example/video/fake"><img
+            src="/images/ad.jpg" alt="Unrelated"/></a>
+          </main>""",base)
+        val cards=SourceIndexParser.authenticVideoPreviews(page,base,"HENTAI",100L)
+        assertEquals(1,cards.size)
+        assertEquals("https://hentaibros.net/muramata-san-no-aijou-episode-2/",cards[0].url)
+        assertEquals("video",cards[0].kind)
+        assertFalse(cards[0].queued)
+    }
+
     @Test fun approvedIndexDoesNotAcceptLocalOrForeignLinks(){
         assertFalse(SourceIndexParser.safe("http://127.0.0.1/internal"))
         assertFalse(SourceIndexParser.safe("https://localhost/account"))
