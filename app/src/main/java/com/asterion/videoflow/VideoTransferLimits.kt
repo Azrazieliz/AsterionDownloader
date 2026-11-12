@@ -7,7 +7,7 @@ internal object VideoTransferLimits {
     const val POLL_MS = 2_000L
     const val PREFLIGHT_MS = 50_000L
     const val TRANSFER_IDLE_MS = 110_000L
-    const val TRANSFER_MAX_MS = 90L * 60_000L
+    const val TRANSFER_MAX_MS = 48L * 60L * 60_000L
 
     fun expired(stage:String,elapsedMs:Long,idleMs:Long):String?=when {
         stage=="metadata" && elapsedMs>=PREFLIGHT_MS ->

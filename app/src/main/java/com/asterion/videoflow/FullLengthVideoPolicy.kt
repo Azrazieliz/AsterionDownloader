@@ -12,7 +12,7 @@ object FullLengthVideoPolicy {
     enum class Verdict { ACCEPT, HOLD_FOR_REFERENCE, REJECT_SHORT_VERSION }
     data class Decision(val verdict:Verdict,val reason:String)
     private val previewWords=Regex(
-        """(?i)(?:^|[^\p{L}\p{N}])(?:trailer|teaser|preview|sample|promo|promotional|shortened|short\s*ver(?:sion)?|highlights?|excerpt|abridged|cutdown|sneak\s*peek|free\s*clip|part\s*\d+|scene\s*\d+\s*of\s*\d+)(?:$|[^\p{L}\p{N}])""")
+        """(?i)(?:^|[^\p{L}\p{N}])(?:trailer|teaser|preview|sample|promo|promotional|shortened|short\s*ver(?:sion)?|highlights?|excerpt|abridged|cutdown|sneak\s*peek|free\s*clip|)(?:$|[^\p{L}\p{N}])""")
     private val preferredReferenceHosts=setOf(
         "watchporn.to","freepornvideos.xxx","fullporner.com","archivebate.com",
         "xxxi.porn","helloporn.com","notfans.com","eporner.com"
