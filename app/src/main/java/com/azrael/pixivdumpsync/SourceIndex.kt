@@ -149,6 +149,17 @@ class SourceIndexDb(context:Context):
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
     }
     /** A failed page must never roll back the last successful backfill cursor/count. */
+    /** Remove only a disproven *generic parser* warning on a provider with
+     * actual independently indexed native-gallery covers. Never clear HTTP
+     * 401/403, authorization, transfer or original-file errors.
+     */
+    fun clearStaleNativePreviewError(url:String){
+        writableDatabase.execSQL(
+            """UPDATE sources SET error=NULL
+               WHERE url=? AND area='COSPLAY' AND adapter='native'
+                 AND error LIKE 'No supported public media%'""",
+            arrayOf(url))
+    }
     fun failure(url:String,reason:String){
         val v=ContentValues().apply{
             put("error",reason.take(280))
@@ -884,13 +895,16 @@ object SourceIndex {
             try {
                 ensure(context)
                 val sites=SourceIndexDb(context).use{db->
-                    db.sources().filter{
-                        it.area==area && SourceIndexParser.safe(it.url) &&
-                            // Native Kyora adapters own COSPLAY indexing;
-                            // scanning their landing pages as "generic"
-                            // produced fake errors despite real gallery covers.
-                            !(area=="COSPLAY" && it.adapter=="native")
+                    val all=db.sources().filter{
+                        it.area==area && SourceIndexParser.safe(it.url)
                     }.distinctBy{SiteControls.key(it.url)}
+                    if(area=="COSPLAY")for(site in all){
+                        if(site.adapter=="native" &&
+                            KyoraCreatorPreviews.cached(context,site.url)
+                                ?.entries.orEmpty().isNotEmpty())
+                            db.clearStaleNativePreviewError(site.url)
+                    }
+                    all.filterNot{area=="COSPLAY" && it.adapter=="native"}
                 }
                 val before=SourceIndexDb(context).use{db->
                     db.items(area,4000).count{!it.preview.isNullOrBlank()}
@@ -932,6 +946,18 @@ object SourceIndex {
                 db.sources().firstOrNull{
                     it.area==area && SiteControls.key(it.url)==SiteControls.key(address)
                 }
+            }
+            if(source?.area=="COSPLAY" && source.adapter=="native"){
+                // A native gallery CHECK NEW is handled by the independent
+                // Kyora public thumbnail fetch in the existing UI; never
+                // run an unsupported generic parser over its homepage.
+                val authentic=KyoraCreatorPreviews.cached(context,source.url)
+                    ?.entries.orEmpty().isNotEmpty()
+                if(authentic)SourceIndexDb(context).use{
+                    it.clearStaleNativePreviewError(source.url)
+                }
+                finished(authentic)
+                return@thread
             }
             val result=source!=null && runCatching{
                 scanOne(context,source,previewOnly=true)

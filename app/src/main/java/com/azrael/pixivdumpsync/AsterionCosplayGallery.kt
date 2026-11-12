@@ -196,13 +196,7 @@ object AsterionCosplayGallery {
             card.addView(ui.text(a,
                 visual.size.toString()+" authentic gallery covers · "+checked,
                 12f,ui.secondary),ui.lp(a,5))
-            // Keep genuine native access errors visible. Discard only a
-            // stale generic "no supported media" verdict when real gallery
-            // artwork exists and the source belongs to a native Kyora parser.
-            val staleGeneric=source?.adapter=="native" && visual.isNotEmpty() &&
-                source.error.orEmpty().startsWith("No supported public media")
-            val issue=if(staleGeneric)previewStatus?.error
-                else source?.error?:previewStatus?.error
+            val issue=source?.error?:previewStatus?.error
             if(!issue.isNullOrBlank())
                 card.addView(ui.text(a,issue.take(130),
                     11f,ui.danger),ui.lp(a,5))
@@ -230,13 +224,8 @@ object AsterionCosplayGallery {
                 if(!AppPower.enabled(a)){
                     toast(a,"Resume the application first")
                 }else{
-                    // Native gallery adapters must never be checked by the
-                    // generic SourceIndex HTML scanner, which rejects real
-                    // 4KHD/CosplayTele/other gallery cards as non-media.
-                    if(source?.adapter!="native"){
-                        SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
-                            a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
-                        }
+                    SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
+                        a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
                     }
                     KyoraCreatorPreviews.load(a,site.url,force=true){
                         if(!a.isFinishing&&!a.isDestroyed)refresh()
