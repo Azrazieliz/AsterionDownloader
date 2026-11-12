@@ -137,4 +137,24 @@ class SiteBackfillProfilesTest {
         assertTrue(originals.all{it.url.contains("mitaku.net")})
     }
 
+    @Test fun mp4HentaiHomepageExtractsDatedRealPostsNotReleaseCalendar(){
+        val base="https://mp4hentai.com/"
+        val html="""<main>
+           <article class="post">
+             <h2 class="entry-title"><a
+               href="/2025/03/mari-bunny-bot-r18/">Mari – Bunny Bot R18</a></h2>
+             <a class="post-thumbnail" href="/2025/03/mari-bunny-bot-r18/">
+               <img src="https://mp4hentai.com/uploads/bunny.webp"
+                    alt="Mari Bunny Bot" /></a>
+           </article>
+           <nav><a href="/category/upcoming-hentai-release/">Upcoming</a></nav>
+           </main>"""
+        val records=titles(html,base,"HENTAI")
+        assertEquals(1,records.size)
+        assertEquals("video",records.single().kind)
+        assertEquals(base+"2025/03/mari-bunny-bot-r18/",records.single().url)
+        assertTrue(com.asterion.videoflow.VideoSiteProfiles
+            .isVideoPage(records.single().url))
+    }
+
 }

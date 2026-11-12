@@ -159,7 +159,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                state='queued',retry_after=0,error=NULL,updated=?
                WHERE url=? AND state NOT IN ('running','done')
                  AND (request_origin!='user' OR
-                      state IN ('full_only_hold','retry_wait','error','paused'))""")
+                      state IN ('full_only_hold','retry_wait','error','paused','dismissed'))""")
         statement.bindLong(1,System.currentTimeMillis())
         statement.bindString(2,normalized)
         return statement.executeUpdateDelete()==1
@@ -325,7 +325,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "Held"->" WHERE state IN ('full_only_hold','retry_wait')"
             "Paused"->" WHERE state='paused'"
             "Failed"->" WHERE state='error'"
-            else->""
+            else->" WHERE state!='dismissed'"
         }
         val out=ArrayList<Video>()
         val query="SELECT id,url,title,state,progress,saved_uri,error,watch_id,updated "+
@@ -470,6 +470,43 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "UPDATE videos SET state='queued', progress=0, lease=lease+1 "+
                 "WHERE state='running' AND heartbeat_at<?",
             arrayOf(deadline))
+    }
+    /** Permanent, reversible-from-manual-selection tombstone: auto backfill
+     * cannot recreate a dismissed video. Never erase saved media or history.
+     */
+    fun dismiss(id:Long):Boolean {
+        val cv=ContentValues().apply{
+            put("state","dismissed");put("progress",0)
+            put("retry_after",0L);put("updated",System.currentTimeMillis())
+            put("error","Removed from downloads by user")
+            put("lease",System.currentTimeMillis())
+        }
+        return writableDatabase.update("videos",cv,
+            "id=? AND state NOT IN ('done','dismissed')",
+            arrayOf(id.toString()))==1
+    }
+    fun runningIds():List<Long>{
+        val ids=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id FROM videos WHERE state='running'",null).use{rows->
+            while(rows.moveToNext())ids+=rows.getLong(0)
+        }
+        return ids
+    }
+    /** Clear all unfinished video queue rows atomically; retain saved files.
+     * Dismissed URLs remain in SQLite so a site scan cannot re-add them
+     * until the user explicitly selects the video again.
+     */
+    fun dismissUnfinished():Int {
+        val now=System.currentTimeMillis()
+        writableDatabase.compileStatement(
+            "UPDATE videos SET state='dismissed',progress=0,retry_after=0,"+
+            "error='Removed from downloads by user',lease=lease+1,updated=? "+
+            "WHERE state NOT IN ('done','dismissed')"
+        ).use{statement->
+            statement.bindLong(1,now)
+            return statement.executeUpdateDelete()
+        }
     }
     fun delete(id: Long) { writableDatabase.delete("videos","id=?", arrayOf("$id")) }
 }

@@ -33,7 +33,8 @@ object UnifiedDownloadsUi {
         val percent:Int?,val updated:Long,val action:()->Unit,
         val saved:String?=null,val image:String?=null,val mime:String="*/*",
         val actionText:String?=null,
-        val receivedBytes:Long=0L
+        val receivedBytes:Long=0L,
+        val onRemove:(()->Unit)?=null
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -147,7 +148,10 @@ object UnifiedDownloadsUi {
                         State.PAUSED->"RESUME"
                         State.HELD->"RETRY"
                         else->null
-                    })
+                    },
+                    onRemove=if(state==State.DONE)null else ({
+                        VideoEngine.cancelVideo(a.applicationContext,item.id)
+                    }))
             }
         }
         ChapterQueue(a).use{db->
@@ -487,6 +491,29 @@ object UnifiedDownloadsUi {
                 leftMargin=ui.px(a,8)
             })
         parent.addView(shortcuts,ui.lp(a,12))
+        // Clearing is explicit and affects only unfinished video tasks.
+        // Saved MediaStore files and non-video queues are never touched.
+        if(rows.any{it.source=="Video" && it.state!=State.DONE}){
+            parent.addView(ui.action(a,"Clear unfinished videos",false){
+                android.app.AlertDialog.Builder(a)
+                    .setTitle("Clear unfinished video downloads?")
+                    .setMessage("Stop active video transfers and remove all "+
+                        "queued, failed, paused and retrying video rows from "+
+                        "the list. Saved files remain untouched. Re-add a "+
+                        "video manually if you want it again.")
+                    .setNegativeButton("Keep",null)
+                    .setPositiveButton("Clear"){_,_->
+                        kotlin.concurrent.thread(name="asterion-clear-video-queue"){
+                            val removed=VideoEngine.clearUnfinished(a.applicationContext)
+                            a.runOnUiThread{
+                                Toast.makeText(a,"Cleared $removed unfinished videos",
+                                    Toast.LENGTH_LONG).show()
+                                refresh()
+                            }
+                        }
+                    }.show()
+            },ui.lp(a,7))
+        }
         parent.addView(ui.action(a,"Torrent transfers",false){
             TorrentTransfers.showQueue(a)
         },ui.lp(a,5))
@@ -591,6 +618,19 @@ object UnifiedDownloadsUi {
                 card.addView(action,LinearLayout.LayoutParams(ui.px(a,88),-2).apply{
                     leftMargin=ui.px(a,6)
                 })
+            }
+            // Each video has independent cancellation even when its primary
+            // control is PAUSE, RETRY or HOLD. Do not rely on a global stop.
+            item.onRemove?.let{remove->
+                val label=if(item.state==State.ACTIVE)"CANCEL" else "CLEAR"
+                val removeButton=ui.action(a,label,false){
+                    remove()
+                    refresh()
+                }.apply{
+                    isSingleLine=true
+                    setTextColor(ui.secondary)
+                }
+                parent.addView(removeButton,ui.lp(a,2))
             }
             parent.addView(card,ui.lp(a,8))
         }

@@ -58,6 +58,23 @@ object VideoEngine {
         VideoDb(context).use{it.pause(id)}
         extractionJobs[id]?.cancel(true)
     }
+    /** Cancel and hide a video without allowing the next automatic scan to
+     * enqueue it again. Do not delete a completed MediaStore original.
+     */
+    fun cancelVideo(context:Context,id:Long):Boolean{
+        stopRequests.add(id)
+        extractionJobs[id]?.cancel(true)
+        return VideoDb(context).use{it.dismiss(id)}
+    }
+    fun clearUnfinished(context:Context):Int{
+        return VideoDb(context).use{db->
+            for(id in db.runningIds()){
+                stopRequests.add(id)
+                extractionJobs[id]?.cancel(true)
+            }
+            db.dismissUnfinished()
+        }
+    }
     fun resumeVideo(context:Context,id:Long){
         stopRequests.remove(id)
         VideoDb(context).use{it.retry(id)}
