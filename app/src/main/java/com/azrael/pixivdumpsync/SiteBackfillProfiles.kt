@@ -60,6 +60,19 @@ internal object SiteBackfillProfiles {
     fun supports(host:String):Boolean=host.lowercase(Locale.ROOT)
         .removePrefix("www.") in profiles
 
+    /** A first-party public cover is a post only if its path matches the
+     * publisher-specific gallery URL; category and creator profiles excluded.
+     */
+    fun recognizesGalleryPage(source:String,target:String):Boolean {
+        val origin=runCatching{URI(source)}.getOrNull()?:return false
+        val url=runCatching{URI(target)}.getOrNull()?:return false
+        val host=origin.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        val profile=profiles[host]?.takeIf{it.area=="COSPLAY"}?:return false
+        return url.scheme=="https" && url.userInfo==null &&
+            url.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==host &&
+            profile.path.matches(url.path.orEmpty().lowercase(Locale.ROOT))
+    }
+
     fun entries(doc:Document,base:String,area:String,now:Long):
             List<IndexedItem>? {
         val uri=runCatching{URI(base)}.getOrNull()?:return null

@@ -500,7 +500,12 @@ internal object SourceIndexParser {
             .distinctBy{SearchRanking.canonicalKey(it.url)}.take(80).toList()
     }
     private fun preview(link:Element):String?{
-        val image=link.selectFirst("img")?:link.parent()?.selectFirst("img")?:return null
+        // WordPress headlines often use a separate sibling image anchor.
+        // Restrict fallback to the same media article/post; never a sidebar.
+        val image=link.selectFirst("img")
+            ?:link.closest("article,.post,.gallery-item,.media-item,.video-card")
+                ?.selectFirst("img")
+            ?:return null
         return SitePreviewImage.best(image)
     }
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
@@ -1247,7 +1252,7 @@ object SourceIndex {
         val specialist=source.url.let{
             val host=runCatching{URI(it).host.orEmpty().lowercase()
                 .removePrefix("www.")}.getOrDefault("")
-            host in setOf("eporner.com","hentaibros.net") &&
+            host in setOf("eporner.com","hentaibros.net","3dhentaix.com") &&
                 source.area in setOf("ADULT","HENTAI")
         }
         if(specialist){
@@ -1335,8 +1340,21 @@ object SourceIndex {
                 }
             }
             val stamp=System.currentTimeMillis()
-            val records=SourceIndexParser.entries(doc,source.url,source.area,stamp)+
-                SourceIndexParser.authenticVideoPreviews(doc,source.url,source.area,stamp)
+            // Public Kyora covers from known gallery-post URL formats can
+            // repair native-index/parser disagreement without pretending the
+            // corresponding original has already downloaded.
+            val nativeGalleryCards=if(source.area=="COSPLAY")
+                KyoraCreatorPreviews.parse(doc.outerHtml(),doc.location())
+                    .asSequence()
+                    .filter{SiteBackfillProfiles.recognizesGalleryPage(
+                        source.url,it.url) && SourceIndexParser.safe(it.cover)}
+                    .map{IndexedItem(it.url,it.title,it.cover,source.url,
+                        source.area,"cosplay",stamp,false)}
+                    .toList() else emptyList()
+            val records=(SourceIndexParser.entries(doc,source.url,source.area,stamp)+
+                SourceIndexParser.authenticVideoPreviews(
+                    doc,source.url,source.area,stamp)+nativeGalleryCards)
+                .distinctBy{it.url+"|"+(it.preview?:"")}
             synchronized(previewDbLock){
                 SourceIndexDb(context).use{db->
                     for(item in records){

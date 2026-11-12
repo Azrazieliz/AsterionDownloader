@@ -14,7 +14,7 @@ internal object VideoSiteProfiles {
     private val routes=listOf(
         Route("pornhub.com",Regex("""(?i)^/view_video\.php\?[^#]*\bviewkey=[^&#]+""")),
         Route("xvideos.com",Regex("""(?i)^/(?:video\d{2,14}|video\.[a-z0-9]{7,18})(?:/|$)""")),
-        Route("xnxx.com",Regex("""(?i)^/video-[a-z0-9]+(?:/|$)""")),
+        // Explicit user removal: XNXX is not an approved video source.
         Route("eporner.com",Regex("""(?i)^/(?:hd-porn/[a-z0-9]+|video-[a-z0-9]+)(?:/|$)""")),
         Route("hqpornerxxx.com",Regex("""(?i)^/(?:hdporn|video|videos)/[^/?#]+""")),
         Route("jav.guru",Regex("""(?i)^/[0-9]{4,10}/[a-z0-9][a-z0-9_-]{3,240}/?$""")),
@@ -22,7 +22,10 @@ internal object VideoSiteProfiles {
         Route("roshy.tv",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("cums.net",Regex("""(?i)^/(?:video|watch|v)/[^/?#]+""")),
         Route("peekvids.com",Regex("""(?i)^/(?:v|video|videos)/[^/?#]+""")),
-        Route("porntrex.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
+        // PornTrex retired. These alternatives were verified to publish
+        // accessible public first-party listing pages and video URLs.
+        Route("pornone.com",Regex("""(?i)^/[a-z0-9_-]{3,60}/[a-z0-9_-]{4,200}/[0-9]{6,12}/?$""")),
+        Route("sunporno.com",Regex("""(?i)^/v/[0-9]{2,12}/[a-z0-9][a-z0-9_-]{3,220}/?$""")),
         Route("tnaflix.com",Regex("""(?i)^/(?:video|videos|hd-videos)/[^/?#]+""")),
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
@@ -67,6 +70,9 @@ internal object VideoSiteProfiles {
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
         val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+        if(domain(url)=="pornone.com" &&
+            (cleanPath.startsWith("shorts/") || cleanPath.startsWith("categories/")))
+            return false
         if(domain(url)=="mp4hentai.com" &&
             cleanPath.contains("upcoming-") &&
             cleanPath.contains("-hentai-release"))return false

@@ -11,7 +11,8 @@ import java.util.Locale
 object ProviderRetirement {
     // Both OMG aliases expose the same public 34/34 video identifiers as
     // FreePornVideos in the 2026-11-11 verified listing comparison.
-    private val retired=setOf("pornhits.com","omg.porn","omg.xxx")
+    private val retired=setOf("pornhits.com","omg.porn","omg.xxx",
+        "porntrex.com","xnxx.com")
 
     fun isRetired(address:String):Boolean {
         val uri=runCatching { URI(address) }.getOrNull() ?: return false

@@ -91,6 +91,12 @@ internal object VerifiedSiteCatalogApi {
             "hentaibros.net"->cursor?.takeIf{it.startsWith(
                 "https://hentaibros.net/wp-json/wp/v2/posts?")} ?:
                 "https://hentaibros.net/wp-json/wp/v2/posts?per_page=30&page=1"
+            // 3DHentai serves official public WordPress JSON with validated
+            // full post URLs and Yoast source-owned poster URLs. Do not
+            // mistake category tiles or movie advertisements for originals.
+            "3dhentaix.com"->cursor?.takeIf{it.startsWith(
+                "https://3dhentaix.com/wp-json/wp/v2/posts?")} ?:
+                "https://3dhentaix.com/wp-json/wp/v2/posts?per_page=30&page=1"
             else->return null
         }
         require(SourceIndexParser.safe(api) &&
@@ -110,8 +116,12 @@ internal object VerifiedSiteCatalogApi {
             // a manually entered history floor. Never invent volume numbers.
             val current=Regex("""[?&]page=(\d+)""").find(api)
                 ?.groupValues?.get(1)?.toIntOrNull()?:1
-            parsed.copy(next=if(parsed.media.size>=30 && current<200)
-                "https://hentaibros.net/wp-json/wp/v2/posts?per_page=30&page="+(current+1)
+            // Provider-owned published posts, never navigation/category URLs.
+            val verified=parsed.media.filter{
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)
+            }
+            parsed.copy(media=verified,next=if(parsed.media.size>=30 && current<200)
+                "https://"+host+"/wp-json/wp/v2/posts?per_page=30&page="+(current+1)
                 else null)
         }
     }

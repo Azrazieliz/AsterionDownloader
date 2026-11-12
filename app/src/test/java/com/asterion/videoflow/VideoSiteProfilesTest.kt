@@ -5,13 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoSiteProfilesTest {
-    @Test fun pornhubXvideosXnxxAndEpornerExactPagePaths(){
+    @Test fun pornhubXvideosAndEpornerExactPagePaths(){
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.pornhub.com/view_video.php?viewkey=ph5abcd12"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.xvideos.com/video123456/sample-title"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
-            "https://www.xnxx.com/video-abc123/sample-title"))
+        // XNXX retired at the owner's request; old history preserved.
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.eporner.com/hd-porn/ABCD123/video-title"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -20,6 +19,20 @@ class VideoSiteProfilesTest {
             "https://www.xvideos.com/tags/animation"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.eporner.com/"))
+    }
+    @Test fun retiredProvidersAreNotAdmittedButReplacementPostRoutesWork(){
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.xnxx.com/video-abc123/a-video"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.porntrex.com/video/an-episode"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://pornone.com/dirty-talk/missax-rissa-may-my-virginity-is-a-burden-ix/279567143/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://pornone.com/shorts/video-example/280287537/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://www.sunporno.com/v/115776/stepmommy-is-fucked-by-the-young-cock/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.sunporno.com/category/uncensored/"))
     }
     @Test fun javGuruBlogPostIsDetectedButCategoryIsNot(){
         assertTrue(VideoSiteProfiles.isVideoPage(

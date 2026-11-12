@@ -40,6 +40,25 @@ class VerifiedSiteCatalogApiTest {
             result.media.single().url)
     }
 
+    @Test fun official3dHentaiPostsContainPublishedVideoAndPoster(){
+        val json="""[{"status":"publish","type":"post",
+          "link":"https://3dhentaix.com/gift-to-the-queen-act-3/",
+          "title":{"rendered":"Gift To The Queen Act 3"},
+          "yoast_head_json":{"og_image":[{"url":
+             "https://3dhentaix.com/wp-content/uploads/posters/gift.webp"}]}},
+          {"status":"publish","type":"post",
+          "link":"https://3dhentaix.com/explore/categories/",
+          "title":{"rendered":"Explore Categories"},
+          "yoast_head_json":{"og_image":[{"url":
+             "https://3dhentaix.com/logo.jpg"}]}}]"""
+        val posts=VerifiedSiteCatalogApi.hentaiBros(
+            json,"https://3dhentaix.com/","HENTAI",123L)
+            .filter{com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)}
+        assertEquals(1,posts.size)
+        assertEquals("https://3dhentaix.com/gift-to-the-queen-act-3/",
+            posts.first().url)
+    }
+
     @Test fun hentaiBrosIndexesPublishedPostsNotNavigation(){
         val json="""[
           {"status":"publish","type":"post",
