@@ -44,6 +44,9 @@ internal object SiteBackfillProfiles {
         // HTTP 403 while ordinary HTML listing access succeeds. The generic
         // heuristic previously discarded many legitimate article anchors.
         Profile("mp4hentai.com","HENTAI",
+            ".gridwp-grid-post-title a[href],"+
+            ".gridwp-grid-post-thumbnail a[href],"+
+            ".gridwp-grid-post a[href],"+
             "article h2 a[href],article h3 a[href],"+
             ".entry-title a[href],.post-title a[href],"+
             "article .post-thumbnail a[href],"+
@@ -91,7 +94,10 @@ internal object SiteBackfillProfiles {
                 .getOrNull()?:continue
             if(url.scheme!="https" || url.userInfo!=null ||
                 url.host?.lowercase(Locale.ROOT)?.removePrefix("www.")!=host ||
-                !profile.path.matches(url.path.orEmpty()))continue
+                !profile.path.matches(url.path.orEmpty()) ||
+                (host=="mp4hentai.com" &&
+                    url.path.orEmpty().contains("upcoming-",true) &&
+                    url.path.orEmpty().contains("-hentai-release",true)))continue
             val destination=url.toString().substringBefore('#').trimEnd('/')+
                 if(profile.kind=="books")"" else "/"
             val title=link.attr("title").ifBlank{
@@ -108,13 +114,21 @@ internal object SiteBackfillProfiles {
             }.trim().take(180)
             if(title.length<3)continue
             val cover=link.selectFirst("img")?:link.parent()?.selectFirst("img")
+                ?:link.closest(".gridwp-grid-post,.post,.gridwp-grid-post-item")
+                    ?.selectFirst("img")
             val image=cover?.let{img->
                 listOf("data-original","data-src","src").firstNotNullOfOrNull{
                     k->img.absUrl(k).takeIf{u->SourceIndexParser.safe(u)}
                 }
             }
-            found.putIfAbsent(destination,IndexedItem(destination,title,image,
-                base,area,profile.kind,now,false))
+            val prior=found[destination]
+            if(prior==null || (prior.preview.isNullOrBlank() &&
+                !image.isNullOrBlank())){
+                found[destination]=IndexedItem(destination,
+                    if(prior!=null && prior.title.length>title.length)
+                        prior.title else title,
+                    image?:prior?.preview,base,area,profile.kind,now,false)
+            }
             require(found.size<2500){
                 "Site-specific listing has too many records for one page; cursor not advanced"
             }

@@ -157,4 +157,26 @@ class SiteBackfillProfilesTest {
             .isVideoPage(records.single().url))
     }
 
+    @Test fun mp4HentaiGridwpListingMatchesRealHomeMarkup(){
+        val base="https://mp4hentai.com/"
+        val html="""<section class="gridwp-grid-posts">
+         <div class="gridwp-grid-post">
+          <div class="gridwp-grid-post-thumbnail">
+            <a href="https://mp4hentai.com/2025/03/mari-bunny-bot-r18/">
+             <img src="https://mp4hentai.com/wp-content/uploads/cover.webp"
+                  alt="Mari Bunny Bot" /></a>
+          </div>
+          <h3 class="gridwp-grid-post-title"><a
+              href="https://mp4hentai.com/2025/03/mari-bunny-bot-r18/">
+              Mari – Bunny Bot R18</a></h3>
+         </div>
+         <h3><a href="/2026/10/upcoming-november-2026-hentai-release/">
+             Upcoming November 2026 Release</a></h3>
+        </section>"""
+        val cards=titles(html,base,"HENTAI")
+        assertEquals(1,cards.size)
+        assertEquals(1,cards.count{it.preview?.endsWith("cover.webp")==true})
+        assertEquals("video",cards.first().kind)
+    }
+
 }
