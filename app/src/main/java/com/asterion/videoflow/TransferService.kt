@@ -469,8 +469,26 @@ object VideoEngine {
                 else null
             val quality=prefs.getString("quality","best[ext=mp4]/best")
                 ?: "best[ext=mp4]/best"
+            // Direct, browser-accessible media uses the Kotlin/Android HTTP
+            // streaming lane. No Python startup, extractor wrapper or shell.
+            // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
+            val native=NativeMediaDownloader.isDirectMediaUrl(link) &&
+                !hidden && !viaProxy
             val future=transferExecutor.submit<Int>{
-                EmbeddedYtDlpTransfer.download(
+                if(native) {
+                    val sameHost=runCatching{
+                        java.net.URI(item.url).host.equals(
+                            java.net.URI(link).host,ignoreCase=true)
+                    }.getOrDefault(false)
+                    NativeMediaDownloader.download(link,referer,parent,
+                        cookieHeader=if(sameHost)
+                            SiteSession.cookie(link) else null,
+                        cancelled={
+                            stopRequests.contains(item.id) ||
+                            Thread.currentThread().isInterrupted
+                        })
+                    0
+                } else EmbeddedYtDlpTransfer.download(
                     link,referer,selected,proxy,parent,template,quality)
             }
             extractionJobs[item.id]=future
