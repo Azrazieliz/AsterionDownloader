@@ -22,14 +22,29 @@ internal object NativeMediaDownloader {
             uri.userInfo==null && supported.containsMatchIn(uri.path.orEmpty())
     }
 
+    /** Hentai uses its already working original extractor without alteration. */
+    fun isNativeEligible(sourceUrl:String,mediaUrl:String):Boolean {
+        if(!isDirectMediaUrl(mediaUrl))return false
+        val origin=runCatching{URI(sourceUrl).host?.lowercase(Locale.ROOT)}
+            .getOrNull()?:return false
+        val hentai=com.azrael.pixivdumpsync.AlohaSources.by(
+            com.azrael.pixivdumpsync.AlohaArea.HENTAI)
+        return hentai.none{site->origin==site.host ||
+            origin.endsWith("."+site.host)}
+    }
+
     fun download(address:String,referer:String?,directory:File,
-                 cookieHeader:String?=null,cancelled:()->Boolean={false}):File {
+                 cookieHeader:String?=null,filenameStem:String="video",
+                 cancelled:()->Boolean={false}):File {
         require(isDirectMediaUrl(address)){"Not a direct native original media URL"}
         require(directory.isDirectory && directory.canWrite()){
             "Native transfer staging directory is unavailable"
         }
         val ext=URI(address).path.substringAfterLast('.').lowercase(Locale.ROOT)
-        val destination=File(directory,"native_original.$ext")
+        val stem=filenameStem.replace(
+            Regex("""[\\/:*?"<>|\p{Cntrl}]"""),"_")
+            .trim().take(140).ifBlank{"video"}
+        val destination=File(directory,"$stem.$ext")
         val partial=File(directory,"native_original.$ext.part")
         val validator=File(directory,"native_original.$ext.etag")
         if(destination.isFile && destination.length()>0L)return destination

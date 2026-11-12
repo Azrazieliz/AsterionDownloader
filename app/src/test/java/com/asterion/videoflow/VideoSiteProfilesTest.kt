@@ -5,10 +5,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoSiteProfilesTest {
-    @Test fun pornhubXvideosAndEpornerExactPagePaths(){
+    @Test fun retainedPornhubAndEpornerExactPagePaths(){
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.pornhub.com/view_video.php?viewkey=ph5abcd12"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.xvideos.com/video123456/sample-title"))
         // XNXX retired at the owner's request; old history preserved.
         assertTrue(VideoSiteProfiles.isVideoPage(
@@ -25,6 +25,10 @@ class VideoSiteProfilesTest {
             "https://www.xnxx.com/video-abc123/a-video"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.porntrex.com/video/an-episode"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.peekvids.com/videos/example"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.tnaflix.com/video/example"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://pornone.com/dirty-talk/example-video/279567143/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -44,7 +48,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(22,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(19,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://hentaibros.net/muramata-san-no-aijou-episode-2/"))
@@ -68,12 +72,12 @@ class VideoSiteProfilesTest {
             "https://mp4hentai.com/2026/07/upcoming-october-2026-hentai-release/"))
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
-        val home="https://www.xvideos.com/"
+        val home="https://www.eporner.com/"
         val doc=Jsoup.parse("""<nav class="pagination">
           <a class="next" href="/page/2/">Next</a>
           <a rel="next" href="https://ads.example.com/page/2">Ad</a>
         </nav>""",home)
-        assertEquals("https://www.xvideos.com/page/2/",
+        assertEquals("https://www.eporner.com/page/2/",
             VideoSiteProfiles.next(doc,home,home))
         assertNull(VideoSiteProfiles.next(
             Jsoup.parse("<a class='next' href='https://evil.example/page/3'>Next</a>",home),

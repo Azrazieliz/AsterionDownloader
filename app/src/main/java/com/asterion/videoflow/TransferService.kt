@@ -472,7 +472,7 @@ object VideoEngine {
             // Direct, browser-accessible media uses the Kotlin/Android HTTP
             // streaming lane. No Python startup, extractor wrapper or shell.
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
-            val native=NativeMediaDownloader.isDirectMediaUrl(link) &&
+            val native=NativeMediaDownloader.isNativeEligible(item.url,link) &&
                 !hidden && !viaProxy
             val future=transferExecutor.submit<Int>{
                 if(native) {
@@ -483,6 +483,7 @@ object VideoEngine {
                     NativeMediaDownloader.download(link,referer,parent,
                         cookieHeader=if(sameHost)
                             SiteSession.cookie(link) else null,
+                        filenameStem=item.title+" ["+item.id+"]",
                         cancelled={
                             stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted

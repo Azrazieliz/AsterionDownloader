@@ -36,7 +36,7 @@ class PerformerIdentityTest {
     }
 
     @Test fun verifiableProfileRoutesAreDistinctFromVideoTitles(){
-        assertTrue(PerformerIdentity.isProfileUrl(
+        assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/pornstars/jane-example"))
         assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/video12345/jane-example"))
