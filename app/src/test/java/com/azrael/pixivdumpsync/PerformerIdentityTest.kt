@@ -28,6 +28,13 @@ class PerformerIdentityTest {
         assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://user:pass@www.pornhub.com/model/jane-example"))
     }
+    @Test fun watchPornOfficialArtistProfileRouteIsRecognized() {
+        assertTrue(PerformerIdentity.isProfileUrl(
+            "Tina Kitsune","https://watchporn.to/models/tina-kitsune/"))
+        assertFalse(PerformerIdentity.isProfileUrl(
+            "Tina Kitsune","https://watchporn.to/video/tina-kitsune/"))
+    }
+
     @Test fun verifiableProfileRoutesAreDistinctFromVideoTitles(){
         assertTrue(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/pornstars/jane-example"))

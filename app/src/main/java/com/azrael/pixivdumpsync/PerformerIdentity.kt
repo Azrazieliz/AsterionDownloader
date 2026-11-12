@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  */
 internal object PerformerIdentity {
     data class Proof(val displayName:String,val profileUrl:String,val provider:String)
-    private val acceptedHosts=setOf("pornhub.com","xvideos.com","xnxx.com")
+    private val acceptedHosts=setOf("pornhub.com","xvideos.com","xnxx.com","watchporn.to")
     private val namePath=Regex("""^/(?:model|pornstar|models|pornstars|profiles)/([a-z0-9-]+)/?$""",
         RegexOption.IGNORE_CASE)
 
@@ -66,7 +66,8 @@ internal object PerformerIdentity {
             "https://www.pornhub.com/pornstar/$handle",
             "https://www.xvideos.com/pornstars/$handle",
             "https://www.xvideos.com/profiles/$handle",
-            "https://www.xnxx.com/pornstars/$handle"
+            "https://www.xnxx.com/pornstars/$handle",
+            "https://watchporn.to/models/$handle/"
         )
         val pool=Executors.newFixedThreadPool(4)
         val completion=ExecutorCompletionService<Proof?>(pool)

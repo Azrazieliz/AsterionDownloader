@@ -90,11 +90,44 @@ object NameCrawler {
         val watch=NameWatchDb(context).use{it.list().firstOrNull{
             candidate->candidate.id==id && candidate.enabled
         }}?:return false
-        if(!PerformerIdentity.isProfileUrl(watch.name,watch.source)){
+        if(!PerformerFollowPolicy.permittedName(watch.name)){
             NameWatchDb(context).use{it.setResult(id,
-                "Unverified performer identity. Recheck an official profile before Sync.")}
-            onStatus("Cannot sync unverified performer: "+watch.name)
+                "Ambiguous or invalid performer name; enter a distinctive creator identity.")}
+            onStatus("Ambiguous creator name: "+watch.name)
             return false
+        }
+        if(!PerformerIdentity.isProfileUrl(watch.name,watch.source)){
+            // Explicitly user-selected names are valid watch queries, not proof
+            // that any particular provider page belongs to that performer.
+            // Search only real indexed first-party video pages. No automated
+            // download is permitted without a verified performer profile.
+            BackfillAgents.submit(context,"performer:"+id){
+                NameWatchDb(context).use{watches->
+                    try{
+                        val matches=SourceIndex.items(context,"ADULT",1200)
+                            .asSequence()
+                            .filter { it.kind=="video" &&
+                                SearchExactness.matches(watch.name,it.title) &&
+                                com.asterion.videoflow.VideoSiteProfiles
+                                    .isVideoPage(it.url) &&
+                                SourceIndexParser.sameSite(it.source,it.url) }
+                            .distinctBy{SearchRanking.canonicalKey(it.url)}
+                            .take(120)
+                            .map{RankedHit(it.title,it.url,
+                                "Name match · "+it.source,score=110,
+                                thumbnail=it.preview)}.toList()
+                        SearchResultsDb(context).use{it.save(watch.name,matches)}
+                        watches.setResult(id,if(matches.isEmpty())
+                            "No indexed videos match this selected name yet; profile unverified"
+                            else "Name-only matches require manual review; no automatic downloads")
+                        onStatus(watch.name+": "+matches.size+
+                            " indexed title matches for manual review")
+                    }catch(t:Exception){
+                        watches.setResult(id,t.message?:"Name search unavailable")
+                    }
+                }
+            }
+            return true
         }
         BackfillAgents.submit(context,"performer:"+id){
             NameWatchDb(context).use{watches->
