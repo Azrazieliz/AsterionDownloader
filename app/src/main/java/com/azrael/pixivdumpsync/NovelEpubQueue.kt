@@ -199,14 +199,15 @@ class NovelEpubQueue(context:Context):
     /** A blocked website must not be hammered automatically for hours.
      * Preserve acquired chapter cache until the website account is reconnected.
      */
-    fun failure(item:NovelEpubTask,error:String){
+    fun failure(item:NovelEpubTask,error:String,notBeforeEpochMs:Long=0L){
         val n=(item.attempts+1).coerceAtMost(30)
         val blocked=NovelAccountPolicy.needsBrowserConnection(error)
         val delay=(60_000L shl n.coerceAtMost(7)).coerceAtMost(6*60*60_000L)
         writableDatabase.update("novels",ContentValues().apply{
             put("state",if(blocked)"WAIT_LOGIN" else "RETRY")
             put("attempts",n)
-            put("retry_after",if(blocked)0L else System.currentTimeMillis()+delay)
+            put("retry_after",if(blocked)0L else maxOf(
+                System.currentTimeMillis()+delay,notBeforeEpochMs))
             put("last_error",error.take(200))
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(item.url))

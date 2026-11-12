@@ -62,11 +62,20 @@ object NovelEpubService {
                 SourceIndexParser.sameSite(source,url)){
                 "A novel source tried to fetch an untrusted address"
             }
+            // Serialize requests for the same novel host across both EPUB
+            // workers. A server's 429 Retry-After survives subsequent jobs.
+            NovelHttpPacing.beforeRequest(context,url)
             val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
                 .timeout(24000).maxBodySize(6_000_000)
                 .followRedirects(false).ignoreHttpErrors(true)
                 .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
                 .execute()
+            if(response.statusCode()==429 ||
+                (response.statusCode()==503 && response.header("Retry-After")!=null)){
+                val until=NovelHttpPacing.recordRateLimit(
+                    context,url,response.header("Retry-After"))
+                throw NovelRateLimited(until)
+            }
             if(response.statusCode() in 300..399){
                 val destination=response.header("Location")
                     ?.takeIf{it.isNotBlank()}?:error("Chapter redirect has no target")
@@ -511,6 +520,9 @@ object NovelEpubService {
                                 db.completed(task.url,saved,signature)
                             }catch(t:ContinueNovel){
                                 db.continueLater(task.url,t.cached)
+                            }catch(t:NovelRateLimited){
+                                db.failure(task,t.message?:"Novel source HTTP 429",
+                                    t.retryAtEpochMs)
                             }catch(t:Exception){
                                 db.failure(task,t.message?:t.javaClass.simpleName)
                             }
