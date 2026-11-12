@@ -631,41 +631,11 @@ object VideoEngine {
         val watchPorn=if(viaProxy)null else runCatching{
             WatchPornOriginalSource.resolve(item.url)
         }.getOrNull()
-        val freePornVideos=if(viaProxy)null else runCatching{
-            FreePornVideosOriginalSource.resolve(item.url)
-        }.getOrNull()
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
         var heldReason:String?=null
         try {
-            if(freePornVideos!=null){
-                // Direct publisher MP4, not an unrelated iframe or advertised clip.
-                // A missing publisher runtime still requires preflight; this
-                // never invents a full-length verification result.
-                val published=freePornVideos.durationSeconds
-                val verified=if(published!=null){
-                    val result=FullLengthVideoPolicy.assess(
-                        item.title,item.title,item.url,published,published,
-                        publisherVerified=true)
-                    published to result
-                }else runCatching{
-                    preflight(freePornVideos.mediaUrl,item.url)
-                }.getOrElse{error->
-                    last=error
-                    0L to FullLengthVideoPolicy.Decision(
-                        FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
-                        "Direct video duration was not available")
-                }
-                if(verified.second.verdict==FullLengthVideoPolicy.Verdict.ACCEPT &&
-                    verified.first>0L){
-                    try{
-                        execute(freePornVideos.mediaUrl,item.url)
-                        expectedDuration=verified.first
-                        downloaded=true
-                    }catch(t:Exception){last=t}
-                }else heldReason=verified.second.reason
-            }
             if(watchPorn!=null){
                 // Full runtime was published twice in the provider's own page.
                 // This avoids a pointless 50-second metadata preflight for a
