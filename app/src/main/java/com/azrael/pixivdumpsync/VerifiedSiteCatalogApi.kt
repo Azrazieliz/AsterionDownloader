@@ -28,9 +28,11 @@ internal object VerifiedSiteCatalogApi {
             val row=videos.optJSONObject(i)?:continue
             val url=row.optString("url")
             val title=Jsoup.parse(row.optString("title")).text().trim().take(180)
+            // EPORNER publishes both /video-ID/ and /hd-porn/ID/title.
+            // The previous catalog parser silently dropped all hd-porn cards,
+            // although the native player route correctly recognized them.
             if(!trusted(source,url) ||
-                !url.matches(Regex("""https://(?:www\.)?eporner\.com/video-[^/\s]+/[^?#]*/?""",
-                    RegexOption.IGNORE_CASE)) ||
+                !com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
                 IndexedMediaQuality.navigationTitle(title))continue
             val thumb=row.optJSONObject("default_thumb")?.optString("src")
                 ?:row.optString("default_thumb")

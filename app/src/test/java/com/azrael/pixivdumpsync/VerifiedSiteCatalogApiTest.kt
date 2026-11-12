@@ -24,6 +24,22 @@ class VerifiedSiteCatalogApiTest {
         assertTrue(result.next!!.contains("page=2"))
     }
 
+    @Test fun epornerHdPornPublishedPagesAreAdmittedFromOfficialCatalog(){
+        val json="""{"page":1,"total_pages":1,"videos":[
+          {"url":"https://www.eporner.com/hd-porn/ABCD123/video-title/",
+           "title":"Publisher Original","default_thumb":{
+              "src":"https://static-ca-cdn.eporner.com/thumbs/original.jpg"}},
+          {"url":"https://www.eporner.com/categories/hardcore/",
+           "title":"Category","default_thumb":{
+              "src":"https://static-ca-cdn.eporner.com/thumbs/category.jpg"}}
+        ]}"""
+        val result=VerifiedSiteCatalogApi.eporner(
+            json,"https://www.eporner.com/","ADULT",17L)
+        assertEquals(1,result.media.size)
+        assertEquals("https://www.eporner.com/hd-porn/ABCD123/video-title/",
+            result.media.single().url)
+    }
+
     @Test fun hentaiBrosIndexesPublishedPostsNotNavigation(){
         val json="""[
           {"status":"publish","type":"post",
