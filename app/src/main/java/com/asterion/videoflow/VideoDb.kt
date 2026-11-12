@@ -331,6 +331,23 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         for(id in matching)retry(id)
         return matching.size
     }
+    /** A previously installed incompatible runtime failed 39 queued rows
+     * with identical "Video engine unavailable" messages. Requeue precisely
+     * those jobs once Python has initialized successfully, without touching
+     * paused, user-rejected or completed downloads.
+     */
+    fun requeuePythonStartupFailures():Int {
+        val now=System.currentTimeMillis()
+        val statement=writableDatabase.compileStatement(
+            """UPDATE videos SET state='queued',progress=0,error=NULL,
+               retry_after=0,attempts=0,updated=?
+               WHERE state='error' AND error LIKE 'Video engine unavailable:%'
+                 AND id IN (SELECT id FROM videos
+                    WHERE state='error' AND error LIKE 'Video engine unavailable:%'
+                    ORDER BY updated ASC LIMIT 100)""")
+        statement.bindLong(1,now)
+        return statement.executeUpdateDelete()
+    }
     fun scheduleRetry(id:Long,reason:String) {
         val db=writableDatabase
         val count=db.rawQuery("SELECT attempts FROM videos WHERE id=?",arrayOf(id.toString())).use{

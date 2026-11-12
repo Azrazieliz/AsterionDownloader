@@ -22,7 +22,10 @@ object VideoEngine {
     private val executor=Executors.newSingleThreadExecutor()
     private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
-        java.util.concurrent.Future<dev.ffmpegkit_maintained.ytdlp.YtDlpResponse>>()
+        java.util.concurrent.Future<*>>()
+    private val metadataExecutor=Executors.newFixedThreadPool(1){task->
+        Thread(task,"videoflow-native-metadata").apply{isDaemon=true}
+    }
     /** Cancels an individual video without deleting its source, metadata or cache.
      * A stopped transfer can be explicitly resumed in Downloads.
      */
@@ -92,16 +95,20 @@ object VideoEngine {
         try {
             val db=VideoDb(context)
             db.recover()
-            try { YtDlp.init(context.applicationContext) }
-            catch(t:Throwable) {
-                // Native Android loader failures are LinkageError, NOT
-                // Exception. Uncaught errors previously killed the entire
-                // worker, leaving unrelated queued jobs apparently idle.
+            try {
+                YtDlp.init(context.applicationContext)
+                EmbeddedYtDlpMetadata.checkRuntime()
+                VideoRuntimeState.healthy(context)
+                // Old releases converted each temporary interpreter startup
+                // failure into a permanent file failure. Recover only those
+                // precise records, preserving user pauses and completed files.
+                db.requeuePythonStartupFailures()
+            }catch(t:Throwable){
                 if(t is VirtualMachineError || t is ThreadDeath)throw t
-                val reason=t.message?:t.javaClass.simpleName
-                db.next()?.let { db.update(it.id,"error",
-                    error="Video engine unavailable: "+reason.take(180)) }
-                onStatus("Video engine failed to initialize: "+reason.take(70))
+                // Do not poison another queued original every time a service
+                // attempts to start Python. Record the real cause chain once.
+                val cause=VideoRuntimeState.failed(context,t)
+                onStatus("Video runtime unavailable: "+cause.take(75))
                 return
             }
             fun drainQueued(maxItems:Int) {
@@ -519,39 +526,55 @@ object VideoEngine {
                     ?: "best[ext=mp4]/best")
                 .apply {
                     if(viaProxy && hidden)addOption("--proxy", "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
-                    if(!referer.isNullOrBlank())addOption("--referer",referer)
+                    // This library's Python wrapper implements --add-header,
+                    // not --referer. The old option was silently ignored.
+                    if(!referer.isNullOrBlank())addOption("--add-header","Referer: "+referer)
                     val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
                         ?:cookie.takeIf{it.isFile&&it.length()>0}
                     if(selected!=null)addOption("--cookies",selected.absolutePath)
                 }
         fun preflight(link:String,referer:String?=null):
                 Pair<Long,FullLengthVideoPolicy.Decision> {
-            // Verify runtime before requesting a single media fragment; video
-            // resolution alone cannot establish that a scene is complete.
-            val request=YtDlpRequest(link)
-                .addOption("--no-cache-dir")
-                .addOption("--paths","home:"+stage)
-                .addOption("--dump-single-json")
-                .addOption("--skip-download")
-                .addOption("--no-playlist")
-                .addOption("--socket-timeout","20")
-                .apply{
-                    if(viaProxy && hidden)addOption("--proxy",
-                        "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
-                    if(!referer.isNullOrBlank())addOption("--referer",referer)
-                    val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
-                        ?:cookie.takeIf{it.isFile&&it.length()>0}
-                    if(selected!=null)addOption("--cookies",selected.absolutePath)
-                }
-            val response=executeControlled(request,"metadata"){_,_,_->
-                if(stopRequests.contains(item.id))
-                    throw java.util.concurrent.CancellationException("Video paused")
+            // The installed yt-dlp wrapper ignores --dump-single-json and
+            // --skip-download and *always* reports blank output. Call the
+            // already-embedded Chaquopy yt_dlp API directly with download=false.
+            // No file or media fragment is downloaded during this preflight.
+            val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+                ?:cookie.takeIf{it.isFile&&it.length()>0}
+            val proxy=if(viaProxy && hidden)
+                "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
+                else null
+            val future=metadataExecutor.submit<JSONObject>{
+                EmbeddedYtDlpMetadata.inspect(link,referer,selected,proxy)
             }
-            if(!response.isSuccess)error(
-                VideoExtractorErrors.message(response.output,
-                    response.exitCode,"metadata"))
-            val json=VideoMetadataOutput.parse(response.output)
-                ?:error("Video extractor returned no valid metadata JSON")
+            extractionJobs[item.id]=future
+            val started=android.os.SystemClock.elapsedRealtime()
+            val json:JSONObject
+            try{
+                while(true){
+                    if(stopRequests.contains(item.id) ||
+                        Thread.currentThread().isInterrupted)
+                        throw java.util.concurrent.CancellationException("Video paused")
+                    if(!db.touchClaim(item.id,item.lease))
+                        throw java.util.concurrent.CancellationException("Lease released")
+                    if(android.os.SystemClock.elapsedRealtime()-started>=
+                        VideoTransferLimits.PREFLIGHT_MS)
+                        throw java.util.concurrent.TimeoutException(
+                            "Metadata inspection timed out before downloading")
+                    try{
+                        json=future.get(VideoTransferLimits.POLL_MS,
+                            java.util.concurrent.TimeUnit.MILLISECONDS)
+                        break
+                    }catch(_:java.util.concurrent.TimeoutException){
+                        // Keep the lease alive and enforce a deadline.
+                    }
+                }
+            }catch(t:Exception){
+                future.cancel(true)
+                throw t
+            }finally{
+                extractionJobs.remove(item.id,future)
+            }
             val duration=json.optDouble("duration",0.0)
                 .takeIf{it.isFinite() && it>0.0}?.toLong()
             val extracted=json.optString("title","")

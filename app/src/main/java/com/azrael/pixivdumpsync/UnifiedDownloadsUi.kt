@@ -69,6 +69,14 @@ object UnifiedDownloadsUi {
     }
     private fun collect(a:Activity):List<Row>{
         val rows=ArrayList<Row>()
+        VideoRuntimeState.failure(a)?.let{failure->
+            rows+=Row("Video engine","Video engine unavailable",
+                "Embedded Python startup failed · "+failure.take(160),
+                State.FAILED,null,System.currentTimeMillis(),{
+                    Toast.makeText(a,"Runtime diagnostics: "+failure.take(180),
+                        Toast.LENGTH_LONG).show()
+                })
+        }
         VideoDb(a).use{db->
             for(item in db.listVideos(180)){
                 val present=readable(a,item.savedUri)
