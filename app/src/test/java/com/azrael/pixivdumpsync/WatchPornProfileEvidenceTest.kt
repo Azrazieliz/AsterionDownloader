@@ -15,6 +15,11 @@ class WatchPornProfileEvidenceTest {
             address)
         assertTrue(WatchPornPanel.matchesProfile("Jane Example",address,page))
     }
+    @Test fun shortInitialsCannotMasqueradeAsDistinctCreator(){
+        val url="https://watchporn.to/models/jj/"
+        val page=Jsoup.parse("<html><h1>JJ</h1></html>",url)
+        assertFalse(WatchPornPanel.matchesProfile("JJ",url,page))
+    }
     @Test fun rejectsVideoTitleAndUnrelatedPerformer(){
         val document=Jsoup.parse(
             """<html><h1>Another Person</h1><a title="Jane Example" href="/video/a">

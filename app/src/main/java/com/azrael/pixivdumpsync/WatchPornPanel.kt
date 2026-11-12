@@ -30,6 +30,7 @@ object WatchPornPanel {
         if(uri.scheme!="https" || uri.userInfo!=null || host!="watchporn.to")return false
         val route=uri.path.orEmpty().trimEnd('/')
         if(!route.matches(Regex("^/models/[a-z0-9_-]+$")))return false
+        if(!PerformerFollowPolicy.permittedName(name))return false
         val targetSlug=slug(name)
         if(targetSlug.length<2 || route.substringAfterLast('/')!=targetSlug)return false
         val canonical=document.selectFirst("link[rel=canonical]")?.absUrl("href").orEmpty()
@@ -56,6 +57,7 @@ object WatchPornPanel {
 
     private fun models(name:String):List<Performer>{
         val needle=name.trim()
+        if(!PerformerFollowPolicy.permittedName(needle))return emptyList()
         val handle=slug(needle)
         if(handle.length<2)return emptyList()
         // Try the exact profile even if the website's directory is inaccessible.
@@ -110,7 +112,10 @@ object WatchPornPanel {
         val result=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         block.addView(ui.action(a,"SEARCH WATCHPORN ARTISTS",true){
             val q=input.text.toString().trim()
-            if(q.length<2){status.text="Enter a performer name";return@action}
+            if(!PerformerFollowPolicy.permittedName(q)){
+                status.text="Enter a distinctive creator name, not initials or a generic term"
+                return@action
+            }
             status.text="Verifying real WatchPorn performer profiles…";result.removeAllViews()
             thread(name="asterion-watchporn-models"){
                 val found=runCatching{models(q)}
