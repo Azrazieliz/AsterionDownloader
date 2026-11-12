@@ -602,7 +602,13 @@ object VideoEngine {
         // For Eporner use the verified publisher's own embed first. Never
         // silently bypass an age/login requirement or send cookies cross-site.
         // Other providers retain existing canonical-URL behavior.
-        val variants=EpornerOriginalSource.videoCandidates(item.url,connected)
+        val variants=(EpornerOriginalSource.videoCandidates(item.url,connected)+
+            // UncensoredHentai's watch pages use an authorized native iframe
+            // player. yt-dlp cannot extract the WordPress watch page itself.
+            // Resolve only a page-owned, explicitly supported player embed.
+            (if(viaProxy)emptyList() else runCatching{
+                WebDiscovery.embeddedCandidates(item.url)
+            }.getOrDefault(emptyList()))).distinct()
         val watchPorn=if(viaProxy)null else runCatching{
             WatchPornOriginalSource.resolve(item.url)
         }.getOrNull()

@@ -256,6 +256,38 @@ object WebDiscovery {
         return found.values.toList()
     }
 
+    /** Official embedded-player link advertised by the selected, approved
+     * publisher page. This is NOT an extra catalog provider or a downloader
+     * for arbitrary third-party advertising iframes. No authentication is
+     * bypassed; provider access errors remain errors.
+     */
+    internal fun publishedEmbeds(doc:Document,source:String):List<String> {
+        val origin=runCatching{URI(source)}.getOrNull()?:return emptyList()
+        val host=origin.host.orEmpty().lowercase().removePrefix("www.")
+        if(host!="uncensoredhentai.xxx" || !VideoSiteProfiles.isVideoPage(source))
+            return emptyList()
+        val result=LinkedHashSet<String>()
+        for(iframe in doc.select("iframe[src][allowfullscreen],"+
+            "iframe[src][allow*=fullscreen]").take(20)){
+            val url=runCatching{
+                URI(doc.location()).resolve(iframe.attr("src"))
+            }.getOrNull()?:continue
+            if(url.scheme!="https" || url.userInfo!=null ||
+                url.host.orEmpty().lowercase().removePrefix("www.")!="nhplayer.com" ||
+                !Regex("""^/v/[A-Za-z0-9]{8,40}/?$""").matches(url.path.orEmpty()))
+                continue
+            result+=url.toString().substringBefore('#')
+            if(result.size>=3)break
+        }
+        return result.toList()
+    }
+    fun embeddedCandidates(address:String):List<String> {
+        if(!isUrl(address) || !VideoSiteProfiles.isVideoPage(address))
+            return emptyList()
+        val doc=open(address)
+        return publishedEmbeds(doc,address)
+    }
+
     fun directMedia(address:String):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
