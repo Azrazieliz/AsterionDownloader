@@ -14,7 +14,7 @@ import java.io.IOException
  */
 internal object LegacyYtDlpTransfer {
     @Volatile private var initialized=false
-    @Synchronized private fun initialize(context:Context){
+    @Synchronized fun initialize(context:Context){
         if(!initialized){
             YtDlp.init(context.applicationContext)
             initialized=true

@@ -39,7 +39,7 @@ object VideoEngine {
      */
     private fun ensureExtractor(context:Context) {
         try {
-            YtDlp.init(context.applicationContext)
+            LegacyYtDlpTransfer.initialize(context)
             EmbeddedYtDlpMetadata.checkRuntime()
             VideoRuntimeState.healthy(context)
             VideoDb(context).use{it.requeuePythonStartupFailures()}
