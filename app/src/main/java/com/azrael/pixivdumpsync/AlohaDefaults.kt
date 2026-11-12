@@ -33,6 +33,9 @@ object AlohaDefaults {
             var newVideo=false
             var newGallery=false
             VideoDb(app).use{db->
+                db.migrateProviderListing(
+                    "https://mp4hentai.com/category/upcoming-hentai-release/",
+                    "https://mp4hentai.com/")
                 // NotFans is catalogued as creator imagery but also serves
                 // real video pages with their own accessible MP4 originals.
                 // Enroll both engines without removing its Kyora gallery source.

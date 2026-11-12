@@ -776,6 +776,11 @@ object SourceIndex {
                 "https://roshy.tv/category/decensored-6/")
             db.migrateOfficialSource(
                 "https://m.tnaflix.com/","https://www.tnaflix.com/")
+            // The old MP4Hentai seed pointed to a release calendar, not
+            // actual video posts. Preserve indexed rows when correcting it.
+            db.migrateOfficialSource(
+                "https://mp4hentai.com/category/upcoming-hentai-release/",
+                "https://mp4hentai.com/")
             db.migrateOfficialSource(
                 "https://freewebnovel.com/","https://freewebnovel.com/home")
             db.migrateOfficialSource(

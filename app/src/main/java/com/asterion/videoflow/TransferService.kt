@@ -549,7 +549,7 @@ object VideoEngine {
             }
             extractionJobs[item.id]=future
             val started=android.os.SystemClock.elapsedRealtime()
-            val json:JSONObject
+            lateinit var json:JSONObject
             try{
                 while(true){
                     if(stopRequests.contains(item.id) ||

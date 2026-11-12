@@ -50,6 +50,39 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return writableDatabase.insertWithOnConflict("watches", null, row, SQLiteDatabase.CONFLICT_IGNORE) != -1L
     }
+    /** Official source correction: retain the existing watch, toggle,
+     * cursor and every saved video. No new subscription or duplicate scan.
+     */
+    fun migrateProviderListing(oldUrl:String,newUrl:String){
+        if(oldUrl==newUrl)return
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val old=db.rawQuery("SELECT id FROM watches WHERE address=?",
+                arrayOf(oldUrl)).use{if(it.moveToFirst())it.getLong(0)else null}
+            if(old!=null){
+                val existing=db.rawQuery("SELECT id FROM watches WHERE address=?",
+                    arrayOf(newUrl)).use{if(it.moveToFirst())it.getLong(0)else null}
+                if(existing==null){
+                    db.execSQL("UPDATE watches SET address=? WHERE id=?",
+                        arrayOf(newUrl,old))
+                }else{
+                    db.execSQL("UPDATE videos SET watch_id=? WHERE watch_id=?",
+                        arrayOf(existing,old))
+                    db.execSQL("""UPDATE watches SET
+                        enabled=MAX(enabled,(SELECT enabled FROM watches WHERE id=?)),
+                        last_check=MAX(last_check,(SELECT last_check FROM watches WHERE id=?)),
+                        cursor=COALESCE(cursor,(SELECT cursor FROM watches WHERE id=?)),
+                        backfill_complete=MAX(backfill_complete,
+                            (SELECT backfill_complete FROM watches WHERE id=?))
+                        WHERE id=?""",
+                        arrayOf(old,old,old,old,existing))
+                    db.delete("watches","id=?",arrayOf(old.toString()))
+                }
+            }
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
     fun resetWatchBackfill(id:Long){
         writableDatabase.execSQL("UPDATE watches SET last_check=0,error=NULL,cursor=NULL,backfill_complete=0 WHERE id=?",arrayOf(id))
     }

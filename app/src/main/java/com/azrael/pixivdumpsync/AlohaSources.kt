@@ -49,7 +49,7 @@ TNAFLIX|https://www.tnaflix.com/|ADULT
 XNXX|https://www.xnxx.com/|ADULT
 XXXClub|https://xxxclub.to/|ADULT
 OneJAV|https://onejav.com/|ADULT
-MP4Hentai|https://mp4hentai.com/category/upcoming-hentai-release/|HENTAI
+MP4Hentai|https://mp4hentai.com/|HENTAI
 Hentai Bros|https://hentaibros.net/|HENTAI
 OnlyHentai|https://www.onlyhentaistuff.com/|HENTAI
 Uncensored Hentai|https://uncensoredhentai.xxx/|HENTAI

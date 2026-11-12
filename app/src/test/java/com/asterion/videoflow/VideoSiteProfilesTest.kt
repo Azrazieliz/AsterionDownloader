@@ -47,6 +47,18 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.omg.porn/fr/"))
     }
+    @Test fun liveHentaiProviderPostRoutesAreNotReleaseCalendarsOrCategories(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://3dhentaix.com/loving-mother-1-8-by-japs8005/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://3dhentaix.com/phantom/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/anal/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/explore/categories/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://mp4hentai.com/2026/11/si-give-me-more-segs/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://mp4hentai.com/2026/07/upcoming-october-2026-hentai-release/"))
+    }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.xvideos.com/"
         val doc=Jsoup.parse("""<nav class="pagination">

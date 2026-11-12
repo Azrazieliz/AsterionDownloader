@@ -30,10 +30,13 @@ internal object VideoSiteProfiles {
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
         // Keep native title slugs and /watch/ routes in one provider profile.
         Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
-        Route("mp4hentai.com",Regex("""(?i)^/(?!category/)(?:video|watch|hentai)/[^/?#]+""")),
+        // MP4Hentai actually publishes WordPress /YYYY/MM/post-slug/
+        // pages; the old route only matched /video/... and missed everything.
+        Route("mp4hentai.com",Regex("""(?i)^/(?:[0-9]{4}/(?:0[1-9]|1[0-2])/[^/?#]{3,300}/?|(?:video|watch|hentai)/[^/?#]+)$""")),
         Route("onlyhentaistuff.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
-        Route("3dhentaix.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
+        // Actual 3DHentai video pages use a single top-level title slug.
+        Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
         Route("hentaihaven.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("camstreams.tv",Regex("""(?i)^/(?:video|videos|watch|clip)/[^/?#]+"""))
@@ -63,6 +66,17 @@ internal object VideoSiteProfiles {
         val path=uri.rawPath.orEmpty()+uri.rawQuery?.let{"?"+it}.orEmpty()
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
+        val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+        if(domain(url)=="mp4hentai.com" &&
+            cleanPath.contains("upcoming-") &&
+            cleanPath.contains("-hentai-release"))return false
+        if(domain(url)=="3dhentaix.com" &&
+            (cleanPath.startsWith("explore/") ||
+                cleanPath in setOf("anal","creampie","pov","futanari",
+                    "gangbang","uncensored","rape","ahegao","bondage",
+                    "monster","succubus","incest","public-sex","tentacles",
+                    "fantasy","cosplay","school-girls","dark-skin",
+                    "ugly-bastard","yuri","categories","studios")))return false
         if(domain(url)=="hentaibros.net" &&
             uri.path.orEmpty().trim('/') in setOf(
                 "latest-videos","longest-videos","random-videos",

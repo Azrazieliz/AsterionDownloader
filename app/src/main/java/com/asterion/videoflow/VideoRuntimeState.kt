@@ -16,7 +16,7 @@ internal object VideoRuntimeState {
     fun failed(c:Context,t:Throwable):String{
         val chain=generateSequence(t){it.cause}.take(5).joinToString(" <- "){
             it.javaClass.simpleName+":"+it.message.orEmpty()
-                .replace(Regex("""(?i)https?://[^\\s]+"""),"[redacted URL]")
+                .replace(Regex("""(?i)https?://[^\s]+"""),"[redacted URL]")
                 .take(110)
         }.take(380)
         c.getSharedPreferences(PREF,0).edit().putString(KEY,chain).apply()
