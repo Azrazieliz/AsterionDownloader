@@ -80,8 +80,16 @@ object AsterionAdultHub {
     /** Do not recommend site menus, language directories, tags or category pages
      * as if they were individual media. Never invent missing thumbnails.
      */
-    internal fun realMedia(item:IndexedItem):Boolean =
-        IndexedMediaQuality.isMedia(item.url,item.title,item.preview,item.area)
+    internal fun realMedia(item:IndexedItem):Boolean {
+        if(item.area in setOf("ADULT","HENTAI","VIDEOS") &&
+            SourceIndexParser.safe(item.url) &&
+            SourceIndexParser.sameSite(item.source,item.url) &&
+            !IndexedMediaQuality.navigationTitle(item.title) &&
+            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(item.url))
+            return true
+        return IndexedMediaQuality.isMedia(
+            item.url,item.title,item.preview,item.area)
+    }
     /** Each preview belongs to its website; performer previews belong to
      * their followed model. Never mix an unrequested global "Latest" feed.
      */

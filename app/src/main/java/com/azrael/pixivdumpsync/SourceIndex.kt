@@ -885,7 +885,11 @@ object SourceIndex {
                 ensure(context)
                 val sites=SourceIndexDb(context).use{db->
                     db.sources().filter{
-                        it.area==area && SourceIndexParser.safe(it.url)
+                        it.area==area && SourceIndexParser.safe(it.url) &&
+                            // Native Kyora adapters own COSPLAY indexing;
+                            // scanning their landing pages as "generic"
+                            // produced fake errors despite real gallery covers.
+                            !(area=="COSPLAY" && it.adapter=="native")
                     }.distinctBy{SiteControls.key(it.url)}
                 }
                 val before=SourceIndexDb(context).use{db->
