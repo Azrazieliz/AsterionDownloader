@@ -4,14 +4,14 @@ import com.asterion.videoflow.VideoSiteProfiles
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Preserve the 37 owner-approved Aloha providers. Retired sources retain data. A provider must be routed
+/** Preserve the owner-approved Aloha providers. Retired sources retain data. A provider must be routed
  * through a real content engine, not silently downgraded to an inert bookmark.
  * This is a routing test, NOT proof of live-site historical completeness.
  */
 class ApprovedProviderCoverageTest {
     @Test fun allOwnerRetainedSitesHaveASyncEngine(){
         val sites=AlohaSources.all
-        assertEquals(37,sites.size)
+        assertEquals(39,sites.size)
         val missing=sites.filter{site->
             var host=site.host.lowercase()
             for(prefix in listOf("m.","fr.","en.")){
