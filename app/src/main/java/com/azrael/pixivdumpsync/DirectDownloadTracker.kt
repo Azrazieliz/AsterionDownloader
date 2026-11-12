@@ -81,11 +81,24 @@ object DirectDownloadTracker {
         // zero-byte timeout. Keep the original in the native Downloads list,
         // as a FAILED row rather than an invisible, forever-queued entry.
         // Its encrypted metadata and dedup claim survive for manual retry.
-        return saved.mapNotNull{job->
-            byId[job.id] ?: if(OriginalReceiptState.get(c,job.id)=="STALLED")
-                State(job,DownloadManager.STATUS_FAILED,0L,-1L,
-                    DownloadManager.ERROR_UNKNOWN,null)
-            else null
+        val now=System.currentTimeMillis()
+        return saved.map{job->
+            byId[job.id] ?: run {
+                val previous=OriginalReceiptState.get(c,job.id)
+                // The system provider may need a moment to expose a newly
+                // enqueued request. After that, an absent OS row must remain
+                // visible and manually recoverable, not vanish from Downloads.
+                val newlyEnqueued=job.created>0L && now>=job.created &&
+                    now-job.created<60_000L
+                if(newlyEnqueued && previous!="STALLED" && previous!="MISSING")
+                    State(job,DownloadManager.STATUS_PENDING,0L,-1L,0,null)
+                else {
+                    if(previous!="STALLED" && previous!="MISSING")
+                        OriginalReceiptState.set(c,job.id,"MISSING")
+                    State(job,DownloadManager.STATUS_FAILED,0L,-1L,
+                        DownloadManager.ERROR_UNKNOWN,null)
+                }
+            }
         }
     }
     fun render(a:Activity,body:LinearLayout){
@@ -94,7 +107,7 @@ object DirectDownloadTracker {
         val ui=NocturneDesign
         body.addView(ui.text(a,"Direct downloads",18f,ui.white,true),ui.lp(a,18))
         val active=data.count{it.status==DownloadManager.STATUS_RUNNING ||
-            it.status==DownloadManager.STATUS_PENDING||it.status==DownloadManager.STATUS_PAUSED}
+            it.status==DownloadManager.STATUS_PENDING}
         body.addView(ui.text(a,active.toString()+" active · "+data.size+
             " recent · Books / Assets / Originals",12f,ui.secondary),ui.lp(a,4))
         for(item in data.take(20)){

@@ -167,6 +167,14 @@ internal object ModuleOriginalAgents {
                 return
             }
             if(statusValue==null){
+                // A newly queued Android request can be temporarily absent
+                // from DownloadProvider. Keep observing during its grace period
+                // instead of silently losing the only receipt monitor.
+                if(SystemClock.elapsedRealtime()-startTick<60_000L){
+                    Thread.sleep(2_500L)
+                    continue
+                }
+                DirectDownloadTracker.states(context,250) // persist MISSING state
                 status(context,area,slot,"SYSTEM_REQUEST_NOT_FOUND")
                 return
             }

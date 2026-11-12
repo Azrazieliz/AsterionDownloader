@@ -311,6 +311,8 @@ object UnifiedDownloadsUi {
                     State.FAILED->when {
                         OriginalReceiptState.get(a,item.job.id)=="STALLED" ->
                             "No bytes received for 150s · Stopped stalled OS request · Retry"
+                        OriginalReceiptState.get(a,item.job.id)=="MISSING" ->
+                            "Android request disappeared · Original unverified · Manual retry"
                         receipt!=null && !receipt.valid ->
                             "Rejected invalid original · "+receipt.reason.take(100)
                         item.reason in 400..599->

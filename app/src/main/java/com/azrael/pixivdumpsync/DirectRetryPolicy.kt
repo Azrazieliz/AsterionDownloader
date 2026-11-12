@@ -12,6 +12,10 @@ internal object DirectRetryPolicy {
         failed && (manual || (attempts<5 && now>=after &&
             reason !in nonAutomaticReasons))
 
+    /** A tap must not claim to retry an already-running or queued request. */
+    fun manualRetryable(failed:Boolean,paused:Boolean,invalidSavedFile:Boolean):Boolean =
+        failed || paused || invalidSavedFile
+
     fun backoffMs(previousAttempts:Int):Long =
         30_000L shl previousAttempts.coerceIn(0,6)
 }

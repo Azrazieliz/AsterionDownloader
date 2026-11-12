@@ -81,6 +81,10 @@ internal object DirectRetryVault {
 }
 object DirectDownloadRetry {
     private const val JOB=48764
+    // Prevent repeated taps and scheduled recovery from racing to replace
+    // the same DownloadManager ID and leaving misleading ghost queue rows.
+    private val inFlight=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val manualScheduled=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     fun ensure(ctx:Context){
         val jobs=ctx.getSystemService(JobScheduler::class.java)
         if(jobs.allPendingJobs.none{it.id==JOB})
@@ -96,11 +100,26 @@ object DirectDownloadRetry {
     fun retryNow(ctx:Context,id:Long):Boolean{
         if(!AppPower.enabled(ctx))return false
         val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}?:return false
-        DirectRetryVault.remember(ctx,record.copy(attempts=0,after=0))
-        thread(name="asterion-manual-direct-retry"){
-            retrySelected(ctx.applicationContext,id)
+        val state=DirectDownloadTracker.states(ctx,250)
+            .firstOrNull{it.job.id==id}?:return false
+        val receipt=OriginalReceiptState.get(ctx,id)
+        if(!DirectRetryPolicy.manualRetryable(
+                state.status==DownloadManager.STATUS_FAILED,
+                state.status==DownloadManager.STATUS_PAUSED,
+                state.status==DownloadManager.STATUS_SUCCESSFUL && receipt=="INVALID"
+            ))return false
+        if(inFlight.contains(id) || !manualScheduled.add(id))return false
+        return try{
+            DirectRetryVault.remember(ctx,record.copy(attempts=0,after=0))
+            thread(name="asterion-manual-direct-retry"){
+                try{retrySelected(ctx.applicationContext,id)}
+                finally{manualScheduled.remove(id)}
+            }
+            true
+        }catch(_:Exception){
+            manualScheduled.remove(id)
+            false
         }
-        return true
     }
     /** DownloadManager broadcasts completion promptly, long before the
      * periodic retry poll. A transport-successful HTML error is not saved.
@@ -183,6 +202,8 @@ object DirectDownloadRetry {
         for(record in DirectRetryVault.all(ctx)){
             if(forceId!=null && record.id!=forceId)continue
             val state=status[record.id]?:continue
+            if(!inFlight.add(record.id))continue
+            try {
             val systemSuccess=state.status==DownloadManager.STATUS_SUCCESSFUL
             val receipt=if(systemSuccess)
                 OriginalFileReceipt.verify(ctx,manager,record.id,record.name,state.total)
@@ -204,7 +225,12 @@ object DirectDownloadRetry {
             val manualResume=forceId==record.id &&
                 (state.status==DownloadManager.STATUS_PAUSED ||
                     OriginalReceiptState.get(ctx,record.id)=="STALLED")
-            val due=if(badReceipt)
+            // An OS-removed transfer is never retried on a timer: the
+            // downloaded original may have been moved outside the app.
+            // Requeue only following the owner's explicit RETRY action.
+            val due=if(OriginalReceiptState.get(ctx,record.id)=="MISSING")
+                forceId==record.id
+                else if(badReceipt)
                 forceId==record.id ||
                     (!loginPage && record.attempts<2 && now>=record.after)
                 else manualResume || DirectRetryPolicy.shouldAttempt(
@@ -252,6 +278,9 @@ object DirectDownloadRetry {
                 count++
             }catch(_:Exception){
                 // Preserve the prior encrypted record and retry status for investigation.
+            }
+            } finally {
+                inFlight.remove(record.id)
             }
         }
         return count

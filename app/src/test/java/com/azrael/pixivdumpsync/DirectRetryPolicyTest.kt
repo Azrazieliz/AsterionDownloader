@@ -21,6 +21,13 @@ class DirectRetryPolicyTest {
         assertFalse(DirectRetryPolicy.shouldAttempt(false,403,0,0,1_000,true))
     }
 
+    @Test fun manualRetryDoesNotLieForActiveOrQueuedRequests() {
+        assertFalse(DirectRetryPolicy.manualRetryable(false,false,false))
+        assertTrue(DirectRetryPolicy.manualRetryable(true,false,false))
+        assertTrue(DirectRetryPolicy.manualRetryable(false,true,false))
+        assertTrue(DirectRetryPolicy.manualRetryable(false,false,true))
+    }
+
     @Test fun backoffIsBoundedAndExponential() {
         assertEquals(30_000L,DirectRetryPolicy.backoffMs(0))
         assertEquals(60_000L,DirectRetryPolicy.backoffMs(1))
