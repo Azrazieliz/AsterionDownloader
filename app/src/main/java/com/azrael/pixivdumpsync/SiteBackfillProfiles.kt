@@ -47,10 +47,12 @@ internal object SiteBackfillProfiles {
         Profile("pornpics.com","COSPLAY",
             cosplay+",.gallery-thumb a[href],.thumb a[href],.galleries a[href]",
             Regex("^/(?:galleries|gallery)/[^/?#]+(?:/[^/?#]+)?/?$"),"cosplay"),
-        Profile("archivebate.com","COSPLAY",
-            cosplay+",.gallery-thumb a[href],.thumb a[href]",
-            Regex("^/(?:gallery|galleries|album|post|posts|photos)/[^/?#]+/?$"),
-            "cosplay"),
+        // The publisher serves full recording pages at numeric /<id> paths,
+        // not gallery-photo posts or a /video/<id> route.
+        Profile("archivebate.com","ADULT",
+            "main a[href],article a[href],.video a[href],"+
+            ".videos a[href],.video-card a[href],.card a[href]",
+            Regex("^/[0-9]{1,10}/?$"),"video"),
         Profile("celeb.st","COSPLAY",
             cosplay+",.feed a[href],.media-list a[href]",
             Regex("^/(?:(?:p|post|posts|gallery|photos|media)/[^/?#]+|creator/[^/?#]+/(?:images|videos|posts))/?$"),
@@ -93,8 +95,12 @@ internal object SiteBackfillProfiles {
             }.ifBlank{
                 link.selectFirst("img")?.attr("alt").orEmpty()
             }.ifBlank{
-                link.closest("article,.post,.gallery-item")
-                    ?.selectFirst("h2,h3,.entry-title")?.text().orEmpty()
+                link.closest("article,.post,.gallery-item,.video,.video-card,.card")
+                    ?.selectFirst("h2,h3,.entry-title,.title,.video-title")
+                    ?.text().orEmpty()
+            }.ifBlank{
+                if(host=="archivebate.com")"Archivebate recording "+
+                    url.path.trim('/').take(12) else ""
             }.trim().take(180)
             if(title.length<3)continue
             val cover=link.selectFirst("img")?:link.parent()?.selectFirst("img")
@@ -177,6 +183,21 @@ internal object SiteBackfillProfiles {
                 if(results.size>=3000)break
             }
             for(image in content.select("img")){
+                // Kiutaku embeds the publisher's high-resolution originals
+                // directly as article img[src] (often hosted by mitaku.net).
+                // Only sizeable photo-body images qualify; never sidebar
+                // thumbnails, tracking pixels, icons or arbitrary listing art.
+                if(host=="kiutaku.com"){
+                    val width=image.attr("width").toIntOrNull()?:0
+                    val height=image.attr("height").toIntOrNull()?:0
+                    val direct=image.absUrl("src")
+                    val photoHost=runCatching{URI(direct).host.orEmpty().lowercase(Locale.ROOT)}
+                        .getOrDefault("")
+                    if(width>=600 && height>=600 &&
+                        photoHost in setOf("mitaku.net","www.mitaku.net",
+                            "kiutaku.com","www.kiutaku.com"))
+                        record(direct,image.attr("alt"))
+                }
                 // A listing's lazy data-src and ordinary img[src] are usually
                 // preview images. Download originals only when the publisher
                 // explicitly supplies a full-resolution attribute or an

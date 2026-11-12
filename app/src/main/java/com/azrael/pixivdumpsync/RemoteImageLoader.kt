@@ -50,7 +50,11 @@ object RemoteImageLoader {
 
                 if (!file.exists() || file.length() <= 0L) {
                     NetworkCookies.install(app)
-                    val conn = URL(url).openConnection() as HttpURLConnection
+                    val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
+                        app,referer)
+                        ?:com.asterion.videoflow.NetworkRoute.javaProxy(app,url)
+                    val conn=(if(proxy!=null)URL(url).openConnection(proxy)
+                        else URL(url).openConnection()) as HttpURLConnection
                     try {
                         conn.instanceFollowRedirects = true
                         conn.connectTimeout = 8_000

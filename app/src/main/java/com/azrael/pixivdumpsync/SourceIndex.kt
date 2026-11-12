@@ -822,6 +822,10 @@ object SourceIndex {
                         site.host in AlohaSources.alreadyIntegratedHosts)
                         "native" else "generic")
                 if(ownsFeed)db.setAdapter(site.url,"native")
+                // The Kiutaku homepage is a website-level collection; it is
+                // not a /tag/<id> native entity. Keep existing tag entities in
+                // GalleryDb but migrate only this root record to generic.
+                if(site.host=="kiutaku.com")db.setAdapter(site.url,"generic")
                 if(site.host in setOf("archivebate.com","notfans.com"))
                     db.migrateArea(site.url,"ADULT")
             }

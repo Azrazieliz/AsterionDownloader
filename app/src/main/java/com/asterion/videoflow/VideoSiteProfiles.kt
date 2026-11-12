@@ -21,7 +21,8 @@ internal object VideoSiteProfiles {
         Route("roshy.tv",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("cums.net",Regex("""(?i)^/(?:video|watch|v)/[^/?#]+""")),
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
-        Route("archivebate.com",Regex("""(?i)^/(?:videos?|watch|recordings?|v)/[^/?#]+""")),
+        // Archivebate's live listing uses numeric recording pages such as /2257.
+        Route("archivebate.com",Regex("""(?i)^(?:/[0-9]{1,10}/?|/(?:videos?|watch|recordings?|v)/[^/?#]+)""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         Route("helloporn.com",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         Route("notfans.com",Regex("""(?i)^/(?:videos?|watch|posts?|v)/[^/?#]+""")),

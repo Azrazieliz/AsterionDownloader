@@ -132,7 +132,11 @@ object KyoraCreatorPreviews {
                     val response=Jsoup.connect(current).timeout(15000)
                         .maxBodySize(2_000_000).userAgent(HttpClient.USER_AGENT)
                         .followRedirects(false).ignoreHttpErrors(true)
-                        .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                        .apply{
+                            com.asterion.videoflow.NetworkRoute.javaProxy(
+                                a.applicationContext,current)?.let{proxy(it)}
+                            SiteSession.cookie(current)?.let{header("Cookie",it)}
+                        }
                         .execute()
                     if(response.statusCode() in 300..399){
                         val location=response.header("Location")

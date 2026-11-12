@@ -110,4 +110,36 @@ class SiteBackfillProfilesTest {
             Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),
             "https://other.example/","ASSETS",0L))
     }
+    @Test fun archivebateNativeNumberedRecordingAndNavigation(){
+        val home="https://archivebate.com/"
+        val doc=Jsoup.parse("""<main><article class="video-card">
+           <a href="/2257"><img src="/media/poster.webp" alt="Full recorded stream"/></a>
+           <a href="/platform/eW91dHViZQ==">Platform</a>
+           <a href="/gender/ZmVtYWxl">Gender</a>
+           </article></main>""",home)
+        val found=SiteBackfillProfiles.entries(doc,home,"ADULT",1234L).orEmpty()
+        assertEquals(1,found.size)
+        assertEquals("video",found.single().kind)
+        assertEquals(home+"2257/",found.single().url)
+    }
+    @Test fun kiutakuArticleHighResolutionInlineImagesAreOriginals(){
+        val home="https://kiutaku.com/"
+        val record=IndexedItem(home+"7440/","Gallery",null,home,"COSPLAY",
+            "cosplay",1234L,false)
+        val doc=Jsoup.parse("""<main><article><div class="entry-content">
+           <p><img src="https://mitaku.net/wp-content/uploads/2026/11/photo-1.jpg"
+               width="768" height="1024" alt="Photo one"/></p>
+           <p><img src="https://mitaku.net/wp-content/uploads/2026/11/photo-2.jpg"
+               width="1024" height="768" alt="Photo two"/></p>
+           <img src="https://mitaku.net/wp-content/uploads/2026/11/thumb.jpg"
+               width="200" height="150"/>
+           <aside><img src="https://kiutaku.com/sidebar.jpg"
+               width="800" height="800"/></aside>
+           </div></article></main>""",record.url)
+        val originals=SiteBackfillProfiles.galleryOriginals(doc,record,1234L)
+        assertEquals(2,originals.size)
+        assertTrue(originals.all{it.kind=="original"})
+        assertTrue(originals.all{it.url.contains("mitaku.net")})
+    }
+
 }

@@ -30,7 +30,10 @@ object VideoSearchPreviews {
         image.tag=url
         workers.execute{
             val bitmap=runCatching{
-                val connection=URL(url).openConnection().apply{
+                val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
+                    a.applicationContext,referer?:url)
+                val connection=(if(proxy!=null)URL(url).openConnection(proxy)
+                    else URL(url).openConnection()).apply{
                     connectTimeout=6000
                     readTimeout=8000
                     setRequestProperty("User-Agent","Mozilla/5.0")

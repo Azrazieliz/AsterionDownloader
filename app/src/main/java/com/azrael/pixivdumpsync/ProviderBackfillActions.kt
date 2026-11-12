@@ -27,8 +27,9 @@ object ProviderBackfillActions {
             return "Subscribed MP4Directs series scan requested"
         }
         if(site.adapter=="generic"){
-            SourceIndex.scanSourceNow(a.applicationContext,site.url)
-            return "Historical page scan requested for "+site.name
+            val queued=SiteRunControl.start(a.applicationContext,site.url,site.area)
+            return if(queued)"Historical originals queued for "+site.name
+                else "Site is already scanning, paused or unavailable"
         }
         if(site.area in setOf("ADULT","VIDEOS","HENTAI")){
             // Manual history acquisition is separate from the Sync switch.
