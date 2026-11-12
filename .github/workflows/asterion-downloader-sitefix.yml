@@ -10,7 +10,7 @@ on:
       - 'app/build.gradle.kts'
   workflow_dispatch:
 
-# Only the newest backend-repair push should build test APK variants.
+# Only the final approved backend-repair push is permitted to assemble one APK.
 concurrency:
   group: asterion-downloader-sitefix-${{ github.ref }}
   cancel-in-progress: true
@@ -106,53 +106,29 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Compile, test and assemble exact APK
-        run: gradle testPilotUnitTest testAcceptanceUnitTest assemblePilot assembleAcceptance assemblePhonepilot --stacktrace --console=plain
-      - name: Verify APK identity, signer and checksum
+        run: gradle testPilotUnitTest testAcceptanceUnitTest assemblePhonepilot --stacktrace --console=plain
+      - name: Verify the sole installable phone APK and checksum
         shell: bash
         run: |
           set -euo pipefail
-          APK=app/build/outputs/apk/pilot/app-pilot.apk
-          test -s "$APK"
-          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          "$TOOLS/aapt" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.pilotagents'"
-          "$TOOLS/aapt" dump badging "$APK" | grep -F "versionName='1.3.52-pilot'"
-          "$TOOLS/apksigner" verify "$APK"
-          ACCEPTANCE=app/build/outputs/apk/acceptance/app-acceptance.apk
-          test -s "$ACCEPTANCE"
-          "$TOOLS/aapt" dump badging "$ACCEPTANCE" | grep -F "package: name='com.azrael.pixivdumpsync.acceptance'"
-          "$TOOLS/aapt" dump badging "$ACCEPTANCE" | grep -F "versionName='1.3.52-acceptance'"
-          "$TOOLS/apksigner" verify "$ACCEPTANCE"
-          # One-off phone tester has an intentionally unique applicationId,
-          # so installation cannot overwrite the installed Agents/Acceptance apps.
           PHONE=app/build/outputs/apk/phonepilot/app-phonepilot.apk
           test -s "$PHONE"
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           "$TOOLS/aapt" dump badging "$PHONE" | grep -F "package: name='com.azrael.pixivdumpsync.testphone1111'"
-          "$TOOLS/aapt" dump badging "$PHONE" | grep -F "versionName='1.3.52-phone-test'"
+          "$TOOLS/aapt" dump badging "$PHONE" | grep -F "versionName='1.3.53-phone-test'"
           "$TOOLS/aapt" dump badging "$PHONE" | grep -F "application-label:'Asterion Downloader Test'"
           "$TOOLS/apksigner" verify "$PHONE"
-          cp "$PHONE" Asterion-Downloader-PhoneTest-v1.3.52.apk
-          sha256sum Asterion-Downloader-PhoneTest-v1.3.52.apk > Asterion-Downloader-PhoneTest-v1.3.52.sha256
-          # Acceptance APKs assembled by ephemeral CI are never published.
-          # Only the Windows persistent signer is authorized to publish them.
-          unzip -t "$APK" >/dev/null
-          cp "$APK" Asterion-Downloader-Agents-v1.3.52.apk
-          sha256sum Asterion-Downloader-Agents-v1.3.52.apk > Asterion-Downloader-Agents-v1.3.52.sha256
+          unzip -t "$PHONE" >/dev/null
+          cp "$PHONE" Asterion-Downloader-PhoneTest-v1.3.53.apk
+          sha256sum Asterion-Downloader-PhoneTest-v1.3.53.apk > Asterion-Downloader-PhoneTest-v1.3.53.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: Asterion-Downloader-Agents-v1.3.52
-          if-no-files-found: error
-          retention-days: 3
-          path: |
-            Asterion-Downloader-Agents-v1.3.52.apk
-            Asterion-Downloader-Agents-v1.3.52.sha256
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Asterion-Downloader-PhoneTest-v1.3.52
+          name: Asterion-Downloader-PhoneTest-v1.3.53
           if-no-files-found: error
           retention-days: 7
           path: |
-            Asterion-Downloader-PhoneTest-v1.3.52.apk
-            Asterion-Downloader-PhoneTest-v1.3.52.sha256
+            Asterion-Downloader-PhoneTest-v1.3.53.apk
+            Asterion-Downloader-PhoneTest-v1.3.53.sha256
       # CI-generated Android debug certificates differ between runs, so a
       # published artifact cannot update the same installed app while keeping
       # its private data. The verified APK remains attached to this CI run
