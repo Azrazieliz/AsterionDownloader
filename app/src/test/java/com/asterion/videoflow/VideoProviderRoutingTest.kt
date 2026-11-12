@@ -24,7 +24,7 @@ class VideoProviderRoutingTest {
             "https://www.pornhub.com/view_video.php?viewkey=ph123456"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://fr.xvideos.com/video123456/example"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.xnxx.com/video-abc123/example"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.eporner.com/"))

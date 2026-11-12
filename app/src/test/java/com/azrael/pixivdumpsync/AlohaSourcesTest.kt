@@ -6,15 +6,15 @@ import org.junit.Test
 class AlohaSourcesTest {
     @Test fun userApprovedBookmarksOnly() {
         val sites=AlohaSources.all
-        assertEquals(41,sites.size)
-        assertEquals(41,sites.map{it.url}.toSet().size)
+        assertEquals(39,sites.size)
+        assertEquals(39,sites.map{it.url}.toSet().size)
         assertTrue(sites.all{it.url.startsWith("https://")})
         assertTrue(sites.none{it.url.contains("slot-id=")})
         assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
             it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK ||
             it.area==AlohaArea.VIDEOS})
         assertEquals(8,AlohaSources.by(AlohaArea.COSPLAY).size)
-        assertEquals(17,AlohaSources.by(AlohaArea.ADULT).size)
+        assertEquals(15,AlohaSources.by(AlohaArea.ADULT).size)
         assertEquals(7,AlohaSources.by(AlohaArea.HENTAI).size)
         assertEquals(3,AlohaSources.by(AlohaArea.COMICS).size)
         assertEquals(4,AlohaSources.by(AlohaArea.BOOKS).size)
