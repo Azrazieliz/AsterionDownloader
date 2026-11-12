@@ -30,7 +30,8 @@ object UnifiedDownloadsUi {
         val source:String,val filename:String,val info:String,val state:State,
         val percent:Int?,val updated:Long,val action:()->Unit,
         val saved:String?=null,val image:String?=null,val mime:String="*/*",
-        val actionText:String?=null
+        val actionText:String?=null,
+        val receivedBytes:Long=0L
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -339,7 +340,8 @@ object UnifiedDownloadsUi {
                         else->{}
                     }
                 },if(state==State.DONE)original else null,
-                    actionText=if(state==State.HELD)"RETRY" else null)
+                    actionText=if(state==State.HELD)"RETRY" else null,
+                    receivedBytes=item.bytes)
         }
         return rows.sortedWith(compareBy<Row>{
             when(it.state){
@@ -387,8 +389,10 @@ object UnifiedDownloadsUi {
     }
     private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,rows:List<Row>){
         val active=rows.count{it.state==State.ACTIVE}
-        val transferring=rows.count{it.state==State.ACTIVE &&
-            (it.percent?:0)>0}
+        val transferring=rows.count{
+            DownloadProgressPolicy.receiving(
+                it.state==State.ACTIVE,it.receivedBytes,it.percent)
+        }
         val preparing=active-transferring
         val queued=rows.count{it.state==State.QUEUED}
         val paused=rows.count{it.state==State.PAUSED}
@@ -508,7 +512,7 @@ object UnifiedDownloadsUi {
             val label=when(item.state){
                 State.DONE->"Saved"
                 State.FAILED->"Failed"
-                State.HELD->if(item.actionText=="RETRY")"Retry scheduled"
+                State.HELD->if(item.actionText=="RETRY")"Retry available"
                     else "Action needed"
                 State.PAUSED->"Paused"
                 State.QUEUED->"Queued"

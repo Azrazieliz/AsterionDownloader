@@ -82,9 +82,12 @@ object DirectDownloadTracker {
         // as a FAILED row rather than an invisible, forever-queued entry.
         // Its encrypted metadata and dedup claim survive for manual retry.
         val now=System.currentTimeMillis()
-        return saved.map{job->
+        return saved.mapNotNull{job->
             byId[job.id] ?: run {
                 val previous=OriginalReceiptState.get(c,job.id)
+                // Preserve verified receipts even if Android purges its
+                // DownloadManager record. Saved files appear in native Files.
+                if(previous=="VERIFIED")return@mapNotNull null
                 // The system provider may need a moment to expose a newly
                 // enqueued request. After that, an absent OS row must remain
                 // visible and manually recoverable, not vanish from Downloads.
@@ -126,7 +129,9 @@ object DirectDownloadTracker {
                 DownloadManager.STATUS_RUNNING->"Downloading"+progress
                 DownloadManager.STATUS_PENDING->"Queued"
                 DownloadManager.STATUS_PAUSED->"Paused"+progress
-                DownloadManager.STATUS_FAILED->"Failed · system reason "+item.reason
+                DownloadManager.STATUS_FAILED->
+                    if(receipt=="MISSING")"Android transfer record missing · manual retry"
+                    else "Failed · system reason "+item.reason
                 else->"Waiting"
             }
             card.addView(ui.text(a,item.job.folder+" · "+item.job.sourceHost+
