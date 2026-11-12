@@ -81,12 +81,14 @@ object AsterionAdultHub {
      * as if they were individual media. Never invent missing thumbnails.
      */
     internal fun realMedia(item:IndexedItem):Boolean {
-        if(item.area in setOf("ADULT","HENTAI","VIDEOS") &&
-            SourceIndexParser.safe(item.url) &&
-            SourceIndexParser.sameSite(item.source,item.url) &&
-            !IndexedMediaQuality.navigationTitle(item.title) &&
-            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(item.url))
-            return true
+        if(item.area in setOf("ADULT","HENTAI","VIDEOS")){
+            if(!SourceIndexParser.safe(item.url) ||
+                !SourceIndexParser.sameSite(item.source,item.url))
+                return false
+            if(!IndexedMediaQuality.navigationTitle(item.title) &&
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(item.url))
+                return true
+        }
         return IndexedMediaQuality.isMedia(
             item.url,item.title,item.preview,item.area)
     }
