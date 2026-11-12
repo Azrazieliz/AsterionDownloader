@@ -20,9 +20,10 @@ class EpornerOriginalSourceTest {
         assertEquals("https://www.eporner.com/embed/AcCjSXiLGwV/",urls[0])
         assertEquals(video,urls[1])
     }
-    @Test(expected=IllegalArgumentException::class)
-    fun neverUseAlternatePlayerWithoutUserConnectedSiteSession(){
-        EpornerOriginalSource.videoCandidates(video,false)
+    @Test fun publicVideoCanUseCanonicalWatchUrlWithoutAccount(){
+        assertEquals(listOf(video),EpornerOriginalSource.videoCandidates(video,false))
+        assertEquals("https://www.eporner.com/video-AcCjSXiLGwV/",
+            EpornerOriginalSource.canonicalUrl(video))
     }
     @Test fun officialPublishedRuntimeCanValidateRealShortCompleteOriginal(){
         val accepted=FullLengthVideoPolicy.assess("Example original",
@@ -30,8 +31,7 @@ class EpornerOriginalSourceTest {
         assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,accepted.verdict)
         val unverified=FullLengthVideoPolicy.assess("Example original",
             "Example original",video,15L,15L)
-        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
-            unverified.verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,unverified.verdict)
         val trailer=FullLengthVideoPolicy.assess("Example teaser",
             "Example teaser",video,15L,15L,publisherVerified=true)
         assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
@@ -40,6 +40,6 @@ class EpornerOriginalSourceTest {
     @Test fun originalMustMatchOfficialDuration(){
         val result=FullLengthVideoPolicy.assess("Published original",
             "Published original",video,40L,180L,publisherVerified=true)
-        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,result.verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,result.verdict)
     }
 }

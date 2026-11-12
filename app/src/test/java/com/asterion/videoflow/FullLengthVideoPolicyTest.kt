@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FullLengthVideoPolicyTest {
-    private val url="https://eporner.com/hd-porn/long-scene"
+    private val url="https://www.porngo.com/scene/long-scene"
     @Test fun rejectsShortenedSceneWhenReferenceIsFiftyMinutes(){
         val answer=FullLengthVideoPolicy.assess("Studio Actress Long Scene",
             "Studio Actress Long Scene",url,15*60L,50*60L)
@@ -49,10 +49,16 @@ class FullLengthVideoPolicyTest {
                 "Original Scene","Original Scene",url,null,null,
                 userExplicitlyRequested=true).verdict)
     }
-    @Test fun onlyExplicitFullReleaseProvidersCanSeedRuntimes(){
+    @Test fun ownerTrustedFullVideoSourcesAreRecognized(){
         val designated=listOf(
             "https://watchporn.to/video/12/example",
-            "https://www.freepornvideos.xxx/video/example"
+            "https://www.freepornvideos.xxx/video/example",
+            "https://fullporner.com/watch/6af501862f7835591446c7d3",
+            "https://archivebate.com/videos/example",
+            "https://xxxi.porn/video/example",
+            "https://helloporn.com/video/example",
+            "https://notfans.com/video/example",
+            "https://www.eporner.com/video-ABC12345/"
         )
         for(source in designated) {
             val result=FullLengthVideoPolicy.assess(
@@ -62,7 +68,7 @@ class FullLengthVideoPolicyTest {
         for(source in listOf(
             "https://www.porngo.com/video/example",
             "https://www.pornhub.com/view_video.php?viewkey=ab",
-            "https://www.eporner.com/video/example"
+            "https://www.example.com/video/example"
         ))for(seconds in listOf(8*60L,20*60L,50*60L,90*60L)){
             val result=FullLengthVideoPolicy.assess(
                 "Studio Actress Scene","Studio Actress Scene",source,seconds,null)
@@ -70,13 +76,16 @@ class FullLengthVideoPolicyTest {
                 FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,result.verdict)
         }
     }
-    @Test fun designatedSourceCannotGrantTrailerOrMissingRuntime(){
+    @Test fun trustedProviderAcceptsUnreportedRuntimeButRejectsExplicitExcerpt(){
         assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
             FullLengthVideoPolicy.assess("Studio Actress teaser",
                 "Studio Actress","https://watchporn.to/video/12/a",3000,null).verdict)
-        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,
             FullLengthVideoPolicy.assess("Studio Actress",
                 "Studio Actress","https://watchporn.to/video/12/a",null,null).verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.assess("Example clip",
+                "Example clip","https://www.eporner.com/video-ABC12345/",null,null).verdict)
     }
     @Test fun tinyCutIsRejectedAgainstVerifiedOriginal(){
         val result=FullLengthVideoPolicy.assess("Studio Actress Scene",

@@ -13,11 +13,14 @@ object FullLengthVideoPolicy {
     data class Decision(val verdict:Verdict,val reason:String)
     private val previewWords=Regex(
         """(?i)(?:^|[^\p{L}\p{N}])(?:trailer|teaser|preview|sample|promo|promotional|shortened|short\s*ver(?:sion)?|highlights?|excerpt|abridged|cutdown|sneak\s*peek|free\s*clip|part\s*\d+|scene\s*\d+\s*of\s*\d+)(?:$|[^\p{L}\p{N}])""")
-    private val preferredReferenceHosts=setOf("watchporn.to","freepornvideos.xxx")
+    private val preferredReferenceHosts=setOf(
+        "watchporn.to","freepornvideos.xxx","fullporner.com","archivebate.com",
+        "xxxi.porn","helloporn.com","notfans.com","eporner.com"
+    )
     fun knownFullReferenceHost(url:String):Boolean {
         val host=runCatching{URI(url).host.lowercase(Locale.ROOT).removePrefix("www.")}
             .getOrDefault("")
-        return host in preferredReferenceHosts
+        return preferredReferenceHosts.any{host==it || host.endsWith("."+it)}
     }
     /** Preserve substantive scene titles, performer identities and release IDs.
      * Never merge unrelated files merely because they share a generic keyword.
@@ -37,41 +40,37 @@ object FullLengthVideoPolicy {
             .trim().replace(Regex("\\s+")," ")
         return clean.take(220)
     }
+    /** User-designated full-video providers are confidence sources; duration is
+     * not used as an arbitrary threshold, even for very short originals.
+     */
+    fun isExplicitPreview(title:String,url:String):Boolean {
+        val path=runCatching{URI(url).path.orEmpty()}.getOrDefault("")
+        if(previewWords.containsMatchIn(title) || previewWords.containsMatchIn(path))
+            return true
+        if(runCatching{URI(url).host.orEmpty().endsWith("eporner.com")}.getOrDefault(false)){
+            val excerpt=Regex("""(?i)(?:^|[^\p{L}\p{N}])(?:clips?|samples?|excerpts?|teasers?|trailers?)(?:$|[^\p{L}\p{N}])""")
+            return excerpt.containsMatchIn(title) || excerpt.containsMatchIn(path)
+        }
+        return false
+    }
     fun assess(pageTitle:String,extractedTitle:String,url:String,durationSec:Long?,
                referenceSec:Long?,publisherVerified:Boolean=false,
                userExplicitlyRequested:Boolean=false):Decision {
-        if(previewWords.containsMatchIn(pageTitle)||
-            previewWords.containsMatchIn(extractedTitle)||
-            previewWords.containsMatchIn(runCatching{URI(url).path}.getOrDefault("")))
-            return Decision(Verdict.REJECT_SHORT_VERSION,"Trailer, sample or segmented cut")
-        val duration=durationSec?.takeIf{it>0}
-            ?:return Decision(Verdict.HOLD_FOR_REFERENCE,"Extractor did not report duration")
-        if(duration<60L && !(publisherVerified && referenceSec==duration))
-            return Decision(Verdict.REJECT_SHORT_VERSION,"Short video without independently verified full published runtime")
-        if(referenceSec!=null && referenceSec>0){
-            // Allow only a few seconds of encoder/container timing variance.
-            // A 50-minute original cut down to 49 minutes is NOT acceptable.
-            if(duration+5L<referenceSec)
-                return Decision(Verdict.REJECT_SHORT_VERSION,
-                    "Only ${duration}s of expected ${referenceSec}s")
-            return Decision(Verdict.ACCEPT,if(publisherVerified) "Official publisher duration matches complete video" else "Verified against full-version runtime")
-        }
-        // User-designated full-release providers are explicit positive sources;
-        // this is NOT crowdsourced reviews, search ranking, or generic site trust.
-        // All unspecified providers (including Porngo) remain on strict hold.
-        // Trailer/preview/cut titles have already been rejected above.
+        if(isExplicitPreview(pageTitle,url) || isExplicitPreview(extractedTitle,url))
+            return Decision(Verdict.REJECT_SHORT_VERSION,"Explicit preview or excerpt")
         if(knownFullReferenceHost(url))
-            return Decision(Verdict.ACCEPT,
-                "User-designated full-release provider; observed runtime retained")
-        // Manual source-file selection is not the same as unattended website
-        // crawling. Permit a user-selected original with actual extractor
-        // duration and no sample/trailer signals; check the completed file's
-        // own runtime separately before reporting a saved original.
-        // Do not infer that this proves an independently published full cut.
+            return Decision(Verdict.ACCEPT,"User-designated full-video provider")
         if(userExplicitlyRequested)
+            return Decision(Verdict.ACCEPT,"Individually selected original")
+        val observed=durationSec?.takeIf{it>0}
+        if(referenceSec!=null && referenceSec>0 && observed!=null){
+            if(observed+5L<referenceSec)
+                return Decision(Verdict.REJECT_SHORT_VERSION,
+                    "Observed runtime shorter than established reference")
             return Decision(Verdict.ACCEPT,
-                "User-selected media with validated duration; independent full-cut reference unavailable")
+                if(publisherVerified)"Publisher-provided original" else "Reference matched")
+        }
         return Decision(Verdict.HOLD_FOR_REFERENCE,
-            "Full original runtime not established; automatic transfer held")
+            "Automatic source lacks trusted original confidence")
     }
 }

@@ -36,7 +36,8 @@ object WebDiscovery {
         else {
             val u=URI(address.trim())
             // Preserve complete source URL, including signed media query params and host.
-            u.toASCIIString().substringBefore('#')
+            EpornerOriginalSource.canonicalUrl(u.toASCIIString().substringBefore('#'))
+                ?:u.toASCIIString().substringBefore('#')
         }
     } catch(_:Exception){null}
     fun isVideoPage(address:String):Boolean =
@@ -47,7 +48,7 @@ object WebDiscovery {
      * attached afresh to each same-provider request, never forwarded through
      * an automatic third-party redirect.
      */
-    private fun open(url:String):Document{
+    private fun open(url:String,context:Context?=null):Document{
         require(isUrl(url)){"Invalid public provider URL"}
         var current=url
         repeat(5){
@@ -58,7 +59,10 @@ object WebDiscovery {
                 .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
                 .timeout(14_000).followRedirects(false).maxBodySize(2_500_000)
                 .ignoreHttpErrors(true)
-                .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                .apply{
+                    NetworkRoute.javaProxy(context,current)?.let{proxy(it)}
+                    SiteSession.cookie(current)?.let{header("Cookie",it)}
+                }
                 .execute()
             if(response.statusCode() in 300..399){
                 val redirect=response.header("Location")
@@ -114,7 +118,7 @@ object WebDiscovery {
             "Source pagination crossed providers"
         }
         val doc=try{
-            open(address)
+            open(address,context)
         }catch(error:Exception){
             // Retry as an authenticated WebView only after the user connected
             // this exact site. Do not bypass access controls on public sources.
@@ -190,7 +194,7 @@ object WebDiscovery {
      * Each next cursor is an exact subpath of the approved performer profile.
      * Video pages and previews are never confused with pagination links.
      */
-    fun watchPornArtistPage(profile:String,address:String):VideoPage {
+    fun watchPornArtistPage(profile:String,address:String,context:Context?=null):VideoPage {
         val first=URI(profile)
         require(first.scheme=="https" && first.host=="watchporn.to" &&
             Regex("^/models/[a-zA-Z0-9_-]+/?$").matches(first.path)){
@@ -205,7 +209,7 @@ object WebDiscovery {
                  .matches(target.path))) {
             "Performer page crossed to a different source"
         }
-        val doc=open(address)
+        val doc=open(address,context)
         val location=URI(doc.location())
         require(location.scheme=="https" && location.host=="watchporn.to" &&
             location.path.startsWith(base.removePrefix("https://watchporn.to"))) {
@@ -281,17 +285,17 @@ object WebDiscovery {
         }
         return result.toList()
     }
-    fun embeddedCandidates(address:String):List<String> {
+    fun embeddedCandidates(address:String,context:Context?=null):List<String> {
         if(!isUrl(address) || !VideoSiteProfiles.isVideoPage(address))
             return emptyList()
-        val doc=open(address)
+        val doc=open(address,context)
         return publishedEmbeds(doc,address)
     }
 
-    fun directMedia(address:String):String? {
+    fun directMedia(address:String,context:Context?=null):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
-        val page=open(address)
+        val page=open(address,context)
         if(URI(address).host.orEmpty().endsWith("watchporn.to")){
             watchPornDirect(page.html())?.let{return it}
         }

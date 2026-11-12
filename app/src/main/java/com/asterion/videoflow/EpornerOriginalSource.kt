@@ -26,13 +26,14 @@ internal object EpornerOriginalSource {
     fun officialEmbed(url:String):String?=videoId(url)?.let{
         "https://www.eporner.com/embed/$it/"
     }
+    /** Canonical publisher identity deduplicates HD, title and embed aliases. */
+    fun canonicalUrl(url:String):String?=videoId(url)?.let{
+        "https://www.eporner.com/video-"+it+"/"
+    }
     fun videoCandidates(url:String,sessionConnected:Boolean):List<String>{
         val embed=officialEmbed(url)
         if(embed==null)return listOf(url)+SourceDiagnostics.alternateHosts(url)
-        require(sessionConnected){
-            "Eporner authentication required: use CONNECT ACCOUNT to verify site access"
-        }
-        return listOf(embed,url).distinct()
+        return if(sessionConnected)listOf(embed,url).distinct() else listOf(url)
     }
     /** Returns null rather than trusting unverified runtime if the provider's
      * first-party identity and duration cannot be independently checked.
