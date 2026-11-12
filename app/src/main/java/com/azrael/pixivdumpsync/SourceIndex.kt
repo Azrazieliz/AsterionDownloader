@@ -1397,8 +1397,11 @@ object SourceIndex {
                     db.update(source.url,source.cursor,null,
                         source.discovered+fresh,null)
                     if(records.isEmpty()){
+                        val archived=SiteControls.key(source.url)=="archivebate.com"
                         db.failure(source.url,
-                            "No supported public media on listing; login or adapter may be required")
+                            if(archived)
+                                "Archivebate exposes no public video cards here; connect an authorized session or repair its provider adapter"
+                            else "No supported public media on listing; login or adapter may be required")
                     }
                 }
                 return
@@ -1409,7 +1412,10 @@ object SourceIndex {
             else if(historyEnabled && index>1 && next!=null && next !in visited)
                 pages+=next
             if(records.isEmpty() && fresh==0 && index==1 && saved==null)
-                throw IllegalStateException("No supported originals found; dedicated adapter or login required")
+                throw IllegalStateException(
+                    if(SiteControls.key(source.url)=="archivebate.com")
+                        "Archivebate listing has no accessible video entries; authorized session or provider adapter required"
+                    else "No supported originals found; dedicated adapter or login required")
             // Persist each successful page before the next request. A network failure
             // on the following page must resume here instead of restarting history.
             if(historyEnabled && !source.historyComplete)

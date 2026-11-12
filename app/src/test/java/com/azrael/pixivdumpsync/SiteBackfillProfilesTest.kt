@@ -110,17 +110,12 @@ class SiteBackfillProfilesTest {
             Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),
             "https://other.example/","ASSETS",0L))
     }
-    @Test fun archivebateNativeNumberedRecordingAndNavigation(){
+    @Test fun archivebateLegalNoticeCannotBecomeOriginal(){
         val home="https://archivebate.com/"
-        val doc=Jsoup.parse("""<main><article class="video-card">
-           <a href="/2257"><img src="/media/poster.webp" alt="Full recorded stream"/></a>
-           <a href="/platform/eW91dHViZQ==">Platform</a>
-           <a href="/gender/ZmVtYWxl">Gender</a>
-           </article></main>""",home)
-        val found=SiteBackfillProfiles.entries(doc,home,"ADULT",1234L).orEmpty()
-        assertEquals(1,found.size)
-        assertEquals("video",found.single().kind)
-        assertEquals(home+"2257/",found.single().url)
+        val doc=Jsoup.parse("""<main><a href="/2257">
+            USC 2257 Statement</a>
+            <a href="/platform/eW91dHViZQ==">Platform</a></main>""",home)
+        assertTrue(SourceIndexParser.entries(doc,home,"ADULT",1234L).isEmpty())
     }
     @Test fun kiutakuArticleHighResolutionInlineImagesAreOriginals(){
         val home="https://kiutaku.com/"

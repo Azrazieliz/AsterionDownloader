@@ -47,12 +47,6 @@ internal object SiteBackfillProfiles {
         Profile("pornpics.com","COSPLAY",
             cosplay+",.gallery-thumb a[href],.thumb a[href],.galleries a[href]",
             Regex("^/(?:galleries|gallery)/[^/?#]+(?:/[^/?#]+)?/?$"),"cosplay"),
-        // The publisher serves full recording pages at numeric /<id> paths,
-        // not gallery-photo posts or a /video/<id> route.
-        Profile("archivebate.com","ADULT",
-            "main a[href],article a[href],.video a[href],"+
-            ".videos a[href],.video-card a[href],.card a[href]",
-            Regex("^/[0-9]{1,10}/?$"),"video"),
         Profile("celeb.st","COSPLAY",
             cosplay+",.feed a[href],.media-list a[href]",
             Regex("^/(?:(?:p|post|posts|gallery|photos|media)/[^/?#]+|creator/[^/?#]+/(?:images|videos|posts))/?$"),

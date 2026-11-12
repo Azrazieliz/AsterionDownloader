@@ -99,8 +99,8 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://mp4hentai.com/2026/07/upcoming-october-2026-hentai-release/"))
     }
-    @Test fun archivebateNumericRecordingIsVideoNotCategory(){
-        assertTrue(VideoSiteProfiles.isVideoPage("https://archivebate.com/2257"))
+    @Test fun archivebateLegalAndCategoryPagesAreNotVideo(){
+        assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/2257"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://archivebate.com/platform/eW91dHViZQ=="))

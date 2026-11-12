@@ -432,7 +432,8 @@ object AsterionAdultHub {
                 card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,6))
                 if(issue.contains("401")||issue.contains("login",true)||
                     issue.contains("sign in",true)||
-                    issue.contains("session expired",true)){
+                    issue.contains("session expired",true)||
+                    issue.contains("authorized session",true)){
                     card.addView(ui.action(a,"CONNECT ACCOUNT",false){
                         a.startActivity(Intent(a,SiteLoginActivity::class.java)
                             .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
