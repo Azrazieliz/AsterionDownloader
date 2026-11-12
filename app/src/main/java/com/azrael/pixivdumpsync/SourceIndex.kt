@@ -90,8 +90,8 @@ class SourceIndexDb(context:Context):
         val db=writableDatabase
         db.beginTransactionNonExclusive()
         try{
-            db.execSQL("UPDATE sources SET area=? WHERE url=?",arrayOf(area,url))
-            db.execSQL("UPDATE entries SET area=? WHERE source=?",arrayOf(area,url))
+            db.execSQL("UPDATE sources SET area=? WHERE url=? AND area<>?",arrayOf(area,url,area))
+            db.execSQL("UPDATE entries SET area=? WHERE source=? AND area<>?",arrayOf(area,url,area))
             db.setTransactionSuccessful()
         }finally{db.endTransaction()}
     }
