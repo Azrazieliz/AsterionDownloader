@@ -68,6 +68,14 @@ object RemoteImageLoader {
                                 "https://x.com/"
                             mediaHost=="i.pximg.net" || mediaHost.endsWith(".pximg.net") ->
                                 "https://www.pixiv.net/"
+                            (mediaHost=="mitaku.net" ||
+                                mediaHost.endsWith(".mitaku.net")) &&
+                                SiteControls.key(referer)=="kiutaku.com" ->
+                                // Verified: image CDN returns HTTP 403 with
+                                // kiutaku.com Referer and HTTP 200 with its
+                                // own publishing host. Do not send unrelated
+                                // site cookies; only correct the public header.
+                                "https://mitaku.net/"
                             else->referer
                         }
                         conn.setRequestProperty("Referer", resolvedReferer)
