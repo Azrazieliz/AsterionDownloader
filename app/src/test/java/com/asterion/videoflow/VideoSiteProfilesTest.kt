@@ -5,6 +5,34 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoSiteProfilesTest {
+    @Test fun approvedFullPornerRecognizesOnlyRealWatchPages(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://fullporner.com/watch/6af501862f7835591446c7d3"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://fullporner.com/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fullporner.com/player/6896933/6"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fullporner.com/pornstar/stacy-cruz"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fullporner.com/watch/invalid"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://fullporner.com.attacker.example/watch/6af501862f7835591446c7d3"))
+    }
+    @Test fun approvedFullPornerNumberedPaginationIsScopedToListing(){
+        val home="https://fullporner.com/"
+        val doc=Jsoup.parse("""<a href="/home/2">2</a>
+            <a href="https://ads.example/home/2">Ad</a>""",home)
+        assertEquals("https://fullporner.com/home/2",
+            VideoSiteProfiles.next(doc,home,home))
+        val artist="https://fullporner.com/pornstar/stacy-cruz"
+        val doc2=Jsoup.parse("""<a href="/pornstar/stacy-cruz/2">2</a>
+            <a href="/pornstar/other-person/2">Wrong profile</a>""",artist)
+        assertEquals("https://fullporner.com/pornstar/stacy-cruz/2",
+            VideoSiteProfiles.next(doc2,artist,artist))
+        assertNull(VideoSiteProfiles.next(
+            Jsoup.parse("""<a href="https://evil.example/home/2">2</a>""",home),
+            home,home))
+    }
     @Test fun retainedPornhubAndEpornerExactPagePaths(){
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.pornhub.com/view_video.php?viewkey=ph5abcd12"))
@@ -48,7 +76,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(19,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(20,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://hentaibros.net/muramata-san-no-aijou-episode-2/"))

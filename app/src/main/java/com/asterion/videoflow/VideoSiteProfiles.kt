@@ -21,6 +21,7 @@ internal object VideoSiteProfiles {
         Route("roshy.tv",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("cums.net",Regex("""(?i)^/(?:video|watch|v)/[^/?#]+""")),
         Route("watchporn.to",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
+        Route("fullporner.com",Regex("""(?i)^/watch/[a-f0-9]{24}/?$""")),
         Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
@@ -83,6 +84,36 @@ internal object VideoSiteProfiles {
         val host=domain(source)
         if(host !in routes)return null
         val now=runCatching{URI(current)}.getOrNull()?:return null
+        // FullPorner's actual home and performer pagination uses numbered
+        // links rather than rel=next or the usual CSS "next" class. Select
+        // only the exact immediate next page under the same approved listing.
+        if(host=="fullporner.com"){
+            val sourcePath=runCatching{URI(source).path.orEmpty().trimEnd('/')}
+                .getOrDefault("")
+            val onPerformer=Regex("""^/pornstar/[a-z0-9-]+$""")
+                .matches(sourcePath.lowercase(Locale.ROOT))
+            val base=if(onPerformer)sourcePath else "/home"
+            val currentPath=now.path.orEmpty().trimEnd('/')
+            val index=when {
+                currentPath=="/" || currentPath==sourcePath ->1
+                currentPath==base ->1
+                currentPath.startsWith(base+"/") ->
+                    currentPath.removePrefix(base+"/").toIntOrNull()
+                else ->null
+            }
+            if(index!=null && index in 1..99999){
+                val expected="$base/${index+1}"
+                val link=doc.select("a[href]").firstOrNull{a->
+                    val u=runCatching{URI(doc.location()).resolve(a.attr("href"))}
+                        .getOrNull()
+                    u?.scheme=="https" && u.host.orEmpty().lowercase(Locale.ROOT)
+                        .removePrefix("www.")=="fullporner.com" &&
+                        u.path.orEmpty().trimEnd('/')==expected &&
+                        u.query.isNullOrBlank() && u.userInfo==null
+                }
+                if(link!=null)return "https://fullporner.com"+expected
+            }
+        }
         val choices=doc.select("a[rel=next][href],.pagination a.next[href],"+
             "a.next[href],.pagenavi a.next[href],.pagination-next a[href],"+
             ".wp-pagenavi a.nextpostslink[href],.pagination a[aria-label=Next][href]")
