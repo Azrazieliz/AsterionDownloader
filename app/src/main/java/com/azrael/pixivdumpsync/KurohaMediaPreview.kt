@@ -53,8 +53,11 @@ internal object KurohaMediaPreview {
 
             for (tile in images.take(limit)) {
                 val thumb = ImageView(a).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
                     setBackgroundColor(ui.raised)
+                    // A failed remote request must not leave a featureless square.
+                    setImageResource(if(tile.video)R.drawable.ic_source_video
+                        else R.drawable.ic_source_kyora)
                     contentDescription = tile.title + " · " + tile.attribution +
                         " · download original"
                     isClickable = true

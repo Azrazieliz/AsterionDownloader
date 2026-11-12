@@ -119,6 +119,7 @@ object VideoEngine {
         try {
             val db=VideoDb(context)
             db.recover()
+            db.recoverTrustedPolicyHoldsOnce()
             // Never gate native HTTP originals on Python availability.
             // Start the embedded extractor lazily only for actual page
             // metadata/extraction work. A broken Python runtime may hold

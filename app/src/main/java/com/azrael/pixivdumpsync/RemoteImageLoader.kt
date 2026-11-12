@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 
 object RemoteImageLoader {
-    private val executor = Executors.newFixedThreadPool(2)
+    private val executor = Executors.newFixedThreadPool(4)
 
     private val memory = object : LruCache<String, Bitmap>(
         minOf(
@@ -53,10 +53,12 @@ object RemoteImageLoader {
                     val conn = URL(url).openConnection() as HttpURLConnection
                     try {
                         conn.instanceFollowRedirects = true
-                        conn.connectTimeout = 12_000
-                        conn.readTimeout = 25_000
-                        conn.setRequestProperty("User-Agent", PixivApi.USER_AGENT)
+                        conn.connectTimeout = 8_000
+                        conn.readTimeout = 14_000
                         val mediaHost=runCatching{URL(url).host.lowercase()}.getOrDefault("")
+                        conn.setRequestProperty("User-Agent",
+                            if(mediaHost.endsWith(".pximg.net")) PixivApi.USER_AGENT
+                            else "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/125.0.0.0 Mobile Safari/537.36")
                         val resolvedReferer=when{
                             mediaHost=="pbs.twimg.com" || mediaHost.endsWith(".twimg.com") ->
                                 "https://x.com/"
@@ -71,7 +73,8 @@ object RemoteImageLoader {
                         )
 
                         val code = conn.responseCode
-                        if (code !in 200..299) {
+                        if (code !in 200..299 ||
+                            !conn.contentType.orEmpty().startsWith("image/",true)) {
                             return@runCatching null
                         }
 
@@ -86,6 +89,7 @@ object RemoteImageLoader {
                 }
 
                 decodeSampled(file, if(preserveOriginal) 1024 else 256)
+                    .also { decoded -> if(decoded==null)file.delete() }
             }.getOrNull()
 
             if (bitmap != null) {

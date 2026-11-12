@@ -346,6 +346,35 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "UPDATE videos SET attempts=0,retry_after=0,request_origin='user' WHERE id=?",
             arrayOf(id))
     }
+    /** One-time migration for rows held by the superseded runtime policy.
+     * Requeue only user-designated full-video providers; old untrusted rows
+     * remain available for individual manual RETRY. Preserve all completed files.
+     */
+    fun recoverTrustedPolicyHoldsOnce():Int {
+        val prefs=appContext.getSharedPreferences("videoflow_policy_migrations",0)
+        if(prefs.getBoolean("trusted_full_v2",false))return 0
+        val selected=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id,url,title FROM videos WHERE state='full_only_hold'",null
+        ).use{rows->
+            while(rows.moveToNext()){
+                val url=rows.getString(1)
+                val title=rows.getString(2)
+                if(FullLengthVideoPolicy.knownFullReferenceHost(url) &&
+                    !FullLengthVideoPolicy.isExplicitPreview(title,url))
+                    selected+=rows.getLong(0)
+            }
+        }
+        for(id in selected){
+            writableDatabase.execSQL(
+                "UPDATE videos SET state='queued',error=NULL,progress=0,attempts=0,"+
+                    "retry_after=0,updated=? WHERE id=? AND state='full_only_hold'",
+                arrayOf(System.currentTimeMillis(),id)
+            )
+        }
+        prefs.edit().putBoolean("trusted_full_v2",true).commit()
+        return selected.size
+    }
     /** A new verified full-version reference may unblock previous shortened/unknown
      * candidates. Only matching scene titles are reconsidered, not all downloads.
      */

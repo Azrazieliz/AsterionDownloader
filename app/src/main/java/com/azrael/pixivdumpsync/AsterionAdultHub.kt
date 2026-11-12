@@ -232,7 +232,12 @@ object AsterionAdultHub {
                     media.any{it.url==entry.url} ||
                         searches.any{it.url==entry.url}
                 }
-            val issue=error(site,a)
+            val visibleSources=media.isNotEmpty()||searches.isNotEmpty()||public.isNotEmpty()
+            val issue=error(site,a)?.takeUnless{reason->
+                visibleSources && (
+                    reason.contains("No supported public media",true) ||
+                    reason.contains("No gallery thumbnails",true))
+            }
             val operation=SiteRunControl.status(a,site.url)
             val running=operation.state in setOf("RUNNING","QUEUED","STOPPING")
             val card=ui.card(a,15)
@@ -343,10 +348,14 @@ object AsterionAdultHub {
                 }
             }
             val publicChecked=KyoraCreatorPreviews.cached(a,site.url)
-            val state=if(publicChecked?.entries?.isNotEmpty()==true &&
-                sourceState(a,site)=="Not checked")
-                    "Catalog checked · originals not verified"
-                else sourceState(a,site)
+            val rawState=sourceState(a,site)
+            val state=when{
+                issue==null && visibleSources && rawState=="Source error"->
+                    "Covers indexed · original downloads not verified"
+                publicChecked?.entries?.isNotEmpty()==true && rawState=="Not checked"->
+                    "Catalog covers found · original downloads not verified"
+                else->rawState
+            }
             card.addView(ui.text(a,
                 (media.size+searches.size+public.size).toString()+
                     " real media previews · "+state,
@@ -415,13 +424,15 @@ object AsterionAdultHub {
             card.addView(controls,ui.lp(a,8))
             if(!issue.isNullOrBlank()){
                 val readable=when{
-                    issue.contains("403")->"HTTP 403 · authorization or provider adapter required"
+                    issue.contains("403")->"HTTP 403 · provider blocked request (IP, session or access); cause unconfirmed"
                     issue.contains("429")->"HTTP 429 · rate limited"
                     issue.contains("redirect",true)->"Provider redirected unexpectedly · adapter needs repair"
                     else->issue.take(116)
                 }
                 card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,6))
-                if(issue.contains("403")||issue.contains("login",true)){
+                if(issue.contains("401")||issue.contains("login",true)||
+                    issue.contains("sign in",true)||
+                    issue.contains("session expired",true)){
                     card.addView(ui.action(a,"CONNECT ACCOUNT",false){
                         a.startActivity(Intent(a,SiteLoginActivity::class.java)
                             .putExtra(SiteLoginActivity.EXTRA_URL,site.url))

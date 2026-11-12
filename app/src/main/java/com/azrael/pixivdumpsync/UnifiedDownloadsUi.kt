@@ -103,7 +103,9 @@ object UnifiedDownloadsUi {
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
                     State.HELD->if(item.status=="retry_wait")
                         "Video · Retry scheduled: "+item.error.orEmpty().take(110)
-                        else "Video · Full-length original requires verification"
+                        else "Video · "+item.error.orEmpty()
+                            .ifBlank{"Previous source verification was inconclusive; manual retry available"}
+                            .take(110)
                     State.PAUSED->"Video · Paused by user; original and progress retained"
                     State.QUEUED->"Video · Waiting for transfer worker"
                     State.ACTIVE->"Video · "+if(bytes>0)"Receiving original · "+received
@@ -117,22 +119,11 @@ object UnifiedDownloadsUi {
                             State.FAILED->{VideoDb(a).use{it.retry(item.id)};VideoEngine.launch(a,false)}
                             State.ACTIVE,State.QUEUED->VideoEngine.pauseVideo(a,item.id)
                             State.PAUSED->VideoEngine.resumeVideo(a,item.id)
-                            State.HELD->if(item.status=="retry_wait"){
+                            State.HELD->{
+                                // A manual retry is an explicit original request, not
+                                // another silent automatic verification hold.
                                 VideoDb(a).use{it.retry(item.id)}
                                 VideoEngine.launch(a,false)
-                            }else{
-                                android.app.AlertDialog.Builder(a)
-                                    .setTitle("Full original not accessible")
-                                    .setMessage("The indexed preview is not proof of an "+
-                                        "accessible full-length video. Connect an "+
-                                        "authorized session or try a different source.")
-                                    .setPositiveButton("CONNECT ACCOUNT"){_,_->
-                                        a.startActivity(Intent(a,
-                                            com.azrael.galleryflow.SiteLoginActivity::class.java)
-                                            .putExtra(
-                                                com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,
-                                                item.url))
-                                    }.setNegativeButton("Close",null).show()
                             }
                             else->{}
                         }
@@ -142,7 +133,7 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
-                        State.HELD->if(item.status=="retry_wait")"RETRY" else "SOURCE"
+                        State.HELD->"RETRY"
                         else->null
                     })
             }
@@ -532,8 +523,7 @@ object UnifiedDownloadsUi {
             val label=when(item.state){
                 State.DONE->"Saved"
                 State.FAILED->"Failed"
-                State.HELD->if(item.actionText=="RETRY")"Retry available"
-                    else "Action needed"
+                State.HELD->"Retry available"
                 State.PAUSED->"Paused"
                 State.QUEUED->"Queued"
                 State.ACTIVE->if(item.percent!=null && item.percent>0)
@@ -584,7 +574,9 @@ object UnifiedDownloadsUi {
                     else ui.border)
                 action.setTextColor(if(command=="RESUME")
                     android.graphics.Color.rgb(226,255,239) else ui.white)
-                card.addView(action,LinearLayout.LayoutParams(ui.px(a,82),-2).apply{
+                action.isSingleLine=true
+                action.setPadding(ui.px(a,5),0,ui.px(a,5),0)
+                card.addView(action,LinearLayout.LayoutParams(ui.px(a,88),-2).apply{
                     leftMargin=ui.px(a,6)
                 })
             }

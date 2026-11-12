@@ -41,6 +41,14 @@ object ProviderBackfillActions {
                 else "Unable to start video check for "+host
         }
         if(site.area=="COSPLAY"){
+            // A site homepage is not a Kiutaku /tag/<id> entity. The public
+            // source-owned archive scanner accepts root-site gallery posts,
+            // preserving native tag subscriptions without fabricating one.
+            if(host=="kiutaku.com" &&
+                runCatching{URI(site.url).path.orEmpty().trim('/')}.getOrDefault("").isBlank()){
+                SourceIndex.scanSourceNow(a.applicationContext,site.url,manual=true)
+                return "Kiutaku public gallery history scan requested"
+            }
             // Approved native sites may be registered in SourceIndex before
             // GalleryFlow has ever saved a native entity. Explicit BACKFILL
             // must enroll the actual site profile, not silently do nothing.

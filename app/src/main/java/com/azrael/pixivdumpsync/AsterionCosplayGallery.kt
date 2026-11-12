@@ -194,9 +194,13 @@ object AsterionCosplayGallery {
                 else->"Not checked"
             }
             card.addView(ui.text(a,
-                visual.size.toString()+" authentic gallery covers · "+checked,
+                visual.size.toString()+" gallery cover links · "+checked,
                 12f,ui.secondary),ui.lp(a,5))
-            val issue=source?.error?:previewStatus?.error
+            val issue=(source?.error?:previewStatus?.error)?.takeUnless{reason->
+                visual.isNotEmpty() &&
+                    (reason.contains("No supported public media",true) ||
+                     reason.contains("No gallery thumbnails",true))
+            }
             if(!issue.isNullOrBlank())
                 card.addView(ui.text(a,issue.take(130),
                     11f,ui.danger),ui.lp(a,5))

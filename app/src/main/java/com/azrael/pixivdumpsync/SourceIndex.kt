@@ -994,7 +994,7 @@ object SourceIndex {
     /** The user may backfill one registered site without resetting unrelated
      * cursors or changing other providers' include/live preferences.
      */
-    fun scanSourceNow(context:Context,address:String) {
+    fun scanSourceNow(context:Context,address:String,manual:Boolean=false) {
         if(!AppPower.enabled(context))return
         thread(name="asterion-source-specific-backfill"){
             if(!busy.compareAndSet(false,true))return@thread
@@ -1002,8 +1002,11 @@ object SourceIndex {
                 val source=SourceIndexDb(context).use{db->
                     db.sources().firstOrNull{it.url==address}
                 }?:return@thread
-                if(!source.enabled || source.adapter!="generic")return@thread
-                runCatching{scanOne(context,source)}.onFailure{error->
+                if(!manual && (!source.enabled || source.adapter!="generic"))
+                    return@thread
+                // Explicit site-wide scans are not tied to the Sync switch.
+                // They preserve every previously saved cursor and result.
+                runCatching{scanOne(context,source,manual=manual)}.onFailure{error->
                     SourceIndexDb(context).use{db->
                         db.failure(address,error.message?:"Source-specific backfill failed")
                     }
