@@ -314,6 +314,29 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return out
     }
+    /** Status-filtered query for diagnostics. Applying a filter after the
+     * first page hid 757 errors behind 300 queued rows on Android.
+     */
+    fun listVideosForTab(tab:String,limit:Int=300):List<Video>{
+        val where=when(tab){
+            "Active"->" WHERE state IN ('queued','running','retry_wait')"
+            "Saved"->" WHERE state='done'"
+            "Held"->" WHERE state='full_only_hold'"
+            "Failed"->" WHERE state='error'"
+            else->""
+        }
+        val out=ArrayList<Video>()
+        val query="SELECT id,url,title,state,progress,saved_uri,error,watch_id,updated "+
+            "FROM videos"+where+
+            " ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 "+
+            "ELSE 2 END, updated DESC LIMIT "+limit.coerceIn(1,1000)
+        readableDatabase.rawQuery(query,null).use { c->
+            while(c.moveToNext())out+=Video(c.getLong(0),c.getString(1),
+                c.getString(2),c.getString(3),c.getInt(4),c.getString(5),
+                c.getString(6),c.getLong(7),c.getLong(8))
+        }
+        return out
+    }
     fun count(status: String): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM videos WHERE state=?", arrayOf(status)).use { c -> c.moveToFirst(); return c.getInt(0) }
     }

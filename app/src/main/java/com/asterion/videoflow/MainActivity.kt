@@ -232,15 +232,9 @@ class MainActivity:Activity() {
                 LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(5)})
         }
         add(content,tabs,17)
-        val list=db.listVideos(300).filter {
-            when(filter){
-                "Active"->it.status in setOf("queued","running")
-                "Saved"->it.status=="done"
-                "Held"->it.status=="full_only_hold"
-                "Failed"->it.status=="error"
-                else->true
-            }
-        }
+        // Apply status selection inside SQLite BEFORE limiting results.
+        // Previously the first 300 queued rows hid hundreds of real errors.
+        val list=db.listVideosForTab(filter,300)
         val controls=row()
         controls.addView(text(list.size.toString()+" ITEMS",12f,grey,true),
             LinearLayout.LayoutParams(0,-2,1f))
@@ -272,6 +266,13 @@ class MainActivity:Activity() {
         if(v.status=="error"){
             add(box,text(SourceDiagnostics.summary(v.error),12f,bad),9)
             add(box,text(SourceDiagnostics.retryAdvice(v.error),11f,grey),5)
+        }
+        if(!compact && v.status!="done"){
+            VideoTransferJournal.current(this,v.id)?.let{state->
+                add(box,text("Transfer stage: "+state.stage+
+                    if(state.detail.isBlank())"" else " · "+state.detail,
+                    11f,grey),6)
+            }
         }
         if(v.status=="full_only_hold")
             add(box,text(v.error.orEmpty().ifBlank{

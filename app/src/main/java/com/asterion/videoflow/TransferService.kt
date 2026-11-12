@@ -194,7 +194,11 @@ object VideoEngine {
 
             // Transfer queued media before any potentially slow provider scan.
             drainQueued(if(scan)6 else 12)
-            if(scan) {
+            // Backpressure protects direct transfers from unbounded automatic
+            // discovery. Nothing is erased, and no source cursor is advanced
+            // while waiting for the existing queue to drain. Explicit manual
+            // site Backfill remains independently available.
+            if(scan && (targetHost!=null || db.count("queued")<96)) {
                 // Independent name crawlers keep their own scheduling and do
                 // not block the foreground download queue in this worker.
                 // Independent per-provider discovery agents run concurrently.
@@ -492,7 +496,6 @@ object VideoEngine {
             val native=NativeMediaDownloader.isNativeEligible(item.url,link) &&
                 (!hidden || proxy!=null)
             val future=(if(native)nativeExecutor else transferExecutor).submit<Int>{
-                if(!native)ensureExtractor(context)
                 if(native) {
                     val sameHost=runCatching{
                         java.net.URI(item.url).host.equals(
@@ -509,8 +512,36 @@ object VideoEngine {
                             Thread.currentThread().isInterrupted
                         })
                     0
-                } else EmbeddedYtDlpTransfer.download(
-                    link,referer,selected,proxy,parent,template,quality)
+                } else {
+                    // The original standalone VideoFlow used YtDlp.execute
+                    // directly, with real progress callbacks and no metadata
+                    // gate. Restore it as the first transfer path; keep the
+                    // typed-Python extractor as a source-specific fallback.
+                    try {
+                        VideoTransferJournal.record(context,item.id,"original_engine")
+                        LegacyYtDlpTransfer.download(context,link,referer,selected,
+                            proxy,parent,template,quality){percent->
+                            db.progress(item.id,percent)
+                            status(percent)
+                        }
+                        VideoTransferJournal.record(context,item.id,"original_complete")
+                        0
+                    }catch(primary:Exception){
+                        if(stopRequests.contains(item.id) ||
+                            Thread.currentThread().isInterrupted)
+                            throw java.util.concurrent.CancellationException("Video paused")
+                        VideoTransferJournal.record(context,item.id,"python_fallback",
+                            primary.javaClass.simpleName)
+                        try{
+                            ensureExtractor(context)
+                            EmbeddedYtDlpTransfer.download(
+                                link,referer,selected,proxy,parent,template,quality)
+                        }catch(secondary:Exception){
+                            secondary.addSuppressed(primary)
+                            throw secondary
+                        }
+                    }
+                }
             }
             extractionJobs[item.id]=future
             val start=android.os.SystemClock.elapsedRealtime()
