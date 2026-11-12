@@ -1,5 +1,6 @@
 package com.azrael.pixivdumpsync
 
+import com.asterion.videoflow.NetworkRoute
 import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
@@ -68,7 +69,10 @@ object NovelEpubService {
             val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
                 .timeout(24000).maxBodySize(6_000_000)
                 .followRedirects(false).ignoreHttpErrors(true)
-                .apply{SiteSession.cookie(url)?.let{header("Cookie",it)}}
+                .apply{
+                    NetworkRoute.javaProxy(context,url)?.let{proxy(it)}
+                    SiteSession.cookie(url)?.let{header("Cookie",it)}
+                }
                 .execute()
             if(response.statusCode()==429 ||
                 (response.statusCode()==503 && response.header("Retry-After")!=null)){

@@ -286,7 +286,17 @@ object AsterionAdultHub {
                     mediaTiles+searchTiles+publicTiles){tile->
                     val indexItem=media.firstOrNull{it.url==tile.url}
                     if(indexItem!=null){
-                        SourceIndexPanel.details(a,indexItem)
+                        if(indexItem.kind=="video" &&
+                            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(indexItem.url)){
+                            val submitted=VideoDb(a).use{
+                                it.addVideo(indexItem.url,indexItem.title)
+                            }
+                            if(submitted)VideoEngine.launch(a,false)
+                            Toast.makeText(a,if(submitted)
+                                "Original queued · "+indexItem.title.take(45)
+                                else "Already in Downloads · "+indexItem.title.take(45),
+                                Toast.LENGTH_SHORT).show()
+                        }else SourceIndexPanel.details(a,indexItem)
                     }else{
                         val hit=searches.firstOrNull{it.url==tile.url}
                         if(hit!=null){

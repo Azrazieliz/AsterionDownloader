@@ -34,7 +34,7 @@ object DirectDownloadTracker {
         saved.add(0,Tracked(id,filename.take(100),folder.take(30),host.take(80),
             System.currentTimeMillis()))
         val arr=JSONArray()
-        for(job in saved.take(220))arr.put(JSONObject().apply{
+        for(job in saved.take(500))arr.put(JSONObject().apply{
             put("id",job.id);put("filename",job.filename)
             put("folder",job.folder);put("host",job.sourceHost)
             put("created",job.created)
@@ -52,7 +52,7 @@ object DirectDownloadTracker {
         prefs(c).edit().putString(KEY,arr.toString()).apply()
     }
     fun states(c:Context,limit:Int=50):List<State>{
-        val saved=read(c).take(limit.coerceIn(1,250))
+        val saved=read(c).take(limit.coerceIn(1,500))
         if(saved.isEmpty())return emptyList()
         val manager=c.getSystemService(DownloadManager::class.java)
         val byId=HashMap<Long,State>()

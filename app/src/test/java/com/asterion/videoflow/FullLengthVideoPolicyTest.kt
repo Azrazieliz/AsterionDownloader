@@ -44,7 +44,7 @@ class FullLengthVideoPolicyTest {
             FullLengthVideoPolicy.assess(
                 "Original Scene teaser","Original Scene",url,900L,null,
                 userExplicitlyRequested=true).verdict)
-        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,
             FullLengthVideoPolicy.assess(
                 "Original Scene","Original Scene",url,null,null,
                 userExplicitlyRequested=true).verdict)

@@ -1,5 +1,6 @@
 package com.azrael.pixivdumpsync
 
+import com.asterion.videoflow.NetworkRoute
 import android.app.DownloadManager
 import android.app.job.JobInfo
 import android.app.job.JobParameters
@@ -1132,7 +1133,10 @@ object SourceIndex {
                     .userAgent(HttpClient.USER_AGENT)
                     .header("Accept","text/html,application/xhtml+xml")
                     .followRedirects(false).ignoreHttpErrors(true)
-                    .apply{SiteSession.cookie(current)?.let{header("Cookie",it)}}
+                    .apply{
+                        NetworkRoute.javaProxy(context,current)?.let{proxy(it)}
+                        SiteSession.cookie(current)?.let{header("Cookie",it)}
+                    }
                     .execute()
                 if(response.statusCode() in 300..399){
                     val location=response.header("Location")
@@ -1415,7 +1419,9 @@ object SourceIndex {
             if(queued)VideoEngine.launch(context,false)
             // Existing downloads, including strict full-length holds, are owned by
             // VideoFlow and must not be enqueued repeatedly by the source scanner.
-            return queued || VideoDb(context).use{it.hasVideo(item.url)}
+            return queued || VideoDb(context).use{
+                it.stateForUrl(item.url) in setOf("queued","running","retry_wait","done")
+            }
         }
         if(!SourceIndexParser.autoOriginal(item))return false
         if(item.area=="COMICS" && (NhentaiChapters.isGallery(item.url) ||

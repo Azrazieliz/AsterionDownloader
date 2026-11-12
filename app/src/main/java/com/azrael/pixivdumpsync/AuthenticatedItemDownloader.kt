@@ -25,7 +25,7 @@ object AuthenticatedItemDownloader {
         }
         Toast.makeText(a,"Resolving accessible original…",Toast.LENGTH_SHORT).show()
         val accepted=ModuleOriginalAgents.submitUser(a,item.area,item.url){
-            val found=runCatching{AuthorizedOriginalResolver.resolve(item.url,item.area)}
+            val found=runCatching{AuthorizedOriginalResolver.resolve(item.url,item.area,a)}
             a.runOnUiThread{
                 if(a.isDestroyed||a.isFinishing)return@runOnUiThread
                 found.onSuccess{file->
@@ -84,6 +84,8 @@ object AuthenticatedItemDownloader {
                         val summary=when(failure?.reason){
                             OriginalAccessCause.RATE_LIMIT->
                                 "Provider rate-limited this request. Try again later."
+                            OriginalAccessCause.ACCESS_RESTRICTED->
+                                "HTTP 403: check the site's network route or connected account."
                             OriginalAccessCause.NOT_FOUND->
                                 "Original no longer exists on the provider."
                             OriginalAccessCause.NO_ORIGINAL->

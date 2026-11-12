@@ -110,7 +110,7 @@ internal object ModuleOriginalAgents {
 
     private fun activeDirect(context:Context,area:String):Int{
         val category=folder(area)
-        return DirectDownloadTracker.states(context,220).count{state->
+        return DirectDownloadTracker.states(context,500).count{state->
             state.job.folder==category && occupiesActiveSlot(state.status)
         }
     }

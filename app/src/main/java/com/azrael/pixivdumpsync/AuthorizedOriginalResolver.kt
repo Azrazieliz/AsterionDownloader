@@ -1,5 +1,7 @@
 package com.azrael.pixivdumpsync
 
+import android.content.Context
+import com.asterion.videoflow.NetworkRoute
 import com.azrael.galleryflow.SiteSession
 import org.jsoup.Jsoup
 import java.net.URI
@@ -11,7 +13,7 @@ import java.util.Locale
 data class AccessibleOriginal(val url:String,val filename:String,val kind:String,
     val referer:String)
 
-enum class OriginalAccessCause { SIGN_IN, ENTITLEMENT, RATE_LIMIT, NOT_FOUND, NO_ORIGINAL }
+enum class OriginalAccessCause { SIGN_IN, ENTITLEMENT, ACCESS_RESTRICTED, RATE_LIMIT, NOT_FOUND, NO_ORIGINAL }
 
 class OriginalAccessException(val reason:OriginalAccessCause,message:String):
     IllegalStateException(message)
@@ -91,7 +93,7 @@ object AuthorizedOriginalResolver {
             .ifBlank{"original.bin"}
         return AccessibleOriginal(best.key,name,best.value.second,page)
     }
-    fun resolve(pageOrFile:String,hint:String):AccessibleOriginal {
+    fun resolve(pageOrFile:String,hint:String,context:Context?=null):AccessibleOriginal {
         require(SearchRanking.validUrl(pageOrFile)){"Invalid download source URL"}
         val kind=mediaType(pageOrFile)
         if(kindAccepts(hint,kind)){
@@ -117,6 +119,7 @@ object AuthorizedOriginalResolver {
                 .userAgent("Mozilla/5.0 (Linux; Android 17) AsterionDownloader/1.3")
                 .header("Accept","text/html,application/xhtml+xml")
                 .ignoreHttpErrors(true).followRedirects(false)
+            NetworkRoute.javaProxy(context,address)?.let{request.proxy(it)}
             SiteSession.cookie(address)?.let{request.header("Cookie",it)}
             val r=request.execute()
             if(r.statusCode() in 300..399){
@@ -148,8 +151,8 @@ object AuthorizedOriginalResolver {
                 "Sign in with an account authorized to access this original")
             402->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
                 "This file requires an active entitlement or purchase")
-            403->throw OriginalAccessException(OriginalAccessCause.ENTITLEMENT,
-                "The connected account is not permitted to download this file")
+            403->throw OriginalAccessException(OriginalAccessCause.ACCESS_RESTRICTED,
+                "Provider HTTP 403: IP, region, browser verification or account access restriction")
             404,410->throw OriginalAccessException(OriginalAccessCause.NOT_FOUND,
                 "This original file is no longer available")
             429->throw OriginalAccessException(OriginalAccessCause.RATE_LIMIT,
