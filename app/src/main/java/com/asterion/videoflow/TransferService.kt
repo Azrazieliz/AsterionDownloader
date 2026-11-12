@@ -13,7 +13,6 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import dev.ffmpegkit_maintained.ytdlp.YtDlp
-import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
 
 class FullVersionUnavailable(message:String):Exception(message)
 
@@ -23,8 +22,11 @@ object VideoEngine {
     private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
         java.util.concurrent.Future<*>>()
-    private val metadataExecutor=Executors.newFixedThreadPool(1){task->
+    private val metadataExecutor=Executors.newSingleThreadExecutor{task->
         Thread(task,"videoflow-native-metadata").apply{isDaemon=true}
+    }
+    private val transferExecutor=Executors.newSingleThreadExecutor{task->
+        Thread(task,"videoflow-native-transfer").apply{isDaemon=true}
     }
     /** Cancels an individual video without deleting its source, metadata or cache.
      * A stopped transfer can be explicitly resumed in Downloads.
@@ -452,53 +454,64 @@ object VideoEngine {
         check(db.touchClaim(item.id,item.lease)){
             "Download claim is no longer owned by this worker"
         }
-        fun executeControlled(
-            request:YtDlpRequest,
-            phase:String,
-            activity:java.util.concurrent.atomic.AtomicLong?=null,
-            onProgress:dev.ffmpegkit_maintained.ytdlp.DownloadProgressCallback
-        ):dev.ffmpegkit_maintained.ytdlp.YtDlpResponse{
+        // The third-party Java request wrapper silently discards several
+        // essential yt-dlp options (including its output paths). Invoke the
+        // embedded Python YoutubeDL API with typed options instead. The
+        // staged bytes are measured while the future is executing, not inferred
+        // from a progress callback which can remain at zero indefinitely.
+        fun executeControlled(link:String,referer:String?=null) {
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
-            val start=android.os.SystemClock.elapsedRealtime()
-            val future=YtDlp.executeAsync(request,onProgress)
+            val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+                ?:cookie.takeIf{it.isFile&&it.length()>0}
+            val proxy=if(viaProxy && hidden)
+                "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
+                else null
+            val quality=prefs.getString("quality","best[ext=mp4]/best")
+                ?: "best[ext=mp4]/best"
+            val future=transferExecutor.submit<Int>{
+                EmbeddedYtDlpTransfer.download(
+                    link,referer,selected,proxy,parent,template,quality)
+            }
             extractionJobs[item.id]=future
-            var bytes=parent.listFiles()?.filter{it.isFile}?.sumOf{it.length()}?:0L
+            val start=android.os.SystemClock.elapsedRealtime()
+            var latestBytes=parent.listFiles()?.filter{it.isFile}
+                ?.sumOf{it.length()}?:0L
             var lastByteTick=start
-            var lastLeaseHeartbeat=0L
-            VideoTransferJournal.record(context,item.id,phase)
+            var lastLeaseTick=0L
+            VideoTransferJournal.record(context,item.id,"transfer")
             try{
                 while(true){
                     if(stopRequests.contains(item.id) ||
                         Thread.currentThread().isInterrupted)
                         throw java.util.concurrent.CancellationException("Video paused")
                     val now=android.os.SystemClock.elapsedRealtime()
-                    if(now-lastLeaseHeartbeat>4_000L){
-                        if(!db.touchClaim(item.id,item.lease)){
+                    if(now-lastLeaseTick>=4_000L){
+                        if(!db.touchClaim(item.id,item.lease))
                             throw java.util.concurrent.CancellationException(
-                                "Transfer lease released or paused")
-                        }
-                        lastLeaseHeartbeat=now
+                                "Transfer paused or claim superseded")
+                        lastLeaseTick=now
                     }
-                    if(phase=="transfer"){
-                        val current=parent.listFiles()?.filter{it.isFile}
-                            ?.sumOf{it.length()}?:0L
-                        if(current>bytes){bytes=current;lastByteTick=now}
+                    val current=parent.listFiles()?.filter{it.isFile}
+                        ?.sumOf{it.length()}?:0L
+                    if(current>latestBytes){
+                        latestBytes=current
+                        lastByteTick=now
+                        VideoTransferJournal.record(
+                            context,item.id,"receiving",current.toString())
                     }
-                    val tick=maxOf(lastByteTick,activity?.get()?:start)
-                    val elapsed=now-start
-                    val idle=now-tick
-                    val limit=VideoTransferLimits.expired(phase,elapsed,idle)
-                    val preparationLimit=phase=="metadata" &&
-                        now-preparationStart>=80_000L
-                    if(limit!=null || preparationLimit)
-                        throw java.util.concurrent.TimeoutException(
-                            limit?:"Original preparation exceeded its 80s budget")
+                    val reason=VideoTransferLimits.expired(
+                        "transfer",now-start,now-lastByteTick)
+                    if(reason!=null)
+                        throw java.util.concurrent.TimeoutException(reason)
                     try{
-                        return future.get(VideoTransferLimits.POLL_MS,
+                        val exit=future.get(VideoTransferLimits.POLL_MS,
                             java.util.concurrent.TimeUnit.MILLISECONDS)
+                        if(exit!=0)throw java.io.IOException(
+                            "Embedded video extractor ended with status "+exit)
+                        return
                     }catch(_:java.util.concurrent.TimeoutException){
-                        // Check real bytes, cancellation and bounded deadlines.
+                        // Re-read real written bytes and enforce deadlines.
                     }
                 }
             }catch(t:Exception){
@@ -508,31 +521,6 @@ object VideoEngine {
                 extractionJobs.remove(item.id,future)
             }
         }
-        fun request(link:String, referer:String?=null)=
-            YtDlpRequest(link).setOutputTemplate(template)
-                // An explicit output path overrides the wrapper's relative default.
-                .addOption("--paths","home:"+stage)
-                .addOption("--paths","temp:"+stage)
-                .addOption("--output",template)
-                .addOption("--no-cache-dir")
-                .addOption("--no-playlist").addOption("--continue")
-                .addOption("--no-overwrites").addOption("--retries","2")
-                .addOption("--fragment-retries","3")
-                .addOption("--retry-sleep","http:2")
-                .addOption("--socket-timeout","20")
-                .addOption("--user-agent",
-                    "Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
-                .addOption("-f",prefs.getString("quality","best[ext=mp4]/best")
-                    ?: "best[ext=mp4]/best")
-                .apply {
-                    if(viaProxy && hidden)addOption("--proxy", "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}")
-                    // This library's Python wrapper implements --add-header,
-                    // not --referer. The old option was silently ignored.
-                    if(!referer.isNullOrBlank())addOption("--add-header","Referer: "+referer)
-                    val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
-                        ?:cookie.takeIf{it.isFile&&it.length()>0}
-                    if(selected!=null)addOption("--cookies",selected.absolutePath)
-                }
         fun preflight(link:String,referer:String?=null):
                 Pair<Long,FullLengthVideoPolicy.Decision> {
             // The installed yt-dlp wrapper ignores --dump-single-json and
@@ -604,27 +592,12 @@ object VideoEngine {
             return (duration?:0L) to decision
         }
         fun execute(link:String,referer:String?=null) {
-            val heartbeat=java.util.concurrent.atomic.AtomicLong(
-                android.os.SystemClock.elapsedRealtime())
-            var greatest=0f
-            var lastSavedPercent=-1
-            val response=executeControlled(request(link,referer),
-                "transfer",heartbeat){progress,_,_->
-                if(stopRequests.contains(item.id))
-                    throw java.util.concurrent.CancellationException("Video paused")
-                if(progress>greatest){
-                    greatest=progress
-                    heartbeat.set(android.os.SystemClock.elapsedRealtime())
-                }
-                val percent=progress.toInt().coerceIn(0,100)
-                if(percent>lastSavedPercent){
-                    db.progress(item.id,percent)
-                    lastSavedPercent=percent
-                    if(percent%5==0)status(percent)
-                }
-            }
-            if(!response.isSuccess)error(
-                VideoExtractorErrors.message(response.output,response.exitCode,"transfer"))
+            executeControlled(link,referer)
+            val received=parent.listFiles()?.filter{it.isFile}
+                ?.sumOf{it.length()}?:0L
+            if(received<=0L)
+                throw java.io.IOException("No original media bytes received")
+            // Saved=100% is set only after the verified MediaStore receipt.
         }
         // For Eporner use the verified publisher's own embed first. Never
         // silently bypass an age/login requirement or send cookies cross-site.

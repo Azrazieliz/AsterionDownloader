@@ -14,6 +14,7 @@ import android.widget.*
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import com.asterion.videoflow.VideoRuntimeState
+import com.asterion.videoflow.VideoTransferJournal
 import java.util.concurrent.Executors
 
 /** The only general-purpose download queue UI. Each row is a real file/job,
@@ -81,6 +82,14 @@ object UnifiedDownloadsUi {
         VideoDb(a).use{db->
             for(item in db.listVideos(180)){
                 val present=readable(a,item.savedUri)
+                val journal=if(item.status=="running")
+                    VideoTransferJournal.current(a,item.id) else null
+                val bytes=if(journal?.stage=="receiving")
+                    journal.detail.toLongOrNull()?.coerceAtLeast(0L)?:0L
+                    else 0L
+                val received=if(bytes>0)
+                    String.format(java.util.Locale.US,"%.1f MiB",
+                        bytes.toDouble()/1_048_576.0) else ""
                 val state=when{
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
@@ -97,7 +106,8 @@ object UnifiedDownloadsUi {
                         else "Video · Full-length original requires verification"
                     State.PAUSED->"Video · Paused by user; original and progress retained"
                     State.QUEUED->"Video · Waiting for transfer worker"
-                    State.ACTIVE->"Video · "+if(item.progress>0)"Transferring"
+                    State.ACTIVE->"Video · "+if(bytes>0)"Receiving original · "+received
+                        else if(journal?.stage=="transfer")"Connecting to original"
                         else "Inspecting / preparing original"
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
@@ -127,6 +137,7 @@ object UnifiedDownloadsUi {
                             else->{}
                         }
                     },if(present)item.savedUri else null,mime="video/*",
+                    receivedBytes=bytes,
                     actionText=when(state){
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
