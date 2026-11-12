@@ -1,5 +1,6 @@
 package com.asterion.videoflow
 
+import android.content.Context
 import com.azrael.galleryflow.SiteSession
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -26,7 +27,7 @@ internal object WatchPornOriginalSource {
         if(!isExactPage(pageUrl))return null
         val doc=Jsoup.parse(html,pageUrl)
         val duration=doc.selectFirst("meta[itemprop=duration]")
-            ?.attr("content")?.toLongOrNull()?.takeIf{it in 60L..(10L*60*60)}
+            ?.attr("content")?.toLongOrNull()?.takeIf{it in 1L..(24L*60*60)}
             ?:return null
         val jsonDurations=doc.select("script[type=application/ld+json]")
             .mapNotNull{tag->
@@ -48,13 +49,16 @@ internal object WatchPornOriginalSource {
         return Original(media,duration)
     }
 
-    fun resolve(pageUrl:String):Original? {
+    fun resolve(pageUrl:String,context:Context?=null):Original? {
         if(!isExactPage(pageUrl))return null
         val response=Jsoup.connect(pageUrl)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
             .ignoreHttpErrors(true).followRedirects(false)
             .timeout(16_000).maxBodySize(3_000_000)
-            .apply { SiteSession.cookie(pageUrl)?.let{header("Cookie",it)} }
+            .apply {
+                NetworkRoute.javaProxy(context,pageUrl)?.let{proxy(it)}
+                SiteSession.cookie(pageUrl)?.let{header("Cookie",it)}
+            }
             .execute()
         if(response.statusCode() !in 200..299)return null
         if(response.url().host!="watchporn.to")return null

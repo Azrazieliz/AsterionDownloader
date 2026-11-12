@@ -35,6 +35,7 @@ internal object NativeMediaDownloader {
 
     fun download(address:String,referer:String?,directory:File,
                  cookieHeader:String?=null,filenameStem:String="video",
+                 proxy:java.net.Proxy?=null,progress:(Int)->Unit={},
                  cancelled:()->Boolean={false}):File {
         require(isDirectMediaUrl(address)){"Not a direct native original media URL"}
         require(directory.isDirectory && directory.canWrite()){
@@ -63,7 +64,8 @@ internal object NativeMediaDownloader {
             val resumed=partial.length()>0L && validator.isFile &&
                 validator.readText().isNotBlank()
             val offset=if(resumed)partial.length() else 0L
-            val conn=URL(current).openConnection() as HttpURLConnection
+            val conn=(if(proxy==null)URL(current).openConnection()
+                else URL(current).openConnection(proxy)) as HttpURLConnection
             conn.instanceFollowRedirects=false
             conn.connectTimeout=15_000
             conn.readTimeout=30_000
@@ -127,6 +129,9 @@ internal object NativeMediaDownloader {
                             if(n==0)continue
                             output.write(buffer,0,n)
                             written+=n
+                            if(expected!=null && expected>0L)
+                                progress((((offset+written)*95L)/(offset+expected))
+                                    .toInt().coerceIn(1,95))
                         }
                         output.flush()
                     }

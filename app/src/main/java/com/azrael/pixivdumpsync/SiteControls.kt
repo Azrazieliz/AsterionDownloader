@@ -32,8 +32,12 @@ object SiteControls {
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("sync:$host",default)
     }
-    fun backfill(context:Context,url:String,default:Boolean=false):Boolean =
-        sync(context,url,default)
+    fun backfill(context:Context,url:String,default:Boolean=false):Boolean {
+        val host=key(url)
+        if(host.isBlank() || ProviderRetirement.isRetired(url))return false
+        return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+            .getBoolean("backfill:$host",default)
+    }
 
     /** Auto-discovery is not permission to download the site's contents. */
     fun explicitlyEnabled(context:Context,url:String):Boolean {

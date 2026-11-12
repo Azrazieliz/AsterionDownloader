@@ -6,6 +6,7 @@ import com.azrael.galleryflow.GalleryDb
 import com.azrael.galleryflow.SyncForegroundService as GallerySync
 import com.azrael.galleryflow.SyncMode as GalleryMode
 import com.asterion.videoflow.VideoEngine
+import com.asterion.videoflow.VideoDb
 import java.net.URI
 
 /** Retains native provider ownership and existing user include/live switches.
@@ -30,6 +31,13 @@ object ProviderBackfillActions {
             return "Historical page scan requested for "+site.name
         }
         if(site.area in setOf("ADULT","VIDEOS","HENTAI")){
+            // Manual history acquisition is separate from the Sync switch.
+            VideoDb(a).use{db->
+                db.addWatch(site.url,site.name)
+                db.listWatches().filter{
+                    it.address.trimEnd('/')==site.url.trimEnd('/')
+                }.forEach{db.resetWatchBackfill(it.id)}
+            }
             val accepted=VideoEngine.launch(a,true,host)
             return if(accepted)"Video scan queued for "+host
                 else "Unable to start video check for "+host

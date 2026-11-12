@@ -406,6 +406,51 @@ class MainActivity:Activity() {
             toast("Preferences saved")
         },14)
         add(content,quality,17)
+        val routing=card()
+        routing.addView(text("NETWORK / EXIT IP",12f,primary,true))
+        add(routing,text("Per-site direct, Android VPN, or user-supplied HTTP/SOCKS5 proxy. A new public IP requires a real working exit server.",12f,grey),9)
+        val routeSite=edit("Site URL or domain","https://www.eporner.com/")
+        add(routing,routeSite,10)
+        val routeChoices=listOf("Direct / system VPN","HTTP proxy","SOCKS5 proxy")
+        val routeMode=Spinner(this).apply{
+            adapter=ArrayAdapter(this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,routeChoices)
+            background=rounded(elevated,12)
+        }
+        add(routing,routeMode,10)
+        val routeHost=edit("Proxy DNS name or IPv4 address")
+        add(routing,routeHost,8)
+        val routePort=edit("Proxy port").apply{
+            inputType=InputType.TYPE_CLASS_NUMBER
+        }
+        add(routing,routePort,8)
+        add(routing,button("LOAD SITE ROUTE",false){
+            val saved=NetworkRoute.configured(this,routeSite.text.toString())
+            routeMode.setSelection(when(saved?.mode){"http"->1;"socks5"->2;else->0})
+            routeHost.setText(saved?.host.orEmpty())
+            routePort.setText(saved?.port?.takeIf{it>0}?.toString().orEmpty())
+            toast("Site route loaded")
+        },10)
+        add(routing,button("SAVE SITE ROUTE"){
+            runCatching{
+                val mode=when(routeMode.selectedItemPosition){
+                    1->"http";2->"socks5";else->"direct"
+                }
+                NetworkRoute.save(this,routeSite.text.toString(),mode,
+                    routeHost.text.toString().trim(),
+                    routePort.text.toString().toIntOrNull()?:0)
+            }.onSuccess{toast("Network route saved")}
+                .onFailure{toast(it.message?:"Invalid network route")}
+        },9)
+        add(routing,button("TEST EXIT IP",false){
+            val address=routeSite.text.toString().trim()
+            kotlin.concurrent.thread(name="videoflow-route-check"){
+                val result=runCatching{NetworkRoute.checkExitIp(this,address)}
+                    .getOrElse{it.message?:"Connection failed"}
+                runOnUiThread{toast("Observed exit IP: "+result)}
+            }
+        },9)
+        add(content,routing,12)
         val auth=card()
         auth.addView(text("AUTHENTICATED DOWNLOADS",12f,primary,true))
         add(auth,text("Optional: import a Netscape-format cookies.txt file for websites you are authorized to access.",12f,grey),9)
