@@ -1188,13 +1188,19 @@ object SourceIndex {
                                 SourceIndexParser.safe(file.url) &&
                                 SourceIndexParser.autoOriginal(file))
                         }
+                    var acceptedVideoPage=false
                     if(originals.isEmpty() &&
                         item.area in setOf("ADULT","HENTAI","VIDEOS") &&
-                        com.asterion.videoflow.WebDiscovery.isVideoPage(item.url)){
-                        val added=VideoDb(context).use{
-                            it.addVideo(item.url,item.title)
+                        com.asterion.videoflow.VideoSiteProfiles.isVideoPage(item.url)){
+                        // Automated catalog discovery must NEVER claim the
+                        // user individually selected this original. Preserve
+                        // the full-length provenance policy for backfills.
+                        VideoDb(context).use{videos->
+                            if(videos.addVideo(item.url,item.title,origin="website")){
+                                enqueued++
+                                acceptedVideoPage=true
+                            }else acceptedVideoPage=videos.hasVideo(item.url)
                         }
-                        if(added)enqueued++
                     }
                     SourceIndexDb(context).use{db->
                         for(file in originals){
@@ -1205,7 +1211,8 @@ object SourceIndex {
                                 enqueued++
                             }
                         }
-                        if(originals.isNotEmpty())db.detailsFinished(item.url)
+                        if(originals.isNotEmpty() || acceptedVideoPage)
+                            db.detailsFinished(item.url)
                         else db.detailsFailed(item.url,
                             "No accessible original; provider parser or sign-in required")
                     }

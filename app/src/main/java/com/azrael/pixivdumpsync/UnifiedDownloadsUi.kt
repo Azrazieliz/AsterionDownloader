@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.*
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
+import com.asterion.videoflow.VideoRuntimeState
 import java.util.concurrent.Executors
 
 /** The only general-purpose download queue UI. Each row is a real file/job,
