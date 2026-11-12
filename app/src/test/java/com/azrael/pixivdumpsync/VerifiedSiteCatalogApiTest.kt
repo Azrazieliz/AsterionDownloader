@@ -94,4 +94,27 @@ class VerifiedSiteCatalogApiTest {
         VerifiedSiteCatalogApi.eporner("<html>blocked</html>",
             "https://www.eporner.com/","ADULT")
     }
+    @Test fun officialCatalogRetainsVideoWithoutThumbnailForNativeIcon(){
+        val json="""{"page":1,"total_pages":1,"videos":[{
+            "url":"https://www.eporner.com/video-ABC123/example/",
+            "title":"Publisher video","default_thumb":""}]}"""
+        val found=VerifiedSiteCatalogApi.eporner(json,
+            "https://www.eporner.com/","ADULT").media
+        assertEquals(1,found.size)
+        assertTrue(found.single().preview.isNullOrBlank())
+    }
+    @Test fun wordpressFeaturedMediaRepairsMissingYoastPoster(){
+        val json="""[{"status":"publish","type":"post",
+            "link":"https://3dhentaix.com/published-episode-5/",
+            "title":{"rendered":"Published Episode 5"},
+            "featured_media":123,
+            "_embedded":{"wp:featuredmedia":[{
+                "source_url":"https://3dhentaix.com/wp-content/uploads/2026/11/episode.webp"
+            }]}}]"""
+        val found=VerifiedSiteCatalogApi.hentaiBros(json,
+            "https://3dhentaix.com/","HENTAI").media
+        assertEquals(1,found.size)
+        assertTrue(found.single().preview!!.endsWith("episode.webp"))
+    }
+
 }

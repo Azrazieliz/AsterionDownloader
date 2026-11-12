@@ -117,17 +117,22 @@ object AsterionAdultHub {
             AsterionUnifiedFollowing.adult(a,parent,refresh)
             return
         }
-        val indexed=SourceIndex.items(a,area,1000)
-            .asSequence()
+        // Query by provider rather than relying on the first 1,000 entries
+        // across all sources. A busy provider must not crowd newer catalogs
+        // (3DHentai and EPORNER) completely off the visible shelf.
+        val indexed=SourceIndexDb(a).use{db->
+            sources.flatMap{db.forSource(it.url,120)}
+        }.asSequence()
             // A provider redirect must never relabel another website's
             // videos as its own. In particular, OMG and FreePornVideos
             // must not share thumbnails merely because a redirect succeeded.
             .filter{SourceIndexParser.sameSite(it.source,it.url) &&
-                realMedia(it) && !it.preview.isNullOrBlank() &&
-                SearchRanking.validUrl(it.preview)}
+                realMedia(it) &&
+                (it.preview.isNullOrBlank() ||
+                    SearchRanking.validUrl(it.preview))}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .sortedByDescending{it.discoveredAt}
-            .take(600).toList()
+            .take(1800).toList()
         val bySite=indexed.groupBy{SiteControls.key(it.source)}
         // Reuse actual thumbnail evidence from previous Search results when
         // SourceIndex has not yet re-indexed an individual video. This restores

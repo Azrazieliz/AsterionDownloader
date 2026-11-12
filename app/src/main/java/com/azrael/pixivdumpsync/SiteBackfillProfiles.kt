@@ -187,7 +187,11 @@ internal object SiteBackfillProfiles {
                     val direct=image.absUrl("src")
                     val photoHost=runCatching{URI(direct).host.orEmpty().lowercase(Locale.ROOT)}
                         .getOrDefault("")
-                    if(width>=600 && height>=600 &&
+                    val publisherImage=runCatching{
+                        URI(direct).path.orEmpty().lowercase(Locale.ROOT)
+                            .contains("/wp-content/uploads/")
+                    }.getOrDefault(false)
+                    if((width>=600 && height>=600 || publisherImage) &&
                         photoHost in setOf("mitaku.net","www.mitaku.net",
                             "kiutaku.com","www.kiutaku.com"))
                         record(direct,image.attr("alt"))

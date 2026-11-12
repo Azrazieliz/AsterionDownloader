@@ -156,22 +156,31 @@ object NovelEpubParser {
     fun chapterText(doc:Document):NovelText {
         // FreeWebNovel's live reader wraps its text in #article, with the
         // numbered heading inside h4. Generic readers use the other selectors.
-        val content=doc.selectFirst("#article,#chapter-content,.chapter-content,"+
+        val candidates=doc.select("#article,#chapter-content,.chapter-content,"+
             "#chapterContent,.reading-content,.read-content,.novel-content,"+
             "#chapter-body,#chapter-body-content,.txtnav,.text-left")
-            ?:throw IllegalStateException("No novel chapter reader was found")
-        val cloned=content.clone()
-        cloned.select("script,style,iframe,form,aside,nav,.ads,.ad,.advertisement,"+
-            ".chapter-nav,.chapter-controls,.reading-settings").remove()
-        val paragraphs=cloned.select("p").map {it.text().trim()}
-            .filter{it.isNotBlank() && it.length<20000}
-            .ifEmpty{
-                cloned.wholeText().replace("\r","")
-                    .split(Regex("\n{2,}")).map{it.trim()}
-                    .filter{it.isNotBlank() && it.length<20000}
-            }
-        require(paragraphs.sumOf{it.length}>=80) {
-            "Chapter content missing or truncated; refusing an incomplete EPUB"
+        require(candidates.isNotEmpty()){"No novel chapter reader was found"}
+        // Some live reader templates wrap a short navigation notice in
+        // #article while the actual chapter is in .chapter-content. Taking
+        // the first matching element wrongly rejected complete chapters.
+        val paragraphs=candidates.map{content->
+            val cloned=content.clone()
+            cloned.select("script,style,iframe,form,aside,nav,.ads,.ad,"+
+                ".advertisement,.chapter-nav,.chapter-controls,"+
+                ".reading-settings,.related-posts").remove()
+            cloned.select("br").forEach{it.after("\n")}
+            val direct=cloned.select("p").map{it.text().trim()}
+                .filter{it.isNotBlank() && it.length<20000}
+            val fallback=cloned.wholeText().replace("\r","")
+                .split(Regex("\n{2,}")).map{it.trim()}
+                .filter{it.isNotBlank() && it.length<20000}
+            if(direct.sumOf{it.length}>=fallback.sumOf{it.length}*8/10)
+                direct.ifEmpty{fallback}
+            else fallback
+        }.maxByOrNull{parts->parts.sumOf{it.length}}.orEmpty()
+        require(paragraphs.sumOf{it.length}>=80){
+            "Chapter content missing or truncated ("+
+                paragraphs.sumOf{it.length}+" text characters); refusing incomplete EPUB"
         }
         val title=doc.selectFirst("h1,h2,h3")?.text()?.trim()
             ?.takeIf{it.isNotBlank()}?:doc.title()

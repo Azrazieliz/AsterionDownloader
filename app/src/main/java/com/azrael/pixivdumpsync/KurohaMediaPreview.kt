@@ -27,7 +27,11 @@ internal object KurohaMediaPreview {
     internal fun usable(tiles: List<Tile>): List<Tile> =
         tiles.asSequence().filter {
             (it.thumbnail.startsWith("content://") ||
-                SearchRanking.validUrl(it.thumbnail)) &&
+                SearchRanking.validUrl(it.thumbnail) ||
+                // An indexed publisher video can be shown with the native
+                // video icon when its thumbnail is not yet accessible.
+                // Never mislabel a missing thumbnail as a missing video.
+                (it.video && SourceIndexParser.safe(it.url))) &&
                 it.title.isNotBlank() && it.url.isNotBlank()
         }.distinctBy { SearchRanking.canonicalKey(it.url) }
             .take(120).toList()

@@ -319,9 +319,11 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
      */
     fun listVideosForTab(tab:String,limit:Int=300):List<Video>{
         val where=when(tab){
-            "Active"->" WHERE state IN ('queued','running','retry_wait')"
+            "Active"->" WHERE state='running'"
+            "Queued"->" WHERE state='queued'"
             "Saved"->" WHERE state='done'"
-            "Held"->" WHERE state='full_only_hold'"
+            "Held"->" WHERE state IN ('full_only_hold','retry_wait')"
+            "Paused"->" WHERE state='paused'"
             "Failed"->" WHERE state='error'"
             else->""
         }

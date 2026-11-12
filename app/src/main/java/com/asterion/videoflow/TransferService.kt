@@ -530,6 +530,20 @@ object VideoEngine {
                         if(stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted)
                             throw java.util.concurrent.CancellationException("Video paused")
+                        // A partially received original is resumable by the
+                        // original downloader on the next attempt. Starting
+                        // another extractor on the same .part files can corrupt
+                        // or invalidate that resume state.
+                        val partial=parent.listFiles()?.any{
+                            it.isFile && it.length()>0L &&
+                                (it.name.endsWith(".part",true) ||
+                                 it.name.endsWith(".ytdl",true))
+                        }==true
+                        if(partial){
+                            VideoTransferJournal.record(context,item.id,
+                                "resume_pending",primary.javaClass.simpleName)
+                            throw primary
+                        }
                         VideoTransferJournal.record(context,item.id,"python_fallback",
                             primary.javaClass.simpleName)
                         try{

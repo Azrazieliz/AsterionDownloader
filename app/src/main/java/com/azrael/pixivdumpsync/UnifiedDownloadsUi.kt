@@ -80,7 +80,19 @@ object UnifiedDownloadsUi {
                 })
         }
         VideoDb(a).use{db->
-            for(item in db.listVideos(180)){
+            // Always load each durable state separately: the old first-180
+            // global query sorted queued before saved/failed/retrying, so a
+            // transfer vanished as soon as it left the active state.
+            // Bounded status slices keep the gallery responsive with 1,000+
+            // records while never hiding every error or completed receipt.
+            val tracked=LinkedHashMap<Long,com.asterion.videoflow.Video>()
+            for((tab,count) in listOf(
+                "Active" to 25, "Failed" to 70, "Held" to 70,
+                "Saved" to 50, "Paused" to 30, "Queued" to 100)){
+                for(video in db.listVideosForTab(tab,count))
+                    tracked.putIfAbsent(video.id,video)
+            }
+            for(item in tracked.values){
                 val present=readable(a,item.savedUri)
                 val journal=if(item.status=="running")
                     VideoTransferJournal.current(a,item.id) else null

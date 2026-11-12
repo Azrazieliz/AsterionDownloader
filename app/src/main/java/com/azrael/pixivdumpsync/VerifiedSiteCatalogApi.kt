@@ -45,7 +45,9 @@ internal object VerifiedSiteCatalogApi {
                             ?.takeIf{SearchRanking.validUrl(it)}
                     }.firstOrNull()
                 }
-            if(image.isNullOrBlank())continue
+            // Preserve an authentic video entry even when a provider chooses
+            // not to supply a poster. The UI shows its native video icon
+            // instead of pretending the video catalog is empty.
             // One publisher ID can appear under /hd-porn and /video aliases.
             // Preserve one identity; do not equate unrelated IDs by vague title.
             val identity=EpornerOriginalSource.canonicalUrl(url)?:url
@@ -78,7 +80,24 @@ internal object VerifiedSiteCatalogApi {
             val image=(0 until images.length()).mapNotNull{j->
                 images.optJSONObject(j)?.optString("url")
                     ?.takeIf{SearchRanking.validUrl(it)}
-            }.firstOrNull()?:continue
+            }.firstOrNull()
+                ?:obj.optString("jetpack_featured_media_url")
+                    .takeIf{SearchRanking.validUrl(it)}
+                ?:obj.optJSONObject("_embedded")
+                    ?.optJSONArray("wp:featuredmedia")?.optJSONObject(0)
+                    ?.let{media->
+                        media.optString("source_url")
+                            .takeIf{SearchRanking.validUrl(it)}
+                            ?:media.optJSONObject("media_details")
+                                ?.optJSONObject("sizes")?.optJSONObject("medium_large")
+                                ?.optString("source_url")?.takeIf{SearchRanking.validUrl(it)}
+                    }
+                ?:run{
+                    val html=obj.optJSONObject("content")
+                        ?.optString("rendered").orEmpty()
+                    org.jsoup.Jsoup.parse(html,link).selectFirst("img")
+                        ?.let{SitePreviewImage.best(it)}
+                }
             // This is an actual published post with a provider-owned cover.
             // The post may require its separate authorized video extractor.
             result[link]=IndexedItem(link,title,image,source,area,"video",stamp,false)

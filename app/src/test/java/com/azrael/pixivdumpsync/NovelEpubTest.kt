@@ -194,4 +194,18 @@ class NovelEpubTest {
         assertEquals("OEBPS/content.opf",names.last())
     }
 
+    @Test fun chapterReaderChoosesRealBodyOverShortMatchingNotice(){
+        val doc=Jsoup.parse("""<h1>Chapter 15</h1>
+            <div id="article"><p>Ad notice</p></div>
+            <div id="chapter-content"><p>The actual chapter begins here and
+            continues with enough detailed narrative text to establish the real
+            article body instead of rejecting the page because a small notice
+            happened to use the #article selector.</p>
+            <p>This additional paragraph belongs to the same chapter and is
+            retained in the final offline book.</p></div>""",source+"/chapter-15")
+        val chapter=NovelEpubParser.chapterText(doc)
+        assertEquals(2,chapter.paragraphs.size)
+        assertFalse(chapter.paragraphs.joinToString().contains("Ad notice"))
+    }
+
 }
