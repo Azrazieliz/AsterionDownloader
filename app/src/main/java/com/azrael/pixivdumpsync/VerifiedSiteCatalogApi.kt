@@ -1,6 +1,8 @@
 package com.azrael.pixivdumpsync
 
 import android.content.Context
+import com.asterion.videoflow.NetworkRoute
+import com.asterion.videoflow.EpornerOriginalSource
 import com.azrael.galleryflow.HttpClient
 import org.json.JSONArray
 import org.json.JSONObject
@@ -44,7 +46,11 @@ internal object VerifiedSiteCatalogApi {
                     }.firstOrNull()
                 }
             if(image.isNullOrBlank())continue
-            results[url]=IndexedItem(url,title,image,source,area,"video",stamp,false)
+            // One publisher ID can appear under /hd-porn and /video aliases.
+            // Preserve one identity; do not equate unrelated IDs by vague title.
+            val identity=EpornerOriginalSource.canonicalUrl(url)?:url
+            results.putIfAbsent(identity,IndexedItem(
+                identity,title,image,source,area,"video",stamp,false))
         }
         val page=data.optInt("page",1)
         val total=data.optInt("total_pages",page)
@@ -104,6 +110,7 @@ internal object VerifiedSiteCatalogApi {
         val response=Jsoup.connect(api).userAgent(HttpClient.USER_AGENT)
             .ignoreContentType(true).ignoreHttpErrors(true)
             .followRedirects(false).timeout(14_000).maxBodySize(4_000_000)
+            .apply{NetworkRoute.javaProxy(context,source.url)?.let{proxy(it)}}
             .execute()
         require(response.statusCode() in 200..299){
             "Provider catalog API HTTP "+response.statusCode()

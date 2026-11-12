@@ -22,16 +22,14 @@ internal object NativeMediaDownloader {
             uri.userInfo==null && supported.containsMatchIn(uri.path.orEmpty())
     }
 
-    /** Hentai uses its already working original extractor without alteration. */
-    fun isNativeEligible(sourceUrl:String,mediaUrl:String):Boolean {
-        if(!isDirectMediaUrl(mediaUrl))return false
-        val origin=runCatching{URI(sourceUrl).host?.lowercase(Locale.ROOT)}
-            .getOrNull()?:return false
-        val hentai=com.azrael.pixivdumpsync.AlohaSources.by(
-            com.azrael.pixivdumpsync.AlohaArea.HENTAI)
-        return hentai.none{site->origin==site.host ||
-            origin.endsWith("."+site.host)}
-    }
+    /** Direct, concrete video files are ordinary HTTP transfers regardless
+     * of the source category. Hentai watch pages still use their own extractor.
+     */
+    fun isNativeEligible(sourceUrl:String,mediaUrl:String):Boolean =
+        isDirectMediaUrl(mediaUrl) && runCatching{
+            val uri=URI(sourceUrl)
+            uri.scheme in setOf("http","https") && uri.host!=null
+        }.getOrDefault(false)
 
     fun download(address:String,referer:String?,directory:File,
                  cookieHeader:String?=null,filenameStem:String="video",

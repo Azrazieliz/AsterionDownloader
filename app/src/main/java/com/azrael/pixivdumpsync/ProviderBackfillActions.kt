@@ -33,10 +33,8 @@ object ProviderBackfillActions {
         if(site.area in setOf("ADULT","VIDEOS","HENTAI")){
             // Manual history acquisition is separate from the Sync switch.
             VideoDb(a).use{db->
+                // Preserve the previous historical cursor and completed files.
                 db.addWatch(site.url,site.name)
-                db.listWatches().filter{
-                    it.address.trimEnd('/')==site.url.trimEnd('/')
-                }.forEach{db.resetWatchBackfill(it.id)}
             }
             val accepted=VideoEngine.launch(a,true,host)
             return if(accepted)"Video scan queued for "+host

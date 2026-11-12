@@ -36,10 +36,22 @@ class VerifiedSiteCatalogApiTest {
         val result=VerifiedSiteCatalogApi.eporner(
             json,"https://www.eporner.com/","ADULT",17L)
         assertEquals(1,result.media.size)
-        assertEquals("https://www.eporner.com/hd-porn/ABCD123/video-title/",
+        assertEquals("https://www.eporner.com/video-ABCD123/",
             result.media.single().url)
     }
 
+    @Test fun epornerSameVideoIdAliasesDoNotDownloadTwice(){
+        val json="""{"page":1,"total_pages":1,"videos":[
+          {"url":"https://www.eporner.com/video-ABCD123/title1/","title":"Original",
+           "default_thumb":{"src":"https://static-ca-cdn.eporner.com/thumbs/1.jpg"}},
+          {"url":"https://www.eporner.com/hd-porn/ABCD123/title2/","title":"Original HD",
+           "default_thumb":{"src":"https://static-ca-cdn.eporner.com/thumbs/2.jpg"}}
+        ]}"""
+        val media=VerifiedSiteCatalogApi.eporner(
+            json,"https://www.eporner.com/","ADULT").media
+        assertEquals(1,media.size)
+        assertEquals("https://www.eporner.com/video-ABCD123/",media.single().url)
+    }
     @Test fun official3dHentaiPostsContainPublishedVideoAndPoster(){
         val json="""[{"status":"publish","type":"post",
           "link":"https://3dhentaix.com/gift-to-the-queen-act-3/",

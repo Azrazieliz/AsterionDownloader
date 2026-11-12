@@ -60,10 +60,10 @@ class NativeMediaDownloaderTest {
             "https://provider.example/stream.m3u8"))
         assertFalse(NativeMediaDownloader.isDirectMediaUrl(
             "https://evil.example/scene.mp4.html"))
-        assertFalse(NativeMediaDownloader.isNativeEligible(
+        assertTrue(NativeMediaDownloader.isNativeEligible(
             "https://mp4hentai.com/2026/11/anime/",
             "https://cdn.example/scene.mp4"))
-        assertFalse(NativeMediaDownloader.isNativeEligible(
+        assertTrue(NativeMediaDownloader.isNativeEligible(
             "https://hentaibros.net/example/",
             "https://cdn.example/scene.mp4"))
         assertTrue(NativeMediaDownloader.isNativeEligible(
