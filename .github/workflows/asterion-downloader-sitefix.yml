@@ -10,6 +10,11 @@ on:
       - 'app/build.gradle.kts'
   workflow_dispatch:
 
+# Only the newest backend-repair push should build test APK variants.
+concurrency:
+  group: asterion-downloader-sitefix-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -136,6 +141,7 @@ jobs:
         with:
           name: Asterion-Downloader-Agents-v1.3.52
           if-no-files-found: error
+          retention-days: 3
           path: |
             Asterion-Downloader-Agents-v1.3.52.apk
             Asterion-Downloader-Agents-v1.3.52.sha256
@@ -143,6 +149,7 @@ jobs:
         with:
           name: Asterion-Downloader-PhoneTest-v1.3.52
           if-no-files-found: error
+          retention-days: 7
           path: |
             Asterion-Downloader-PhoneTest-v1.3.52.apk
             Asterion-Downloader-PhoneTest-v1.3.52.sha256
