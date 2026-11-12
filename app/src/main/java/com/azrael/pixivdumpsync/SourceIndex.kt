@@ -82,6 +82,19 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.insertWithOnConflict("sources",null,v,SQLiteDatabase.CONFLICT_IGNORE)
     }
+    /** Reclassify an owner-designated video source without deleting downloads,
+     * indexed entries, selection flags, progress or saved pagination cursors.
+     */
+    fun migrateArea(url:String,area:String){
+        require(area in setOf("ADULT","HENTAI","COSPLAY","VIDEOS"))
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            db.execSQL("UPDATE sources SET area=? WHERE url=?",arrayOf(area,url))
+            db.execSQL("UPDATE entries SET area=? WHERE source=?",arrayOf(area,url))
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
     /** Promote supported torrent feeds into their own history engine without
      * resetting user's include/exclude preference or saved source metadata.
      */
@@ -809,6 +822,8 @@ object SourceIndex {
                         site.host in AlohaSources.alreadyIntegratedHosts)
                         "native" else "generic")
                 if(ownsFeed)db.setAdapter(site.url,"native")
+                if(site.host in setOf("archivebate.com","notfans.com"))
+                    db.migrateArea(site.url,"ADULT")
             }
             for((name,url,area) in extra)db.add(url,name,area,
                 if(name in setOf("KoikatsuCards","Pawchive","Kemono","Coomer"))"native" else "generic")
