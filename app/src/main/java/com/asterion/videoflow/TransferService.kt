@@ -28,6 +28,23 @@ object VideoEngine {
     private val transferExecutor=Executors.newSingleThreadExecutor{task->
         Thread(task,"videoflow-native-transfer").apply{isDaemon=true}
     }
+    /** Keep the Python-specific failures scoped to Python-required media.
+     * Previously both download processes exited before reading the queue
+     * whenever this optional runtime could not start.
+     */
+    private fun ensureExtractor(context:Context) {
+        try {
+            YtDlp.init(context.applicationContext)
+            EmbeddedYtDlpMetadata.checkRuntime()
+            VideoRuntimeState.healthy(context)
+            VideoDb(context).use{it.requeuePythonStartupFailures()}
+        }catch(t:Throwable){
+            if(t is VirtualMachineError || t is ThreadDeath)throw t
+            val cause=VideoRuntimeState.failed(context,t)
+            throw IllegalStateException(
+                "Video extractor unavailable: "+cause.take(180),t)
+        }
+    }
     /** Cancels an individual video without deleting its source, metadata or cache.
      * A stopped transfer can be explicitly resumed in Downloads.
      */
@@ -97,22 +114,10 @@ object VideoEngine {
         try {
             val db=VideoDb(context)
             db.recover()
-            try {
-                YtDlp.init(context.applicationContext)
-                EmbeddedYtDlpMetadata.checkRuntime()
-                VideoRuntimeState.healthy(context)
-                // Old releases converted each temporary interpreter startup
-                // failure into a permanent file failure. Recover only those
-                // precise records, preserving user pauses and completed files.
-                db.requeuePythonStartupFailures()
-            }catch(t:Throwable){
-                if(t is VirtualMachineError || t is ThreadDeath)throw t
-                // Do not poison another queued original every time a service
-                // attempts to start Python. Record the real cause chain once.
-                val cause=VideoRuntimeState.failed(context,t)
-                onStatus("Video runtime unavailable: "+cause.take(75))
-                return
-            }
+            // Never gate native HTTP originals on Python availability.
+            // Start the embedded extractor lazily only for actual page
+            // metadata/extraction work. A broken Python runtime may hold
+            // extractor jobs, but direct original bytes can still transfer.
             fun drainQueued(maxItems:Int) {
                 var transferred=0
                 val deadline=android.os.SystemClock.elapsedRealtime()+6L*60_000
@@ -474,6 +479,7 @@ object VideoEngine {
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
             val native=NativeMediaDownloader.isNativeEligible(item.url,link) &&
                 !hidden && !viaProxy
+            if(!native)ensureExtractor(context)
             val future=transferExecutor.submit<Int>{
                 if(native) {
                     val sameHost=runCatching{
@@ -551,6 +557,7 @@ object VideoEngine {
             val proxy=if(viaProxy && hidden)
                 "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
                 else null
+            ensureExtractor(context)
             val future=metadataExecutor.submit<JSONObject>{
                 EmbeddedYtDlpMetadata.inspect(link,referer,selected,proxy)
             }

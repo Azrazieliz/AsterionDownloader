@@ -51,6 +51,8 @@ class NativeMediaDownloaderTest {
         assertTrue(NativeMediaDownloader.isDirectMediaUrl(
             "https://cdn.example.org/original.mp4?token=abc"))
         assertTrue(NativeMediaDownloader.isDirectMediaUrl(
+            "https://www.freepornvideos.xxx/get_file/signed/original.mp4/?token=abc"))
+        assertTrue(NativeMediaDownloader.isDirectMediaUrl(
             "https://cdn.example.org/scene.mkv"))
         assertFalse(NativeMediaDownloader.isDirectMediaUrl(
             "https://provider.example/watch/scene"))
@@ -77,6 +79,9 @@ class NativeMediaDownloaderTest {
                     "http://127.0.0.1:$port/media.mp4",null,dir)
                 assertTrue(file.isFile)
                 assertArrayEquals(payload,file.readBytes())
+                // Signed original links may use a slash after the extension.
+                assertTrue(NativeMediaDownloader.isDirectMediaUrl(
+                    "http://127.0.0.1:$port/media.mp4/?auth=token"))
                 assertTrue(file.name.endsWith(".mp4"))
                 assertFalse(File(dir,"native_original.mp4.part").exists())
             }finally{dir.deleteRecursively()}

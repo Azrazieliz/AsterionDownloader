@@ -15,7 +15,7 @@ import java.util.Locale
  * to run this lane concurrently.
  */
 internal object NativeMediaDownloader {
-    private val supported=Regex("""(?i)\.(?:mp4|m4v|mkv|webm|mov|ts)(?:$)""")
+    private val supported=Regex("""(?i)\.(?:mp4|m4v|mkv|webm|mov|ts)/?$""")
     fun isDirectMediaUrl(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         return uri.scheme in setOf("https","http") && uri.host!=null &&
@@ -40,7 +40,7 @@ internal object NativeMediaDownloader {
         require(directory.isDirectory && directory.canWrite()){
             "Native transfer staging directory is unavailable"
         }
-        val ext=URI(address).path.substringAfterLast('.').lowercase(Locale.ROOT)
+        val ext=URI(address).path.trimEnd('/').substringAfterLast('.').lowercase(Locale.ROOT)
         val stem=filenameStem.replace(
             Regex("""[\\/:*?"<>|\p{Cntrl}]"""),"_")
             .trim().take(140).ifBlank{"video"}
