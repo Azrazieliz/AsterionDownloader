@@ -37,7 +37,13 @@ internal object LegacyYtDlpTransfer {
             .addOption("-f",format)
             .addOption("--user-agent","Mozilla/5.0 (Linux; Android 17; Mobile) "+
                 "AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
-        if(!referer.isNullOrBlank())request.addOption("--referer",referer)
+        if(!referer.isNullOrBlank()){
+            // yt-dlp-android 2.0.2's embedded ytdlp_runner only accepts
+            // --add-header, silently ignoring the CLI --referer flag.
+            // Losing the actual publisher Referer can allow initial bytes
+            // and then trigger CDN HTTP 403 on media fragments.
+            request.addOption("--add-header","Referer: "+referer)
+        }
         if(cookie?.isFile==true && cookie.length()>0L)
             request.addOption("--cookies",cookie.absolutePath)
         if(!proxy.isNullOrBlank())request.addOption("--proxy",proxy)
