@@ -85,6 +85,21 @@ object NameCrawler {
         val ids=NameWatchDb(context).use{it.list().filter{watch->watch.enabled}.map{watch->watch.id}}
         for(id in ids)scanCreator(context,id,onStatus)
     }
+    /** Live, federated search of the currently enabled provider sites.
+     * The local SourceIndex is only a cache; absence from it must not hide
+     * results published online. Results are candidates, not identity proof.
+     */
+    private fun liveCandidates(context:Context,name:String):List<RankedHit> {
+        val result=KeywordSources.searchDetailed(context,name,VideoSearchArea.PORN)
+        return result.hits.asSequence()
+            .filter{SearchExactness.matches(name,it.title) &&
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
+                !ProviderRetirement.isRetired(it.url)}
+            .distinctBy{SearchRanking.canonicalKey(it.url)}
+            .take(240)
+            .map{it.copy(source="Name match · "+it.source)}
+            .toList()
+    }
     fun scanCreator(context:Context,id:Long,
                     onStatus:(String)->Unit={}):Boolean{
         val watch=NameWatchDb(context).use{it.list().firstOrNull{
@@ -104,24 +119,34 @@ object NameCrawler {
             BackfillAgents.submit(context,"performer:"+id){
                 NameWatchDb(context).use{watches->
                     try{
-                        val matches=SourceIndex.items(context,"ADULT",1200)
+                        val indexed=SourceIndex.items(context,"ADULT",5000)
                             .asSequence()
                             .filter { it.kind=="video" &&
                                 SearchExactness.matches(watch.name,it.title) &&
                                 com.asterion.videoflow.VideoSiteProfiles
                                     .isVideoPage(it.url) &&
+                                !ProviderRetirement.isRetired(it.url) &&
                                 SourceIndexParser.sameSite(it.source,it.url) }
-                            .distinctBy{SearchRanking.canonicalKey(it.url)}
-                            .take(120)
+                            .take(240)
                             .map{RankedHit(it.title,it.url,
                                 "Name match · "+it.source,score=110,
                                 thumbnail=it.preview)}.toList()
+                        // Live discovery queries the actual provider websites;
+                        // old indexed results remain visible even if offline.
+                        val live=runCatching{liveCandidates(context,watch.name)}
+                        val matches=(live.getOrDefault(emptyList())+indexed)
+                            .distinctBy{SearchRanking.canonicalKey(it.url)}
+                            .take(300)
                         SearchResultsDb(context).use{it.save(watch.name,matches)}
-                        watches.setResult(id,if(matches.isEmpty())
-                            "No indexed videos match this selected name yet; profile unverified"
-                            else "Name-only matches require manual review; no automatic downloads")
+                        val diagnostic=when{
+                            live.isFailure->"Live provider search failed: "+
+                                (live.exceptionOrNull()?.message?:"unavailable")
+                            matches.isEmpty()->"No matching originals found across live providers or cache"
+                            else->"Name-only matches require manual review; no automatic downloads"
+                        }
+                        watches.setResult(id,diagnostic)
                         onStatus(watch.name+": "+matches.size+
-                            " indexed title matches for manual review")
+                            " live and indexed matches for manual review")
                     }catch(t:Exception){
                         watches.setResult(id,t.message?:"Name search unavailable")
                     }
@@ -145,8 +170,17 @@ object NameCrawler {
                         .map{RankedHit(it.title,it.url,
                             "Verified profile: "+watch.source,score=350,
                             thumbnail=it.preview)}.toList()
+                    // Do not limit a verified performer search to the
+                    // visible first page of a profile. Search all supported
+                    // live provider catalogs for additional candidates, but
+                    // queue only profile-attributable originals automatically.
+                    val live=runCatching{liveCandidates(context,watch.name)}
+                        .getOrDefault(emptyList())
                     SearchResultsDb(context).use{results->
-                        results.save(watch.name,hits)
+                        results.save(watch.name,
+                            (hits+live).distinctBy{
+                                SearchRanking.canonicalKey(it.url)
+                            }.take(300))
                         VideoDb(context).use{videos->
                             for(hit in hits){
                                 if(watch.enabled &&
@@ -158,7 +192,7 @@ object NameCrawler {
                         }
                     }
                     watches.setResult(id,if(hits.isEmpty())
-                        "Profile verified; no attributable originals found yet"
+                        "Profile verified; no directly attributable originals yet; live catalog candidates require review"
                         else null)
                     onStatus("Verified profile "+watch.name+": "+hits.size+" attributable videos")
                 }catch(t:Exception){
