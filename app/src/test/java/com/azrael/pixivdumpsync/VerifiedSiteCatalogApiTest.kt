@@ -53,7 +53,7 @@ class VerifiedSiteCatalogApiTest {
              "https://3dhentaix.com/logo.jpg"}]}}]"""
         val posts=VerifiedSiteCatalogApi.hentaiBros(
             json,"https://3dhentaix.com/","HENTAI",123L)
-            .filter{com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)}
+            .media.filter{com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)}
         assertEquals(1,posts.size)
         assertEquals("https://3dhentaix.com/gift-to-the-queen-act-3/",
             posts.first().url)
