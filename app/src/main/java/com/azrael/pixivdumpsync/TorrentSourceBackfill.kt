@@ -250,20 +250,33 @@ object TorrentSourceBackfill {
             scan(ctx.applicationContext)
         }
     }
-    private fun document(url:String):Document {
+    private fun document(ctx:Context,url:String):Document {
         require(TorrentFeedParser.source(url)!=null)
         val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
             .timeout(20000).maxBodySize(8_000_000)
             .followRedirects(false).ignoreHttpErrors(true)
-            .execute()
+            .apply {
+                com.asterion.videoflow.NetworkRoute.javaProxy(ctx,url)
+                    ?.let { proxy(it) }
+                com.azrael.galleryflow.SiteSession.cookie(url)
+                    ?.let { header("Cookie",it) }
+            }.execute()
+        if(response.statusCode() in setOf(401,403) &&
+            com.azrael.galleryflow.SiteSession.bound(ctx,url)){
+            // Preserve only the user's legitimate authenticated browser
+            // session. No fabricated torrent cards or protection bypass.
+            val html=BrowserPageFetch.html(ctx,url)
+            return Jsoup.parse(html,url)
+        }
         require(response.statusCode() in 200..299){
-            "Torrent listing HTTP "+response.statusCode()
+            "Torrent listing HTTP "+response.statusCode()+
+                "; source access blocked, connect your authorized account"
         }
         return response.parse()
     }
     fun resolve(ctx:Context,page:String):String?{
         if(TorrentFeedParser.source(page)==null)return null
-        val doc=document(page)
+        val doc=document(ctx,page)
         val src=TorrentFeedParser.source(page)?:return null
         return TorrentFeedParser.detail(doc,src)?.also{
             TorrentFeedDb(ctx).use{db->db.resolved(page,it)}
@@ -315,7 +328,7 @@ object TorrentSourceBackfill {
                     val current=queue.removeFirst()
                     if(!seen.add(current))continue
                     try{
-                        val doc=document(current)
+                        val doc=document(ctx,current)
                         TorrentFeedParser.entries(doc,site).forEach(db::record)
                         val next=TorrentFeedParser.next(doc,site,current)
                         db.checked(site,next)
