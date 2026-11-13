@@ -157,12 +157,30 @@ object AsterionCosplayGallery {
                 val gallery=galleries.firstOrNull{"gallery:"+it.galleryId==tile.url}
                 val item=indexedItems.firstOrNull{it.url==tile.url}
                 when {
-                    gallery!=null -> a.startActivity(
-                        Intent(a,GalleryDetailActivity::class.java).apply{
-                            putExtra(GalleryDetailActivity.EXTRA_GALLERY_ID,gallery.galleryId)
-                            putExtra(GalleryDetailActivity.EXTRA_SOURCE,gallery.source.wireName)
-                            putExtra(GalleryDetailActivity.EXTRA_TITLE,gallery.title)
-                        })
+                    gallery!=null -> {
+                        // Saved albums open locally. An incomplete indexed
+                        // album must retry THIS gallery only, not the parent
+                        // artist/tag or every gallery on its source website.
+                        val original=GalleryDb(a).use{db->
+                            db.galleryCanonicalUrl(gallery.source,gallery.galleryId)
+                        }
+                        if(gallery.state!="complete" &&
+                            !original.isNullOrBlank() &&
+                            ApprovedCosplayActions.isGalleryPage(original)){
+                            thread(name="asterion-cosplay-retry-album"){
+                                val message=runCatching{
+                                    ApprovedCosplayActions.selectedGallery(
+                                        a,site.url,tile.copy(url=original))
+                                }.getOrElse{it.message?:"Album retry unavailable"}
+                                toast(a,message)
+                            }
+                        }else a.startActivity(
+                            Intent(a,GalleryDetailActivity::class.java).apply{
+                                putExtra(GalleryDetailActivity.EXTRA_GALLERY_ID,gallery.galleryId)
+                                putExtra(GalleryDetailActivity.EXTRA_SOURCE,gallery.source.wireName)
+                                putExtra(GalleryDetailActivity.EXTRA_TITLE,gallery.title)
+                            })
+                    }
                     item!=null->SourceIndexPanel.details(a,item)
                     else->{
                         // A gallery listing thumbnail does not prove that its

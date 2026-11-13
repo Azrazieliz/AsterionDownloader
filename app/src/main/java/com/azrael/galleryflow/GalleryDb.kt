@@ -236,6 +236,12 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
         return cards
     }
 
+    fun galleryCanonicalUrl(source:SourceId,galleryId:String):String? =
+        readableDatabase.rawQuery(
+            "SELECT canonical_url FROM galleries WHERE source=? AND gallery_id=? LIMIT 1",
+            arrayOf(source.wireName,galleryId)
+        ).use{c->if(c.moveToFirst())c.getString(0)else null}
+
     fun galleryCards(entityId: String, limit: Int = 80): List<GalleryCard> {
         val result = ArrayList<GalleryCard>()
         val sql = """
