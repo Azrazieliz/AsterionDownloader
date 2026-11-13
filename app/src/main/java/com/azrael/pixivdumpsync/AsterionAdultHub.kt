@@ -408,10 +408,15 @@ object AsterionAdultHub {
                                 it.add(address,site.name,area,site.source?.adapter?:"native")
                                 it.enable(address,true)
                             }
-                            VideoDb(app).use{it.addWatch(address,site.name)}
+                            if(site.host!="onejav.com")
+                                VideoDb(app).use{it.addWatch(address,site.name)}
                         }
                         SiteControls.applyToEngines(app,site.url)
-                        if(enabled)VideoEngine.launch(app,true)
+                        if(enabled){
+                            if(site.host=="onejav.com")
+                                TorrentSourceBackfill.startSite(app,"ONEJAV")
+                            else VideoEngine.launch(app,true)
+                        }
                     }
                 }
             }
