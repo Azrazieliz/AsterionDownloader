@@ -166,6 +166,45 @@ try:
                     else:
                         out[name+" real embedded metadata"]={
                             "attempted":False,"reason":"publisher did not expose an exact Mixdrop /e/ embed"}
+                    # The selected recording is the verified Mixdrop iframe.
+                    # Parent-page <video> tags are only recommended previews.
+                    if embeds:
+                        frames=driver.find_elements(By.CSS_SELECTOR,
+                            "iframe[src*='mixdrop.ag/e/']")
+                        if frames:
+                            try:
+                                driver.switch_to.frame(frames[0])
+                                time.sleep(3)
+                                selected=driver.execute_script("""
+                                    const v=document.querySelector('video');
+                                    const src=v?.currentSrc||v?.src||'';
+                                    return {
+                                        title:document.title.slice(0,70),
+                                        hasVideo:!!v,ready:v?.readyState??null,
+                                        mediaHost:(()=>{try{return new URL(src).hostname}
+                                            catch(e){return ''}})()
+                                    };
+                                """)
+                                if selected.get("hasVideo"):
+                                    driver.execute_script("""
+                                        const v=document.querySelector('video');
+                                        v.muted=true;const p=v.play();
+                                        if(p&&p.catch)p.catch(()=>{});
+                                    """)
+                                    time.sleep(3)
+                                    selected["after_play"]=driver.execute_script("""
+                                        const v=document.querySelector('video');
+                                        return {ready:v?.readyState??null,
+                                            paused:v?.paused??null,
+                                            error:v?.error?.code??null};
+                                    """)
+                                out[name+" selected Mixdrop iframe playback"]=selected
+                            except Exception as ex:
+                                out[name+" selected Mixdrop iframe playback"]={
+                                    "error":type(ex).__name__,
+                                    "detail":str(ex)[:150]}
+                            finally:
+                                driver.switch_to.default_content()
                     for video in driver.find_elements(By.CSS_SELECTOR,"video")[:1]:
                         try:
                             driver.execute_script("""
