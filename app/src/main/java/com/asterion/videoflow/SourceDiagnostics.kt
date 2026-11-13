@@ -8,6 +8,11 @@ object SourceDiagnostics {
     fun summary(error:String?):String {
         val value=error.orEmpty().lowercase(Locale.ROOT)
         return when {
+            "short preview clips" in value ->
+                "This website exposed only short previews, not the selected full video. Connect an authorized site session and retry."
+            "browser verification required" in value ||
+                "website verification page" in value ->
+                "This website served browser verification instead of the selected video player. Complete site access in CONNECT ACCOUNT."
             "http error 502" in value || "bad gateway" in value ->
                 "The website returned a temporary gateway error (502). The video may still exist."
             "http error 503" in value || "service unavailable" in value ->
@@ -19,11 +24,6 @@ object SourceDiagnostics {
             "http error 404" in value -> "The video page was not found (404); it may have moved or been removed."
             "sign in" in value || "login" in value || "authentication" in value ->
                 "This video requires a valid signed-in session."
-            "short preview clips" in value ->
-                "This website exposed only short previews, not the selected full video. Connect an authorized site session and retry."
-            "browser verification required" in value ||
-                "website verification page" in value ->
-                "This website served browser verification instead of the selected video player. Complete site access in CONNECT ACCOUNT."
             "unsupported url" in value || "no suitable extractor" in value ->
                 "No working extractor is available for this site yet."
             "requested format is not available" in value ->
