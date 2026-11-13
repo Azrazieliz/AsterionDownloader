@@ -1,0 +1,55 @@
+name: Asterion Downloader v1.3.60 Provider Repair APK
+
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - '.github/workflows/downloader-v1360-provider-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-provider-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Run regression tests and build one provider-corrected Android app
+        run: gradle --no-daemon testPilotUnitTest testProviderpilotUnitTest assembleProviderpilot --stacktrace --console=plain
+      - name: Verify actual signed APK, package identity, version and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/providerpilot/app-providerpilot.apk
+          test -s "$APK"
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$TOOLS/aapt" dump badging "$APK" > apk-badging.txt
+          grep -F "package: name='com.azrael.pixivdumpsync.testphone1114'" apk-badging.txt
+          grep -F "versionName='1.3.60-provider-test'" apk-badging.txt
+          "$TOOLS/apksigner" verify --verbose "$APK"
+          "$TOOLS/apksigner" verify --print-certs "$APK" > APK-signer.txt
+          unzip -t "$APK" >/dev/null
+          test "$(unzip -Z1 "$APK" | grep -cE '^lib/arm64-v8a/.*\.so$')" -gt 0
+          cp "$APK" Asterion-Downloader-v1.3.60-ProviderTest.apk
+          sha256sum Asterion-Downloader-v1.3.60-ProviderTest.apk > Asterion-Downloader-v1.3.60-ProviderTest.sha256
+          printf '%s\n' "$GITHUB_SHA" > Source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.60-ProviderTest-APK
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            Asterion-Downloader-v1.3.60-ProviderTest.apk
+            Asterion-Downloader-v1.3.60-ProviderTest.sha256
+            Source-commit.txt
+            APK-signer.txt
+            apk-badging.txt
