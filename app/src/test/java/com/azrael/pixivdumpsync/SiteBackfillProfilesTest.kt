@@ -137,6 +137,24 @@ class SiteBackfillProfilesTest {
         assertTrue(originals.all{it.url.contains("mitaku.net")})
     }
 
+    @Test fun kiutakuNonArticleBodyAndDirectMitakuLinksAreRealPhotos(){
+        val home="https://kiutaku.com/"
+        val item=IndexedItem(home+"7440/","Real gallery",null,home,"COSPLAY",
+            "cosplay",123L,false)
+        val doc=Jsoup.parse("""<main id="main">
+           <div id="content"><div class="post-body">
+             <a href="https://mitaku.net/wp-content/uploads/2026/11/photo-a.jpg">Open photo</a>
+             <p><img loading="lazy"
+               data-src="https://mitaku.net/wp-content/uploads/2026/11/photo-b.webp"
+               src="/placeholder.gif" width="768" height="1024"/></p>
+           </div></div>
+           <aside><img src="https://kiutaku.com/logo.jpg"/></aside></main>""",
+           item.url)
+        val photos=SiteBackfillProfiles.galleryOriginals(doc,item,123L)
+        assertEquals(2,photos.size)
+        assertTrue(photos.all{it.url.contains("mitaku.net/wp-content/uploads")})
+    }
+
     @Test fun mp4HentaiHomepageExtractsDatedRealPostsNotReleaseCalendar(){
         val base="https://mp4hentai.com/"
         val html="""<main>
