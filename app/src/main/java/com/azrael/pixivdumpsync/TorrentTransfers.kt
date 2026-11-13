@@ -261,15 +261,32 @@ class TorrentTransferService : Service() {
             handle = session.find(info.infoHash())
         }
         require(handle != null && handle.isValid()) { "Torrent engine did not accept descriptor" }
+        var lastProgress=0f
+        var lastAdvance=android.os.SystemClock.elapsedRealtime()
         while (true) {
             if (paused.contains(id)) {
                 handle.pause()
                 update(id, "Paused")
                 while (paused.contains(id)) Thread.sleep(500)
                 handle.resume()
+                lastAdvance=android.os.SystemClock.elapsedRealtime()
             }
             val status = handle.status()
-            val percent = (status.progress() * 100).toInt().coerceIn(0, 100)
+            val currentProgress=status.progress()
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(currentProgress>lastProgress){
+                lastProgress=currentProgress
+                lastAdvance=now
+            }
+            // Do not leave a zero-peer torrent silently queued forever.
+            // Keep the descriptor and partial pieces for a later retry.
+            if(status.numPeers()==0 && now-lastAdvance>=10L*60_000L)
+                throw java.io.IOException(
+                    "No peers transferred pieces for 10 minutes; torrent stalled, pieces retained")
+            if(now-lastAdvance>=20L*60_000L)
+                throw java.io.IOException(
+                    "Torrent made no verified piece progress for 20 minutes; pieces retained")
+            val percent = (currentProgress * 100).toInt().coerceIn(0, 100)
             update(id, "${info.name().take(32)} $percent% · ${status.downloadRate()/1024} KiB/s · ${status.numPeers()} peers", percent)
             if (status.isFinished()) break // libtorrent has verified selected pieces
             Thread.sleep(2000)
