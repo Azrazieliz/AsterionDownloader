@@ -1,0 +1,30 @@
+name: Asterion Downloader real selected FreePornVideos full-file acceptance
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - 'scripts/real_freepornvideos_acceptance.py'
+      - '.github/workflows/downloader-real-freepornvideos-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-source-transfer-and-playback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check --no-deps yt-dlp==2026.10.26
+      - name: Full selected-original HTTP transfer and local ffprobe verification
+        run: |
+          command -v ffprobe
+          python scripts/real_freepornvideos_acceptance.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: freepornvideos-real-full-original-evidence-only
+          path: real-freepornvideos-acceptance.json
+          if-no-files-found: warn
