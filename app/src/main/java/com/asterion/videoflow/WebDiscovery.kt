@@ -313,27 +313,44 @@ object WebDiscovery {
         if(!VideoSiteProfiles.isVideoPage(source))return emptyList()
         val authorizedArchivebate=host=="archivebate.com" &&
             Regex("^/watch/[0-9]{1,16}/?$").matches(origin.path.orEmpty())
-        if(host!="uncensoredhentai.xxx" && !authorizedArchivebate)
-            return emptyList()
+        val uncensored=host=="uncensoredhentai.xxx"
         val result=LinkedHashSet<String>()
-        for(iframe in doc.select(
-            "iframe[src][allowfullscreen],iframe[src][allow*=fullscreen],"+
-            "iframe[src*='mixdrop.ag/e/']").take(20)){
+        // Older code ignored published players on every other video site.
+        // Read only video-player iframes from the selected publisher's page:
+        // never blanket-follow ad/analytics iframes or promote a catalog card
+        // as a verified original. Extractor and final file checks still apply.
+        val selectors="iframe[src][allowfullscreen],iframe[src][allow*=fullscreen],"+
+            "#player iframe[src],.video-player iframe[src],"+
+            ".player iframe[src],iframe[src*='mixdrop.ag/e/']"
+        for(iframe in doc.select(selectors).take(30)){
             val url=runCatching{
                 URI(doc.location()).resolve(iframe.attr("src"))
             }.getOrNull()?:continue
-            if(url.scheme!="https" || url.userInfo!=null)continue
-            val embedHost=url.host.orEmpty().lowercase().removePrefix("www.")
-            val accepted=if(authorizedArchivebate)
-                embedHost=="mixdrop.ag" &&
+            if(url.scheme!="https" || url.userInfo!=null || url.host==null)
+                continue
+            val embedHost=url.host.lowercase().removePrefix("www.")
+            val path=url.path.orEmpty().lowercase()
+            val accepted=when {
+                authorizedArchivebate -> embedHost=="mixdrop.ag" &&
                     Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""")
                         .matches(url.path.orEmpty())
-            else embedHost=="nhplayer.com" &&
-                Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
-                    .matches(url.path.orEmpty())
+                uncensored -> embedHost=="nhplayer.com" &&
+                    Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                        .matches(url.path.orEmpty())
+                else -> {
+                    val advertisedPlayer=iframe.hasAttr("allowfullscreen") ||
+                        iframe.attr("allow").contains("fullscreen",true) ||
+                        iframe.parents().take(3).any{
+                            (it.id()+" "+it.className()).contains("player",true)
+                        }
+                    val adPath=Regex("""(?i)(?:^|/)(?:ads?|banner|popunder|tracking|analytics|click|redirect)(?:/|$)""")
+                    advertisedPlayer && !adPath.containsMatchIn(path) &&
+                        url.toString()!=source
+                }
+            }
             if(!accepted)continue
             result+=url.toString().substringBefore('#')
-            if(result.size>=3)break
+            if(result.size>=5)break
         }
         return result.toList()
     }
