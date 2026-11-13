@@ -339,6 +339,7 @@ class TorrentTransferService : Service() {
         require(handle != null && handle.isValid()) { "Torrent engine did not accept descriptor" }
         var lastProgress=0f
         var lastAdvance=android.os.SystemClock.elapsedRealtime()
+        var reannouncedSinceAdvance=false
         while (true) {
             if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
                 throw InterruptedException("Torrent transfer stopped; pieces retained")
@@ -359,11 +360,20 @@ class TorrentTransferService : Service() {
             if(currentProgress>lastProgress){
                 lastProgress=currentProgress
                 lastAdvance=now
+                reannouncedSinceAdvance=false
             }
             val connected=status.numPeers().coerceAtLeast(0)
             val seeds=status.numSeeds().coerceIn(0,connected)
             val leechers=(connected-seeds).coerceAtLeast(0)
             val idle=now-lastAdvance
+            if(TorrentPeerDiagnostics.shouldReannounce(
+                    idle,seeds,reannouncedSinceAdvance)){
+                // Reannounce only once per 2-minute stall, respecting the
+                // tracker's own min_interval. Discover new seeders without
+                // discarding verified pieces or restarting the torrent.
+                handle.forceReannounce(0,-1)
+                reannouncedSinceAdvance=true
+            }
             // Connected peers are not necessarily seeders; a swarm can have
             // many leechers and still lack the pieces we need. Expose both.
             // Preserve all previously verified pieces on a stalled transfer.
