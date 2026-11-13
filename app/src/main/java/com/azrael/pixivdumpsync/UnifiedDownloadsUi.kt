@@ -122,9 +122,7 @@ object UnifiedDownloadsUi {
                 val present=readable(a,item.savedUri)
                 val journal=if(item.status=="running")
                     VideoTransferJournal.current(a,item.id) else null
-                val bytes=if(journal?.stage=="receiving")
-                    journal.detail.toLongOrNull()?.coerceAtLeast(0L)?:0L
-                    else 0L
+                val bytes=journal?.verifiedBytes?.coerceAtLeast(0L)?:0L
                 val received=if(bytes>0)
                     String.format(java.util.Locale.US,"%.1f MiB",
                         bytes.toDouble()/1_048_576.0) else ""
@@ -154,12 +152,17 @@ object UnifiedDownloadsUi {
                             .take(110)
                     State.PAUSED->"Video · Paused by user; original and progress retained"
                     State.QUEUED->"Video · Waiting for transfer worker"
-                    State.ACTIVE->"Video · "+if(bytes>0)"Receiving original · "+received
-                        else if(journal?.stage=="transfer")"Connecting to original"
-                        else "Inspecting / preparing original"
+                    State.ACTIVE->"Video · "+when {
+                        bytes>0L->"Receiving original · "+received
+                        item.progress>0->"Engine reports "+item.progress+
+                            "% · checking written bytes"
+                        journal?.stage=="transfer"->"Connecting to original"
+                        journal?.stage=="python_fallback"->"Switching extractor"
+                        else->"Inspecting / preparing original"
+                    }
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
-                    info,state,if(item.status=="running" && bytes>0L)
+                    info,state,if(item.status=="running" && item.progress>0)
                         item.progress else null,item.updated,{
                         when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
@@ -663,11 +666,14 @@ object UnifiedDownloadsUi {
                 State.HELD->"Retry available"
                 State.PAUSED->"Paused"
                 State.QUEUED->"Queued"
-                State.ACTIVE->if(item.receivedBytes>0L)
-                    if(item.percent!=null && item.percent>0)
+                State.ACTIVE->when {
+                    item.receivedBytes>0L && item.percent!=null && item.percent>0->
                         "Transferring · "+item.percent+"%"
-                    else "Receiving original bytes"
-                    else "Preparing / connecting"
+                    item.receivedBytes>0L->"Receiving original bytes"
+                    item.percent!=null && item.percent>0->
+                        "Engine progress · "+item.percent+"%"
+                    else->"Preparing / connecting"
+                }
             }
             val stateColor=when(item.state){
                 State.FAILED->ui.danger
@@ -681,12 +687,14 @@ object UnifiedDownloadsUi {
             main.addView(ui.text(a,item.info.take(110),11f,ui.secondary).apply{
                 maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
             },ui.lp(a,3))
-            if(item.state==State.ACTIVE && item.receivedBytes>0L &&
-                item.percent!=null){
+            if(item.state==State.ACTIVE && item.percent!=null &&
+                item.percent>0){
                 main.addView(ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal).apply{
                     max=100;progress=item.percent
                     progressTintList=ColorStateList.valueOf(
-                        android.graphics.Color.rgb(104,214,164))
+                        if(item.receivedBytes>0L)
+                            android.graphics.Color.rgb(104,214,164)
+                        else ui.secondary)
                 },LinearLayout.LayoutParams(-1,ui.px(a,3)).apply{topMargin=ui.px(a,7)})
             }
             card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
