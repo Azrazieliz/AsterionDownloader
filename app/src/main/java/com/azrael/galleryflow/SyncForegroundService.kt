@@ -37,8 +37,17 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Promote before returning from ANY path, including paused and busy.
-        startForeground(NOTIFICATION_ID, notification())
+        // A scheduled background restart can be denied foreground-service
+        // promotion by Android. Preserve the durable queue and return safely:
+        // an uncaught exception here used to kill the whole app in background.
+        try {
+            startForeground(NOTIFICATION_ID, notification())
+        }catch(t:RuntimeException){
+            android.util.Log.e("AsterionGallerySync",
+                "Foreground promotion denied; saved gallery jobs retained",t)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         when(intent?.action){
             ACTION_PAUSE->{SyncControl.pause();notifyNow();return START_NOT_STICKY}
             ACTION_RESUME->{SyncControl.resume();notifyNow();return START_NOT_STICKY}
