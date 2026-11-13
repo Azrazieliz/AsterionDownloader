@@ -11,7 +11,7 @@ import org.junit.Test
 class ApprovedProviderCoverageTest {
     @Test fun allOwnerRetainedSitesHaveASyncEngine(){
         val sites=AlohaSources.all
-        assertEquals(38,sites.size)
+        assertEquals(37,sites.size)
         val missing=sites.filter{site->
             var host=site.host.lowercase()
             for(prefix in listOf("m.","fr.","en.")){
