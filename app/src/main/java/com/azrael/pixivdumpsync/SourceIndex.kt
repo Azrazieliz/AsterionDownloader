@@ -523,6 +523,10 @@ internal object SourceIndexParser {
         return SitePreviewImage.best(image)
     }
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
+        // Providers with known, constrained watch URLs must not fall through
+        // to generic menus when an access gate returns an empty listing.
+        if(AdultProviderListings.owns(base,area))
+            return AdultProviderListings.entries(doc,base,area,clock)
         // Prefer a validated source-specific listing path over arbitrary
         // navigation links. Generic indexing remains for other providers.
         val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
