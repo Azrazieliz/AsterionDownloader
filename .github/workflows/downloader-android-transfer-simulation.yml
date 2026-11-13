@@ -1,0 +1,62 @@
+name: Downloader actual Android transfer simulation
+
+on:
+  push:
+    branches:
+      - work/downloader-single-build-staging-20261112
+    paths:
+      - '.github/workflows/downloader-android-transfer-simulation.yml'
+      - 'app/src/androidTest/**'
+      - 'app/src/phonepilot/AndroidManifest.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-actual-emulator-transfers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Compile target Android app and device test APK
+        run: gradle --no-daemon assemblePhonepilot assemblePhonepilotAndroidTest --stacktrace --console=plain
+      - name: Enable KVM emulator support
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0660", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot Android and download actual media with native and Python engines
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install -r app/build/outputs/apk/phonepilot/app-phonepilot.apk
+            adb install -r app/build/outputs/apk/androidTest/phonepilot/app-phonepilot-androidTest.apk
+            adb logcat -c
+            adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation | tee android-transfer-simulation.txt
+            grep -F 'AST_SIM: NATIVE_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: PYTHON_RUNTIME_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: EMBEDDED_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: PASS' android-transfer-simulation.txt
+            if adb logcat -b crash -d | grep -q 'FATAL EXCEPTION'; then
+              adb logcat -b crash -d
+              exit 1
+            fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-real-download-simulation-logs
+          if-no-files-found: ignore
+          path: android-transfer-simulation.txt
