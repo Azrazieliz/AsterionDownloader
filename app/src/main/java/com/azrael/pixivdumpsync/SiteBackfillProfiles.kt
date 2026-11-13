@@ -190,13 +190,28 @@ internal object SiteBackfillProfiles {
                 item.source,item.area,"original",now,false))
         }
         val scopes=doc.select("main article,article .entry-content,main .gallery,"+
-            "main .post-content,main .content,article .post-content")
-        val parts=if(scopes.isNotEmpty())scopes else doc.select("article")
+            "main .post-content,main .content,article .post-content,"+
+            "#content .entry-content,#post-content,.post-body,.gallery-images")
+        // Kiutaku's real photo reader can be a simple main/#content
+        // section rather than an <article>. Do not fall back to unrelated
+        // global <img> tags: only genuine primary content qualifies.
+        val parts=if(scopes.isNotEmpty())scopes else
+            doc.select("main,#content,#main,article,.post-content")
         for(content in parts.take(30)){
             content.select(".related,.related-posts,.recommendations,.sidebar,"+
                 "aside,nav,header,footer,.advertisement").remove()
             for(link in content.select("a[href]")){
-                if(link.selectFirst("img")==null)continue
+                val url=link.absUrl("href")
+                val originalImageLink=host=="kiutaku.com" && runCatching{
+                    val uri=URI(url)
+                    val host=uri.host.orEmpty().lowercase(Locale.ROOT)
+                    host in setOf("mitaku.net","www.mitaku.net",
+                        "kiutaku.com","www.kiutaku.com") &&
+                    uri.path.orEmpty().contains("/wp-content/uploads/") &&
+                    Regex("""(?i)\.(?:jpe?g|png|webp|avif)$""")
+                        .containsMatchIn(uri.path.orEmpty())
+                }.getOrDefault(false)
+                if(link.selectFirst("img")==null && !originalImageLink)continue
                 record(link.attr("href"),link.attr("title"))
                 if(results.size>=3000)break
             }
@@ -208,7 +223,18 @@ internal object SiteBackfillProfiles {
                 if(host=="kiutaku.com"){
                     val width=image.attr("width").toIntOrNull()?:0
                     val height=image.attr("height").toIntOrNull()?:0
-                    val direct=image.absUrl("src")
+                    val direct=listOf("data-full","data-original",
+                        "data-full-src","data-highres","data-src","src")
+                        .map{image.absUrl(it)}
+                        .firstOrNull{raw->
+                            runCatching {
+                                val uri=URI(raw)
+                                uri.host.orEmpty().lowercase(Locale.ROOT) in
+                                    setOf("mitaku.net","www.mitaku.net",
+                                        "kiutaku.com","www.kiutaku.com") &&
+                                uri.path.orEmpty().contains("/wp-content/uploads/")
+                            }.getOrDefault(false)
+                        }?:image.absUrl("src")
                     val photoHost=runCatching{URI(direct).host.orEmpty().lowercase(Locale.ROOT)}
                         .getOrDefault("")
                     val publisherImage=runCatching{
