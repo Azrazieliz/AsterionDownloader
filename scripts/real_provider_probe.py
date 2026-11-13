@@ -167,9 +167,6 @@ def main():
                         absolute(TARGETS[name], p)).path[:140]
                         for p in parsed.players if absolute(TARGETS[name], p)
                         and first_party(host, absolute(TARGETS[name], p))][:6],
-                    player_hosts=list(dict.fromkeys(urllib.parse.urlsplit(
-                        absolute(TARGETS[name], p)).hostname or ""
-                        for p in parsed.players if absolute(TARGETS[name], p)))[:8],
                     first_party_links=sum(bool(absolute(TARGETS[name],a)) and
                         first_party(host,absolute(TARGETS[name],a))
                         for a in parsed.anchors),
