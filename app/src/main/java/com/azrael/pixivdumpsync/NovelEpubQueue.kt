@@ -126,7 +126,9 @@ class NovelEpubQueue(context:Context):
         val now=System.currentTimeMillis()
         writableDatabase.update("novels",ContentValues().apply{
             put("state","RETRY");put("retry_after",now+20_000L)
-            put("last_error","Chapter extraction continuing: $cached cached")
+            // A scheduled continuation is not a failed book.
+            // The live cached count is computed from chapter files.
+            putNull("last_error")
             put("last_update",now)
         },"url=? AND state='WORKING'",arrayOf(url))
     }
