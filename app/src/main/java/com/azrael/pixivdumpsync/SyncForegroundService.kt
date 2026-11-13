@@ -43,9 +43,17 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Android 17 requires foreground promotion before paused, disabled,
-        // reentrant or STOP return paths.
-        startForeground(NOTIFICATION_ID, notification())
+        // Foreground-service promotion may be denied when a job resumes
+        // after the user backgrounds the app. Never propagate that runtime
+        // exception from onStartCommand and kill the whole application.
+        try {
+            startForeground(NOTIFICATION_ID, notification())
+        }catch(t:RuntimeException){
+            android.util.Log.e("AsterionKurohaSync",
+                "Foreground promotion denied; saved jobs retained",t)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_PAUSE -> {
                 SyncControl.pause()
