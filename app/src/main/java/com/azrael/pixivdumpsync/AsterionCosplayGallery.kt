@@ -125,10 +125,10 @@ object AsterionCosplayGallery {
             }
             val indexedTiles=indexedItems.map{item->KurohaMediaPreview.Tile(
                 url=item.url,title=item.title,thumbnail=item.preview.orEmpty(),
-                attribution=site.name,referer=site.url)}
+                attribution=site.name,referer=item.url)}
             val publicTiles=public.map{item->KurohaMediaPreview.Tile(
                 url=item.url,title=item.title,thumbnail=item.cover,
-                attribution=site.name,referer=site.url)}
+                attribution=site.name,referer=item.url)}
             val visual=KurohaMediaPreview.usable(nativeTiles+indexedTiles+publicTiles)
             if(visual.isNotEmpty())shown++
             val card=ui.card(a,15)
@@ -254,8 +254,8 @@ object AsterionCosplayGallery {
         }
         parent.addView(ui.text(a,
             approved.size.toString()+" approved websites · "+shown+
-                " displaying real media · "+(approved.size-shown)+
-                " awaiting accessible thumbnails",
+                " with indexed gallery cards · "+(approved.size-shown)+
+                " without verified gallery metadata",
             12f,ui.secondary),ui.lp(a,8))
         if(shown==0)parent.addView(ui.text(a,
             "No genuine source covers are available yet. Refresh previews or "+
