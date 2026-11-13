@@ -146,7 +146,8 @@ class SyncEngine(private val context: Context) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
             }
-            val selectedAlbum=entity.kind=="selected_album"
+            val selectedAlbum=entity.kind=="selected_album" ||
+                (targetEntityId!=null && entity.kind=="gallery_only")
             val prefix=if(selectedAlbum)
                 "Selected album • "+entity.displayName
                 else "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
@@ -192,7 +193,9 @@ class SyncEngine(private val context: Context) {
                         stats.incompleteGalleries++
                         progress("Queued failed album for retry: " + gallery.title)
                     }
-                    if (serviceQueuedLive(db, files, flow, stats, progress)) {
+                    // Do not interrupt an explicitly tapped album with
+                    // unrelated Live Sync before its own originals complete.
+                    if (!targeted && serviceQueuedLive(db, files, flow, stats, progress)) {
                         SyncControl.setMode(SyncMode.BACKFILL)
                         SyncControl.updateMessage(prefix)
                         progress("Resuming " + prefix)

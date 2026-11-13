@@ -71,6 +71,19 @@ internal object ApprovedCosplayActions {
      * GalleryFlow native transaction queue. Cover URLs are never treated as
      * completed originals. Subscriptions and automatic Live flags are intact.
      */
+    internal fun exactKiutakuAlbum(address:String,title:String):SourceEntity {
+        val uri=URI(address)
+        val id=uri.path.orEmpty().trim('/')
+        require(uri.scheme in setOf("http","https") &&
+            SiteControls.key(address)=="kiutaku.com" &&
+            id.matches(Regex("[0-9]{1,9}"))){
+            "Expected a Kiutaku numeric gallery"
+        }
+        return SourceEntity(SourceId.KIUTAKU,"gallery:"+id,
+            title.take(120).ifBlank{"Kiutaku gallery "+id},
+            "https://kiutaku.com/"+id,"gallery_only")
+    }
+
     fun selectedGallery(a:Activity,sourceAddress:String,tile:KurohaMediaPreview.Tile):String {
         if(!AppPower.enabled(a))return "Resume downloads first"
         val site=approved(sourceAddress)?:error("Unknown approved Cosplay source")
@@ -91,8 +104,11 @@ internal object ApprovedCosplayActions {
         val knownKiutaku=site.host=="kiutaku.com" &&
             path.matches(Regex("[0-9]{1,9}"))
         val entity=if(knownKiutaku){
-            com.azrael.galleryflow.AdapterRegistry.forUrl(tile.url,a.applicationContext)
-                .resolveEntity(tile.url)
+            // KiutakuAdapter.resolveEntity() intentionally follows a post's
+            // cosplayer tag when building a subscription. That is WRONG for
+            // a thumbnail tap: it silently changes one gallery into an
+            // artist-wide backfill. Explicit selections must stay gallery_only.
+            exactKiutakuAlbum(tile.url,tile.title)
         }else{
             val digest=MessageDigest.getInstance("SHA-256")
                 .digest(tile.url.toByteArray(Charsets.UTF_8))
