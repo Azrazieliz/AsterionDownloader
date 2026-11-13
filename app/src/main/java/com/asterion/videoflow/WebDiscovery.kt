@@ -89,6 +89,28 @@ object WebDiscovery {
                         else " · request unsuccessful"
                 }
                 val document=response.parse()
+                // Archivebate's public homepage legitimately returns HTTP 200
+                // with an 18+ Continue gateway and ZERO /watch/ links. Chrome
+                // observed 36 genuine watch links only AFTER the user's
+                // normal Continue action, and a real MP4 playback response.
+                // For an already-connected site, read the owner's WebView
+                // session instead of accepting a successful-but-empty shell.
+                val sourceHost=runCatching{URI(url).host.orEmpty()
+                    .lowercase().removePrefix("www.")}.getOrDefault("")
+                if(sourceHost=="archivebate.com" && context!=null &&
+                    SiteSession.bound(context,current) &&
+                    document.select("a[href*='/watch/']").isEmpty() &&
+                    document.text().contains(
+                        "Explore the world's largest webcam archive",true)){
+                    val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                        context,current)
+                    val browser=Jsoup.parse(html,current)
+                    require(browser.select("a[href*='/watch/']").isNotEmpty()){
+                        "Archivebate connected browser still has no recordings; "+
+                            "complete the site's public Continue step in CONNECT ACCOUNT"
+                    }
+                    return browser
+                }
                 val title=document.title().lowercase()
                 require(!title.contains("just a moment") &&
                     !title.contains("access denied") &&
