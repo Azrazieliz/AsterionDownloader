@@ -73,18 +73,12 @@ jobs:
             adb shell dumpsys activity processes > android-transfer-processes.txt
             set -e
             grep -Fx '0' android-transfer-exit.txt
-            if grep -q 'Process crashed' android-transfer-simulation.txt; then
-              cat android-transfer-crash-logcat.txt
-              exit 1
-            fi
+            if grep -q 'Process crashed' android-transfer-simulation.txt; then cat android-transfer-crash-logcat.txt; exit 1; fi
             grep -F 'AST_SIM: NATIVE_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PYTHON_RUNTIME_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: EMBEDDED_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PASS' android-transfer-simulation.txt
-            if grep -q 'FATAL EXCEPTION' android-transfer-crash-logcat.txt; then
-              cat android-transfer-crash-logcat.txt
-              exit 1
-            fi
+            if grep -q 'FATAL EXCEPTION' android-transfer-crash-logcat.txt; then cat android-transfer-crash-logcat.txt; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
