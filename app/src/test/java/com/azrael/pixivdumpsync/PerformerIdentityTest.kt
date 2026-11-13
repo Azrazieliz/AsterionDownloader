@@ -46,6 +46,22 @@ class PerformerIdentityTest {
             "Jane Example","https://fullporner.com/watch/jane-example"))
     }
 
+    @Test fun cumsRealModelIdMustMatchVisibleIdentity() {
+        val url="https://cums.net/model/caryn-beaumont-18aq0o/"
+        val doc=Jsoup.parse("""<html><head>
+          <link rel="canonical" href="$url"/></head>
+          <body><h1>Caryn Beaumont Porn and Nude Videos</h1></body></html>""",url)
+        assertTrue(PerformerIdentity.isProfileUrl("Caryn Beaumont",url))
+        assertTrue(PerformerIdentity.matchesEvidence("Caryn Beaumont",url,doc))
+        assertFalse(PerformerIdentity.matchesEvidence("Wrong Person",url,doc))
+        assertFalse(PerformerIdentity.isProfileUrl(
+            "Caryn Beaumont","https://cums.net/model/"))
+        assertFalse(PerformerIdentity.isProfileUrl(
+            "Caryn Beaumont","https://cums.net/video/240284/a-movie/"))
+        assertFalse(PerformerIdentity.isProfileUrl(
+            "Caryn Beaumont","https://cums.net/model/caryn-beaumont-fake.example/"))
+    }
+
     @Test fun verifiableProfileRoutesAreDistinctFromVideoTitles(){
         assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/pornstars/jane-example"))
