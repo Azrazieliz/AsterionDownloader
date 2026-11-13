@@ -130,7 +130,10 @@ class SiteLoginActivity:Activity() {
                 const body=(document.body?.innerText||'').slice(0,800);
                 const good=document.readyState==='complete' &&
                     !/just a moment|attention required|verify you are human|enable javascript and cookies/i.test(title+' '+body);
-                return JSON.stringify({good:good,host:location.hostname});
+                const watchLinks=document.querySelectorAll(
+                    'a[href*="/watch/"],video[src],video source[src]').length;
+                return JSON.stringify({good:good,host:location.hostname,
+                    watchLinks:watchLinks});
             })()"""){value->
                 val info=runCatching {
                     org.json.JSONObject(org.json.JSONTokener(value).nextValue() as String)
@@ -140,8 +143,13 @@ class SiteLoginActivity:Activity() {
                 val expectedHost=Uri.parse(address).host.orEmpty()
                     .lowercase(java.util.Locale.ROOT).removePrefix("www.")
                 val pageOk=info?.optBoolean("good")==true && currentHost==expectedHost
-                val authenticated=pageOk && (!xSite ||
-                    SiteSession.cookie(address)?.split(';')?.any{
+                // Archivebate's empty age-gate shell previously passed this
+                // test as a valid connection even with ZERO public videos.
+                // A saved cookie alone is not proof that catalog data loaded.
+                val archive=expectedHost=="archivebate.com"
+                val hasPublicVideos=info?.optInt("watchLinks",0)?:0
+                val authenticated=pageOk && (!archive || hasPublicVideos>0) &&
+                    (!xSite || SiteSession.cookie(address)?.split(';')?.any{
                         it.trim().startsWith("auth_token=")}==true)
                 if(authenticated){
                     CookieManager.getInstance().flush()
@@ -157,6 +165,9 @@ class SiteLoginActivity:Activity() {
                 }
                 Toast.makeText(this,if(authenticated)
                     "Browser session saved. Access to restricted media still depends on account entitlement."
+                    else if(archive && pageOk)
+                        "Archivebate loaded without any video cards. "+
+                        "Use the site's own Continue control; no catalog access verified."
                     else "Website verification is incomplete. Connection not saved.",
                     Toast.LENGTH_LONG).show()
                 if(authenticated){
