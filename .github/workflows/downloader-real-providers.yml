@@ -1,0 +1,33 @@
+name: Asterion Downloader — LIVE provider HTTP/media probe
+
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - 'scripts/real_provider_probe.py'
+      - '.github/workflows/downloader-real-providers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-probes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Public provider HTTP, thumbnail, video player and novel chapter requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/real_provider_probe.py
+          test -s real-provider-results.json
+      - name: Upload real provider results and source response diagnostics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-provider-http-media-evidence
+          path: real-provider-results.json
+          if-no-files-found: warn
+          retention-days: 30
