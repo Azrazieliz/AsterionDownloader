@@ -35,17 +35,23 @@ class CreatorNameDb(context:Context):
         if(userChosen)writableDatabase.execSQL(
             "UPDATE names SET chosen=1 WHERE key=?",arrayOf(key))
     }
-    fun suggest(prefix:String,category:String?=null,limit:Int=15):List<String>{
+    fun suggest(prefix:String,category:String?=null,limit:Int=50):List<String>{
         val needle=prefix.trim().lowercase()
         if(needle.isEmpty())return emptyList()
         val out=ArrayList<String>()
         val restrict=if(category.isNullOrBlank()||category=="ALL")"" else
             "AND (category=? OR category='ALL')"
-        val args=if(restrict.isEmpty()) arrayOf(needle+"%",limit.coerceIn(1,50).toString())
-            else arrayOf(needle+"%",category.orEmpty().uppercase(),limit.coerceIn(1,50).toString())
+        // Name recognition must not depend on where a model's name starts.
+        // Keep prefix matches first, then substring matches across the
+        // creator vocabulary, with a UI-sized page of results.
+        val args=if(restrict.isEmpty())
+            arrayOf("%"+needle+"%",needle+"%",limit.coerceIn(1,500).toString())
+        else arrayOf("%"+needle+"%",category.orEmpty().uppercase(),
+            needle+"%",limit.coerceIn(1,500).toString())
         readableDatabase.rawQuery(
             "SELECT label FROM names WHERE lower(label) LIKE ? $restrict "+
-                "ORDER BY chosen DESC,seen_at DESC LIMIT ?",args).use{c->
+                "ORDER BY CASE WHEN lower(label) LIKE ? THEN 0 ELSE 1 END, "+
+                "chosen DESC,seen_at DESC LIMIT ?",args).use{c->
             while(c.moveToNext())out+=c.getString(0)
         }
         return out.distinctBy{it.lowercase()}
