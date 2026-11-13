@@ -11,7 +11,7 @@ import org.junit.Test
 class ApprovedProviderCoverageTest {
     @Test fun allOwnerRetainedSitesHaveASyncEngine(){
         val sites=AlohaSources.all
-        assertEquals(39,sites.size)
+        assertEquals(38,sites.size)
         val missing=sites.filter{site->
             var host=site.host.lowercase()
             for(prefix in listOf("m.","fr.","en.")){
@@ -23,7 +23,8 @@ class ApprovedProviderCoverageTest {
                         "cosplaytele.com","notfans.com") ||
                     SiteBackfillProfiles.supports(host)
                 AlohaArea.ADULT,AlohaArea.HENTAI ->
-                    host=="onejav.com" || host in VideoSiteProfiles.coveredHosts
+                    host in VideoSiteProfiles.coveredHosts
+                AlohaArea.VIDEOS -> host=="onejav.com"
                 AlohaArea.BOOKS ->
                     host=="mp4directs.com" || SiteBackfillProfiles.supports(host)
                 AlohaArea.COMICS -> SiteBackfillProfiles.supports(host)
