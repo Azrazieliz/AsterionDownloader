@@ -339,12 +339,23 @@ object SourceIndexPanel {
                         }
                     }
                 },LinearLayout.LayoutParams(0,-2,1f))
-                commands.addView(ui.action(a,"LOGIN",false){
-                    a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                        .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
-                },LinearLayout.LayoutParams(0,-2,1f).apply{
-                    leftMargin=ui.px(a,8)
-                })
+                // A public source must never imply login is mandatory.
+                // Only explicit publisher authentication evidence gets an
+                // account action. HTTP 403 alone may be edge protection.
+                val accountNeeded=group.any{record->
+                    val problem=record.error.orEmpty().lowercase()
+                    problem.contains("http 401") ||
+                        problem.contains("sign in") ||
+                        problem.contains("login required") ||
+                        problem.contains("account required")
+                }
+                if(accountNeeded || com.azrael.galleryflow.SiteSession.bound(a,site.url))
+                    commands.addView(ui.action(a,"ACCOUNT",false){
+                        a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                            .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                    },LinearLayout.LayoutParams(0,-2,1f).apply{
+                        leftMargin=ui.px(a,8)
+                    })
                 root.addView(commands,ui.lp(a,5))
                 return root
             }
