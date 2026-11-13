@@ -7,6 +7,11 @@ import json
 import re
 import time
 import urllib.parse
+import urllib.request
+import urllib.error
+import tempfile
+import pathlib
+import hashlib
 
 SITES = {
     "Jav Guru": "https://jav.guru/1076811/mukc-135-off-pako-creampie-breeding-photo-session-where-we-defile-a-beautiful-pure-idol-whos-obedient-like-a-doll-however-we-please-shitara-yuuhi/",
@@ -134,6 +139,48 @@ try:
                             """,video)
                             time.sleep(2)
                             evidence(name,"after video play")
+                            # Real publisher/CDN transfer check: download only
+                            # the first 128 KiB of ONE explicitly opened video.
+                            # Verify bytes on disk and discard immediately.
+                            media=driver.execute_script("""
+                                const v=document.querySelector('video');
+                                return v?.currentSrc||v?.querySelector('source[src]')?.src||'';
+                            """) or ""
+                            host=urllib.parse.urlsplit(media).hostname or ""
+                            if host=="cdn.freefile.io" and media.startswith("https://"):
+                                try:
+                                    req=urllib.request.Request(media,headers={
+                                        "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36",
+                                        "Referer":driver.current_url,
+                                        "Range":"bytes=0-131071",
+                                        "Accept":"video/mp4,*/*",
+                                        "Accept-Encoding":"identity"})
+                                    with urllib.request.urlopen(req,timeout=15) as reply:
+                                        status=reply.status
+                                        mime=reply.headers.get("Content-Type","")
+                                        body=reply.read(131072)
+                                    with tempfile.TemporaryDirectory(prefix="asterion-live-media-") as tmp:
+                                        target=pathlib.Path(tmp)/"real-media.part"
+                                        target.write_bytes(body)
+                                        copied=target.read_bytes()
+                                        verified=(copied==body and len(body)>1024 and
+                                            (b"ftyp" in body[:256] or b"moov" in body[:256] or b"mdat" in body[:256]))
+                                    out["Archivebate actual HTTP video-range transfer"]={
+                                        "http":status,"mime":mime.split(';')[0],
+                                        "bytes_written":len(body),
+                                        "exact_bytes_verified":verified,
+                                        "sha256_prefix":hashlib.sha256(body).hexdigest()[:24],
+                                        "deleted_temp_file":True}
+                                except urllib.error.HTTPError as ex:
+                                    out["Archivebate actual HTTP video-range transfer"]={
+                                        "http":ex.code,"error":"Publisher refused ranged media request"}
+                                except Exception as ex:
+                                    out["Archivebate actual HTTP video-range transfer"]={
+                                        "error":type(ex).__name__,
+                                        "note":"Chrome media delivery remains independently tested"}
+                            else:
+                                out["Archivebate actual HTTP video-range transfer"]={
+                                    "blocked":"No observed direct publisher CDN URL; no media requested"}
                         except Exception as ex:
                             out[name+" play"]={"error":type(ex).__name__+":"+str(ex)[:160]}
                 else:
