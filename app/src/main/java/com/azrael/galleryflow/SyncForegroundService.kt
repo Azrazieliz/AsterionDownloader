@@ -111,6 +111,18 @@ class SyncForegroundService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Android 15+ will crash dataSync services that exceed the foreground
+     * quota unless they terminate promptly. Preserve already downloaded
+     * originals and database retry rows; interrupt the current request.
+     */
+    override fun onTimeout(startId:Int,fgsType:Int){
+        SyncControl.stop()
+        currentRun?.cancel(true)
+        synchronized(pending){pending.clear()}
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onDestroy(){
         synchronized(pending){pending.clear()}
         currentRun?.cancel(true)
