@@ -258,7 +258,7 @@ object TorrentSourceBackfill {
             .apply {
                 com.asterion.videoflow.NetworkRoute.javaProxy(ctx,url)
                     ?.let { proxy(it) }
-                com.azrael.galleryflow.SiteSession.cookie(url)
+                com.azrael.galleryflow.SiteSession.cookie(ctx,url)
                     ?.let { header("Cookie",it) }
             }.execute()
         if(response.statusCode() in setOf(401,403) &&
@@ -282,6 +282,14 @@ object TorrentSourceBackfill {
             TorrentFeedDb(ctx).use{db->db.resolved(page,it)}
         }
     }
+    // A provider's HTTP 403 is not cured by repeat scans. Respect the
+    // existing 6-hour periodic schedule unless the user manually retries.
+    internal fun autoRetryAllowed(source:String,lastCheck:Long,
+                                  error:String?,now:Long):Boolean=
+        !(source=="ONEJAV" &&
+            (error.orEmpty().contains("HTTP 403") ||
+                error.orEmpty().contains("access blocked",true)) &&
+            now-lastCheck in 0L until 6L*60*60_000L)
     private val active=java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.atomic.AtomicBoolean>()
     private val starting=java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.atomic.AtomicBoolean>()
     fun isRunning(source:String):Boolean=
@@ -317,6 +325,9 @@ object TorrentSourceBackfill {
                 if(active.putIfAbsent(site,token)!=null)continue
                 try{
                 val state=db.status().first{it.source==site}
+                if(onlySource==null && !autoRetryAllowed(site,
+                        state.lastCheck,state.error,System.currentTimeMillis()))
+                    continue
                 val home=TorrentFeedParser.home(site)
                 val queue=ArrayDeque<String>()
                 queue.addLast(home)
