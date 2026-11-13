@@ -22,7 +22,8 @@ object BrowserPageFetch {
     // HTTP clients. Never solve access challenges or bypass authentication.
     private val publicBrowserHosts=setOf("jav.guru","rule34video.com",
         "kiutaku.com","freewebnovel.com","novelbuddy.me",
-        "novelbuddy.com","readnovelfull.com")
+        "novelbuddy.com","readnovelfull.com",
+        "hentaibros.net","3dhentaix.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -153,13 +154,28 @@ object BrowserPageFetch {
                             }).join('');
                             // Preserve only video URLs genuinely present in
                             // the user's authenticated browser DOM.
+                            // CurrentSrc is populated by JS/video.js players after the
+                            // initial document load; HTML attributes alone were
+                            // empty on the real HentaiBros and 3DHentaiX pages.
+                            // Do NOT claim short trailers as full originals:
+                            // preserve duration for the receiving resolver to
+                            // reject clips below the selected-video threshold.
                             const players=[...document.querySelectorAll(
-                                'main video,article video,.video-player video,video source[src]')]
-                                .slice(0,120).map(el=>{
-                                    const video=el.tagName.toLowerCase()==='video'?el:el.closest('video');
-                                    const src=el.getAttribute('src')||'';
-                                    const poster=video?.getAttribute('poster')||'';
-                                    return '<video src="'+esc(src)+'" poster="'+esc(poster)+'"></video>';
+                                'main video,article video,.video-player video,'+
+                                '#player video,.video-js video,video source[src]')]
+                                .map(el=>el.tagName.toLowerCase()==='video'?
+                                    el:el.closest('video')).filter((el,i,list)=>
+                                    !!el && list.indexOf(el)===i &&
+                                    !el.closest('.related,.recommendations,'+
+                                        '.happy-under-player,.ads,.advertisement'))
+                                .slice(0,40).map(video=>{
+                                    const src=video.currentSrc||video.getAttribute('src')||
+                                        video.querySelector('source[src]')?.src||'';
+                                    const duration=Number.isFinite(video.duration)?
+                                        Math.round(video.duration):0;
+                                    return '<video src="'+esc(src)+'" data-duration="'+
+                                        duration+'" poster="'+
+                                        esc(video.getAttribute('poster')||'')+'"></video>';
                                 }).join('');
                             // Archivebate's selected /watch/ID page publishes
                             // a real Mixdrop /e/ID iframe. Preserve only this

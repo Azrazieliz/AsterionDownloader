@@ -394,6 +394,31 @@ object WebDiscovery {
         return publishedEmbeds(doc,address,explicitlySelected)
     }
 
+    /** Real 2026-11-13 Chrome tests proved these public pages display 5–30s
+     * teasers but no publicly verified full recording. Only accept a REAL
+     * rendered video.currentSrc with a publisher-visible duration >=90s;
+     * never promote poster URLs, recommendations or ad/trailer clips.
+     */
+    internal data class SelectedBrowserMedia(
+        val original:String?,val previewOnly:Boolean
+    )
+    internal fun selectedBrowserMedia(html:String,pageUrl:String):SelectedBrowserMedia {
+        val document=org.jsoup.Jsoup.parse(html,pageUrl)
+        var preview=false
+        for(video in document.select("main .video-player video[src][data-duration]")){
+            val duration=video.attr("data-duration").toLongOrNull()?:continue
+            val value=video.attr("abs:src").ifBlank{
+                runCatching{URI(pageUrl).resolve(video.attr("src")).toString()}
+                    .getOrDefault("")
+            }
+            if(!isUrl(value) || !mediaFiles.containsMatchIn(value))continue
+            if(duration in 1..89)preview=true
+            if(duration in 90..(24L*3600))
+                return SelectedBrowserMedia(value,preview)
+        }
+        return SelectedBrowserMedia(null,preview)
+    }
+
     fun directMedia(address:String,context:Context?=null):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
@@ -413,6 +438,23 @@ object WebDiscovery {
             val source=node.attr("abs:src").ifBlank{node.attr("content")}
             val resolved=runCatching{URI(page.location()).resolve(source).toString()}.getOrNull()?:continue
             if(isUrl(resolved)&&mediaFiles.containsMatchIn(resolved))return resolved
+        }
+        // Public Chrome renders a genuine HTML5 player only AFTER JavaScript
+        // execution for these two publishers. Never mistake their teaser clips
+        // (observed 5–30 seconds) for the requested full-length original.
+        val selectedHost=runCatching{URI(address).host.orEmpty()
+            .lowercase().removePrefix("www.")}.getOrDefault("")
+        if(context!=null &&
+            selectedHost in setOf("hentaibros.net","3dhentaix.com")){
+            val rendered=com.azrael.pixivdumpsync.BrowserPageFetch
+                .html(context,address)
+            val inspected=selectedBrowserMedia(rendered,address)
+            if(inspected.original!=null)return inspected.original
+            if(inspected.previewOnly)throw IllegalStateException(
+                "Publisher only exposed short preview clips; full video "+
+                    "authentication required. Connect your authorized site "+
+                    "session before retrying, or use the publisher's genuine "+
+                    "original media URL.")
         }
         return null
     }
