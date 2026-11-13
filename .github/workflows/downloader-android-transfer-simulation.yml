@@ -41,10 +41,15 @@ jobs:
       - name: Boot Android and download actual media with native and Python engines
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          # The overloaded API35 emulator repeatedly lost adb/system services
+          # before instrumentation began (Broken pipe / com.android.phone ANR).
+          # API30 still supports the app's minSdk29 and both packaged x86_64
+          # media engines, with substantially lighter boot workload.
+          api-level: 30
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 2 -accel on
           script: |
             set -eu
             # Avoid racing first-boot system work and the app's BOOT_COMPLETED
