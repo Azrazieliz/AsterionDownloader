@@ -432,7 +432,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                WHERE state='error' AND (error LIKE 'Video engine unavailable:%' OR
                     error LIKE 'Video extractor unavailable:%')
                  AND id IN (SELECT id FROM videos
-                    WHERE state='error' AND (error LIKE 'Video engine unavailable:%' OR
+                    WHERE state='error' AND request_origin='user' AND
+                    (error LIKE 'Video engine unavailable:%' OR
                     error LIKE 'Video extractor unavailable:%')
                     ORDER BY updated ASC LIMIT 100)""")
         statement.bindLong(1,now)
