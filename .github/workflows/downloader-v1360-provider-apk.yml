@@ -1,14 +1,8 @@
 name: Asterion Downloader v1.3.60 Provider Repair APK
 
+# Build APKs only after a real-source acceptance gate.
+# Every source patch used to trigger an untested APK and consume CI minutes.
 on:
-  push:
-    branches: [work/downloader-single-build-staging-20261112]
-    paths:
-      - '.github/workflows/downloader-v1360-provider-apk.yml'
-      - 'app/src/main/java/**'
-      - 'app/src/test/java/**'
-      - 'app/src/main/AndroidManifest.xml'
-      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
