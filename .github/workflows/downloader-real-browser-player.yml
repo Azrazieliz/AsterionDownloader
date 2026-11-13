@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install isolated Chrome WebDriver
-        run: python -m pip install --disable-pip-version-check selenium==4.36.0
+        run: python -m pip install --disable-pip-version-check selenium==4.36.0 yt-dlp
       - name: Open real publisher streams in headless Google Chrome
         shell: bash
         run: |
