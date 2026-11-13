@@ -35,6 +35,17 @@ class PerformerIdentityTest {
             "Tina Kitsune","https://watchporn.to/video/tina-kitsune/"))
     }
 
+    @Test fun fullPornerPublishedPersonRouteRequiresExactNameAndCanonical() {
+        val url="https://fullporner.com/pornstar/jane-example"
+        val page=Jsoup.parse("""<html><head>
+            <link rel="canonical" href="https://fullporner.com/pornstar/jane-example"/>
+            </head><body><h1>Jane Example</h1></body></html>""",url)
+        assertTrue(PerformerIdentity.matchesEvidence("Jane Example",url,page))
+        assertFalse(PerformerIdentity.matchesEvidence("Other Performer",url,page))
+        assertFalse(PerformerIdentity.isProfileUrl(
+            "Jane Example","https://fullporner.com/watch/jane-example"))
+    }
+
     @Test fun verifiableProfileRoutesAreDistinctFromVideoTitles(){
         assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/pornstars/jane-example"))
