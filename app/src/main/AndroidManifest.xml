@@ -66,6 +66,11 @@
             android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".DownloaderHubActivity" android:exported="false"/>
         <activity android:name=".OfflineVnActivity" android:exported="false" />
+        <!-- Main-process private cookie handoff to this app's isolated VideoFlow
+             services. Not exported; no other application can read sessions. -->
+        <provider android:name="com.azrael.galleryflow.SessionCookieProvider"
+            android:authorities="${applicationId}.session-cookies"
+            android:exported="false" />
         <provider android:name=".AsterionUpdateFileProvider"
             android:authorities="${applicationId}.update-apk"
             android:exported="false"
