@@ -311,10 +311,24 @@ object ChapterArchives {
 class ChapterArchiveService:Service(){
     override fun onBind(intent:Intent?):IBinder?=null
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
-        startForeground(25481,ChapterArchives.notification(this,"Preparing archive"))
-        val running=ChapterArchives.run(applicationContext){message->
-            getSystemService(NotificationManager::class.java)
-                .notify(25481,ChapterArchives.notification(this,message))
+        try {
+            startForeground(25481,ChapterArchives.notification(this,"Preparing archive"))
+        }catch(t:RuntimeException){
+            android.util.Log.e("AsterionChapters",
+                "Foreground promotion denied; chapter ZIP queue remains saved",t)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
+        val running=try{
+            ChapterArchives.run(applicationContext){message->
+                getSystemService(NotificationManager::class.java)
+                    .notify(25481,ChapterArchives.notification(this,message))
+            }
+        }catch(t:RuntimeException){
+            android.util.Log.e("AsterionChapters",
+                "Archive worker could not start; saved chapters unchanged",t)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
         }
         Thread{runCatching{running.get()};stopSelfResult(startId)}.start()
         return START_REDELIVER_INTENT
