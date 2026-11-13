@@ -16,8 +16,20 @@ import java.util.concurrent.atomic.AtomicReference
 /** Uses a verified browser session for accessible chapter pages when the
  * non-browser HTTP client is rejected. Never bypasses website verification. */
 object BrowserPageFetch {
+    // These approved publishers may expose public catalogs to ordinary
+    // Android WebView while their direct HTML endpoint rejects non-browser
+    // HTTP clients. Never solve access challenges or bypass authentication.
+    private val publicBrowserHosts=setOf("jav.guru","rule34video.com",
+        "kiutaku.com")
+    fun publicEligible(url:String):Boolean {
+        val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
+        val host=uri.host.orEmpty().lowercase().removePrefix("www.")
+        return uri.scheme=="https" && uri.userInfo==null &&
+            host in publicBrowserHosts
+    }
     fun html(context:Context,url:String):String {
-        require(com.azrael.galleryflow.SiteSession.bound(context,url)) {
+        require(com.azrael.galleryflow.SiteSession.bound(context,url) ||
+            publicEligible(url)) {
             "Save an accessible website session before retrying."
         }
         check(Looper.myLooper()!=Looper.getMainLooper()) {
