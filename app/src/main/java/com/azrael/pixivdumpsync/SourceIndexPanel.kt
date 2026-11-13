@@ -200,18 +200,12 @@ object SourceIndexPanel {
                     if(!AppPower.enabled(a)){
                         Toast.makeText(a,"Resume downloads first",
                             Toast.LENGTH_SHORT).show()
-                    }else if(record==null){
-                        Toast.makeText(a,
-                            site.name+": provider adapter not registered",
-                            Toast.LENGTH_LONG).show()
                     }else{
                         thread(name="asterion-cosplay-"+site.host.take(14)){
+                            // Existing site preview does not require the
+                            // SourceIndex record to have been created yet.
                             val message=runCatching{
-                                if(record.adapter=="generic"){
-                                    if(SiteRunControl.start(a,url,"COSPLAY"))
-                                        "Historical scan started · "+site.name
-                                    else "Already checking · "+site.name
-                                }else ProviderBackfillActions.request(a,record)
+                                ApprovedCosplayActions.backfill(a,site.url)
                             }.getOrElse{it.message?:"Backfill failed"}
                             a.runOnUiThread{
                                 if(!a.isFinishing)Toast.makeText(a,message,
