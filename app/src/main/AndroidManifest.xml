@@ -177,6 +177,11 @@
             android:name=".SyncJobService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- Boot restoration is a deferred JobService. No provider sync or
+             Python initialization may occupy the BOOT_COMPLETED broadcast. -->
+        <service android:name=".RestoreDownloadSchedulesJob"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
