@@ -23,6 +23,7 @@ SITES = {
     "FullPorner selected": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
     "HentaiHaven selected": "https://hentaihaven.xxx/watch/renseijutsushi-collet-no-h-na-shibo-shirage-monogatari/",
     "UncensoredHentai selected": "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/",
+    "Rule34Video failed 4727221": "https://rule34video.com/video/4727221/",
 }
 out = {}
 try:
