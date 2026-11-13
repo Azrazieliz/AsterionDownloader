@@ -79,12 +79,15 @@ sys.stdout.buffer.write(response.read(3000000))
                 NovelEpubParser.writeEpubStreaming(output,
                     "Dual Cultivation live integration",root,chosen.map{it.title}){i->
                     val chapter=chosen[i]
+                    // Real 2026-11-13 source rejected a 250ms/chap burst with
+                    // HTTP 429 on chapter eight. Match the production slow
+                    // publisher cadence; do not hammer the live website.
+                    Thread.sleep(10_000L)
                     val document=page(chapter.url,root)
                     val actual=NovelEpubParser.readerChapter(document,chapter.url,chapter)
                     assertEquals(chapter.number,actual.number,0.0)
                     val text=NovelEpubParser.chapterText(document)
                     assertTrue(text.paragraphs.joinToString("").length>=80)
-                    if(i<13)Thread.sleep(250)
                     text
                 }
             }
