@@ -146,7 +146,10 @@ class SyncEngine(private val context: Context) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
             }
-            val prefix = "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
+            val selectedAlbum=entity.kind=="selected_album"
+            val prefix=if(selectedAlbum)
+                "Selected album • "+entity.displayName
+                else "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
             SyncControl.updateMessage(prefix)
             progress(prefix)
             try {
@@ -172,8 +175,11 @@ class SyncEngine(private val context: Context) {
                     if(!targeted &&
                         !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                         break
-                    val message = entity.displayName + " / " +
-                        stats.mediaDownloaded + " new images"
+                    val message=if(selectedAlbum)
+                        "Selected album • "+gallery.title+
+                        " • "+stats.mediaDownloaded+" original files received"
+                        else entity.displayName + " / " +
+                            stats.mediaDownloaded + " new images"
                     SyncControl.updateMessage(message)
                     progress(message)
                     val completed = processGallery(entity, gallery, adapter, db, files,

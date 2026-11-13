@@ -173,14 +173,22 @@ object VideoEngine {
                             "Transfer cancelled or superseded before final receipt")
                     }
                     VideoTransferJournal.record(context,next.id,"saved")
+                    // The MediaStore receipt was committed already. A cloud
+                    // handoff failure must not mark that actual saved original
+                    // as FAILED, nor restart its download on the next retry.
                     if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
-                        com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
-                            queue.enqueue("videos",
-                                android.net.Uri.parse(uri).lastPathSegment.orEmpty()
-                                    .ifBlank{"video_"+next.id+".mp4"},
-                                android.net.Uri.parse(uri))
+                        runCatching{
+                            com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
+                                queue.enqueue("videos",
+                                    android.net.Uri.parse(uri).lastPathSegment.orEmpty()
+                                        .ifBlank{"video_"+next.id+".mp4"},
+                                    android.net.Uri.parse(uri))
+                            }
+                            com.azrael.pixivdumpsync.NduUploadService.launch(context)
+                        }.onFailure{
+                            android.util.Log.w("AsterionVideo",
+                                "Verified local original saved; cloud upload pending",it)
                         }
-                        com.azrael.pixivdumpsync.NduUploadService.launch(context)
                     }
                     onStatus("Saved ${next.title}")
                 } catch(t:Throwable) {
