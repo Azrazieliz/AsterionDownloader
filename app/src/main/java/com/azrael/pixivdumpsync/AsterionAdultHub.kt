@@ -165,9 +165,10 @@ object AsterionAdultHub {
         // Provider HTML often advertises genuine video covers before an
         // authenticated native index has discovered the originals.
         val publicBySite=sources.associate{site->
-            site.host to KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
-                .filter{SourceIndexParser.sameSite(site.url,it.url) &&
-                    publicMedia(it.url,it.title,it.cover)}
+            site.host to if(site.host=="onejav.com")emptyList() else
+                KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
+                    .filter{SourceIndexParser.sameSite(site.url,it.url) &&
+                        publicMedia(it.url,it.title,it.cover)}
         }
         val hasVisual=bySite.values.any{it.isNotEmpty()} ||
             searchBySite.values.any{it.isNotEmpty()} ||
