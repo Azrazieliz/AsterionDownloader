@@ -20,6 +20,13 @@ import kotlin.concurrent.thread
  * Never contacts external adult providers, user accounts or unrelated media.
  */
 class DeviceTransferSimulation:Instrumentation() {
+    // Instrumentation.onCreate is a no-op: explicitly start the runner thread.
+    // Otherwise onStart is never invoked, `am instrument -w` hangs until
+    // the CI timeout, and no native/Python transfer is actually tested.
+    override fun onCreate(arguments:Bundle?) {
+        super.onCreate(arguments)
+        start()
+    }
     private fun status(message:String){
         Log.i("ASTERION_SIM","AST_SIM: "+message)
         sendStatus(0,Bundle().apply{
