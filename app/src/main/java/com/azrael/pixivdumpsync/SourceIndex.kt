@@ -929,7 +929,15 @@ object SourceIndex {
                                 ?.entries.orEmpty().isNotEmpty())
                             db.clearStaleNativePreviewError(site.url)
                     }
-                    all.filterNot{area=="COSPLAY" && it.adapter=="native"}
+                    all.filterNot{
+                        (area=="COSPLAY" && it.adapter=="native") ||
+                        // OneJAV is a torrent feed, not a video-thumbnail site.
+                        // Its native adapter owns authentication and history;
+                        // generic preview crawling made a second, misleading
+                        // HTTP 403 appear in the adult gallery.
+                        (it.adapter=="native" &&
+                            SiteControls.key(it.url)=="onejav.com")
+                    }
                 }
                 val before=SourceIndexDb(context).use{db->
                     db.items(area,4000).count{!it.preview.isNullOrBlank()}
@@ -971,6 +979,11 @@ object SourceIndex {
                 db.sources().firstOrNull{
                     it.area==area && SiteControls.key(it.url)==SiteControls.key(address)
                 }
+            }
+            if(source?.adapter=="native" &&
+                SiteControls.key(source.url)=="onejav.com"){
+                finished(TorrentSourceBackfill.startSite(context,"ONEJAV"))
+                return@thread
             }
             if(source?.area=="COSPLAY" && source.adapter=="native"){
                 // A native gallery CHECK NEW is handled by the independent
