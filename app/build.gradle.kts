@@ -26,6 +26,9 @@ val hasStablePreviewKey = listOf(
 android {
     namespace = "com.azrael.pixivdumpsync"
     compileSdk = 35
+    // Android Gradle Plugin instruments only debug by default.
+    // Run transfer simulation against the isolated PhoneTest target instead.
+    testBuildType = "phonepilot"
 
     defaultConfig {
         applicationId = "com.azrael.pixivdumpsync"
