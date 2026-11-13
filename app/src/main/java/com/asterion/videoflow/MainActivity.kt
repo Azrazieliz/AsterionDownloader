@@ -446,9 +446,9 @@ class MainActivity:Activity() {
         add(routing,button("TEST EXIT IP",false){
             val address=routeSite.text.toString().trim()
             kotlin.concurrent.thread(name="videoflow-route-check"){
-                val result=runCatching{NetworkRoute.checkExitIp(this,address)}
-                    .getOrElse{it.message?:"Connection failed"}
-                runOnUiThread{toast("Observed exit IP: "+result)}
+                val result=runCatching{NetworkRoute.compareExitIp(this,address)}
+                    .getOrElse{"Exit route not verified: "+(it.message?:"Connection failed")}
+                runOnUiThread{toast(result)}
             }
         },9)
         add(content,routing,12)

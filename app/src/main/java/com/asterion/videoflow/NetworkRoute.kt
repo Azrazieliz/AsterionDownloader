@@ -61,16 +61,31 @@ internal object NetworkRoute {
         val protocol=if(r.mode=="socks5")"socks5h" else "http"
         return protocol+"://"+r.host+":"+r.port
     }
-    /** Test performed only when the user presses the test control. */
-    fun checkExitIp(context:Context,url:String):String {
-        require(siteKey(url).isNotBlank()){"Enter the site to test"}
+    /** A route configuration is not a claim of a changed public IP. Compare
+     * the actual direct and configured exits with no browser cookies.
+     */
+    fun compareExitIp(context:Context,url:String):String {
+        val site=siteKey(url)
+        require(site.isNotBlank()){"Enter the publisher site to check"}
+        val configured=configured(context,url)
+        if(configured==null || configured.mode=="direct"){
+            return "Direct / Android system VPN: "+
+                checkExitIp(context,url)+
+                " · no per-site proxy is configured; exit region not changed by this app"
+        }
+        val routed=checkExitIp(context,url)
+        val direct=probeExitIp(null)
+        return if(direct==routed)
+            "Exit IP unchanged: $routed · selected proxy is not changing the public exit"
+        else "Exit IP changed: direct $direct · selected proxy $routed"
+    }
+    private fun probeExitIp(proxy:Proxy?):String {
         val endpoint=URL("https://api.ipify.org")
-        val selected=javaProxy(context,url)
-        val conn=(if(selected==null)endpoint.openConnection()
-            else endpoint.openConnection(selected)) as HttpURLConnection
+        val conn=(if(proxy==null)endpoint.openConnection()
+            else endpoint.openConnection(proxy)) as HttpURLConnection
         conn.connectTimeout=8000
         conn.readTimeout=8000
-        try {
+        try{
             require(conn.responseCode==200){"Route test HTTP "+conn.responseCode}
             val value=conn.inputStream.bufferedReader().use{it.readText().trim()}
             require(value.length in 3..64 &&
@@ -79,5 +94,10 @@ internal object NetworkRoute {
             }
             return value
         }finally{conn.disconnect()}
+    }
+    /** Test performed only when the user presses the test control. */
+    fun checkExitIp(context:Context,url:String):String {
+        require(siteKey(url).isNotBlank()){"Enter the site to test"}
+        return probeExitIp(javaProxy(context,url))
     }
 }

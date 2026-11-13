@@ -7,6 +7,12 @@ internal object VideoTransferLimits {
     const val POLL_MS = 2_000L
     const val PREFLIGHT_MS = 50_000L
     const val TRANSFER_IDLE_MS = 110_000L
+    // This only bounds zero-original-byte resolving. Once an original
+    // starts transferring, regular progress/idle rules apply without any
+    // artificial file-size or length restriction.
+    const val NO_BYTES_RESOLVE_MS = 4L * 60_000L
+    fun resolvingStalled(elapsedMs:Long,bytes:Long):Boolean =
+        bytes<=0L && elapsedMs>=NO_BYTES_RESOLVE_MS
     const val TRANSFER_MAX_MS = 48L * 60L * 60_000L
 
     fun expired(stage:String,elapsedMs:Long,idleMs:Long):String?=when {
