@@ -11,6 +11,18 @@ class PublisherPreviewFallbackTest {
             cdn),PublisherPreviewFallback.candidates(cdn,
                 "https://jav.guru/1076811/a-real-publisher-title/"))
     }
+    @Test fun javGuruVerifiedRelatedThumbnailUsesPublisherThumbsPath(){
+        val cdn="https://cdn.javnorth.com/wp-content/uploads/thumbs/2026/11/example.jpg?ref=tracking"
+        assertEquals(listOf(
+            "https://jav.guru/wp-content/uploads/thumbs/2026/11/example.jpg",cdn),
+            PublisherPreviewFallback.candidates(cdn,
+                "https://jav.guru/1076811/a-real-publisher-title/"))
+    }
+    @Test fun unrelatedCdnCannotBePromotedToPublisher(){
+        val unknown="https://cdn.other-site.test/wp-content/uploads/thumbs/2026/11/photo.jpg"
+        assertEquals(listOf(unknown),PublisherPreviewFallback.candidates(
+            unknown,"https://jav.guru/1076811/a-real-publisher-title/"))
+    }
     @Test fun doesNotRewriteOtherProvidersOrUnrelatedPaths(){
         val src="https://cdn.javmiku.com/wp-content/uploads/2026/11/poster.jpg"
         assertEquals(listOf(src),PublisherPreviewFallback.candidates(src,
