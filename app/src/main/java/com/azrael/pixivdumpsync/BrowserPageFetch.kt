@@ -110,8 +110,10 @@ object BrowserPageFetch {
                                 .slice(0,1000).map(p=>'<p>'+
                                     esc((p.innerText||p.textContent||'').slice(0,20000))+
                                     '</p>').join(''):'';
+                            const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
-                                '</title></head><body><h4>'+esc(chapterTitle)+
+                                '</title></head><body><h1>'+esc(realH1)+
+                                '</h1><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+players+
                                 '</div><div id="reader">'+images+
