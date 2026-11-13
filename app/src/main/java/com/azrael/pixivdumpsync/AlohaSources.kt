@@ -44,9 +44,8 @@ HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
-CUMS|https://cums.net/|ADULT
 XXXClub|https://xxxclub.to/|ADULT
-OneJAV|https://onejav.com/|ADULT
+OneJAV|https://onejav.com/|VIDEOS
 MP4Hentai|https://mp4hentai.com/|HENTAI
 Hentai Bros|https://hentaibros.net/|HENTAI
 OnlyHentai|https://www.onlyhentaistuff.com/|HENTAI
@@ -69,7 +68,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==39 && sites.distinctBy{it.url}.size==39){"Incorrect approved Aloha source set"}
+            require(sites.size==38 && sites.distinctBy{it.url}.size==38){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
@@ -95,7 +94,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             AlohaArea.ARTWORK->"Artwork"
             AlohaArea.COSPLAY->"Cosplay"
             AlohaArea.VIDEOS->"Videos"
-            AlohaArea.ADULT,AlohaArea.HENTAI->if(site.host=="onejav.com")"Adult" else "Videos"
+            AlohaArea.ADULT,AlohaArea.HENTAI->"Videos"
             AlohaArea.COMICS->"Comics"
             AlohaArea.BOOKS->"Books"
             AlohaArea.GAMES->"Games"
@@ -139,7 +138,11 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
                 status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
                     else site.name+" already watched; scan requested"
             }
-            AlohaArea.VIDEOS,AlohaArea.HENTAI->{
+            AlohaArea.VIDEOS,AlohaArea.HENTAI->if(site.host=="onejav.com"){
+                val started=TorrentSourceBackfill.startSite(a.applicationContext,"ONEJAV")
+                status.text=if(started)"OneJAV video torrent index scanning"
+                    else "OneJAV torrent check already running or paused"
+            }else{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
                 status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
