@@ -31,11 +31,16 @@ internal object EmbeddedYtDlpMetadata {
         put("cachedir",false)
         if(cookies!=null && cookies.isFile)put("cookiefile",cookies.absolutePath)
         if(!proxy.isNullOrBlank())put("proxy",proxy)
-        if(!referer.isNullOrBlank()){
-            val headers=python.getBuiltins().callAttr("dict")
+        // Metadata inspection must identify itself exactly like the real
+        // transfer engine. The previous default Python User-Agent disagreed
+        // with the Android player session and could trigger provider HTTP 403.
+        val headers=python.getBuiltins().callAttr("dict")
+        headers.asMap()[PyObject.fromJava("User-Agent")]=PyObject.fromJava(
+            "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 "+
+            "Chrome/131.0 Mobile Safari/537.36")
+        if(!referer.isNullOrBlank())
             headers.asMap()[PyObject.fromJava("Referer")]=PyObject.fromJava(referer)
-            fields[PyObject.fromJava("http_headers")]=headers
-        }
+        fields[PyObject.fromJava("http_headers")]=headers
         val ydl=python.getModule("yt_dlp").callAttr("YoutubeDL",opts)
         try{
             // This positional false is the Python download flag. No data is

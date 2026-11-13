@@ -4,6 +4,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class VideoCandidatePlanTest {
+    @Test fun publisherPageIsRefererOnlyForItsAlternatePlayers(){
+        assertEquals(null,VideoCandidatePlan.referer(
+            "https://example.org/watch/a","https://example.org/watch/a"))
+        assertEquals("https://example.org/watch/a",VideoCandidatePlan.referer(
+            "https://example.org/watch/a","https://cdn.example.org/e/abc"))
+    }
     @Test fun selectedPageIsRetainedWhenNoIframeWasDiscovered(){
         assertEquals(listOf("https://example.org/watch/a"),
             VideoCandidatePlan.ordered("https://example.org/watch/a",

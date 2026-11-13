@@ -5,6 +5,9 @@ package com.asterion.videoflow
  * Alternatives retain their original order, and duplicates never rerun.
  */
 internal object VideoCandidatePlan {
+    fun referer(selected:String,candidate:String):String? =
+        selected.takeIf{it!=candidate}
+
     fun ordered(selected:String,providerAlternatives:List<String>,
                 embeddedAlternatives:List<String>):List<String> =
         (listOf(selected)+providerAlternatives+embeddedAlternatives)

@@ -780,6 +780,10 @@ object VideoEngine {
                     }catch(t:Exception){last=t}
                     continue
                 }
+                // The publisher's selected watch page is the required HTTP
+                // Referer for third-party player and CDN hosts. Losing it
+                // caused HTTP 403 even after a valid player URL was found.
+                val candidateReferer=VideoCandidatePlan.referer(item.url,candidate)
                 val trusted=FullLengthVideoPolicy.knownFullReferenceHost(candidate)
                 val decision=if(trusted)FullLengthVideoPolicy.assess(
                     item.title,item.title,candidate,null,null,
@@ -791,17 +795,17 @@ object VideoEngine {
                 }
                 if(trusted){
                     try{
-                        execute(candidate)
+                        execute(candidate,candidateReferer)
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
                 }else{
-                    val checked=runCatching{preflight(candidate)}
+                    val checked=runCatching{preflight(candidate,candidateReferer)}
                     if(checked.isSuccess){
                         val verified=checked.getOrThrow().second
                         if(verified.verdict==FullLengthVideoPolicy.Verdict.ACCEPT){
                             try{
-                                execute(candidate)
+                                execute(candidate,candidateReferer)
                                 expectedDuration=checked.getOrThrow().first
                                 downloaded=true
                                 break
@@ -817,7 +821,7 @@ object VideoEngine {
                         if(userRequested &&
                             !FullLengthVideoPolicy.isExplicitPreview(item.title,candidate)){
                             try{
-                                execute(candidate)
+                                execute(candidate,candidateReferer)
                                 downloaded=true
                                 break
                             }catch(t:Exception){last=t}
