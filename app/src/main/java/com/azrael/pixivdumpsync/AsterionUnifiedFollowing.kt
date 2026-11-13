@@ -372,13 +372,18 @@ object AsterionUnifiedFollowing {
             val c=ui.card(a)
             val prefs=a.getSharedPreferences("asterion_performer_gallery",0)
             val full=prefs.getBoolean("expanded:"+creator.id,false)
+            val pageIndex=prefs.getInt("matches_page:"+creator.id,0).coerceAtLeast(0)
+            val perPage=24
+            val totalMatches=SearchResultsDb(a).use{
+                it.countForQuery(creator.name)
+            }
             val verified=PerformerFollowPolicy.permittedName(creator.name) &&
                 PerformerIdentity.isProfileUrl(creator.name,creator.source)
             // Old name-only follows are retained for recovery, but unrelated
             // historic keyword results never pass as verified performer media.
             val hits=if(PerformerFollowPolicy.permittedName(creator.name))
                 SearchResultsDb(a).use{
-                    it.listForQuery(creator.name,if(full)100 else 24)
+                    it.listForQuery(creator.name,perPage,if(full)pageIndex*perPage else 0)
                 }.filter{
                     SearchExactness.matches(creator.name,it.title) &&
                         !IndexedMediaQuality.navigationTitle(it.title) &&
@@ -415,7 +420,8 @@ object AsterionUnifiedFollowing {
             labels.addView(ui.text(a,
                 hits.size.toString()+if(verified)" indexed profile matches · "
                     else " title matches to review · "+
-                    if(full)"full collection" else "tap name to expand",
+                    if(full)"page "+(pageIndex+1)+" · "+totalMatches+
+                        " total saved matches" else "tap name to expand",
                 12f,ui.secondary),ui.lp(a,4))
             head.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
             put(a,c,head,3)
@@ -442,6 +448,20 @@ object AsterionUnifiedFollowing {
                         if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
                             VideoEngine.launch(a,false)
                         notice(a,"Queued · "+hit.title.take(65))
+                    }
+                }
+            }
+            if(full){
+                if(pageIndex>0){
+                    action(a,c,"PREVIOUS MODEL MATCHES",false){
+                        prefs.edit().putInt("matches_page:"+creator.id,pageIndex-1).apply()
+                        refresh()
+                    }
+                }
+                if((pageIndex+1)*perPage<totalMatches){
+                    action(a,c,"NEXT MODEL MATCHES",false){
+                        prefs.edit().putInt("matches_page:"+creator.id,pageIndex+1).apply()
+                        refresh()
                     }
                 }
             }
