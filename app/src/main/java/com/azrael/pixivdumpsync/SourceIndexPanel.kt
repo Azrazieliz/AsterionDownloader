@@ -243,6 +243,25 @@ object SourceIndexPanel {
      * a website or an intermediary source-page dialog.
      */
     internal fun details(a:Activity,item:IndexedItem){
+        if(item.area=="COSPLAY" &&
+            ApprovedCosplayActions.isGalleryPage(item.url)){
+            // Use a single first-party selected-gallery route for all indexed
+            // Cosplay cards, not only the main gallery home. Previously these
+            // went to the generic original resolver and failed as unindexed.
+            thread(name="asterion-cosplay-selected-original"){
+                val result=runCatching{
+                    ApprovedCosplayActions.selectedGallery(a,item.source,
+                        KurohaMediaPreview.Tile(
+                            item.url,item.title,item.preview.orEmpty(),
+                            "Cosplay",item.url))
+                }.getOrElse{it.message?:"Gallery selection failed"}
+                a.runOnUiThread{
+                    if(!a.isDestroyed && !a.isFinishing)
+                        Toast.makeText(a,result,Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
         if(item.queued){
             Toast.makeText(a,"Already queued · check Downloads",
                 Toast.LENGTH_SHORT).show()

@@ -163,21 +163,7 @@ object AsterionCosplayGallery {
                             putExtra(GalleryDetailActivity.EXTRA_SOURCE,gallery.source.wireName)
                             putExtra(GalleryDetailActivity.EXTRA_TITLE,gallery.title)
                         })
-                    item!=null->{
-                        if(ApprovedCosplayActions.isGalleryPage(item.url)){
-                            // Indexed galleries previously went through the
-                            // direct-original resolver and were rejected as
-                            // "site not indexed". Route them to the SAME
-                            // selected-gallery engine as public cover cards.
-                            thread(name="asterion-cosplay-indexed-gallery"){
-                                val message=runCatching{
-                                    ApprovedCosplayActions.selectedGallery(
-                                        a,site.url,tile)
-                                }.getOrElse{it.message?:"Gallery selection failed"}
-                                toast(a,message)
-                            }
-                        }else SourceIndexPanel.details(a,item)
-                    }
+                    item!=null->SourceIndexPanel.details(a,item)
                     else->{
                         // A gallery listing thumbnail does not prove that its
                         // original is directly downloadable. Run its actual
