@@ -434,6 +434,11 @@ object WebDiscovery {
         if(URI(address).host.orEmpty().endsWith("watchporn.to")){
             watchPornDirect(page.html())?.let{return it}
         }
+        // For these selected JS-driven sites, an HTML video element may be
+        // ONLY a 5–30s preview. It must pass the rendered duration gate below.
+        val selectedBrowserHost=runCatching{URI(address).host.orEmpty()
+            .lowercase().removePrefix("www.")}.getOrDefault("")
+        if(selectedBrowserHost !in setOf("hentaibros.net","3dhentaix.com"))
         for(node in page.select("video[src],video source[src],source[src],meta[property=og:video],meta[property=og:video:url],meta[itemprop=contentUrl]")){
             val source=node.attr("abs:src").ifBlank{node.attr("content")}
             val resolved=runCatching{URI(page.location()).resolve(source).toString()}.getOrNull()?:continue
