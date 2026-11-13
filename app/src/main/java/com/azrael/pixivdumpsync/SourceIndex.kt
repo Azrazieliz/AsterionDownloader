@@ -1203,7 +1203,8 @@ object SourceIndex {
             // Some sites deliver provider-authorized content only in their
             // browser session. Use the existing safe WebView content parser
             // after the user has actually connected that account.
-            if(!SiteSession.bound(context,address))throw error
+            if(!SiteSession.bound(context,address) &&
+                !BrowserPageFetch.publicEligible(address))throw error
             val browser=BrowserPageFetch.html(context,address)
             return Jsoup.parse(browser,address)
         }
