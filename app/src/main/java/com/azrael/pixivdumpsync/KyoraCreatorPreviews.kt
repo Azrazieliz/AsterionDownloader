@@ -54,7 +54,14 @@ object KyoraCreatorPreviews {
         // Old Kiutaku snapshots contain homepage montages. Invalidate only
         // that provider's old cache; keep every other site's cached previews.
         if(SiteControls.key(source)=="kiutaku.com" &&
-            !obj.optBoolean("verified_individual_photos_v1",false))return null
+            !obj.optBoolean("verified_individual_photos_v1",false) &&
+            obj.optJSONArray("entries")?.length()!=0) {
+            // Only discard old *non-empty* montage snapshots. Retain failed
+            // fetch state so the screen does not repeatedly re-request all
+            // albums and redraw the UI after each failure.
+            return Snapshot(emptyList(),obj.optLong("updated"),
+                obj.optString("error").ifBlank{"Old montage cache invalidated"})
+        }
         val arr=obj.optJSONArray("entries")?:JSONArray()
         Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
             arr.optJSONObject(i)?.let{
@@ -121,8 +128,10 @@ object KyoraCreatorPreviews {
         if(!force)cached(a,url)?.let{onReady(it)}
         if(!SourceIndexParser.safe(url))return
         val stored=cached(a,url)
-        if(!force && stored!=null && System.currentTimeMillis()-stored.updated<
-            (if(stored.error==null)12L*60*60*1000 else 2L*60*60*1000))return
+        val wait=if(stored?.error==null)12L*60*60*1000 else
+            if(SiteControls.key(url)=="kiutaku.com")5L*60*1000
+            else 2L*60*60*1000
+        if(!force && stored!=null && System.currentTimeMillis()-stored.updated<wait)return
         if(!inflight.add(url))return
         pool.execute{
             val snapshot=runCatching{
