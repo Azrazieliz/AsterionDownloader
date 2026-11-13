@@ -40,12 +40,13 @@ object VideoSearchPreviews {
                     else URL(url).openConnection()).apply{
                     connectTimeout=6000
                     readTimeout=8000
-                    setRequestProperty("User-Agent","Mozilla/5.0")
-                    setRequestProperty("Accept","image/*")
+                    setRequestProperty("User-Agent",
+                        "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36")
+                    setRequestProperty("Accept","image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
                     if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer))
                         setRequestProperty("Referer",referer)
                 }
-                require(connection.contentType.orEmpty().startsWith("image/"))
+                val mime=connection.contentType.orEmpty().lowercase()
                 val bytes=connection.getInputStream().use{input->
                     val buffer=java.io.ByteArrayOutputStream()
                     val chunk=ByteArray(16384)
@@ -57,8 +58,29 @@ object VideoSearchPreviews {
                     buffer.toByteArray()
                 }
                 require(bytes.size in 200..2_000_000)
+                val jpeg=bytes[0]==0xff.toByte() && bytes[1]==0xd8.toByte()
+                val png=bytes[0]==0x89.toByte() && bytes[1]==0x50.toByte()
+                val webp=String(bytes,0,4)=="RIFF" &&
+                    String(bytes,8,4)=="WEBP"
+                require(mime.startsWith("image/") || jpeg || png || webp){
+                    "Publisher returned HTML/challenge instead of poster bytes"
+                }
+                // Two-megabyte JPEGs can expand to enormous Android bitmaps;
+                // decode dimensions first and scale to the 85dp preview card.
+                val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+                BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+                require(bounds.outWidth in 1..20_000 &&
+                    bounds.outHeight in 1..20_000){
+                    "Invalid or oversized image header"
+                }
+                var sample=1
+                while(maxOf(bounds.outWidth,bounds.outHeight)/sample>350)
+                    sample*=2
                 BitmapFactory.decodeByteArray(bytes,0,bytes.size,
-                    BitmapFactory.Options().apply{inSampleSize=2})
+                    BitmapFactory.Options().apply{
+                        inSampleSize=sample
+                        inPreferredConfig=Bitmap.Config.RGB_565
+                    })
             }.getOrNull()
             if(bitmap!=null){
                 synchronized(lock){memory.put(url,bitmap)}
