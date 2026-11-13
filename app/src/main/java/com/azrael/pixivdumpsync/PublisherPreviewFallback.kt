@@ -15,7 +15,7 @@ internal object PublisherPreviewFallback {
         val publisher=from?.host.orEmpty().lowercase(Locale.ROOT)
             .removePrefix("www.")
         val path=p?.rawPath.orEmpty()
-        val valid= p?.scheme=="https" && p.rawUserInfo==null &&
+        val valid= p!=null && p.scheme=="https" && p.rawUserInfo==null &&
             p.port==-1 && publisher=="jav.guru" &&
             cdn in setOf("cdn.javmiku.com","javmiku.com") &&
             path.startsWith("/wp-content/uploads/") &&

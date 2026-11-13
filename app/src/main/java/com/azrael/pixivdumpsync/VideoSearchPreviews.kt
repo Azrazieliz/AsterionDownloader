@@ -53,7 +53,7 @@ object VideoSearchPreviews {
                         // page as Referer, not the catalog's homepage.
                         setRequestProperty("Referer",referer)
                         val sameHost=runCatching{
-                            val poster=java.net.URI(url).host.orEmpty().lowercase()
+                            val poster=java.net.URI(candidateUrl).host.orEmpty().lowercase()
                             val publisher=java.net.URI(referer).host.orEmpty().lowercase()
                             poster==publisher
                         }.getOrDefault(false)
