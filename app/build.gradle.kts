@@ -34,8 +34,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 87
-        versionName = "1.3.58"
+        versionCode = 88
+        versionName = "1.3.59"
 
         testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
@@ -90,6 +90,16 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".testphone1111"
             versionNameSuffix = "-phone-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // One isolated post-repair test installation. Existing Acceptance
+        // and earlier PhoneTest packages are left untouched because CI's
+        // debug certificate cannot update their independently signed APKs.
+        create("fieldpilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1113"
+            versionNameSuffix = "-field-test"
             isDebuggable = true
             matchingFallbacks += listOf("debug")
         }
