@@ -54,8 +54,10 @@ internal object AdultProviderListings {
         val host=host(source)
         val selector=when(host){
             "jav.guru" ->
-                "article h2 a[href],article h3 a[href],.post-title a[href],"+
-                ".entry-title a[href],main article a[href],.post a[href]"
+                // Real Jav Guru markup uses listing wrappers that are not
+                // consistently article/post elements. Select anchors first,
+                // then admit ONLY strict publisher watch URLs below.
+                "a[href]"
             "cums.net" ->
                 "a[href*='/video/'],.video-item a[href],.video-card a[href]"
             else ->
