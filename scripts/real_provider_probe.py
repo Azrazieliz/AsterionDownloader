@@ -34,6 +34,7 @@ TARGETS = {
     # availability and first-party player metadata, never assume transfer success.
     "Eporner": "https://www.eporner.com/",
     "3DHentaiX": "https://3dhentaix.com/",
+    "3DHentaiX actual detail": "https://3dhentaix.com/ntr-witness-milf-1-3/",
     "JAVIDEO": "https://javideo.net/",
     "Helloporn": "https://helloporn.com/",
     "XXXClub": "https://xxxclub.to/",
@@ -167,6 +168,13 @@ def main():
                     sample_hrefs=[urllib.parse.urlsplit(absolute(TARGETS[name],x)).path
                         for x in parsed.anchors if absolute(TARGETS[name],x) and
                         first_party(host,absolute(TARGETS[name],x))][:5],
+                    player_hosts=list(dict.fromkeys(
+                        urllib.parse.urlsplit(absolute(TARGETS[name],x)).hostname or ""
+                        for x in parsed.players if absolute(TARGETS[name],x)))[:12],
+                    player_kinds=[
+                        ("m3u8" if ".m3u8" in x.lower() else "mp4" if ".mp4" in x.lower()
+                         else "iframe_or_other")
+                        for x in parsed.players[:20]],
                     sample_img_hosts=list(dict.fromkeys(
                         (urllib.parse.urlsplit(absolute(TARGETS[name],x)).hostname or "")
                         for x in parsed.images if absolute(TARGETS[name],x)))[:8],
@@ -255,7 +263,7 @@ def main():
         status=("player_url_observed" if raw_players else
             "rendered_stream_choices_but_no_direct_media_url"))
     # Render actual browser DOM only where static HTTP did not expose cards.
-    for name in ("Jav Guru detail", "Archivebate", "Rule34Video"):
+    for name in ("Jav Guru detail", "Archivebate", "Rule34Video", "3DHentaiX actual detail"):
         value = report.get(name,{})
         if value.get("http") not in (200,201) or value.get("first_party_links",0)<3:
             browser=render_dom(TARGETS[name])
@@ -263,6 +271,10 @@ def main():
             if dom:
                 parsed=Parse();parsed.feed(dom)
                 browser.update(dom_images=len(parsed.images),
+                    dom_player_count=len(parsed.players),
+                    dom_player_hosts=list(dict.fromkeys(
+                        urllib.parse.urlsplit(absolute(TARGETS[name],x)).hostname or ""
+                        for x in parsed.players if absolute(TARGETS[name],x)))[:12],
                     dom_first_party_links=sum(bool(absolute(TARGETS[name],x)) and
                         first_party(urllib.parse.urlsplit(TARGETS[name]).hostname or "",
                                     absolute(TARGETS[name],x))
