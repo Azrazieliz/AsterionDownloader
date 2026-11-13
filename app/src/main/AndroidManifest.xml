@@ -127,6 +127,12 @@
             android:stopWithTask="false"/>
         <service android:name=".ChapterRecoveryService"
             android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <!-- Targeted in-app IPC; process-local downloader futures must be
+             interrupted where they actually run, not in the UI process. -->
+        <receiver android:name="com.asterion.videoflow.VideoCancelPrimaryReceiver"
+            android:exported="false" android:process=":videoflow_primary"/>
+        <receiver android:name="com.asterion.videoflow.VideoCancelSecondaryReceiver"
+            android:exported="false" android:process=":videoflow_secondary"/>
         <service android:name="com.asterion.videoflow.TransferService"
             android:exported="false" android:process=":videoflow_primary"
             android:foregroundServiceType="dataSync" android:stopWithTask="false"/>
