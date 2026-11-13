@@ -26,6 +26,15 @@ internal object VideoErrorDetail {
             Regex("""\b(401|403)\b|forbidden|access denied|sign.?in|authentication required""")
                 .containsMatchIn(lower)->
                 "Provider denied playback or transfer (HTTP 401/403); verify direct browser access and connected account"
+            Regex("""\b429\b|too many requests|rate.?limit""")
+                .containsMatchIn(lower)->
+                "Provider rate-limited requests (HTTP 429); wait for cooldown: "+raw
+            Regex("""\b404\b|\b410\b|video removed|original not found""")
+                .containsMatchIn(lower)->
+                "Original unavailable (HTTP 404/410); verify the selected page: "+raw
+            Regex("""drm protected|widevine|protected playback""")
+                .containsMatchIn(lower)->
+                "Publisher uses DRM-protected playback; unsupported original: "+raw
             Regex("""module.?not.?found|no module named|python.*not.*start|importerror""")
                 .containsMatchIn(lower)->
                 "Embedded Python dependency failed: "+raw
@@ -34,7 +43,7 @@ internal object VideoErrorDetail {
                 "Video staging is not writable: "+raw
             Regex("""unsupported url|no suitable extractor|unable to extract|no video formats""")
                 .containsMatchIn(lower)->
-                "Video extractor cannot resolve this publisher's current player: "+raw
+                "Video extractor cannot resolve this publisher's current player (extractor repair required): "+raw
             else->raw
         }
         val python=chain.any{

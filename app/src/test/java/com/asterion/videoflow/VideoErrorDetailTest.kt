@@ -23,6 +23,21 @@ class VideoErrorDetailTest {
             VideoFailurePolicy.classify(message))
     }
 
+    @Test fun rateLimitingIsNotMisreportedAsAnAccountProblem(){
+        val msg=VideoErrorDetail.summary(
+            IllegalStateException("HTTP Error 429: Too Many Requests"))
+        assertTrue(msg.contains("rate-limited",true))
+        assertEquals(VideoFailurePolicy.Kind.RATE_LIMIT,VideoFailurePolicy.classify(msg))
+    }
+
+    @Test fun unsupportedPublisherPlayerIsNonRetryableWithoutRepair(){
+        val msg=VideoErrorDetail.summary(
+            IllegalStateException("Unsupported URL: https://video.example/watch/3"))
+        assertTrue(msg.contains("extractor repair required"))
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,VideoFailurePolicy.classify(msg))
+        assertFalse(msg.contains("video.example"))
+    }
+
     @Test fun pythonRuntimeDependencyFailureIsDistinct(){
         val msg=VideoErrorDetail.summary(
             ExecutionException(IllegalStateException("ModuleNotFoundError: No module named yt_dlp")))

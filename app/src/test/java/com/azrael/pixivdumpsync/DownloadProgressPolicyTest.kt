@@ -9,8 +9,10 @@ class DownloadProgressPolicyTest {
         assertTrue(DownloadProgressPolicy.receiving(true,8192L,null))
         assertTrue(DownloadProgressPolicy.receiving(true,1L,0))
     }
-    @Test fun knownPercentAlsoCounts() {
-        assertTrue(DownloadProgressPolicy.receiving(true,0L,27))
+    @Test fun extractorPercentWithoutWrittenBytesIsNotTransfer() {
+        assertFalse(DownloadProgressPolicy.receiving(true,0L,27))
+        assertFalse(DownloadProgressPolicy.receiving(true,0L,95))
+        assertTrue(DownloadProgressPolicy.receiving(true,1L,27))
     }
     @Test fun inactiveOrZeroByteDoesNotCount() {
         assertFalse(DownloadProgressPolicy.receiving(false,8192L,100))

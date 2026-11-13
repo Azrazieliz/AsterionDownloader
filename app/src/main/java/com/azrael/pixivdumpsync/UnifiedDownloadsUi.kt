@@ -159,7 +159,8 @@ object UnifiedDownloadsUi {
                         else "Inspecting / preparing original"
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
-                    info,state,if(item.status=="running")item.progress else null,item.updated,{
+                    info,state,if(item.status=="running" && bytes>0L)
+                        item.progress else null,item.updated,{
                         when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED->{
@@ -657,8 +658,10 @@ object UnifiedDownloadsUi {
                 State.HELD->"Retry available"
                 State.PAUSED->"Paused"
                 State.QUEUED->"Queued"
-                State.ACTIVE->if(item.percent!=null && item.percent>0)
-                    "Transferring · "+item.percent+"%"
+                State.ACTIVE->if(item.receivedBytes>0L)
+                    if(item.percent!=null && item.percent>0)
+                        "Transferring · "+item.percent+"%"
+                    else "Receiving original bytes"
                     else "Preparing / connecting"
             }
             val stateColor=when(item.state){
@@ -673,7 +676,8 @@ object UnifiedDownloadsUi {
             main.addView(ui.text(a,item.info.take(110),11f,ui.secondary).apply{
                 maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
             },ui.lp(a,3))
-            if(item.state==State.ACTIVE && item.percent!=null){
+            if(item.state==State.ACTIVE && item.receivedBytes>0L &&
+                item.percent!=null){
                 main.addView(ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal).apply{
                     max=100;progress=item.percent
                     progressTintList=ColorStateList.valueOf(

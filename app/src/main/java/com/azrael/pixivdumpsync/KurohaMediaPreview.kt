@@ -74,11 +74,16 @@ internal object KurohaMediaPreview {
 
                 if (tile.thumbnail.startsWith("content://")) {
                     CreatorPreviews.galleryThumbnail(a, thumb, tile.thumbnail, null)
-                } else if (tile.video) {
-                    VideoSearchPreviews.display(a, thumb, tile.thumbnail, tile.referer)
-                } else {
-                    RemoteImageLoader.load(a, thumb, tile.thumbnail, tile.referer)
+                } else if (SearchRanking.validUrl(tile.thumbnail)) {
+                    if (tile.video) {
+                        VideoSearchPreviews.display(a, thumb, tile.thumbnail, tile.referer)
+                    } else {
+                        RemoteImageLoader.load(a, thumb, tile.thumbnail, tile.referer)
+                    }
                 }
+                // No image URL: keep the honest video icon and tappable
+                // indexed-page card. Never attempt to load an empty URL or
+                // count the icon as a successfully fetched media thumbnail.
             }
             holder.addView(HorizontalScrollView(a).apply {
                 isHorizontalScrollBarEnabled = false
