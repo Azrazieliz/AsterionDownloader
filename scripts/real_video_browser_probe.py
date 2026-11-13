@@ -44,7 +44,19 @@ def evidence(name,label):
         watchLinks:[...document.querySelectorAll('a[href]')]
           .filter(el=>/\\/watch\\/|\\/video\\//i.test(el.getAttribute('href')||''))
           .length,
-        cards:document.querySelectorAll('article,.video-card,.video-item,.video-box').length
+        cards:document.querySelectorAll('article,.video-card,.video-item,.video-box').length,
+        title:document.title.slice(0,120),
+        heading:(document.querySelector('h1')?.textContent||'').trim().slice(0,120),
+        watchPaths:[...document.querySelectorAll('a[href]')].filter(el=>
+            /^\/watch\/|^\/video\//i.test(new URL(el.href,location.href).pathname))
+            .slice(0,15).map(el=>new URL(el.href,location.href).pathname),
+        ageGate:/verify you are human|cloudflare|please enable javascript|access denied|blocked|captcha/i
+            .test(document.body?.innerText?.slice(0,2000)||''),
+        streamControls:[...document.querySelectorAll(
+            'button,a,[role=button],input[type=button]')]
+            .map(el=>(el.textContent||el.value||'').trim().slice(0,60))
+            .filter(t=>/^stream|^play|^watch|^continue|^enter/i.test(t))
+            .slice(0,30)
       }
     """)
     def host(u):
@@ -54,7 +66,10 @@ def evidence(name,label):
            for e in values["players"]]
     out[name+" "+label]={"page_host":host(driver.current_url),
          "html_bytes":len(html.encode("utf-8")),"watch_links":values["watchLinks"],
-         "cards":values["cards"],"player_elements":urls}
+         "cards":values["cards"],"player_elements":urls,
+         "title":values["title"],"heading":values["heading"],
+         "watch_paths":values["watchPaths"],"age_gate":values["ageGate"],
+         "controls":values["streamControls"]}
 try:
     for name,url in SITES.items():
         try:
@@ -73,6 +88,30 @@ try:
                         evidence(name,"after public continue")
                     except Exception as ex:
                         out[name+" continue"]={"error":str(ex)[:200]}
+                # Open exactly one first-party public watch entry in the
+                # ordinary browser. We do not bulk-download videos or alter
+                # any account/cookie challenges. This checks real playback.
+                initial=out.get(name+" after public continue") or out.get(name+" initial") or {}
+                paths=initial.get("watch_paths",[])
+                route=next((p for p in paths if re.match(r"^/watch/[a-z0-9][^/]{0,150}/?$",p,re.I)),None)
+                if route:
+                    driver.get(urllib.parse.urljoin(url,route))
+                    time.sleep(4)
+                    evidence(name,"one real watch page")
+                    for video in driver.find_elements(By.CSS_SELECTOR,"video")[:1]:
+                        try:
+                            driver.execute_script("""
+                                arguments[0].muted=true;
+                                const promise=arguments[0].play();
+                                if(promise&&typeof promise.catch==='function')
+                                    promise.catch(()=>{});
+                            """,video)
+                            time.sleep(2)
+                            evidence(name,"after video play")
+                        except Exception as ex:
+                            out[name+" play"]={"error":type(ex).__name__+":"+str(ex)[:160]}
+                else:
+                    out[name+" watch-route"]={"status":"no first-party watch route witnessed"}
             elif name=="Jav Guru":
                 controls=driver.find_elements(By.XPATH,
                     "//*[self::button or self::a or @role='button']"
@@ -93,6 +132,9 @@ try:
                         out[name+" click "+str(attempted)]={"error":str(ex)[:200]}
                 out[name+" choices"]={"observed_controls":len(controls),
                     "clicked_stream_choices":attempted}
+                # A plain article HTTP 200 is not proof the player exists.
+                # Collect the browser's own page title and bounded button
+                # labels for diagnosis instead of claiming a stream was found.
         except Exception as ex:
             out[name]={"error":type(ex).__name__+": "+str(ex)[:300]}
     media=[]
