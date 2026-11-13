@@ -180,9 +180,18 @@ object WebDiscovery {
         }
         // Some sites put the accessible video original only in a native HTML
         // <video> element. Preserve the distinct page/source and thumbnail.
-        for(node in doc.select("main video[src],main video source[src],"+
-            "article video[src],article video source[src],"+
-            ".post video[src],.post video source[src]")){
+        // On Archivebate the <video> elements shown around /watch/ID
+        // are previews of OTHER recordings. Chrome confirmed that the
+        // selected player is a separate Mixdrop iframe. Never publish these
+        // preview clips as full downloadable originals.
+        val archivebateCatalog=runCatching{
+            URI(root).host.orEmpty().lowercase().removePrefix("www.")==
+                "archivebate.com"
+        }.getOrDefault(false)
+        for(node in (if(archivebateCatalog)emptyList()
+            else doc.select("main video[src],main video source[src],"+
+                "article video[src],article video source[src],"+
+                ".post video[src],.post video source[src]"))){
             val candidate=normalize(node.absUrl("src"))?:continue
             if(!mediaFiles.containsMatchIn(candidate))continue
             val video=node.closest("video")?:node
@@ -338,6 +347,14 @@ object WebDiscovery {
     fun directMedia(address:String,context:Context?=null):String? {
         require(isUrl(address)){"Invalid public HTTP(S) URL"}
         if(mediaFiles.containsMatchIn(address))return address
+        // A selected Archivebate /watch/<ID> page has recommendation MP4s
+        // beside its real embedded watch player. The former is not the
+        // selected original and must NEVER be saved under its title.
+        if(runCatching{
+            val uri=URI(address)
+            uri.host.orEmpty().lowercase().removePrefix("www.")=="archivebate.com" &&
+                Regex("""^/watch/[0-9]{1,16}/?$""").matches(uri.path.orEmpty())
+        }.getOrDefault(false))return null
         val page=open(address,context)
         if(URI(address).host.orEmpty().endsWith("watchporn.to")){
             watchPornDirect(page.html())?.let{return it}
