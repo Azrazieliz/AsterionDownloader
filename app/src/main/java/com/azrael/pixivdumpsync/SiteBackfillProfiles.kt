@@ -178,8 +178,12 @@ internal object SiteBackfillProfiles {
         val results=LinkedHashMap<String,IndexedItem>()
         val banned=Regex("(?i)(?:thumb|thumbnail|preview|sample|avatar|logo|icon|sprite|placeholder|spinner)")
         fun record(raw:String,label:String){
-            val url=runCatching{URI(doc.location()).resolve(raw).toString()}
-                .getOrNull()?:return
+            // Gallery filenames can contain Japanese/Chinese characters.
+            // Canonical ASCII percent-encoding is required by Android HTTP
+            // request targets; keep the exact publisher path, not a guessed URL.
+            val url=runCatching{
+                URI(doc.location()).resolve(URI(raw.trim())).toASCIIString()
+            }.getOrNull()?:return
             if(!SourceIndexParser.safe(url) || banned.containsMatchIn(url))return
             val path=runCatching{URI(url).path.orEmpty().lowercase(Locale.ROOT)}
                 .getOrDefault("")
@@ -257,6 +261,32 @@ internal object SiteBackfillProfiles {
                     record(raw,image.attr("alt"))
                     break
                 }
+                if(results.size>=3000)break
+            }
+        }
+        if(host=="kiutaku.com" && results.isEmpty() && runCatching{
+            Regex("""^/[0-9]{1,9}/?$""").matches(URI(item.url).path.orEmpty())
+        }.getOrDefault(false)){
+            // Live /7440 uses full-resolution photos under the page's body,
+            // without the old <article>/<main> wrappers. Scan ONLY this
+            // validated numeric detail page and ONLY publisher originals
+            // on mitaku.net with numbered photo filenames. Avoid cards,
+            // advertising images, montage covers and related-site widgets.
+            for(element in doc.select("img[src],img[data-src],a[href]").take(600)){
+                val raw=when(element.tagName()){
+                    "a"->element.absUrl("href")
+                    else->element.absUrl("data-src").ifBlank{element.absUrl("src")}
+                }
+                val accepted=runCatching{
+                    val uri=URI(raw)
+                    val imageHost=uri.host.orEmpty().lowercase(Locale.ROOT)
+                    val path=uri.path.orEmpty()
+                    imageHost in setOf("mitaku.net","www.mitaku.net") &&
+                        path.contains("/wp-content/uploads/") &&
+                        Regex("""(?i)-[0-9]{1,4}\.(?:jpe?g|png|webp|avif)$""")
+                            .containsMatchIn(path)
+                }.getOrDefault(false)
+                if(accepted)record(raw,element.attr("alt"))
                 if(results.size>=3000)break
             }
         }
