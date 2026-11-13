@@ -1,0 +1,43 @@
+name: Downloader LIVE original-adapter integration
+
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - 'app/src/test/java/com/azrael/pixivdumpsync/ActualProviderIntegrationTest.kt'
+      - '.github/workflows/downloader-real-adapter-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ASTERION_LIVE_PROVIDERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Run REAL provider adapters and first 14 real chapters through EPUB writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testPilotUnitTest --tests 'com.azrael.pixivdumpsync.ActualProviderIntegrationTest' --stacktrace --console=plain
+      - name: Publish tests/results (no downloaded media or book text)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-provider-integration-results
+          if-no-files-found: ignore
+          path: |
+            app/build/test-results/testPilotUnitTest/*.xml
+            app/build/reports/tests/testPilotUnitTest/**
+          retention-days: 30
