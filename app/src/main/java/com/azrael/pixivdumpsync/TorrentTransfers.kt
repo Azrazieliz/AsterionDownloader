@@ -162,31 +162,67 @@ class TorrentTransferService : Service() {
             .setContentIntent(open).setOnlyAlertOnce(true)
             .setProgress(100, percent.coerceIn(0, 100), false).build()
     }
+    private fun startJob(id:String,folder:String,indices:String):Boolean {
+        if(indices.isBlank()) {
+            update(id,"FAILED: Previously selected files are unavailable")
+            return false
+        }
+        if(!inFlight.add(id))return false
+        thread(name="asterion-torrent-$id"){
+            try {
+                transfer(id,folder,indices)
+                getSharedPreferences("torrent_transfers",MODE_PRIVATE).edit()
+                    .remove("job_folder_$id").remove("job_indices_$id")
+                    .remove("job_paused_$id").apply()
+            }catch(e:Throwable){
+                update(id,"FAILED: "+(e.message?:e.javaClass.simpleName))
+            }finally {
+                inFlight.remove(id)
+                if(inFlight.isEmpty())stopSelf()
+            }
+        }
+        return true
+    }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION, notification("Preparing torrent…"))
-        val id = intent?.getStringExtra("job") ?: return START_NOT_STICKY
-        when (intent.action) {
-            PAUSE, RESUME -> {
-                val pause = intent.action == PAUSE
-                if (pause) paused.add(id) else paused.remove(id)
-                update(id, if (pause) "Paused" else "Resuming")
-                return START_STICKY
+        val id=intent?.getStringExtra("job")
+        if(id.isNullOrBlank()){
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
+        val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        when(intent.action){
+            PAUSE->{
+                paused.add(id)
+                prefs.edit().putBoolean("job_paused_$id",true).apply()
+                update(id,"Paused")
+                if(inFlight.isEmpty())stopSelfResult(startId)
+                return START_NOT_STICKY
             }
-            ADD -> {
-                val folder = intent.getStringExtra("folder")?.takeIf { it == "Games" || it == "Books" || it == "Videos" || it == "Assets" }
-                    ?: "Games"
-                val indices = intent.getStringExtra("indices") ?: ""
-                if (inFlight.add(id)) thread(name = "asterion-torrent-$id") {
-                    try { transfer(id, folder, indices) }
-                    catch (e: Throwable) { update(id, "FAILED: " + (e.message ?: e.javaClass.simpleName)) }
-                    finally {
-                        inFlight.remove(id)
-                        if (inFlight.isEmpty()) stopSelf()
-                    }
-                }
+            RESUME->{
+                paused.remove(id)
+                prefs.edit().putBoolean("job_paused_$id",false).apply()
+                val folder=prefs.getString("job_folder_$id","Videos")?:"Videos"
+                val indices=prefs.getString("job_indices_$id","").orEmpty()
+                if(!inFlight.contains(id))startJob(id,folder,indices)
+                else update(id,"Resuming")
+                return START_REDELIVER_INTENT
+            }
+            ADD->{
+                val folder=intent.getStringExtra("folder")
+                    ?.takeIf{it in setOf("Games","Books","Videos","Assets")}
+                    ?:prefs.getString("job_folder_$id","Videos")?:"Videos"
+                val indices=intent.getStringExtra("indices")
+                    ?:prefs.getString("job_indices_$id","").orEmpty()
+                prefs.edit().putString("job_folder_$id",folder)
+                    .putString("job_indices_$id",indices).apply()
+                if(prefs.getBoolean("job_paused_$id",false))paused.add(id)
+                else paused.remove(id)
+                startJob(id,folder,indices)
                 return START_REDELIVER_INTENT
             }
         }
+        stopSelfResult(startId)
         return START_NOT_STICKY
     }
     private fun update(id: String, state: String, progress: Int = 0) {
