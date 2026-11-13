@@ -176,7 +176,8 @@ object KyoraCreatorPreviews {
                         current=next
                     }else{
                         if(response.statusCode() in setOf(401,403) &&
-                            SiteSession.bound(a.applicationContext,current)){
+                            (SiteSession.bound(a.applicationContext,current) ||
+                                BrowserPageFetch.publicEligible(current))){
                             // Only reuse a session the user already connected;
                             // browser verification must succeed legitimately.
                             val html=BrowserPageFetch.html(a.applicationContext,current)
@@ -197,7 +198,8 @@ object KyoraCreatorPreviews {
                 // gallery is rendered only in the user's authorized browser
                 // session. Do not call it a successful listing without cards.
                 if(items.isEmpty() &&
-                    SiteSession.bound(a.applicationContext,url)){
+                    (SiteSession.bound(a.applicationContext,url) ||
+                        BrowserPageFetch.publicEligible(url))){
                     val html=BrowserPageFetch.html(a.applicationContext,url)
                     items=parse(html,url)
                 }
