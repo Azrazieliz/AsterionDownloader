@@ -307,10 +307,15 @@ object WebDiscovery {
      * for arbitrary third-party advertising iframes. No authentication is
      * bypassed; provider access errors remain errors.
      */
-    internal fun publishedEmbeds(doc:Document,source:String):List<String> {
+    internal fun publishedEmbeds(doc:Document,source:String,
+                                 explicitlySelected:Boolean=false):List<String> {
         val origin=runCatching{URI(source)}.getOrNull()?:return emptyList()
         val host=origin.host.orEmpty().lowercase().removePrefix("www.")
-        if(!VideoSiteProfiles.isVideoPage(source))return emptyList()
+        // A verified user tap on a site's media card may use a slug that its
+        // old provider route no longer recognizes. The caller already checks
+        // it is an approved provider; keep the same player-provenance checks.
+        if(!VideoSiteProfiles.isVideoPage(source) && !explicitlySelected)
+            return emptyList()
         val authorizedArchivebate=host=="archivebate.com" &&
             Regex("^/watch/[0-9]{1,16}/?$").matches(origin.path.orEmpty())
         val uncensored=host=="uncensoredhentai.xxx"
@@ -386,7 +391,7 @@ object WebDiscovery {
                 actual==host
             })return emptyList()
         val doc=open(address,context)
-        return publishedEmbeds(doc,address)
+        return publishedEmbeds(doc,address,explicitlySelected)
     }
 
     fun directMedia(address:String,context:Context?=null):String? {
