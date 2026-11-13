@@ -116,6 +116,17 @@ internal object NativeMediaDownloader {
                     throw IOException("Media URL returned $mime instead of a video file")
                 }
                 val contentRange=conn.getHeaderField("Content-Range").orEmpty()
+                if(verifiedMp4 && status==206 && offset==0L){
+                    // A 206 is not automatically a complete original. The
+                    // source must supply the ENTIRE byte range, otherwise a
+                    // server-side excerpt could be published as a full video.
+                    val range=Regex("""bytes 0-([0-9]+)/([0-9]+)""")
+                        .matchEntire(contentRange)
+                    val end=range?.groupValues?.get(1)?.toLongOrNull()
+                    val total=range?.groupValues?.get(2)?.toLongOrNull()
+                    if(end==null || total==null || end+1L!=total)
+                        throw IOException("Publisher returned only a partial MP4 range")
+                }
                 val matchingRange=status==206 && offset>0L &&
                     contentRange.startsWith("bytes $offset-")
                 if(status==206 && offset>0L && !matchingRange)
