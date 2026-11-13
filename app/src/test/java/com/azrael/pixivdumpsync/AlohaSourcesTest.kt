@@ -27,7 +27,7 @@ class AlohaSourcesTest {
     @Test fun onlyMissingSourcesAreShownInAlohaAdditions() {
         val newSites=AlohaSources.additions
         assertEquals(27,newSites.size)
-        assertEquals(28,newSites.map{it.host}.toSet().size)
+        assertEquals(27,newSites.map{it.host}.toSet().size)
         assertTrue(newSites.any{it.host=="fullporner.com"})
         assertTrue(newSites.any{it.host=="notfans.com"})
         assertTrue(newSites.any{it.host=="archivebate.com"})
