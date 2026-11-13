@@ -197,7 +197,10 @@ object UnifiedDownloadsUi {
                     item.state=="DONE" && present->State.DONE
                     item.state=="WAIT_LOGIN"->State.HELD
                     item.state=="DONE" && !present->State.FAILED
-                    item.state=="RETRY" || item.state=="ERROR"->State.FAILED
+                    item.state=="ERROR"->State.FAILED
+                    item.state=="RETRY" && item.error.orEmpty().startsWith(
+                        "Chapter extraction continuing:")->State.QUEUED
+                    item.state=="RETRY"->State.HELD
                     item.state=="WORKING"->State.ACTIVE
                     else->State.QUEUED
                 }
@@ -209,15 +212,22 @@ object UnifiedDownloadsUi {
                     type+" · "+when(state){
                         State.DONE->"Saved on device"
                         State.FAILED->item.error?:"Saved archive is missing"
-                        State.HELD->"Account sign-in required"
-                        State.ACTIVE->"$cached chapters cached · Assembling"
-                        else->"$cached chapters cached · Queued"
+                        State.HELD->if(item.state=="WAIT_LOGIN")
+                            "Account sign-in required"
+                            else "Automatic retry scheduled · "+item.error.orEmpty().take(90)
+                        State.ACTIVE->"$cached chapters cached · Extracting"
+                        else->"$cached chapters cached · Continuing"
                     },state,null,item.updated,{
                     when(state){
                         State.DONE->item.savedUri?.let{open(a,it,mime)}
-                        State.HELD->a.startActivity(Intent(a,
-                            com.azrael.galleryflow.SiteLoginActivity::class.java)
-                            .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,item.url))
+                        State.HELD->if(item.state=="WAIT_LOGIN"){
+                            a.startActivity(Intent(a,
+                                com.azrael.galleryflow.SiteLoginActivity::class.java)
+                                .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,item.url))
+                        }else{
+                            NovelEpubQueue(a).use{it.retryNow(item.url)}
+                            NovelEpubService.schedule(a)
+                        }
                         State.FAILED->{
                             NovelEpubQueue(a).use{it.retryNow(item.url)}
                             NovelEpubService.schedule(a)
