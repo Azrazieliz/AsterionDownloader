@@ -18,6 +18,9 @@ import hashlib
 SITES = {
     "Jav Guru": "https://jav.guru/1076811/mukc-135-off-pako-creampie-breeding-photo-session-where-we-defile-a-beautiful-pure-idol-whos-obedient-like-a-doll-however-we-please-shitara-yuuhi/",
     "Archivebate": "https://archivebate.com/",
+    "HentaiBros selected": "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
+    "3DHentaiX selected": "https://3dhentaix.com/ntr-compilation/",
+    "FullPorner selected": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
 }
 out = {}
 try:
