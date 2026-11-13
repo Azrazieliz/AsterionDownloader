@@ -22,6 +22,8 @@ class FreePornVideosOriginalSourceTest {
         assertFalse(NativeMediaDownloader.isNativeEligible(
             page,"https://ads.bad.example/original",true))
         assertFalse(NativeMediaDownloader.isNativeEligible(
+            page,"https://ads.bad.example/original.mp4",true))
+        assertFalse(NativeMediaDownloader.isNativeEligible(
             page,"https://www.freepornvideos.xxx/get_file",false))
     }
 }

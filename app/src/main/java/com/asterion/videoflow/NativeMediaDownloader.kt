@@ -26,9 +26,8 @@ internal object NativeMediaDownloader {
      * of the source category. Hentai watch pages still use their own extractor.
      */
     fun isNativeEligible(sourceUrl:String,mediaUrl:String,verifiedMp4:Boolean=false):Boolean =
-        (isDirectMediaUrl(mediaUrl) ||
-         (verifiedMp4 && FreePornVideosOriginalSource.firstPartyFormat(
-             sourceUrl,mediaUrl))) && runCatching{
+        (if(verifiedMp4)FreePornVideosOriginalSource.firstPartyFormat(
+            sourceUrl,mediaUrl) else isDirectMediaUrl(mediaUrl)) && runCatching{
             val uri=URI(sourceUrl)
             uri.scheme in setOf("http","https") && uri.host!=null
         }.getOrDefault(false)
@@ -37,13 +36,13 @@ internal object NativeMediaDownloader {
                  cookieHeader:String?=null,filenameStem:String="video",
                  proxy:java.net.Proxy?=null,progress:(Int)->Unit={},
                  cancelled:()->Boolean={false},verifiedMp4:Boolean=false):File {
-        require(isDirectMediaUrl(address) ||
-            (verifiedMp4 && address.startsWith("https://") &&
-                runCatching{val uri=URI(address)
-                    uri.userInfo==null && uri.port==-1 &&
-                    uri.host.orEmpty().lowercase().removePrefix("www.")==
-                        "freepornvideos.xxx"
-                }.getOrDefault(false))){
+        require(if(verifiedMp4)address.startsWith("https://") &&
+            runCatching{val uri=URI(address)
+                uri.userInfo==null && uri.port==-1 &&
+                uri.host.orEmpty().lowercase().removePrefix("www.")==
+                    "freepornvideos.xxx"
+            }.getOrDefault(false)
+            else isDirectMediaUrl(address)){
             "Not a verified first-party direct original media URL"
         }
         require(directory.isDirectory && directory.canWrite()){
