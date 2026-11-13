@@ -20,7 +20,8 @@ object BrowserPageFetch {
     // Android WebView while their direct HTML endpoint rejects non-browser
     // HTTP clients. Never solve access challenges or bypass authentication.
     private val publicBrowserHosts=setOf("jav.guru","rule34video.com",
-        "kiutaku.com")
+        "kiutaku.com","freewebnovel.com","novelbuddy.me",
+        "novelbuddy.com","readnovelfull.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
