@@ -170,12 +170,12 @@ object AsterionCosplayGallery {
                         // native provider parser instead of saving HTML as art.
                         thread(name="asterion-cosplay-open-gallery"){
                             val message=runCatching{
-                                if(source==null)"Source not registered · "+site.name
-                                else if(source.adapter=="native")
-                                    ProviderBackfillActions.request(a,source)
-                                else if(SiteRunControl.start(a,source.url,area))
-                                    "Gallery indexing requested · "+site.name
-                                else "Gallery already being indexed"
+                                // A deliberately tapped public tile names a
+                                // precise gallery, not an authorization to
+                                // download the entire site or show a dead
+                                // "source not registered" message.
+                                ApprovedCosplayActions.selectedGallery(
+                                    a,site.url,tile)
                             }.getOrElse{it.message?:"Gallery indexing failed"}
                             toast(a,message)
                         }
@@ -242,14 +242,7 @@ object AsterionCosplayGallery {
                     toast(a,"Resume the application first")
                 }else thread(name="asterion-cosplay-backfill"){
                     val result=runCatching{
-                        when{
-                            source?.adapter=="native" ->
-                                ProviderBackfillActions.request(a,source)
-                            source!=null && SiteRunControl.start(a,source.url,area)->
-                                "History queued · "+site.name
-                            source==null->"Site not registered"
-                            else->"Already checking · "+site.name
-                        }
+                        ApprovedCosplayActions.backfill(a,site.url)
                     }.getOrElse{it.message?:"Provider error"}
                     toast(a,result)
                 }
