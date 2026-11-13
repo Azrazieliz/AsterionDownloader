@@ -48,8 +48,17 @@ sys.stdout.buffer.write(response.read(3000000))
                 "python3","-c",code,address,referer.orEmpty()).start()
             val downloaded=process.inputStream.readNBytes(3_000_000)
             val exited=process.waitFor(25,java.util.concurrent.TimeUnit.SECONDS)
-            require(exited && process.exitValue()==0 && downloaded.size>1500){
-                "Public novel browser-compatible HTTP fallback failed"
+            if(!exited)process.destroyForcibly()
+            val stderr=process.errorStream.bufferedReader()
+                .use{it.readText().takeLast(900)}
+            if(!exited || process.exitValue()!=0 || downloaded.size<=1500){
+                // A failed remote request must remain FAILED. Report the
+                // publisher's actual HTTP exception rather than obscuring it
+                // under an arbitrary assertion or reporting a fake EPUB.
+                throw IllegalStateException(
+                    "Live novel reader failure: "+address.substringBefore('?').take(180)+
+                    " · python exit="+(if(exited)process.exitValue() else -1)+
+                    " · bytes="+downloaded.size+" · "+stderr.take(600))
             }
             Jsoup.parse(String(downloaded,Charsets.UTF_8),address)
         }
