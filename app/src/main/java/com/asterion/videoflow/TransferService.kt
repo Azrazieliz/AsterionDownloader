@@ -752,14 +752,18 @@ object VideoEngine {
         // standalone extractor. Previously only discovered iframe candidates
         // were attempted: a valid video page with no detectable iframe could
         // never download, even when yt-dlp supported its page directly.
-        val variants=VideoCandidatePlan.ordered(item.url,
-            EpornerOriginalSource.videoCandidates(item.url,connected),
-            // Provider-owned iframe/media links remain alternatives; discovery
-            // must not replace the actual item the user selected.
-            if(!canInspectPublisherHtml)emptyList() else runCatching{
+        // Keep page-verification / authorization failures rather than silently
+        // discarding them and later displaying the SAME vague Python error.
+        val publishedPlayerInspection=if(!canInspectPublisherHtml)
+            Result.success(emptyList<String>()) else runCatching {
                 WebDiscovery.embeddedCandidates(item.url,context,
                     explicitlySelected=userRequested)
-            }.getOrDefault(emptyList()))
+            }
+        val discoveryFailure=publishedPlayerInspection.exceptionOrNull()
+        var renderedPlayerFailure:Throwable?=null
+        val variants=VideoCandidatePlan.ordered(item.url,
+            EpornerOriginalSource.videoCandidates(item.url,connected),
+            publishedPlayerInspection.getOrDefault(emptyList()))
         val watchPorn=if(!canInspectPublisherHtml)null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
@@ -828,7 +832,14 @@ object VideoEngine {
                 // without adding site-specific fake player links.
                 val directlyPublished=if(canInspectPublisherHtml)
                     runCatching{WebDiscovery.directMedia(candidate,context)}
-                        .getOrNull() else null
+                        .onFailure{cause->
+                            // A real browser may show ONLY preview clips or a
+                            // verification interstitial. Prefer that diagnosis
+                            // over yt-dlp's generic Unsupported URL when no
+                            // full original is subsequently resolved.
+                            if(renderedPlayerFailure==null)
+                                renderedPlayerFailure=cause
+                        }.getOrNull() else null
                 if(userRequested &&
                     !directlyPublished.isNullOrBlank() &&
                     directlyPublished!=candidate &&
@@ -933,7 +944,26 @@ object VideoEngine {
             throw java.util.concurrent.CancellationException("Video paused")
         if(!downloaded){
             if(heldReason!=null)throw FullVersionUnavailable(heldReason!!)
-            throw (last?:IllegalStateException("No video extractor succeeded"))
+            val attempted=last
+            val category=attempted?.let{
+                VideoFailurePolicy.classify(VideoErrorDetail.summary(it))
+            }
+            val access=listOfNotNull(renderedPlayerFailure,discoveryFailure)
+                .firstOrNull{failure->
+                    val message=failure.message.orEmpty()
+                    message.contains("short preview clips",true) ||
+                        VideoFailurePolicy.classify(message)==
+                            VideoFailurePolicy.Kind.AUTH
+                }
+            // Never hide a genuine server 403/429 or Python runtime crash.
+            // Only replace an unrecognized-URL extractor error with concrete,
+            // independently observed public-player access evidence.
+            if(access!=null && (attempted==null ||
+                    category==VideoFailurePolicy.Kind.UNSUPPORTED ||
+                    category==VideoFailurePolicy.Kind.METADATA))
+                throw access
+            throw (attempted?:access?:
+                IllegalStateException("No publisher original or supported player found"))
         }
         val file=parent.listFiles()?.filter { it.isFile && it.length()>0 &&
             it.extension.lowercase() in setOf("mp4","mkv","webm","mov","ts","m4a","mp3","flac","opus") }
