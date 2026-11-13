@@ -8,6 +8,9 @@ import json
 import re
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
+import urllib.error
 from datetime import datetime,timezone
 
 SITES = {
@@ -69,6 +72,39 @@ def examine(name,url):
             duration_s=metadata.get("duration"),
             formats_count=len(formats),
             format_protocols=sorted(set(str(f.get("protocol","")) for f in formats))[:6])
+        if name=="FreePornVideos Serena":
+            # Confirm actual delivery from the source's selected original
+            # format. Transfer at most 32 KiB, discard immediately, never
+            # retain signed CDN URLs or material in diagnostics artifacts.
+            candidate=next((f for f in sorted(formats,
+                         key=lambda f:int(f.get("height") or 0),reverse=True)
+                         if f.get("protocol") in ("https","http") and
+                         str(f.get("url","")).startswith("https://") and
+                         not f.get("has_drm")),None)
+            if candidate is None:
+                result["media_range"]={"status":"no_verified_https_format"}
+            else:
+                href=candidate["url"]
+                req=urllib.request.Request(href,headers={
+                    "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile)",
+                    "Referer":url,
+                    "Range":"bytes=0-32767"})
+                try:
+                    with urllib.request.urlopen(req,timeout=13) as response:
+                        fragment=response.read(32768)
+                        result["media_range"]={
+                            "http":response.status,
+                            "bytes":len(fragment),
+                            "mime":response.headers.get("Content-Type",""),
+                            "content_range":bool(response.headers.get("Content-Range")),
+                            "mp4_magic":len(fragment)>=12 and fragment[4:8]==b"ftyp",
+                            "source_host":urllib.parse.urlsplit(href).hostname,
+                            "retained_media_bytes":0}
+                except Exception as exc:
+                    result["media_range"]={
+                        "http":getattr(exc,"code",0),
+                        "error":type(exc).__name__,
+                        "retained_media_bytes":0}
     except Exception:
         result["category"]="output_not_valid_json"
     return result
