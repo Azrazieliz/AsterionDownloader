@@ -28,10 +28,14 @@ object VideoSearchPreviews {
             return
         }
         image.tag=url
+        val app=a.applicationContext
+        val view=java.lang.ref.WeakReference(image)
+        // Do not retain Activity/ImageView references in the unbounded
+        // thumbnail network queue after the app enters the background.
         workers.execute{
             val bitmap=runCatching{
                 val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
-                    a.applicationContext,referer?:url)
+                    app,referer?:url)
                 val connection=(if(proxy!=null)URL(url).openConnection(proxy)
                     else URL(url).openConnection()).apply{
                     connectTimeout=6000
@@ -58,11 +62,13 @@ object VideoSearchPreviews {
             }.getOrNull()
             if(bitmap!=null){
                 synchronized(lock){memory.put(url,bitmap)}
-                a.runOnUiThread{
-                    if(image.tag==url&&!a.isFinishing&&!a.isDestroyed){
-                        image.scaleType=ImageView.ScaleType.CENTER_CROP
-                        image.setImageBitmap(bitmap)
-                        image.contentDescription="Video thumbnail"
+                view.get()?.post{
+                    val target=view.get()
+                    if(target!=null && target.tag==url &&
+                        target.isAttachedToWindow){
+                        target.scaleType=ImageView.ScaleType.CENTER_CROP
+                        target.setImageBitmap(bitmap)
+                        target.contentDescription="Video thumbnail"
                     }
                 }
             }
