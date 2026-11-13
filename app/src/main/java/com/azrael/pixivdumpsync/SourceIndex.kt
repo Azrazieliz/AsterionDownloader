@@ -826,6 +826,9 @@ object SourceIndex {
                         site.host in AlohaSources.alreadyIntegratedHosts)
                         "native" else "generic")
                 if(ownsFeed)db.setAdapter(site.url,"native")
+                // Existing installations saved OneJAV under ADULT, but it
+                // is a native video torrent source, never a streaming site.
+                if(site.host=="onejav.com")db.migrateArea(site.url,"VIDEOS")
                 // The Kiutaku homepage is a website-level collection; it is
                 // not a /tag/<id> native entity. Keep existing tag entities in
                 // GalleryDb but migrate only this root record to generic.
