@@ -7,8 +7,7 @@ package com.azrael.pixivdumpsync
 internal object NovelAccountPolicy {
     fun needsBrowserConnection(message:String):Boolean{
         val normalized=message.lowercase()
-        return listOf("http 401","http 403","authenticated site session",
-            "interactive browser verification","sign in","login required",
-            "account required","access denied").any{it in normalized}
+        return listOf("http 401","authenticated site session",
+            "sign in","login required","account required").any{it in normalized}
     }
 }
