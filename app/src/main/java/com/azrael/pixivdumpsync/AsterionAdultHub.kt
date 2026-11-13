@@ -316,17 +316,10 @@ object AsterionAdultHub {
                     mediaTiles+searchTiles+publicTiles){tile->
                     val indexItem=media.firstOrNull{it.url==tile.url}
                     if(indexItem!=null){
-                        if(indexItem.kind=="video" &&
-                            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(indexItem.url)){
-                            val submitted=VideoDb(a).use{
-                                it.addVideo(indexItem.url,indexItem.title)
-                            }
-                            if(submitted)VideoEngine.launch(a,false)
-                            Toast.makeText(a,if(submitted)
-                                "Selected video queued for verification · "+indexItem.title.take(45)
-                                else "Already in Downloads · "+indexItem.title.take(45),
-                                Toast.LENGTH_SHORT).show()
-                        }else SourceIndexPanel.details(a,indexItem)
+                        // Centralized selected-media route. An indexed video
+                        // page must never become a generic direct-file request
+                        // just because its indexed kind was mislabeled.
+                        SourceIndexPanel.details(a,indexItem)
                     }else{
                         val hit=searches.firstOrNull{it.url==tile.url}
                         if(hit!=null){

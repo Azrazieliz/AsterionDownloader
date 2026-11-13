@@ -267,7 +267,18 @@ object SourceIndexPanel {
                 Toast.LENGTH_SHORT).show()
             return
         }
-        if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
+        if(SelectedVideoRouter.isSelectedVideo(item.area,item.url)){
+            // Video page thumbnails, including provider-indexed cards with a
+            // missing/incorrect "video" kind, need VideoFlow resolution.
+            // Generic original-file resolution expects a direct file link and
+            // incorrectly reports "No verified original" for these pages.
+            val created=VideoDb(a).use{it.addVideo(item.url,item.title)}
+            if(created)VideoEngine.launch(a,false)
+            Toast.makeText(a,
+                if(created)"Selected video queued for verification · "+item.title.take(45)
+                else "Already in Downloads · "+item.title.take(45),
+                Toast.LENGTH_SHORT).show()
+        }else if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
             val created=NovelEpubService.enqueue(a,item.url,item.title)
             Toast.makeText(a,
                 if(created)"EPUB queued in Downloads" else
