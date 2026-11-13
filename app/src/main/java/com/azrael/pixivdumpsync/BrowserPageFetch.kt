@@ -63,6 +63,7 @@ object BrowserPageFetch {
         // navigating to a new URL. Do not repeat the click or auto-accept a
         // gateway for a source that the user has not connected.
         var archivebateContinued=false
+        var archivebateWaits=0
         main.post {
             try{
             val web=WebView(context)
@@ -199,10 +200,25 @@ object BrowserPageFetch {
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
                                 .getOrNull()
-                            if(page.isNullOrBlank())
+                            if(page.isNullOrBlank()){
                                 error.set("The browser still shows a website verification page.")
-                            else result.set(page)
-                            latch.countDown()
+                                latch.countDown()
+                            }else if(host=="archivebate.com" &&
+                                SiteSession.bound(context,url) &&
+                                Uri.parse(url).path.orEmpty().trim('/')=="" &&
+                                !page.contains("href=\"/watch/") &&
+                                archivebateWaits++<6){
+                                // The public Continue step sometimes populates
+                                // its real /watch/ listing asynchronously.
+                                // Wait for observed cards; do NOT invent entries
+                                // or click the site's verification controls.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_500L)
+                            }else{
+                                result.set(page)
+                                latch.countDown()
+                            }
                         }
                         }catch(t:Throwable){
                             error.set("WebView script failed: "+t.javaClass.simpleName)
