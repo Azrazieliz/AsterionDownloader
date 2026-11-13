@@ -44,6 +44,7 @@ object BrowserPageFetch {
         val main=Handler(Looper.getMainLooper())
         val instance=AtomicReference<WebView?>()
         main.post {
+            try{
             val web=WebView(context)
             instance.set(web)
             web.settings.javaScriptEnabled=true
@@ -58,6 +59,7 @@ object BrowserPageFetch {
                 override fun onPageFinished(v:WebView,finished:String){
                     main.postDelayed({
                         if(latch.count==0L)return@postDelayed
+                        try{
                         v.evaluateJavascript("""(function(){
                             const title=document.title||'';
                             const body=(document.body?.innerText||'').slice(0,800);
@@ -140,13 +142,23 @@ object BrowserPageFetch {
                             else result.set(page)
                             latch.countDown()
                         }
+                        }catch(t:Throwable){
+                            error.set("WebView script failed: "+t.javaClass.simpleName)
+                            latch.countDown()
+                        }
                     },1800L)
                 }
             }
             web.loadUrl(url)
+            }catch(t:Throwable){
+                error.set("WebView initialization failed: "+t.javaClass.simpleName)
+                latch.countDown()
+            }
         }
         val completed=latch.await(45,TimeUnit.SECONDS)
-        main.post{instance.getAndSet(null)?.apply{stopLoading();destroy()}}
+        main.post{runCatching{
+            instance.getAndSet(null)?.apply{stopLoading();destroy()}
+        }}
         if(!completed)throw IllegalStateException("Browser page retrieval timed out: "+url)
         return result.get()?:throw IllegalStateException(
             error.get()?:"Browser could not load this chapter.")
