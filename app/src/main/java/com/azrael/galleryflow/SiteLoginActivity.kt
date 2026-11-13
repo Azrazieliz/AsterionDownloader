@@ -52,6 +52,19 @@ object SiteSession {
         .lowercase(java.util.Locale.ROOT).removePrefix("www.")
     fun bound(context:Context,url:String):Boolean{
         if(!validLoginUrl(url))return false
+        // SharedPreferences are not synchronously coherent across Android
+        // processes. Ask the main process, which owns the user's connection,
+        // rather than rejecting a legitimate session from a stale agent cache.
+        if(android.os.Build.VERSION.SDK_INT>=28 &&
+            android.app.Application.getProcessName()!=context.packageName){
+            return runCatching {
+                val authority=Uri.parse(
+                    "content://"+context.packageName+".session-cookies")
+                context.contentResolver.call(
+                    authority,"is_site_connected",url,null)
+                    ?.getBoolean("connected")==true
+            }.getOrDefault(false)
+        }
         val key=host(url)
         if(!context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean(key,false))return false
