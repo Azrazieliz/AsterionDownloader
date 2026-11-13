@@ -5,7 +5,6 @@ on:
     branches:
       - work/downloader-single-build-staging-20261112
     paths:
-      - '.github/workflows/downloader-android-transfer-simulation.yml'
       - 'app/src/androidTest/**'
       - 'app/src/phonepilot/AndroidManifest.xml'
       - 'app/build.gradle.kts'
@@ -47,13 +46,26 @@ jobs:
             adb install -r app/build/outputs/apk/phonepilot/app-phonepilot.apk
             adb install -r app/build/outputs/apk/androidTest/phonepilot/app-phonepilot-androidTest.apk
             adb logcat -c
+            # Capture logs regardless of instrumentation exit status. Android
+            # reports INSTRUMENTATION_CODE: 0 even when the process crashes.
+            set +e
             adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation | tee android-transfer-simulation.txt
+            instrument_exit=$?
+            adb logcat -b crash -d -v threadtime > android-transfer-crash-logcat.txt
+            adb logcat -d -v threadtime > android-transfer-full-logcat.txt
+            adb shell dumpsys activity processes > android-transfer-processes.txt
+            set -e
+            test "$instrument_exit" -eq 0
+            if grep -q 'Process crashed' android-transfer-simulation.txt; then
+              cat android-transfer-crash-logcat.txt
+              exit 1
+            fi
             grep -F 'AST_SIM: NATIVE_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PYTHON_RUNTIME_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: EMBEDDED_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PASS' android-transfer-simulation.txt
-            if adb logcat -b crash -d | grep -q 'FATAL EXCEPTION'; then
-              adb logcat -b crash -d
+            if grep -q 'FATAL EXCEPTION' android-transfer-crash-logcat.txt; then
+              cat android-transfer-crash-logcat.txt
               exit 1
             fi
       - uses: actions/upload-artifact@v4
@@ -61,4 +73,8 @@ jobs:
         with:
           name: Android-real-download-simulation-logs
           if-no-files-found: ignore
-          path: android-transfer-simulation.txt
+          path: |
+            android-transfer-simulation.txt
+            android-transfer-crash-logcat.txt
+            android-transfer-full-logcat.txt
+            android-transfer-processes.txt
