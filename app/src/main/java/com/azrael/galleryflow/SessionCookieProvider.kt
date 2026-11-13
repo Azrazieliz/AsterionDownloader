@@ -21,7 +21,8 @@ class SessionCookieProvider:ContentProvider() {
     override fun onCreate():Boolean=true
 
     override fun call(method:String,arg:String?,extras:Bundle?):Bundle? {
-        if(method !in setOf("read_site_cookie","read_site_html","is_site_connected"))
+        if(method !in setOf("read_site_cookie","read_site_html",
+                "is_site_connected","resolve_archivebate_selected"))
             return super.call(method,arg,extras)
         if(Binder.getCallingUid()!=Process.myUid())
             throw SecurityException("Cross-application session access denied")
@@ -33,6 +34,23 @@ class SessionCookieProvider:ContentProvider() {
             putBoolean("connected",connected)
         }
         if(!connected)return Bundle()
+        if(method=="resolve_archivebate_selected"){
+            val embed=extras?.getString("embed").orEmpty()
+            // Read only the user-selected watch page's own published player.
+            // Never expose arbitrary URL fetching through Binder.
+            if(!com.asterion.videoflow.ArchivebateSelectedMedia
+                    .isSelectedEmbed(url,embed))
+                return Bundle().apply{putString("error","Invalid selected player")}
+            val result=runCatching{
+                com.asterion.videoflow.ArchivebateSelectedMedia
+                    .fromConnectedPlayer(ctx,url,embed)
+            }
+            return Bundle().apply{
+                result.onSuccess{putString("media",it)}
+                    .onFailure{putString("error",
+                        it.message.orEmpty().take(180))}
+            }
+        }
         if(method=="read_site_html") {
             // Connected browser verification can only be resumed in the main
             // process, which owns the login's WebView cookie jar. Binder has
