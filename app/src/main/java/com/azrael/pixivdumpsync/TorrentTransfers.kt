@@ -43,7 +43,16 @@ object TorrentTransfers {
     }
     fun showQueue(a: Activity) {
         val prefs = a.getSharedPreferences("torrent_transfers", Context.MODE_PRIVATE)
-        val keys = prefs.all.keys.filter { it.startsWith("job_") }.sortedDescending()
+        // job_folder_*, job_indices_* and job_paused_* are metadata,
+        // NOT transfers. Previously each was presented as another torrent,
+        // so Pause/Resume could address a fabricated or missing job.
+        val keys = prefs.all.keys.filter {
+            it.startsWith("job_") &&
+                !it.startsWith("job_folder_") &&
+                !it.startsWith("job_indices_") &&
+                !it.startsWith("job_paused_") &&
+                it.removePrefix("job_").matches(Regex("[a-f0-9]{24}"))
+        }.sortedDescending()
         if (keys.isEmpty()) {
             Toast.makeText(a, "No torrent transfers yet", Toast.LENGTH_LONG).show(); return
         }
@@ -242,8 +251,11 @@ class TorrentTransferService : Service() {
         val priorities = Array(info.numFiles()) {
             if (it in selected) Priority.DEFAULT else Priority.IGNORE
         }
+        // Keep verified pieces in app-private durable storage even if
+        // external app storage is not mounted. The MediaStore export below
+        // still publishes selected finished files to public Downloads.
         val storage = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-            ?: error("External storage unavailable")
+            ?: filesDir
         val destination = File(storage, "torrent-data/$id").apply { mkdirs() }
         val files = info.files()
         selected.forEach { index ->
@@ -326,9 +338,12 @@ class TorrentTransferService : Service() {
                 contentResolver.openOutputStream(uri, "w")!!.use { output ->
                     source.inputStream().use { input -> input.copyTo(output, 131072) }
                 }
-                contentResolver.update(uri, ContentValues().apply {
+                val published=contentResolver.update(uri, ContentValues().apply {
                     put(MediaStore.Downloads.IS_PENDING, 0)
                 }, null, null)
+                check(published==1){
+                    "Downloaded torrent file was written but not published to Downloads"
+                }
             } catch (e: Throwable) {
                 contentResolver.delete(uri, null, null)
                 throw e
