@@ -34,8 +34,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 88
-        versionName = "1.3.59"
+        versionCode = 89
+        versionName = "1.3.60"
 
         testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
@@ -100,6 +100,16 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".testphone1113"
             versionNameSuffix = "-field-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // Final provider-repair trial is deliberately isolated from existing
+        // CI-signed phone pilots. CI has no retained acceptance signing key;
+        // do not pretend a new ephemeral signature can upgrade an old install.
+        create("providerpilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1114"
+            versionNameSuffix = "-provider-test"
             isDebuggable = true
             matchingFallbacks += listOf("debug")
         }
