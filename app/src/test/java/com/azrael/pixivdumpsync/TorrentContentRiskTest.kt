@@ -15,7 +15,8 @@ class TorrentContentRiskTest {
     @Test fun nonGameTransfersDoNotAutoSelectRiskyFiles(){
         assertFalse(TorrentContentRisk.selectByDefault("Videos","clip.mp4.exe"))
         assertTrue(TorrentContentRisk.selectByDefault("Videos","clip.mp4"))
-        assertTrue(TorrentContentRisk.selectByDefault("Games","installer.exe"))
+        assertFalse(TorrentContentRisk.selectByDefault("Games","installer.exe"))
+        assertTrue(TorrentContentRisk.selectByDefault("Games","assets.pak"))
         assertTrue(TorrentContentRisk.selectByDefault("Books","Novel.EPUB"))
         assertFalse(TorrentContentRisk.selectByDefault("Books","installer.exe"))
     }

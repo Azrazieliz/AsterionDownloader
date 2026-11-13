@@ -28,8 +28,11 @@ internal object TorrentContentRisk {
             else->null
         }
     }
+    /** Risky entries remain selectable deliberately, but never prechecked.
+     * Games used to auto-select arbitrary .exe/.js scripts, exposing users
+     * to stealth payloads before the private-quarantine gate.
+     */
     fun selectByDefault(folder:String,path:String):Boolean =
-        folder=="Games" || (folder=="Books" &&
-            path.substringAfterLast('.').equals("epub",true)) ||
-            (folder!="Books" && reviewReason(path)==null)
+        reviewReason(path)==null &&
+        (folder!="Books" || path.substringAfterLast('.').equals("epub",true))
 }
