@@ -99,7 +99,7 @@ internal object ApprovedCosplayActions {
                 .joinToString(""){"%02x".format(it)}
             SourceEntity(SourceId.GENERIC,"url:"+digest.take(32),
                 tile.title.take(120).ifBlank{site.name+" gallery"},
-                tile.url,"gallery_only")
+                tile.url,"selected_album")
         }
         GalleryDb(a).use{db->
             db.addEntity(entity)

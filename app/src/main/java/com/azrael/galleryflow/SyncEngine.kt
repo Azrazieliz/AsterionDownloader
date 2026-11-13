@@ -124,16 +124,22 @@ class SyncEngine(private val context: Context) {
         targetEntityId: String? = null,
         targetSiteHost: String? = null
     ) {
+        // A user-initiated exact gallery or site BACKFILL is an explicit
+        // command, independent of the provider's automatic-history switch.
+        // The switch still controls untargeted scheduled background passes.
+        val targeted = targetEntityId != null || targetSiteHost != null
         val entities = db.listEntities().filter {
             it.selected &&
-                com.azrael.pixivdumpsync.SiteControls.backfill(context,it.canonicalUrl,it.selected) &&
+                (targeted || com.azrael.pixivdumpsync.SiteControls.backfill(
+                    context,it.canonicalUrl,it.selected)) &&
                 (targetEntityId == null || it.entityId == targetEntityId) &&
                 (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
             if (!SyncControl.checkpoint()) return
-            if(!com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+            if(!targeted &&
+                !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                 continue
             val adapter = AdapterRegistry.forSource(entity.source)
             if (!adapter.enabled) {
@@ -149,7 +155,8 @@ class SyncEngine(private val context: Context) {
                 // Retry a bounded batch of historical failures, then continue onward.
                 for (retry in db.pendingRetries(entity)) {
                     if (!SyncControl.checkpoint()) return
-                    if(!com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                         break
                     progress("Retrying failed gallery: " + retry.title)
                     if (processGallery(entity, retry, adapter, db, files, flow, stats, progress)) {
@@ -162,7 +169,8 @@ class SyncEngine(private val context: Context) {
                 }
                 for (gallery in pages) {
                     if (!SyncControl.checkpoint()) return
-                    if(!com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                         break
                     val message = entity.displayName + " / " +
                         stats.mediaDownloaded + " new images"

@@ -29,6 +29,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
 
     override fun enumerateGalleries(entity: SourceEntity): Sequence<GalleryRef> = sequence {
         val url = canonical(validUri(entity.canonicalUrl))
+        if (entity.kind == "selected_album") {
+            // A directly tapped album is the ONLY requested gallery. The
+            // page's other gallery links are recommendations, not the user's
+            // selected original. Leave collection-style gallery_only intact.
+            yield(toGallery(entity, url, entity.displayName))
+            return@sequence
+        }
         if (entity.kind == "gallery_only") {
             val doc = documentWithRetry(url)
             val host = URI(url).host.lowercase(Locale.ROOT)

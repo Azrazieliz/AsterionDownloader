@@ -588,8 +588,7 @@ object VideoEngine {
             }
             extractionJobs[item.id]=future
             val start=android.os.SystemClock.elapsedRealtime()
-            var latestBytes=parent.listFiles()?.filter{it.isFile}
-                ?.sumOf{it.length()}?:0L
+            var latestBytes=VideoPayloadBytes.count(parent)
             var lastByteTick=start
             var lastLeaseTick=0L
             VideoTransferJournal.record(context,item.id,"transfer")
@@ -605,8 +604,7 @@ object VideoEngine {
                                 "Transfer paused or claim superseded")
                         lastLeaseTick=now
                     }
-                    val current=parent.listFiles()?.filter{it.isFile}
-                        ?.sumOf{it.length()}?:0L
+                    val current=VideoPayloadBytes.count(parent)
                     if(current>latestBytes){
                         latestBytes=current
                         lastByteTick=now
@@ -708,8 +706,7 @@ object VideoEngine {
         }
         fun execute(link:String,referer:String?=null) {
             executeControlled(link,referer)
-            val received=parent.listFiles()?.filter{it.isFile}
-                ?.sumOf{it.length()}?:0L
+            val received=VideoPayloadBytes.count(parent)
             if(received<=0L)
                 throw java.io.IOException("No original media bytes received")
             // Saved=100% is set only after the verified MediaStore receipt.
