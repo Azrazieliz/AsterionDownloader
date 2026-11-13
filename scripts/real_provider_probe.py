@@ -25,6 +25,7 @@ TARGETS = {
     "Kiutaku": "https://kiutaku.com/",
     "Kiutaku gallery": "https://kiutaku.com/7440",
     "Rule34Video": "https://rule34video.com/",
+    "Rule34Video exact failed 4727221": "https://rule34video.com/video/4727221/",
     "Archivebate": "https://archivebate.com/",
     "OneJAV torrent index": "https://onejav.com/",
     "FreeWebNovel book": "https://freewebnovel.com/novel/dual-cultivation-novel",
@@ -33,6 +34,7 @@ TARGETS = {
     # Previously reported failing VideoFlow publishers: record actual HTTP
     # availability and first-party player metadata, never assume transfer success.
     "Eporner": "https://www.eporner.com/",
+    "Eporner exact failed video": "https://www.eporner.com/video-MSADu4C0K92/",
     "3DHentaiX": "https://3dhentaix.com/",
     "3DHentaiX actual detail": "https://3dhentaix.com/ntr-witness-milf-1-3/",
     "3DHentaiX exact reported failure": "https://3dhentaix.com/ntr-compilation/",
