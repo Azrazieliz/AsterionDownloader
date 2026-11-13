@@ -337,7 +337,7 @@ object AsterionUnifiedFollowing {
             }
             notice(a,"Checking real profiles and selected-name matches…")
             thread(name="asterion-performer-verify"){
-                val proof=PerformerIdentity.lookup(name)
+                val proof=PerformerIdentity.lookup(name,a.applicationContext)
                 a.runOnUiThread{
                     if(a.isFinishing || a.isDestroyed)return@runOnUiThread
                     if(proof==null){
