@@ -136,18 +136,18 @@ class SiteLoginActivity:Activity() {
                 // Cloudflare/403 shell returned HTTP 200. The actual publisher
                 // must expose real first-party cards or a selected watch page.
                 const sameHost=u=>{try{
-                    return new URL(u,location.href).hostname.replace(/^www\\./,'')===
-                        location.hostname.replace(/^www\\./,'');
+                    return new URL(u,location.href).hostname.replace(/^www\./,'')===
+                        location.hostname.replace(/^www\./,'');
                 }catch(_){return false;}};
                 const links=[...document.querySelectorAll('a[href]')]
                     .filter(el=>sameHost(el.href))
                     .map(el=>new URL(el.href,location.href).pathname);
                 const javPosts=links.filter(p=>
-                    /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(p)).length;
+                    /^\/[0-9]{4,10}\/[a-z0-9_-]{4,240}\/?$/i.test(p)).length;
                 const torrentCards=links.filter(p=>
-                    /^\\/torrent\\/[a-z0-9_-]{2,100}\\/?$/i.test(p)).length;
+                    /^\/torrent\/[a-z0-9_-]{2,100}\/?$/i.test(p)).length;
                 const isSelectedJavPost=
-                    /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(location.pathname);
+                    /^\/[0-9]{4,10}\/[a-z0-9_-]{4,240}\/?$/i.test(location.pathname);
                 return JSON.stringify({good:good,host:location.hostname,
                     watchLinks:watchLinks,javPosts:javPosts,
                     torrentCards:torrentCards,isSelectedJavPost:isSelectedJavPost});
