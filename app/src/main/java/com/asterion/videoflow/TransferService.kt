@@ -50,30 +50,37 @@ object VideoEngine {
                 "Video extractor unavailable: "+cause.take(180),t)
         }
     }
-    /** Cancels an individual video without deleting its source, metadata or cache.
-     * A stopped transfer can be explicitly resumed in Downloads.
-     */
-    fun pauseVideo(context:Context,id:Long){
+    const val ACTION_CANCEL_LOCAL="com.azrael.pixivdumpsync.action.VIDEO_CANCEL_LOCAL"
+    const val EXTRA_VIDEO_ID="video_id"
+
+    /** Stop extraction in the same process as the owning Future. */
+    fun cancelInThisProcess(id:Long){
+        val active=extractionJobs[id]?:return
         stopRequests.add(id)
-        VideoDb(context).use{it.pause(id)}
-        extractionJobs[id]?.cancel(true)
+        active.cancel(true)
     }
-    /** Cancel and hide a video without allowing the next automatic scan to
-     * enqueue it again. Do not delete a completed MediaStore original.
-     */
+    private fun signalCancellation(context:Context,id:Long){
+        cancelInThisProcess(id)
+        for(type in listOf(VideoCancelPrimaryReceiver::class.java,
+                VideoCancelSecondaryReceiver::class.java)){
+            context.sendBroadcast(Intent(context,type).setAction(ACTION_CANCEL_LOCAL)
+                .putExtra(EXTRA_VIDEO_ID,id))
+        }
+    }
+    fun pauseVideo(context:Context,id:Long){
+        VideoDb(context).use{it.pause(id)}
+        signalCancellation(context,id)
+    }
     fun cancelVideo(context:Context,id:Long):Boolean{
-        stopRequests.add(id)
-        extractionJobs[id]?.cancel(true)
-        return VideoDb(context).use{it.dismiss(id)}
+        val changed=VideoDb(context).use{it.dismiss(id)}
+        signalCancellation(context,id)
+        return changed
     }
     fun clearUnfinished(context:Context):Int{
-        return VideoDb(context).use{db->
-            for(id in db.runningIds()){
-                stopRequests.add(id)
-                extractionJobs[id]?.cancel(true)
-            }
-            db.dismissUnfinished()
-        }
+        val ids=VideoDb(context).use{it.runningIds()}
+        val result=VideoDb(context).use{it.dismissUnfinished()}
+        ids.forEach{signalCancellation(context,it)}
+        return result
     }
     fun resumeVideo(context:Context,id:Long){
         stopRequests.remove(id)
@@ -543,6 +550,11 @@ object VideoEngine {
                         VideoTransferJournal.record(context,item.id,"original_engine")
                         LegacyYtDlpTransfer.download(context,link,referer,selected,
                             proxy,parent,template,quality){percent->
+                            if(stopRequests.contains(item.id) ||
+                                Thread.currentThread().isInterrupted ||
+                                !db.ownsClaim(item.id,item.lease))
+                                throw java.util.concurrent.CancellationException(
+                                    "Transfer cancelled by user")
                             db.progress(item.id,percent)
                             status(percent)
                         }
