@@ -51,6 +51,10 @@ object KyoraCreatorPreviews {
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
         val obj=JSONObject(raw)
+        // Old Kiutaku snapshots contain homepage montages. Invalidate only
+        // that provider's old cache; keep every other site's cached previews.
+        if(SiteControls.key(source)=="kiutaku.com" &&
+            !obj.optBoolean("verified_individual_photos_v1",false))return null
         val arr=obj.optJSONArray("entries")?:JSONArray()
         Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
             arr.optJSONObject(i)?.let{
@@ -218,6 +222,8 @@ object KyoraCreatorPreviews {
             }
             val obj=JSONObject().apply{
                 put("updated",snapshot.updated);put("error",snapshot.error?:"")
+                if(SiteControls.key(url)=="kiutaku.com" && snapshot.error==null)
+                    put("verified_individual_photos_v1",true)
                 put("entries",JSONArray().apply{
                     for(item in snapshot.entries)put(JSONObject().apply{
                         put("url",item.url);put("cover",item.cover);put("title",item.title)
