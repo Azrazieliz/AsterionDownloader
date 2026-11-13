@@ -208,12 +208,20 @@ object UnifiedDownloadsUi {
                 val name=fileName(a,if(present)item.savedUri else null,
                     item.title+if(zip)".zip" else ".epub")
                 val cached=NovelEpubService.cachedCount(a,item.url)
+                val providerCooling=item.state=="RETRY" &&
+                    item.error.orEmpty().contains("HTTP 429") &&
+                    item.retryAfter>System.currentTimeMillis()
                 rows+=Row(type,name,
                     type+" · "+when(state){
                         State.DONE->"Saved on device"
                         State.FAILED->item.error?:"Saved archive is missing"
                         State.HELD->if(item.state=="WAIT_LOGIN")
                             "Account sign-in required"
+                            else if(providerCooling)
+                                "Publisher rate limit · automatically resumes at "+
+                                    java.text.DateFormat.getDateTimeInstance()
+                                        .format(java.util.Date(item.retryAfter))+
+                                    " · $cached chapters safely cached"
                             else "Automatic retry scheduled · "+item.error.orEmpty().take(90)
                         State.ACTIVE->"$cached chapters cached · Extracting"
                         else->"$cached chapters cached · Continuing"
@@ -224,6 +232,11 @@ object UnifiedDownloadsUi {
                             a.startActivity(Intent(a,
                                 com.azrael.galleryflow.SiteLoginActivity::class.java)
                                 .putExtra(com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,item.url))
+                        }else if(providerCooling){
+                            android.widget.Toast.makeText(a,
+                                "The novel site requested a cooldown. Saved chapters "+
+                                    "will resume automatically afterward.",
+                                android.widget.Toast.LENGTH_LONG).show()
                         }else{
                             NovelEpubQueue(a).use{it.retryNow(item.url)}
                             NovelEpubService.schedule(a)
@@ -235,7 +248,8 @@ object UnifiedDownloadsUi {
                         else->{}
                     }
                 },if(present)item.savedUri else null,mime=mime,
-                    actionText=if(item.state=="RETRY")"RETRY" else null)
+                    actionText=if(providerCooling)"COOLDOWN"
+                        else if(item.state=="RETRY")"RETRY" else null)
             }
         }
         XPhotoQueue(a).use{db->
