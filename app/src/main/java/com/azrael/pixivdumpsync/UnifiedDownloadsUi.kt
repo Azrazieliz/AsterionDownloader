@@ -600,6 +600,10 @@ object UnifiedDownloadsUi {
                 },LinearLayout.LayoutParams(-1,ui.px(a,3)).apply{topMargin=ui.px(a,7)})
             }
             card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
+            // Keep per-file Retry and Clear together IN that file's card.
+            // The old parent-level Clear rendered as a huge detached button
+            // immediately above the next unrelated download row.
+            val actions=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             if(item.state in setOf(State.DONE,State.FAILED,State.HELD,
                     State.PAUSED) || item.actionText!=null){
                 val command=when(item.state){
@@ -626,8 +630,8 @@ object UnifiedDownloadsUi {
                     android.graphics.Color.rgb(226,255,239) else ui.white)
                 action.isSingleLine=true
                 action.setPadding(ui.px(a,5),0,ui.px(a,5),0)
-                card.addView(action,LinearLayout.LayoutParams(ui.px(a,88),-2).apply{
-                    leftMargin=ui.px(a,6)
+                actions.addView(action,LinearLayout.LayoutParams(-1,-2).apply{
+                    bottomMargin=ui.px(a,5)
                 })
             }
             // Each video has independent cancellation even when its primary
@@ -641,8 +645,12 @@ object UnifiedDownloadsUi {
                     isSingleLine=true
                     setTextColor(ui.secondary)
                 }
-                parent.addView(removeButton,ui.lp(a,2))
+                actions.addView(removeButton,LinearLayout.LayoutParams(-1,-2))
             }
+            if(actions.childCount>0)
+                card.addView(actions,LinearLayout.LayoutParams(ui.px(a,88),-2).apply{
+                    leftMargin=ui.px(a,6)
+                })
             parent.addView(card,ui.lp(a,8))
         }
         if(filtered.size>size)parent.addView(ui.action(a,
