@@ -40,6 +40,7 @@ TARGETS = {
     "3DHentaiX exact reported failure": "https://3dhentaix.com/ntr-compilation/",
     "HentaiBros exact reported failure": "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
     "FullPorner exact reported failure": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
+    "FullPorner observed first party player": "https://fullporner.com/player/9509933/14",
     "JAVIDEO": "https://javideo.net/",
     "Helloporn": "https://helloporn.com/",
     "XXXClub": "https://xxxclub.to/",
