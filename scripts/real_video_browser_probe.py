@@ -21,6 +21,8 @@ SITES = {
     "HentaiBros selected": "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
     "3DHentaiX selected": "https://3dhentaix.com/ntr-compilation/",
     "FullPorner selected": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
+    "HentaiHaven selected": "https://hentaihaven.xxx/watch/renseijutsushi-collet-no-h-na-shibo-shirage-monogatari/",
+    "UncensoredHentai selected": "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/",
 }
 out = {}
 try:
