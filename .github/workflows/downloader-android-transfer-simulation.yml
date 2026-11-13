@@ -9,6 +9,8 @@ on:
       - 'app/src/phonepilot/AndroidManifest.xml'
       - 'app/src/main/java/com/azrael/pixivdumpsync/BootReceiver.kt'
       - 'app/src/main/AndroidManifest.xml'
+      - 'app/src/main/java/com/asterion/videoflow/**'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/TorrentTransfers.kt'
       - 'app/build.gradle.kts'
       - '.github/workflows/downloader-android-transfer-simulation.yml'
   workflow_dispatch:
@@ -45,13 +47,18 @@ jobs:
           disable-animations: true
           script: |
             set -eu
+            # Avoid racing first-boot system work and the app's BOOT_COMPLETED
+            # receiver; this run tests media transfer, not initial phone setup.
+            adb wait-for-device
+            until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 2; done
+            sleep 12
             adb install -r app/build/outputs/apk/phonepilot/app-phonepilot.apk
             adb install -r app/build/outputs/apk/androidTest/phonepilot/app-phonepilot-androidTest.apk
             adb logcat -c
             # Capture logs regardless of instrumentation exit status. Android
             # reports INSTRUMENTATION_CODE: 0 even when the process crashes.
             set +e
-            adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation | tee android-transfer-simulation.txt
+            timeout --signal=TERM --kill-after=10s 240s adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation | tee android-transfer-simulation.txt
             instrument_exit=$?
             adb logcat -b crash -d -v threadtime > android-transfer-crash-logcat.txt
             adb logcat -d -v threadtime > android-transfer-full-logcat.txt
