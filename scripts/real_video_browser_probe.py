@@ -198,6 +198,25 @@ try:
                                             paused:v?.paused??null,
                                             error:v?.error?.code??null};
                                     """)
+                                # Real user gesture, scoped to the selected
+                                # iframe's own HTML5 <video> element. Never
+                                # click offsite ads or recommendation cards.
+                                if selected.get("hasVideo") and not selected.get("mediaHost"):
+                                    try:
+                                        player=driver.find_element(By.CSS_SELECTOR,"video")
+                                        player.click()
+                                        time.sleep(5)
+                                        selected["after_user_video_click"]=driver.execute_script("""
+                                            const v=document.querySelector('video');
+                                            const src=v?.currentSrc||v?.src||'';
+                                            return {ready:v?.readyState??null,
+                                                paused:v?.paused??null,
+                                                error:v?.error?.code??null,
+                                                mediaHost:(()=>{try{return new URL(src).hostname}
+                                                    catch(e){return ''}})()};
+                                        """)
+                                    except Exception as ex:
+                                        selected["click_error"]=type(ex).__name__
                                 out[name+" selected Mixdrop iframe playback"]=selected
                             except Exception as ex:
                                 out[name+" selected Mixdrop iframe playback"]={
