@@ -19,7 +19,7 @@ class VideoExecutionPoolsTest {
                 }
             }
             assertTrue("both old tasks started",entered.await(2,TimeUnit.SECONDS))
-            val next=pool.submit { 13 }
+            val next=pool.submit(java.util.concurrent.Callable<Int> { 13 })
             assertFalse("new selection waits rather than fails",next.isDone)
             stuck.forEach { it.cancel(true) }
             VideoExecutionPools.discardCancelled(pool)
