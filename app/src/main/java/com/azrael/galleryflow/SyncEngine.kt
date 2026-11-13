@@ -14,7 +14,7 @@ class SyncEngine(private val context: Context) {
         var incompleteGalleries: Int = 0
     )
 
-    private val http = HttpClient()
+    private val http = HttpClient(context)
 
     fun run(mode: SyncMode, targetEntityId: String? = null,
             targetSiteHost: String? = null,
@@ -79,7 +79,7 @@ class SyncEngine(private val context: Context) {
             if (!SyncControl.checkpoint()) return
             if(!com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                 continue
-            val adapter = AdapterRegistry.forSource(entity.source)
+            val adapter = AdapterRegistry.forSource(entity.source,context)
             if (!adapter.enabled) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
@@ -141,7 +141,7 @@ class SyncEngine(private val context: Context) {
             if(!targeted &&
                 !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                 continue
-            val adapter = AdapterRegistry.forSource(entity.source)
+            val adapter = AdapterRegistry.forSource(entity.source,context)
             if (!adapter.enabled) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue

@@ -20,7 +20,7 @@ object NetworkRequestRegistry {
     }
 }
 
-open class HttpClient {
+open class HttpClient(private val context:android.content.Context?=null) {
     data class TextResponse(
         val body: String,
         val finalUrl: String,
@@ -42,6 +42,12 @@ open class HttpClient {
             .header("Accept-Language", "en-US,en;q=0.8")
             .header("Accept", accept)
 
+        // Gallery pages use the same configured per-provider route as video
+        // discovery. Previously Jsoup ignored it entirely, making selected
+        // Cosplay galleries fail under routes that worked in VideoFlow.
+        val routedSite=referer?.takeIf { it.startsWith("http") } ?:url
+        com.asterion.videoflow.NetworkRoute.javaProxy(context,routedSite)
+            ?.let{connection.proxy(it)}
         if (!referer.isNullOrBlank()) connection.referrer(referer)
         webCookies(url)?.let { connection.header("Cookie", it) }
 
@@ -271,7 +277,10 @@ open class HttpClient {
 
     open fun open(url: String, referer: String? = null, cookie: String? = null): OpenResponse {
         if (!SyncControl.checkpoint()) throw SyncCancelledException()
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val routedSite=referer?.takeIf { it.startsWith("http") } ?:url
+        val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(context,routedSite)
+        val conn = (if(proxy==null)URL(url).openConnection()
+            else URL(url).openConnection(proxy)) as HttpURLConnection
         NetworkRequestRegistry.register(conn)
         try {
             conn.instanceFollowRedirects = true

@@ -91,7 +91,7 @@ internal object ApprovedCosplayActions {
         val knownKiutaku=site.host=="kiutaku.com" &&
             path.matches(Regex("[0-9]{1,9}"))
         val entity=if(knownKiutaku){
-            com.azrael.galleryflow.AdapterRegistry.forUrl(tile.url)
+            com.azrael.galleryflow.AdapterRegistry.forUrl(tile.url,a.applicationContext)
                 .resolveEntity(tile.url)
         }else{
             val digest=MessageDigest.getInstance("SHA-256")

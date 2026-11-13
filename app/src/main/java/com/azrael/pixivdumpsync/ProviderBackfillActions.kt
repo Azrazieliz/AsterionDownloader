@@ -62,7 +62,7 @@ object ProviderBackfillActions {
             }}
             if(!exists){
                 val enrolled=runCatching{
-                    val adapter=com.azrael.galleryflow.AdapterRegistry.forUrl(site.url)
+                    val adapter=com.azrael.galleryflow.AdapterRegistry.forUrl(site.url,a.applicationContext)
                     val entity=adapter.resolveEntity(site.url)
                     GalleryDb(a).use{it.addEntity(entity)}
                 }
