@@ -19,8 +19,16 @@ internal object NetworkRoute {
         val input=site.trim()
         val address=if("://" in input)input else "https://"+input
         return runCatching{
-            URI(address).host.orEmpty().lowercase(Locale.ROOT)
-                .removePrefix("www.").removePrefix("m.")
+            var host=URI(address).host.orEmpty().lowercase(Locale.ROOT)
+            // VideoSiteProfiles already treats www/m/fr/en variants as one
+            // publisher. Network exits must follow the SAME identity or an
+            // HTTP redirect to fr.pornhub.com silently loses the VPN route.
+            while(listOf("www.","m.","fr.","en.").any{host.startsWith(it)}){
+                val prefix=listOf("www.","m.","fr.","en.")
+                    .first{host.startsWith(it)}
+                host=host.removePrefix(prefix)
+            }
+            host
         }.getOrDefault("")
     }
     fun configured(context:Context?,url:String):Route? {

@@ -8,6 +8,10 @@ class NetworkRouteTest {
     @Test fun canonicalPerSiteRouteKeys() {
         assertEquals("eporner.com",NetworkRoute.siteKey("https://www.eporner.com/video-example/"))
         assertEquals("archivebate.com",NetworkRoute.siteKey("archivebate.com"))
+        assertEquals("pornhub.com",NetworkRoute.siteKey("https://fr.pornhub.com"))
+        assertEquals("pornhub.com",NetworkRoute.siteKey("https://www.pornhub.com"))
+        assertEquals("pornhub.com",NetworkRoute.siteKey("https://m.fr.pornhub.com"))
+        assertEquals("eporner.com",NetworkRoute.siteKey("https://en.eporner.com/"))
         assertEquals("",NetworkRoute.siteKey("not a domain / invalid url"))
     }
 }
