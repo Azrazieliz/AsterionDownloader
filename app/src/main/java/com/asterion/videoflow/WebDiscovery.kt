@@ -61,7 +61,8 @@ object WebDiscovery {
                 .ignoreHttpErrors(true)
                 .apply{
                     NetworkRoute.javaProxy(context,current)?.let{proxy(it)}
-                    SiteSession.cookie(current)?.let{header("Cookie",it)}
+                    (context?.let{SiteSession.cookie(it,current)}
+                        ?:SiteSession.cookie(current))?.let{header("Cookie",it)}
                 }
                 .execute()
             if(response.statusCode() in 300..399){
