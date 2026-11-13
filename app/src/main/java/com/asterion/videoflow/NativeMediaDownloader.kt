@@ -25,8 +25,10 @@ internal object NativeMediaDownloader {
     /** Direct, concrete video files are ordinary HTTP transfers regardless
      * of the source category. Hentai watch pages still use their own extractor.
      */
-    fun isNativeEligible(sourceUrl:String,mediaUrl:String):Boolean =
-        isDirectMediaUrl(mediaUrl) && runCatching{
+    fun isNativeEligible(sourceUrl:String,mediaUrl:String,verifiedMp4:Boolean=false):Boolean =
+        (isDirectMediaUrl(mediaUrl) ||
+         (verifiedMp4 && FreePornVideosOriginalSource.firstPartyFormat(
+             sourceUrl,mediaUrl))) && runCatching{
             val uri=URI(sourceUrl)
             uri.scheme in setOf("http","https") && uri.host!=null
         }.getOrDefault(false)
@@ -34,12 +36,22 @@ internal object NativeMediaDownloader {
     fun download(address:String,referer:String?,directory:File,
                  cookieHeader:String?=null,filenameStem:String="video",
                  proxy:java.net.Proxy?=null,progress:(Int)->Unit={},
-                 cancelled:()->Boolean={false}):File {
-        require(isDirectMediaUrl(address)){"Not a direct native original media URL"}
+                 cancelled:()->Boolean={false},verifiedMp4:Boolean=false):File {
+        require(isDirectMediaUrl(address) ||
+            (verifiedMp4 && address.startsWith("https://") &&
+                runCatching{val uri=URI(address)
+                    uri.userInfo==null && uri.port==-1 &&
+                    uri.host.orEmpty().lowercase().removePrefix("www.")==
+                        "freepornvideos.xxx"
+                }.getOrDefault(false))){
+            "Not a verified first-party direct original media URL"
+        }
         require(directory.isDirectory && directory.canWrite()){
             "Native transfer staging directory is unavailable"
         }
-        val ext=URI(address).path.trimEnd('/').substringAfterLast('.').lowercase(Locale.ROOT)
+        val ext=if(verifiedMp4)"mp4" else
+            URI(address).path.trimEnd('/').substringAfterLast('.')
+                .lowercase(Locale.ROOT)
         val stem=filenameStem.replace(
             Regex("""[\\/:*?"<>|\p{Cntrl}]"""),"_")
             .trim().take(140).ifBlank{"video"}
@@ -97,6 +109,8 @@ internal object NativeMediaDownloader {
                     throw IOException("Native media HTTP $status")
                 val mime=conn.contentType.orEmpty().substringBefore(';')
                     .trim().lowercase(Locale.ROOT)
+                if(verifiedMp4 && mime!="video/mp4")
+                    throw IOException("Verified first-party URL did not serve video/mp4")
                 if(mime !in setOf("application/octet-stream",
                     "binary/octet-stream","application/x-matroska") &&
                     !mime.startsWith("video/")){
@@ -138,6 +152,14 @@ internal object NativeMediaDownloader {
                     throw IOException("Incomplete native transfer: $written of $expected bytes")
                 if(partial.length()<=0L)
                     throw IOException("Native provider supplied zero original bytes")
+                if(verifiedMp4){
+                    val magic=ByteArray(12)
+                    val read=partial.inputStream().use{it.read(magic)}
+                    if(read<12 || !String(magic,4,4,
+                            Charsets.US_ASCII).equals("ftyp"))
+                        throw IOException(
+                            "Selected provider returned non-MP4 or invalid first media bytes")
+                }
                 if(destination.exists() && !destination.delete())
                     throw IOException("Cannot replace staged media file")
                 check(partial.renameTo(destination)){

@@ -521,7 +521,8 @@ object VideoEngine {
         // embedded Python YoutubeDL API with typed options instead. The
         // staged bytes are measured while the future is executing, not inferred
         // from a progress callback which can remain at zero indefinitely.
-        fun executeControlled(link:String,referer:String?=null) {
+        fun executeControlled(link:String,referer:String?=null,
+                              verifiedFirstPartyMp4:Boolean=false) {
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
             val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
@@ -535,7 +536,8 @@ object VideoEngine {
             // Direct, browser-accessible media uses the Kotlin/Android HTTP
             // streaming lane. No Python startup, extractor wrapper or shell.
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
-            val native=NativeMediaDownloader.isNativeEligible(item.url,link) &&
+            val native=NativeMediaDownloader.isNativeEligible(
+                item.url,link,verifiedFirstPartyMp4) &&
                 (!hidden || proxy!=null)
             val future=(if(native)nativeExecutor else transferExecutor).submit<Int>{
                 if(native) {
@@ -552,7 +554,8 @@ object VideoEngine {
                         cancelled={
                             stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted
-                        })
+                        },
+                        verifiedMp4=verifiedFirstPartyMp4)
                     0
                 } else {
                     // The original standalone VideoFlow used YtDlp.execute
@@ -738,8 +741,9 @@ object VideoEngine {
             }
             return (duration?:0L) to decision
         }
-        fun execute(link:String,referer:String?=null) {
-            executeControlled(link,referer)
+        fun execute(link:String,referer:String?=null,
+                    verifiedFirstPartyMp4:Boolean=false) {
+            executeControlled(link,referer,verifiedFirstPartyMp4)
             val received=VideoPayloadBytes.count(parent)
             if(received<=0L)
                 throw java.io.IOException("No original media bytes received")
@@ -772,6 +776,32 @@ object VideoEngine {
         var expectedDuration:Long?=null
         var heldReason:String?=null
         try {
+            // Real selected FreePornVideos HTML5MediaEmbed exposes 3 verified
+            // HTTPS MP4 formats but its selected file URL has no .mp4 suffix.
+            // The old native lane rejected it and retried a Python page
+            // extractor despite HTTP 206 + video/mp4 + valid ftyp bytes.
+            // Resolve the actual selected original through in-app yt-dlp
+            // metadata, then transfer it natively with strict MIME and magic.
+            if(!downloaded && userRequested &&
+                FreePornVideosOriginalSource.selectedPage(item.url) &&
+                !FullLengthVideoPolicy.isExplicitPreview(item.title,item.url)){
+                val format=runCatching{
+                    ensureExtractor(context)
+                    val selected=connectedCookies?.takeIf{
+                        it.isFile&&it.length()>0L}
+                        ?:cookie.takeIf{it.isFile&&it.length()>0L}
+                    EmbeddedYtDlpMetadata.firstPartyMp4(
+                        item.url,item.url,selected,
+                        NetworkRoute.extractorProxy(context,item.url))
+                }
+                if(format.isSuccess && format.getOrNull()!=null){
+                    try {
+                        execute(format.getOrThrow()!!,item.url,
+                            verifiedFirstPartyMp4=true)
+                        downloaded=true
+                    }catch(t:Exception){last=t}
+                }else if(format.isFailure)last=format.exceptionOrNull()
+            }
             // A concrete public media URL does not need Python metadata first.
             if(NativeMediaDownloader.isNativeEligible(item.url,item.url) &&
                 !FullLengthVideoPolicy.isExplicitPreview(item.title,item.url) &&
