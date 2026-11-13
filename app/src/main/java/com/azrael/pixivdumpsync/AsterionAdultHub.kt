@@ -240,9 +240,9 @@ object AsterionAdultHub {
         val inactive=sources.filterNot{it in active}
         parent.addView(ui.text(a,
             sources.size.toString()+" websites · "+active.size+
-                " with real thumbnails · "+
+                " with indexed media cards · "+
                 inactive.count{!error(it,a).isNullOrBlank()}+" source errors · "+
-                inactive.size+" without previews",
+                inactive.size+" without cards",
             12f,ui.secondary),ui.lp(a,3))
         // A selected model's content remains inside that model's card, rather
         // than appearing under an unrelated "latest" website.
@@ -383,7 +383,11 @@ object AsterionAdultHub {
             }
             card.addView(ui.text(a,
                 (media.size+searches.size+public.size).toString()+
-                    " real media previews · "+state,
+                    " indexed media cards · "+
+                    (media.count{!it.preview.isNullOrBlank()}+
+                        searches.count{!it.thumbnail.isNullOrBlank()}+
+                        public.count{it.cover.isNotBlank()}).toString()+
+                    " poster URLs · "+state,
                 12f,ui.secondary),ui.lp(a,5))
             if(media.isEmpty() && searches.isEmpty() && public.isEmpty()){
                 card.addView(ui.text(a,
