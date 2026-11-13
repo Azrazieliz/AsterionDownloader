@@ -5,10 +5,17 @@ import org.junit.Test
 
 class NovelHttpPacingTest {
     @Test fun freeWebNovelReaderIsPacedAcrossAllWorkers(){
-        assertEquals(10_000L,NovelHttpPacing.minimumGapMillis("freewebnovel.com"))
-        assertEquals(10_000L,NovelHttpPacing.minimumGapMillis("www.freewebnovel.com"))
-        assertEquals(4_000L,NovelHttpPacing.minimumGapMillis("novelbuddy.me"))
+        assertEquals(2_500L,NovelHttpPacing.minimumGapMillis("freewebnovel.com"))
+        assertEquals(2_500L,NovelHttpPacing.minimumGapMillis("www.freewebnovel.com"))
+        assertEquals(1_750L,NovelHttpPacing.minimumGapMillis("novelbuddy.me"))
         assertEquals(1_750L,NovelHttpPacing.minimumGapMillis("other.example"))
+    }
+    @Test fun successfulFastChaptersOnlySlowWhenProviderActuallyRateLimits(){
+        assertEquals(2_500L,NovelHttpPacing.adaptiveGapMillis("freewebnovel.com",0))
+        assertEquals(5_000L,NovelHttpPacing.adaptiveGapMillis("freewebnovel.com",1))
+        assertEquals(8_000L,NovelHttpPacing.adaptiveGapMillis("freewebnovel.com",2))
+        assertEquals(12_000L,NovelHttpPacing.adaptiveGapMillis("freewebnovel.com",3))
+        assertEquals(1_750L,NovelHttpPacing.adaptiveGapMillis("novelbuddy.me",20))
     }
     @Test fun repeatedProvider429IncreasesCooldownWithoutHammering(){
         assertEquals(120_000L,NovelHttpPacing.repeatedLimitDelayMillis(1))
