@@ -256,12 +256,19 @@ class MainActivity:Activity() {
         add(box,text(v.title,14f,white,true),7)
         add(box,text(v.url,11f,grey),6)
         if(v.status=="running"){
-            val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{
-                max=100;this.progress=v.progress
-                progressTintList=android.content.res.ColorStateList.valueOf(primary)
+            val verified=VideoTransferJournal.current(this,v.id)
+                ?.verifiedBytes?.coerceAtLeast(0L)?:0L
+            if(verified>0L){
+                val progress=ProgressBar(this,null,
+                    android.R.attr.progressBarStyleHorizontal).apply{
+                    max=100;this.progress=v.progress
+                    progressTintList=android.content.res.ColorStateList
+                        .valueOf(primary)
+                }
+                add(box,progress,11)
             }
-            add(box,progress,11)
-            add(box,text(v.progress.toString()+"% downloaded",11f,grey),5)
+            add(box,text(VideoTransferProgressPolicy.description(
+                v.progress,verified),11f,grey),5)
         }
         if(v.status=="error"){
             add(box,text(SourceDiagnostics.summary(v.error),12f,bad),9)
@@ -283,6 +290,8 @@ class MainActivity:Activity() {
             val labelAction=when(v.status){
                 "done"->"OPEN";"error"->"RETRY"
                 "full_only_hold"->"RECHECK FULL VERSION"
+                "running"->"PAUSE"
+                "paused"->"RESUME"
                 else->"START"
             }
             actions.addView(button(labelAction,false){
@@ -291,6 +300,8 @@ class MainActivity:Activity() {
                     "error","full_only_hold"->{
                         db.retry(v.id);requestTransfer(false);draw()
                     }
+                    "running"->{VideoEngine.pauseVideo(this,v.id);draw()}
+                    "paused"->{VideoEngine.resumeVideo(this,v.id);draw()}
                     else->requestTransfer(false)
                 }
             },LinearLayout.LayoutParams(0,-2,1f))
