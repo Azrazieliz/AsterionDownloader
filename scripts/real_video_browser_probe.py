@@ -49,7 +49,14 @@ def evidence(name,label):
             tag:el.tagName,
             src:el.currentSrc||el.getAttribute('src')||'',
             poster:el.poster||el.getAttribute('poster')||'',
-            ready:typeof el.readyState==='number'?el.readyState:null
+            ready:typeof el.readyState==='number'?el.readyState:null,
+            duration:Number.isFinite(el.duration)?Math.round(el.duration):null,
+            mediaId:(el.id||'').slice(0,70),
+            mediaClass:(el.className||'').toString().slice(0,90),
+            parentClass:(el.parentElement?.className||'').toString().slice(0,90),
+            containerClass:(el.closest('[class*=player],[id*=player],main,article')?.className||'').toString().slice(0,90),
+            visible:el.getBoundingClientRect().width>40 &&
+                el.getBoundingClientRect().height>30
           })),
         watchLinks:[...document.querySelectorAll('a[href]')]
           .filter(el=>/\\/watch\\/|\\/video\\//i.test(el.getAttribute('href')||''))
@@ -93,7 +100,12 @@ def evidence(name,label):
     def host(u):
         return urllib.parse.urlsplit(u).hostname or ""
     urls=[{"tag":e["tag"],"host":host(e["src"]),
-           "poster_host":host(e["poster"]),"ready":e.get("ready")}
+           "poster_host":host(e["poster"]),"ready":e.get("ready"),
+           "duration_s":e.get("duration"),"id":e.get("mediaId"),
+           "class":e.get("mediaClass"),"parent_class":e.get("parentClass"),
+           "container_class":e.get("containerClass"),"visible":e.get("visible"),
+           "media_path_ext":pathlib.PurePosixPath(urllib.parse.urlsplit(e["src"]).path).suffix.lower(),
+           "has_signed_query":bool(urllib.parse.urlsplit(e["src"]).query)}
            for e in values["players"]]
     iframe_shapes=sorted(set(
         re.sub(r'[A-Za-z0-9_-]{6,}', 'ID', urllib.parse.urlsplit(e["src"]).path)
