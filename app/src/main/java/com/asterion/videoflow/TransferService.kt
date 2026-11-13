@@ -311,18 +311,15 @@ object VideoEngine {
                         if(targetHost==null &&
                             !com.azrael.pixivdumpsync.SiteControls.sync(context,watch.address))continue
                         if(hits.isEmpty())error("No video entries indexed from this provider; a site-specific parser or login may be required")
-                        var added=0
-                        for(hit in hits) {
-                            if(!com.azrael.pixivdumpsync.AppPower.enabled(context) ||
-                                Thread.currentThread().isInterrupted)break
-                            if(!FullLengthVideoPolicy.isExplicitPreview(hit.title,hit.url) &&
-                                db.addVideo(hit.url,hit.title,watch.id,origin="website")) added++
-                            // Every observed new item is recorded; never truncate
-                            // a followed provider after three videos.
+                        // Sync and Backfill index metadata; they do not
+                        // authorize downloading every discovered video.
+                        // Explicitly selected videos still use VideoDb.
+                        val foundForReview=hits.filterNot{
+                            FullLengthVideoPolicy.isExplicitPreview(it.title,it.url)
                         }
-                        if(hits.any{!it.preview.isNullOrBlank()}){
+                                                if(foundForReview.isNotEmpty()){
                             com.azrael.pixivdumpsync.SearchResultsDb(context).use{results->
-                                results.save("WATCH:"+watch.label,hits.map{hit->
+                                results.save("WATCH:"+watch.label,foundForReview.map{hit->
                                     com.azrael.pixivdumpsync.RankedHit(
                                         hit.title,hit.url,watch.label,
                                         thumbnail=hit.preview)
@@ -433,14 +430,8 @@ object VideoEngine {
                         if(index.upsert(com.azrael.pixivdumpsync.IndexedItem(
                             hit.url,hit.title,thumb,address,area,"video",clock,false)))
                             count++
-                        // Explicit Backfill means obtaining originals, not simply
-                        // indexing them; preserve each file's own transfer status.
-                        // Manual Backfill is independent of automatic Sync.
-                        // Attach explicit user-requested files to watch_id=0;
-                        // otherwise a disabled Sync switch would silently block
-                        // the videos that Backfill itself discovered.
-                        if(!FullLengthVideoPolicy.isExplicitPreview(hit.title,hit.url) &&
-                            db.addVideo(hit.url,hit.title,0L,origin="website"))enqueued++
+                        // Historical discovery stores source-owned previews;
+                        // transferring any video requires selecting its card.
                     }
                     if(stop())throw InterruptedException("Provider backfill stopped")
                     // A checked page is discovery evidence, not download success.
@@ -456,7 +447,7 @@ object VideoEngine {
                     pages+=cursor
             }
             if(stop())throw InterruptedException("Stopped by user")
-            if(enqueued>0)launch(context,false)
+            // No automatic video transfer is triggered by catalog backfill.
         }finally{db.close()}
     }
     fun submit(context: Context, scan: Boolean, targetHost:String?=null,
