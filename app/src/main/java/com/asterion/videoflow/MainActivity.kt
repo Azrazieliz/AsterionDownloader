@@ -409,9 +409,37 @@ class MainActivity:Activity() {
         add(content,quality,17)
         val routing=card()
         routing.addView(text("NETWORK / EXIT IP",12f,primary,true))
+        add(routing,text("FREE EMBEDDED IP CHANGER · Tor connects selected "+
+            "websites through a real remote exit, with no paid proxy. "+
+            "It never silently falls back to the French IP.",12f,grey),8)
         add(routing,text("Per-site direct, Android VPN, or user-supplied HTTP/SOCKS5 proxy. A new public IP requires a real working exit server.",12f,grey),9)
-        val routeSite=edit("Site URL or domain","https://www.eporner.com/")
+        val routeSite=edit("Site URL or domain","https://www.pornhub.com/")
         add(routing,routeSite,10)
+        val torCountries=TorExitCountries.choices
+        val torRegion=Spinner(this).apply {
+            adapter=ArrayAdapter(this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                torCountries.map{it.first})
+            background=rounded(elevated,12)
+            setSelection(1)
+        }
+        add(routing,torRegion,9)
+        val torStatus=text("Tor: Off · choose an exit country and enable",
+            12f,grey)
+        add(routing,torStatus,7)
+        add(routing,button("ENABLE REAL IP CHANGER"){
+            runCatching{
+                TorExitController.start(this,routeSite.text.toString(),
+                    torCountries[torRegion.selectedItemPosition].second){
+                        status->torStatus.text=status
+                    }
+            }.onFailure{torStatus.text="Tor startup error: "+
+                (it.message?:"Unknown error")}
+        },9)
+        add(routing,button("STOP IP CHANGER",false){
+            TorExitController.stop(this)
+            torStatus.text="Tor stopped; website route reset to direct"
+        },7)
         val routeChoices=listOf("Direct / system VPN","HTTP proxy","SOCKS5 proxy")
         val routeMode=Spinner(this).apply{
             adapter=ArrayAdapter(this@MainActivity,

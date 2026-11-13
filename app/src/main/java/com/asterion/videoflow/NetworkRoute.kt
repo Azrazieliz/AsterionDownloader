@@ -27,6 +27,22 @@ internal object NetworkRoute {
         if(context==null)return null
         val site=siteKey(url)
         if(site.isBlank())return null
+        // Foreground, video-primary, video-secondary and GalleryFlow run in
+        // separate Android processes. SharedPreferences is process-cached:
+        // relying on it can silently leave a newly chosen exit route DIRECT.
+        // Each configuration is also stored in one atomically replaced file.
+        routeFile(context,site).takeIf{it.isFile}?.let{file->
+            return runCatching{
+                val obj=org.json.JSONObject(file.readText())
+                val mode=obj.getString("mode")
+                require(mode in setOf("direct","http","socks5","tor"))
+                Route(mode,obj.optString("host",""),obj.optInt("port",0))
+            }.getOrElse{
+                // Corrupt routing metadata must NEVER silently expose traffic
+                // over the user's direct French public address.
+                Route("tor","",0)
+            }
+        }
         val pref=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
         return Route(pref.getString(site+":mode","direct")?:"direct",
             pref.getString(site+":host","").orEmpty(),
@@ -35,20 +51,74 @@ internal object NetworkRoute {
     fun save(context:Context,url:String,mode:String,host:String,port:Int) {
         val site=siteKey(url)
         require(site.isNotBlank()){"Enter a valid site domain"}
-        require(mode in setOf("direct","http","socks5")){"Invalid route mode"}
-        if(mode!="direct"){
+        require(mode in setOf("direct","http","socks5","tor")){"Invalid route mode"}
+        if(mode=="tor"){
+            require(host=="127.0.0.1" && port in 0..65535){
+                "Embedded Tor route must use local SOCKS only"
+            }
+        }else if(mode!="direct"){
             require(host.matches(Regex("""[A-Za-z0-9.-]{1,253}"""))){
                 "Use a valid proxy DNS name or IPv4 address"
             }
             require(port in 1..65535){"Enter a valid proxy port"}
         }
+        val h=if(mode=="direct")"" else host
+        val p=if(mode=="direct")0 else port
+        val file=routeFile(context,site)
+        val temporary=java.io.File(file.parentFile,file.name+".tmp")
+        try{
+            temporary.writeText(org.json.JSONObject().apply{
+                put("mode",mode);put("host",h);put("port",p)
+            }.toString())
+            if(file.exists() && !file.delete())
+                error("Cannot replace stored network route")
+            check(temporary.renameTo(file)){"Could not commit network route"}
+        }finally{temporary.delete()}
         context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
             .putString(site+":mode",mode)
-            .putString(site+":host",if(mode=="direct")"" else host)
-            .putInt(site+":port",if(mode=="direct")0 else port).apply()
+            .putString(site+":host",h)
+            .putInt(site+":port",p).apply()
     }
+    private fun routeFile(context:Context,site:String):java.io.File {
+        val digest=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(site.toByteArray(Charsets.UTF_8)).take(12)
+            .joinToString(""){"%02x".format(it)}
+        val directory=java.io.File(context.filesDir,"asterion-network-routes")
+            .apply{mkdirs()}
+        return java.io.File(directory,digest+".json")
+    }
+    /** Bootstrap fail-closed: no site-specific direct connection before
+     * the Tor circuit and foreign exit IP have actually been confirmed.
+     */
+    fun waitForTor(context:Context,site:String){
+        save(context,site,"tor","127.0.0.1",0)
+    }
+    fun verifyTorExitAndActivate(context:Context,site:String,port:Int):String{
+        require(port in 1..65535){"Tor SOCKS listener not ready"}
+        val proxy=Proxy(Proxy.Type.SOCKS,
+            InetSocketAddress.createUnresolved("127.0.0.1",port))
+        val foreign=probeExitIp(proxy)
+        val direct=runCatching{probeExitIp(null)}.getOrNull()
+        require(direct==null || foreign!=direct){
+            "Tor did not change the public IP; leaving site route blocked"
+        }
+        save(context,site,"tor","127.0.0.1",port)
+        return "Tor exit IP verified: "+foreign+
+            if(direct==null)" (direct comparison unavailable)"
+            else " (different from direct connection)"
+    }
+    fun usesEmbeddedTor(context:Context?,url:String):Boolean =
+        configured(context,url)?.mode=="tor"
+
     fun javaProxy(context:Context?,url:String):Proxy? {
         val r=configured(context,url)?:return null
+        if(r.mode=="tor"){
+            check(r.port in 1..65535 && r.host=="127.0.0.1"){
+                "Embedded IP changer has not verified a Tor exit yet; direct traffic blocked"
+            }
+            return Proxy(Proxy.Type.SOCKS,
+                InetSocketAddress.createUnresolved("127.0.0.1",r.port))
+        }
         if(r.mode !in setOf("http","socks5") || r.port !in 1..65535 ||
             r.host.isBlank())return null
         return Proxy(if(r.mode=="http")Proxy.Type.HTTP else Proxy.Type.SOCKS,
@@ -56,6 +126,12 @@ internal object NetworkRoute {
     }
     fun extractorProxy(context:Context?,url:String):String? {
         val r=configured(context,url)?:return null
+        if(r.mode=="tor"){
+            check(r.port in 1..65535 && r.host=="127.0.0.1"){
+                "Embedded Tor exit not verified: refusing direct Python transfer"
+            }
+            return "socks5h://127.0.0.1:"+r.port
+        }
         if(r.mode !in setOf("http","socks5") || r.port !in 1..65535 ||
             r.host.isBlank())return null
         val protocol=if(r.mode=="socks5")"socks5h" else "http"

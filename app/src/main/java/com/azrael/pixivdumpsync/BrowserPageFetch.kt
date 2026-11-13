@@ -30,6 +30,12 @@ object BrowserPageFetch {
             host in publicBrowserHosts
     }
     fun html(context:Context,url:String):String {
+        // This WebView has no per-site SOCKS proxy implementation. Falling
+        // back to it while Tor was selected would expose the real public IP.
+        check(!com.asterion.videoflow.NetworkRoute.usesEmbeddedTor(context,url)){
+            "Website browser fallback cannot use the selected Tor exit; "+
+                "direct connection blocked until a proxied resolver is available"
+        }
         require(com.azrael.galleryflow.SiteSession.bound(context,url) ||
             publicEligible(url)) {
             "Save an accessible website session before retrying."
