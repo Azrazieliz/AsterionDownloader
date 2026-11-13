@@ -29,6 +29,25 @@ object SiteSession {
         return runCatching{CookieManager.getInstance().getCookie(url)}
             .getOrNull()?.takeIf{it.isNotBlank()}
     }
+    /**
+     * Prefer the owner's main-process cookie jar. Android requires isolated
+     * WebView directories for VideoFlow's two services, so calling the local
+     * CookieManager from those services would silently lose the login.
+     */
+    fun cookie(context:Context,url:String):String? {
+        if(!validLoginUrl(url))return null
+        val process=if(android.os.Build.VERSION.SDK_INT>=28)
+            android.app.Application.getProcessName() else context.packageName
+        if(process==context.packageName)return cookie(url)
+        if(!bound(context,url))return null
+        val fromMain=runCatching {
+            val provider=Uri.parse("content://"+context.packageName+".session-cookies")
+            context.contentResolver.call(
+                provider,"read_site_cookie",url,null)?.getString("cookie")
+        }.getOrNull()
+        return fromMain?.takeIf{it.isNotBlank()}?:cookie(url)
+    }
+
     private fun host(url:String):String = Uri.parse(url).host.orEmpty()
         .lowercase(java.util.Locale.ROOT).removePrefix("www.")
     fun bound(context:Context,url:String):Boolean{
