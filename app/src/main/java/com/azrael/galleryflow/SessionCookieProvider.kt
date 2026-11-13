@@ -21,14 +21,18 @@ class SessionCookieProvider:ContentProvider() {
     override fun onCreate():Boolean=true
 
     override fun call(method:String,arg:String?,extras:Bundle?):Bundle? {
-        if(method !in setOf("read_site_cookie","read_site_html"))
+        if(method !in setOf("read_site_cookie","read_site_html","is_site_connected"))
             return super.call(method,arg,extras)
         if(Binder.getCallingUid()!=Process.myUid())
             throw SecurityException("Cross-application session access denied")
         val ctx=context?:return Bundle()
         val url=arg.orEmpty()
-        if(!SiteSession.validLoginUrl(url) || !SiteSession.bound(ctx,url))
-            return Bundle()
+        if(!SiteSession.validLoginUrl(url))return Bundle()
+        val connected=SiteSession.bound(ctx,url)
+        if(method=="is_site_connected")return Bundle().apply{
+            putBoolean("connected",connected)
+        }
+        if(!connected)return Bundle()
         if(method=="read_site_html") {
             // Connected browser verification can only be resumed in the main
             // process, which owns the login's WebView cookie jar. Binder has
