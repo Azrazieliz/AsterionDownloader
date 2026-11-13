@@ -117,14 +117,16 @@ internal object PerformerIdentity {
                         val response=Jsoup.connect(candidate)
                             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
                             .followRedirects(false).ignoreHttpErrors(true)
+                            .apply{SiteSession.cookie(candidate)?.let{header("Cookie",it)}}
                             .timeout(6_500).maxBodySize(1_800_000).execute()
-                        if(response.statusCode() !in 200..299)null
-                        else {
-                            val doc=response.parse()
-                            if(matchesEvidence(needle,candidate,doc))
-                                Proof(needle,candidate,host(candidate))
-                            else null
-                        }
+                        val doc=if(response.statusCode() in 200..299)
+                            response.parse()
+                        else if(context!=null && SiteSession.bound(context,candidate))
+                            Jsoup.parse(BrowserPageFetch.html(context,candidate),candidate)
+                        else null
+                        if(doc!=null && matchesEvidence(needle,candidate,doc))
+                            Proof(needle,candidate,host(candidate))
+                        else null
                     }.getOrNull()
                 }
             }
