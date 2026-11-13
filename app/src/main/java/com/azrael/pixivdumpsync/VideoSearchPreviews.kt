@@ -33,11 +33,16 @@ object VideoSearchPreviews {
         // Do not retain Activity/ImageView references in the unbounded
         // thumbnail network queue after the app enters the background.
         workers.execute{
-            val bitmap=runCatching{
+            var bitmap:Bitmap?=null
+            // Jav Guru's advertised CDN currently answers HTTP 403 for real
+            // poster bytes. Use its first-party published WP image path first,
+            // falling back to the original CDN only when necessary.
+            for(candidateUrl in PublisherPreviewFallback.candidates(url,referer)){
+                bitmap=runCatching{
                 val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
                     app,referer?:url)
-                val connection=(if(proxy!=null)URL(url).openConnection(proxy)
-                    else URL(url).openConnection()).apply{
+                val connection=(if(proxy!=null)URL(candidateUrl).openConnection(proxy)
+                    else URL(candidateUrl).openConnection()).apply{
                     connectTimeout=6000
                     readTimeout=8000
                     setRequestProperty("User-Agent",
@@ -95,15 +100,18 @@ object VideoSearchPreviews {
                         inSampleSize=sample
                         inPreferredConfig=Bitmap.Config.RGB_565
                     })
-            }.getOrNull()
-            if(bitmap!=null){
-                synchronized(lock){memory.put(url,bitmap)}
+                }.getOrNull()
+                if(bitmap!=null)break
+            }
+            val ready=bitmap
+            if(ready!=null){
+                synchronized(lock){memory.put(url,ready)}
                 view.get()?.post{
                     val target=view.get()
                     if(target!=null && target.tag==url &&
                         target.isAttachedToWindow){
                         target.scaleType=ImageView.ScaleType.CENTER_CROP
-                        target.setImageBitmap(bitmap)
+                        target.setImageBitmap(ready)
                         target.contentDescription="Video thumbnail"
                     }
                 }
