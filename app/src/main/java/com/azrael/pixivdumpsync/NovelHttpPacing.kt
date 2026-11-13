@@ -85,6 +85,20 @@ internal object NovelHttpPacing {
             return end
         }
     }
+    /**
+     * Serialize the ENTIRE HTTP exchange for the same publisher. Previously
+     * the lock protected only the start-time check; a slow request and a
+     * second novel worker could overlap and trigger another HTTP 429 before
+     * the first response's Retry-After was persisted.
+     */
+    fun <T> serializedRequest(context:Context,url:String,fetch:()->T):T {
+        val guard=locks.getOrPut(host(url)){Any()}
+        synchronized(guard){
+            beforeRequest(context,url)
+            return fetch()
+        }
+    }
+
     fun beforeRequest(context:Context,url:String){
         val key=host(url)
         val guard=locks.getOrPut(key){Any()}
