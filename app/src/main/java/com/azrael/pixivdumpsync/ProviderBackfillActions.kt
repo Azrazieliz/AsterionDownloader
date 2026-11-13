@@ -18,8 +18,12 @@ object ProviderBackfillActions {
         if(!AppPower.enabled(a))return "App is paused in Settings"
         val host=SiteControls.key(site.url)
         if(host in setOf("onejav.com","sukebei.nyaa.si")){
-            TorrentSourceBackfill.scanAsync(a)
-            return "Torrent historical metadata check requested"
+            // scanAsync runs only feeds with automatic Sync enabled. A manual
+            // BACKFILL must check the requested feed even when Sync is off.
+            val feed=if(host=="onejav.com")"ONEJAV" else "SUKEBEI"
+            val started=TorrentSourceBackfill.startSite(a.applicationContext,feed)
+            return if(started)"Torrent history check started · "+feed
+                else "Torrent history already scanning or app paused · "+feed
         }
         if(host=="mp4directs.com"){
             Mp4SeriesSync.ensure(a)
