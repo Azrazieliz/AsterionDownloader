@@ -23,6 +23,9 @@ import java.util.concurrent.Executors
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
     private val thumbnails=Executors.newFixedThreadPool(2)
+    // Immutable text-only snapshot; never cache Activity-bound click closures.
+    // Navigating away and back should not blank the whole Downloads view.
+    @Volatile private var lastVisibleRows:List<Pair<String,String>> = emptyList()
     private enum class State { ACTIVE, QUEUED, PAUSED, HELD, FAILED, DONE }
     private enum class Filter(val label:String) {
         ALL("All"),ACTIVE("Transferring"),QUEUED("Queued"),PAUSED("Paused"),
@@ -447,7 +450,22 @@ object UnifiedDownloadsUi {
         }.thenByDescending{it.updated})
     }
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
-        val loading=ui.text(a,"Loading downloads…",13f,ui.secondary)
+        val prior=lastVisibleRows
+        val snapshot=LinearLayout(a).apply{
+            orientation=LinearLayout.VERTICAL
+            if(prior.isNotEmpty()){
+                addView(ui.text(a,"Restoring latest queue · refreshing",
+                    12f,ui.secondary),ui.lp(a,4))
+                for((name,detail) in prior.take(12)){
+                    addView(ui.text(a,name,13f,ui.white,true),ui.lp(a,3))
+                    addView(ui.text(a,detail,11f,ui.secondary),ui.lp(a,4))
+                }
+            }
+        }
+        if(prior.isNotEmpty())parent.addView(snapshot,ui.lp(a,8))
+        val loading=ui.text(a,
+            if(prior.isEmpty())"Loading downloads…" else "Refreshing transfers…",
+            13f,ui.secondary)
         parent.addView(loading,ui.lp(a,8))
         kotlin.concurrent.thread(name="asterion-downloads-read"){
             val app=a.applicationContext
@@ -459,9 +477,14 @@ object UnifiedDownloadsUi {
                 if(a.isFinishing || a.isDestroyed || loading.parent!==parent)
                     return@runOnUiThread
                 parent.removeView(loading)
-                result.onSuccess{show(a,parent,refresh,it)}
-                    .onFailure{parent.addView(ui.text(a,
-                        "Unable to load downloads: "+it.message,13f,ui.danger))}
+                result.onSuccess{rows->
+                    lastVisibleRows=rows.take(18).map{
+                        it.filename.take(150) to it.info.take(130)
+                    }
+                    if(snapshot.parent===parent)parent.removeView(snapshot)
+                    show(a,parent,refresh,rows)
+                }.onFailure{parent.addView(ui.text(a,
+                    "Unable to refresh downloads: "+it.message,13f,ui.danger))}
             }
         }
     }
