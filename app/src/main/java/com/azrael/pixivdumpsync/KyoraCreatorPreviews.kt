@@ -174,6 +174,42 @@ object KyoraCreatorPreviews {
                     val html=BrowserPageFetch.html(a.applicationContext,url)
                     items=parse(html,url)
                 }
+                if(SiteControls.key(url)=="kiutaku.com"){
+                    // Kiutaku's listing covers are frequently collages of
+                    // multiple photographs, not an individual picture.
+                    // Inspect genuine numeric gallery detail pages instead;
+                    // never present an unverified montage as original art.
+                    val originals=ArrayList<Preview>()
+                    for(item in items.asSequence().filter{
+                        SiteBackfillProfiles.recognizesGalleryPage(url,it.url)
+                    }.take(8)){
+                        val found=runCatching{
+                            val response=Jsoup.connect(item.url)
+                                .timeout(9_000).maxBodySize(3_000_000)
+                                .userAgent(HttpClient.USER_AGENT)
+                                .followRedirects(false).ignoreHttpErrors(true)
+                                .apply{
+                                    com.asterion.videoflow.NetworkRoute.javaProxy(
+                                        a.applicationContext,item.url)?.let{proxy(it)}
+                                    SiteSession.cookie(item.url)?.let{header("Cookie",it)}
+                                }.execute()
+                            require(response.statusCode() in 200..299){
+                                "Kiutaku gallery HTTP "+response.statusCode()
+                            }
+                            val gallery=IndexedItem(item.url,item.title,item.cover,
+                                url,"COSPLAY","cosplay",System.currentTimeMillis(),false)
+                            SiteBackfillProfiles.galleryOriginals(response.parse(),gallery,
+                                System.currentTimeMillis()).firstOrNull()
+                        }.getOrNull()
+                        if(found!=null)originals+=item.copy(cover=found.url)
+                    }
+                    // An empty real-photo listing is better than a convincing
+                    // collage falsely presented as original image coverage.
+                    if(originals.isEmpty())
+                        error("Kiutaku listing covers are composite; no individual "+
+                            "original photos verified from gallery pages")
+                    items=originals
+                }
                 if(items.isEmpty())error("No gallery thumbnails exposed by listing")
                 Snapshot(items,System.currentTimeMillis(),null)
             }.getOrElse{
