@@ -33,7 +33,12 @@ internal object EpornerOriginalSource {
     fun videoCandidates(url:String,sessionConnected:Boolean):List<String>{
         val embed=officialEmbed(url)
         if(embed==null)return listOf(url)+SourceDiagnostics.alternateHosts(url)
-        return if(sessionConnected)listOf(embed,url).distinct() else listOf(url)
+        // The publisher's own /embed/<id> endpoint is a PUBLIC player, not
+        // an account bypass. Upstream yt-dlp's Eporner watch-page hash
+        // extraction is broken for some videos; the public embed is a known
+        // supported alternative even when no login is connected. Cookies are
+        // still used only if the owner has actually connected the site.
+        return listOf(embed,url).distinct()
     }
     /** Returns null rather than trusting unverified runtime if the provider's
      * first-party identity and duration cannot be independently checked.

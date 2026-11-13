@@ -21,7 +21,8 @@ class EpornerOriginalSourceTest {
         assertEquals(video,urls[1])
     }
     @Test fun publicVideoCanUseCanonicalWatchUrlWithoutAccount(){
-        assertEquals(listOf(video),EpornerOriginalSource.videoCandidates(video,false))
+        assertEquals(listOf("https://www.eporner.com/embed/AcCjSXiLGwV/",video),
+            EpornerOriginalSource.videoCandidates(video,false))
         assertEquals("https://www.eporner.com/video-AcCjSXiLGwV/",
             EpornerOriginalSource.canonicalUrl(video))
     }

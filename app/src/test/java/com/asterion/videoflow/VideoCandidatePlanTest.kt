@@ -15,6 +15,13 @@ class VideoCandidatePlanTest {
             VideoCandidatePlan.ordered("https://example.org/watch/a",
                 emptyList(),emptyList()))
     }
+    @Test fun publisherOwnedEpornerPublicEmbedPrecedesBrokenWatchPage(){
+        val selected="https://www.eporner.com/video-AcCjSXiLGwV/example-title/"
+        val expected="https://www.eporner.com/embed/AcCjSXiLGwV/"
+        assertEquals(listOf(expected,selected),VideoCandidatePlan.ordered(
+            selected,EpornerOriginalSource.videoCandidates(selected,false),
+            listOf(expected)))
+    }
     @Test fun selectedPageIsAlwaysFirstAndAlternativesAreDistinct(){
         assertEquals(listOf("https://example.org/watch/a",
                 "https://example.org/embed/a",
