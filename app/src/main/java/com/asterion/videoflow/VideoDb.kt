@@ -393,7 +393,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         for(id in selected){
             writableDatabase.execSQL(
                 "UPDATE videos SET state='queued',error=NULL,progress=0,attempts=0,"+
-                    "retry_after=0,updated=? WHERE id=? AND state='full_only_hold'",
+                    "retry_after=0,updated=? WHERE id=? AND state='full_only_hold' "+
+                    "AND request_origin='user'",
                 arrayOf(System.currentTimeMillis(),id)
             )
         }
@@ -460,6 +461,22 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             null).use{c->
             if(!c.moveToFirst() || c.isNull(0))null
             else(c.getLong(0)-now).coerceAtLeast(1_000L)
+        }
+    }
+    /** Older releases auto-enqueued everything found while browsing a site.
+     * Retain their rows and partial bytes, but require the user to explicitly
+     * resume each video. Never touch user-selected or completed files.
+     * This is idempotent across both VideoFlow worker processes.
+     */
+    fun holdUnrequestedWebsiteVideos():Int {
+        val stmt=writableDatabase.compileStatement(
+            "UPDATE videos SET state='paused',retry_after=0,"+
+            "error='Indexed by an older provider scan; RESUME to explicitly select this video',"+
+            "lease=lease+1,updated=? "+
+            "WHERE request_origin='website' AND state NOT IN ('done','dismissed','paused')")
+        stmt.use {
+            it.bindLong(1,System.currentTimeMillis())
+            return it.executeUpdateDelete()
         }
     }
     fun recover() {
