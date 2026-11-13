@@ -234,7 +234,8 @@ object UnifiedDownloadsUi {
                         }
                         else->{}
                     }
-                },if(present)item.savedUri else null,mime=mime)
+                },if(present)item.savedUri else null,mime=mime,
+                    actionText=if(item.state=="RETRY")"RETRY" else null)
             }
         }
         XPhotoQueue(a).use{db->
