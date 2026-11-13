@@ -22,17 +22,12 @@ object VideoEngine {
     private val stopRequests=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val extractionJobs=java.util.concurrent.ConcurrentHashMap<Long,
         java.util.concurrent.Future<*>>()
-    // Embedded Python may ignore interrupt(); bounded independent pools keep
-    // direct-media transfers alive when one extractor thread is stuck.
-    private fun boundedPool(label:String,limit:Int)=java.util.concurrent.ThreadPoolExecutor(
-        0,limit,45L,java.util.concurrent.TimeUnit.SECONDS,
-        java.util.concurrent.SynchronousQueue<Runnable>(),
-        java.util.concurrent.ThreadFactory{job->
-            Thread(job,label).apply{isDaemon=true}
-        },java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
-    private val metadataExecutor=boundedPool("videoflow-metadata",2)
-    private val transferExecutor=boundedPool("videoflow-extractor",2)
-    private val nativeExecutor=boundedPool("videoflow-native",2)
+    // Each selected video runs independently; stale tasks left by earlier
+    // timed-out publisher extractors must not reject the next selection.
+    // Separate pools retain the native transfer lane when Python is stuck.
+    private val metadataExecutor=VideoExecutionPools.create("videoflow-metadata",2)
+    private val transferExecutor=VideoExecutionPools.create("videoflow-extractor",2)
+    private val nativeExecutor=VideoExecutionPools.create("videoflow-native",2)
     /** Keep the Python-specific failures scoped to Python-required media.
      * Previously both download processes exited before reading the queue
      * whenever this optional runtime could not start.
@@ -630,6 +625,10 @@ object VideoEngine {
                 throw t
             }finally{
                 extractionJobs.remove(item.id,future)
+                // Interrupted yt-dlp operations may never stop immediately.
+                // Do not retain cancelled pending FutureTasks forever.
+                VideoExecutionPools.discardCancelled(
+                    if(native)nativeExecutor else transferExecutor)
             }
         }
         fun preflight(link:String,referer:String?=null):
@@ -675,6 +674,7 @@ object VideoEngine {
                 throw t
             }finally{
                 extractionJobs.remove(item.id,future)
+                VideoExecutionPools.discardCancelled(metadataExecutor)
             }
             val duration=json.optDouble("duration",0.0)
                 .takeIf{it.isFinite() && it>0.0}?.toLong()
