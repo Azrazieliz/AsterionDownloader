@@ -85,15 +85,50 @@ object NovelEpubService {
                     ?.takeIf{it.isNotBlank()}?:error("Chapter redirect has no target")
                 url=URI(url).resolve(destination).toString()
             }else{
-                if(response.statusCode() in setOf(401,403))
+                if(response.statusCode() in setOf(401,403)){
+                    // Real FreeWebNovel HTTP proof: a public chapter is HTTP
+                    // 200 in a browser-compatible client, but Java/Jsoup is
+                    // rejected with 403. Use the same normal public WebView
+                    // rendering path as other website adapters, never assume
+                    // login or silently discard already-cached chapters.
+                    if(BrowserPageFetch.publicEligible(url) ||
+                        SiteSession.bound(context,url)){
+                        val html=runCatching{BrowserPageFetch.html(context,url)}
+                            .getOrElse{browserError->
+                                error("Novel HTTP "+response.statusCode()+
+                                    "; browser could not load source: "+
+                                    browserError.message.orEmpty().take(150))
+                            }
+                        val document=Jsoup.parse(html,url)
+                        require(document.selectFirst(
+                            "h1,#article,#chapter-content,.chapter-content,"+
+                                ".chapter-list,#chapter-list")!=null){
+                            "Novel browser returned no recognizable chapter/index content"
+                        }
+                        return document
+                    }
                     error("Novel source HTTP "+response.statusCode()+
                         ": connect your eligible website account in the browser")
+                }
                 require(response.statusCode() in 200..299){
                     "Novel source unavailable: HTTP "+response.statusCode()
                 }
                 val result=response.parse()
-                if(result.title().contains("Just a moment",true))
+                if(result.title().contains("Just a moment",true) ||
+                    result.title().contains("Access denied",true)){
+                    if(BrowserPageFetch.publicEligible(url) ||
+                        SiteSession.bound(context,url)){
+                        val html=BrowserPageFetch.html(context,url)
+                        val rendered=Jsoup.parse(html,url)
+                        require(rendered.selectFirst(
+                            "h1,#article,#chapter-content,.chapter-content,"+
+                                ".chapter-list,#chapter-list")!=null){
+                            "Novel publisher browser returned no readable chapters"
+                        }
+                        return rendered
+                    }
                     error("Novel source requires interactive browser verification")
+                }
                 return result
             }
         }
