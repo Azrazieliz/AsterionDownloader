@@ -508,9 +508,12 @@ object NovelEpubService {
             val written=resolver.openAssetFileDescriptor(uri,"r")
                 ?.use{it.length}?:-1L
             require(written<0 || written==file.length()){"Incomplete EPUB file copy"}
-            resolver.update(uri,ContentValues().apply{
+            val published=resolver.update(uri,ContentValues().apply{
                 put(MediaStore.Downloads.IS_PENDING,0)
             },null,null)
+            check(published==1){
+                "EPUB bytes were written but Downloads publication failed"
+            }
             return uri.toString()
         }catch(t:Exception){
             resolver.delete(uri,null,null)
