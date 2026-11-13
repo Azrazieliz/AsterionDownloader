@@ -117,7 +117,7 @@ try:
                 if candidates:
                     try:
                         driver.execute_script("arguments[0].click()",candidates[0])
-                        time.sleep(3)
+                        time.sleep(8)
                         evidence(name,"after public continue")
                     except Exception as ex:
                         out[name+" continue"]={"error":str(ex)[:200]}
