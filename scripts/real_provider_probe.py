@@ -193,7 +193,7 @@ def main():
             u = urllib.parse.urlsplit(candidate)
             if u.hostname not in ("cdn.javmiku.com", "cdn.javnorth.com"):
                 continue
-            if not re.fullmatch(r"/wp-content/uploads/(?:thumbs/)?\\d{4}/\\d{2}/[a-zA-Z0-9_.-]+\\.(?:jpg|jpeg|png|webp)", u.path):
+            if not re.fullmatch(r"/wp-content/uploads/(?:thumbs/)?\d{4}/\d{2}/[a-zA-Z0-9_.-]+\.(?:jpg|jpeg|png|webp)", u.path):
                 continue
             if ("/uploads/thumbs/" in u.path) == (kind == "thumb"):
                 sample = candidate
