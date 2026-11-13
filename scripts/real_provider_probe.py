@@ -35,6 +35,9 @@ TARGETS = {
     "Eporner": "https://www.eporner.com/",
     "3DHentaiX": "https://3dhentaix.com/",
     "3DHentaiX actual detail": "https://3dhentaix.com/ntr-witness-milf-1-3/",
+    "3DHentaiX exact reported failure": "https://3dhentaix.com/ntr-compilation/",
+    "HentaiBros exact reported failure": "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
+    "FullPorner exact reported failure": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
     "JAVIDEO": "https://javideo.net/",
     "Helloporn": "https://helloporn.com/",
     "XXXClub": "https://xxxclub.to/",
@@ -160,6 +163,13 @@ def main():
                 host = urllib.parse.urlsplit(TARGETS[name]).hostname or ""
                 details = dict(meta, anchors=len(parsed.anchors),images=len(parsed.images),
                     video_player_elements=len(parsed.players),
+                    first_party_player_paths=[urllib.parse.urlsplit(
+                        absolute(TARGETS[name], p)).path[:140]
+                        for p in parsed.players if absolute(TARGETS[name], p)
+                        and first_party(host, absolute(TARGETS[name], p))][:6],
+                    player_hosts=list(dict.fromkeys(urllib.parse.urlsplit(
+                        absolute(TARGETS[name], p)).hostname or ""
+                        for p in parsed.players if absolute(TARGETS[name], p)))[:8],
                     first_party_links=sum(bool(absolute(TARGETS[name],a)) and
                         first_party(host,absolute(TARGETS[name],a))
                         for a in parsed.anchors),
