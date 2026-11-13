@@ -7,6 +7,8 @@ on:
     paths:
       - 'app/src/androidTest/**'
       - 'app/src/phonepilot/AndroidManifest.xml'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/BootReceiver.kt'
+      - 'app/src/main/AndroidManifest.xml'
       - 'app/build.gradle.kts'
       - '.github/workflows/downloader-android-transfer-simulation.yml'
   workflow_dispatch:
