@@ -11,8 +11,12 @@ class DownloadConsentPolicyTest {
             assertFalse(area,DownloadConsentPolicy.automaticAllowed(area,true))
         }
     }
-    @Test fun evenKnownMediaRequiresExplicitSyncApproval(){
-        for(area in listOf("ADULT","HENTAI","VIDEOS","CREATORS","COSPLAY","ARTWORK")){
+    @Test fun videoSyncNeverAuthorizesBulkDownloading(){
+        for(area in listOf("ADULT","HENTAI","VIDEOS","CREATORS")){
+            assertFalse(area,DownloadConsentPolicy.automaticAllowed(area,false))
+            assertFalse(area,DownloadConsentPolicy.automaticAllowed(area,true))
+        }
+        for(area in listOf("COSPLAY","ARTWORK")){
             assertFalse(area,DownloadConsentPolicy.automaticAllowed(area,false))
             assertTrue(area,DownloadConsentPolicy.automaticAllowed(area,true))
         }
