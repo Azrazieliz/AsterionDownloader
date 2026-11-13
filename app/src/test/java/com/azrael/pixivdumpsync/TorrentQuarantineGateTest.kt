@@ -26,7 +26,8 @@ class TorrentQuarantineGateTest {
         assertTrue(value.contains("2 seeders"))
         assertTrue(value.contains("7 leechers"))
         assertTrue(value.contains("no piece progress"))
-    }    @Test fun trackerReannounceIsOncePerStallAndOnlyWhenNoConnectedSeeder(){
+    }
+    @Test fun trackerReannounceIsOncePerStallAndOnlyWhenNoConnectedSeeder(){
         assertTrue(TorrentPeerDiagnostics.shouldReannounce(120001,0,false))
         assertFalse(TorrentPeerDiagnostics.shouldReannounce(120001,0,true))
         assertFalse(TorrentPeerDiagnostics.shouldReannounce(40000,0,false))
