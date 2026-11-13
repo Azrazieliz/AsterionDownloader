@@ -130,7 +130,7 @@ object NovelEpubParser {
         return null
     }
     /** The visible title is authoritative: chapter-N URLs can use different IDs. */
-    fun readerChapter(doc:Document,address:String):NovelChapter {
+    fun readerChapter(doc:Document,address:String,listed:NovelChapter?=null):NovelChapter {
         // FreeWebNovel's rendered chapter title is not always an H1-H4:
         // some templates put only the book title in H1 and identify the
         // numbered chapter in document <title> / og:title or reader blocks.
@@ -144,8 +144,15 @@ object NovelEpubParser {
             .map{it.attr("content").trim()}.filter{it.isNotBlank()}
         val heading=(headings+metadata+listOf(doc.title().trim()))
             .firstOrNull{parseChapterNumber(it)!=null}
-            ?:throw IllegalStateException(
-                "Reader chapter number missing from headings and page title")
+            ?:run {
+                // A publisher may omit the numbered heading on this reader
+                // template. Reuse only the exact numbered link witnessed in
+                // its own chapter index; never guess from an opaque URL ID.
+                if(listed!=null && listed.url.trimEnd('/')==address.trimEnd('/') &&
+                    parseChapterNumber(listed.title)!=null)return listed
+                throw IllegalStateException(
+                    "Reader chapter number missing and no verified index entry")
+            }
         val number=parseChapterNumber(heading)
             ?:throw IllegalStateException("Reader chapter number missing")
         // Strip only site suffixes when the title came from browser metadata.
