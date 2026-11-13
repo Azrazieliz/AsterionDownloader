@@ -129,11 +129,28 @@ class SiteLoginActivity:Activity() {
                 const title=document.title||'';
                 const body=(document.body?.innerText||'').slice(0,800);
                 const good=document.readyState==='complete' &&
-                    !/just a moment|attention required|verify you are human|enable javascript and cookies/i.test(title+' '+body);
+                    !/just a moment|attention required|verify you are human|enable javascript and cookies|access denied|403 forbidden|rate limit/i.test(title+' '+body);
                 const watchLinks=document.querySelectorAll(
                     'a[href*="/watch/"],video[src],video source[src]').length;
+                // Do not mark a saved site as accessible merely because its
+                // Cloudflare/403 shell returned HTTP 200. The actual publisher
+                // must expose real first-party cards or a selected watch page.
+                const sameHost=u=>{try{
+                    return new URL(u,location.href).hostname.replace(/^www\\./,'')===
+                        location.hostname.replace(/^www\\./,'');
+                }catch(_){return false;}};
+                const links=[...document.querySelectorAll('a[href]')]
+                    .filter(el=>sameHost(el.href))
+                    .map(el=>new URL(el.href,location.href).pathname);
+                const javPosts=links.filter(p=>
+                    /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(p)).length;
+                const torrentCards=links.filter(p=>
+                    /^\\/torrent\\/[a-z0-9_-]{2,100}\\/?$/i.test(p)).length;
+                const isSelectedJavPost=
+                    /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(location.pathname);
                 return JSON.stringify({good:good,host:location.hostname,
-                    watchLinks:watchLinks});
+                    watchLinks:watchLinks,javPosts:javPosts,
+                    torrentCards:torrentCards,isSelectedJavPost:isSelectedJavPost});
             })()"""){value->
                 val info=runCatching {
                     org.json.JSONObject(org.json.JSONTokener(value).nextValue() as String)
@@ -147,8 +164,15 @@ class SiteLoginActivity:Activity() {
                 // test as a valid connection even with ZERO public videos.
                 // A saved cookie alone is not proof that catalog data loaded.
                 val archive=expectedHost=="archivebate.com"
+                val jav=expectedHost=="jav.guru"
+                val onejav=expectedHost=="onejav.com"
                 val hasPublicVideos=info?.optInt("watchLinks",0)?:0
-                val authenticated=pageOk && (!archive || hasPublicVideos>0) &&
+                val javAccess=(info?.optInt("javPosts",0)?:0)>0 ||
+                    info?.optBoolean("isSelectedJavPost")==true
+                val torrentAccess=(info?.optInt("torrentCards",0)?:0)>0
+                val authenticated=pageOk &&
+                    (!archive || hasPublicVideos>0) &&
+                    (!jav || javAccess) && (!onejav || torrentAccess) &&
                     (!xSite || SiteSession.cookie(address)?.split(';')?.any{
                         it.trim().startsWith("auth_token=")}==true)
                 if(authenticated){
@@ -168,6 +192,12 @@ class SiteLoginActivity:Activity() {
                     else if(archive && pageOk)
                         "Archivebate loaded without any video cards. "+
                         "Use the site's own Continue control; no catalog access verified."
+                    else if(jav && pageOk)
+                        "Jav Guru did not expose a real video post. "+
+                        "Complete the website's own verification before saving."
+                    else if(onejav && pageOk)
+                        "OneJAV exposed no torrent cards. Provider access is "+
+                        "currently restricted; no account connection saved."
                     else "Website verification is incomplete. Connection not saved.",
                     Toast.LENGTH_LONG).show()
                 if(authenticated){
