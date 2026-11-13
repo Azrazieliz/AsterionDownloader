@@ -8,6 +8,7 @@ on:
       - '.github/workflows/downloader-android-transfer-simulation.yml'
       - 'app/src/androidTest/**'
       - 'app/src/phonepilot/AndroidManifest.xml'
+      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
