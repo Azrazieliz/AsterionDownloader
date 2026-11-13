@@ -66,7 +66,10 @@ def fetch(url, *, limit=MAX_PAGE, range_header=None, referer=None):
         headers["Range"] = range_header
     if referer:
         headers["Referer"] = referer
-    req = urllib.request.Request(url, headers=headers)
+    # Publisher media paths legitimately contain Unicode names (Kiutaku/Mitaku).
+    # urllib's HTTP request target must be ASCII percent-encoded.
+    request_url = urllib.parse.quote(url, safe=":/?#[]@!    req = urllib.request.Request(url, headers=headers)'()*+,;=%")
+    req = urllib.request.Request(request_url, headers=headers)
     started = time.monotonic()
     try:
         response = urllib.request.urlopen(req, timeout=TIMEOUT)
@@ -154,7 +157,10 @@ def main():
                         first_party(host,absolute(TARGETS[name],x))][:5],
                     sample_img_hosts=list(dict.fromkeys(
                         (urllib.parse.urlsplit(absolute(TARGETS[name],x)).hostname or "")
-                        for x in parsed.images if absolute(TARGETS[name],x)))[:8])
+                        for x in parsed.images if absolute(TARGETS[name],x)))[:8],
+                    sample_img_paths=[urllib.parse.urlsplit(
+                        absolute(TARGETS[name],x)).path[:170]
+                        for x in parsed.images if absolute(TARGETS[name],x)][:8])
                 report[name] = details
                 # Used only for bounded real-media/HTML followups, never persisted.
                 report[name]["_page"] = page
@@ -199,7 +205,7 @@ def main():
         status=("player_url_observed" if raw_players else
             "rendered_stream_choices_but_no_direct_media_url"))
     # Render actual browser DOM only where static HTTP did not expose cards.
-    for name in ("Jav Guru", "Archivebate", "Rule34Video"):
+    for name in ("Jav Guru detail", "Archivebate", "Rule34Video"):
         value = report.get(name,{})
         if value.get("http") not in (200,201) or value.get("first_party_links",0)<3:
             browser=render_dom(TARGETS[name])
@@ -217,8 +223,12 @@ def main():
     # indiscriminate scene/video download. Many sites use JS-only cards.
     r34=report.get("Rule34Video", {})
     img = next((absolute(TARGETS["Rule34Video"],x)
-        for x in r34.get("_images",[]) if absolute(TARGETS["Rule34Video"],x)
-        and any(y in x.lower() for y in ("thumb","poster","preview","/video/","/images/"))),"")
+        for x in r34.get("_images",[])
+        if absolute(TARGETS["Rule34Video"],x)
+        and (urllib.parse.urlsplit(absolute(TARGETS["Rule34Video"],x)).hostname or "")
+            .endswith("rule34video.com")
+        and re.search(r"\.(jpe?g|png|webp)(?:\?|$)",x,re.I)
+        and not re.search(r"icon|logo|avatar|banner|ads?[/_-]",x,re.I)),"")
     if img:
         answer=fetch(img,limit=128_000,range_header="bytes=0-127999",
             referer=TARGETS["Rule34Video"])
@@ -229,6 +239,32 @@ def main():
     else:
         report["Rule34Video real thumbnail"] = dict(
             blocked="No actual thumbnail candidate in HTTP HTML; requires rendered first-party cards")
+
+    # A real Rule34Video video detail page may have poster/media URLs absent
+    # from the home cards. Fetch an actual first-party watch page as well.
+    real_link=next((absolute(TARGETS["Rule34Video"],x)
+        for x in r34.get("_anchors",[])
+        if re.search(r"(?i)/(?:video|videos)/",x)
+        and first_party("rule34video.com",absolute(TARGETS["Rule34Video"],x))),"")
+    if real_link:
+        answer=fetch(real_link,limit=320_000,referer=TARGETS["Rule34Video"])
+        meta,body=answer if isinstance(answer,tuple) else (answer,b"")
+        parsed=Parse();parsed.feed(body.decode("utf8","replace"))
+        report["Rule34Video actual detail"]=dict(meta,
+            video_player_elements=len(parsed.players),
+            poster_candidate_count=len(parsed.images),
+            path=urllib.parse.urlsplit(real_link).path)
+    else:
+        report["Rule34Video actual detail"]=dict(
+            blocked="No public first-party video route in homepage HTML")
+
+    archive=report.get("Archivebate",{})
+    paths=[urllib.parse.urlsplit(absolute(TARGETS["Archivebate"],x)).path
+        for x in archive.get("_anchors",[])
+        if re.fullmatch(r"/watch/[0-9]+/?",
+            urllib.parse.urlsplit(absolute(TARGETS["Archivebate"],x)).path)]
+    report["Archivebate video cards"]=dict(valid_watch_links=len(paths),
+        gated=archive.get("age_or_gate",False))
 
     # Publisher chapters are fetched, not assumed from home-page source HTML.
     novel=report.get("FreeWebNovel book", {})
