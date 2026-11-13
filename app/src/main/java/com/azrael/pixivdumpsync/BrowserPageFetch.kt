@@ -23,6 +23,20 @@ object BrowserPageFetch {
         check(Looper.myLooper()!=Looper.getMainLooper()) {
             "WebView retrieval must run on a background thread."
         }
+        // VideoFlow's two isolated services cannot see the WebView login
+        // stored in the main process. Ask our non-exported provider to perform
+        // the authorized DOM read in the actual owner process.
+        if(android.os.Build.VERSION.SDK_INT>=28 &&
+            android.app.Application.getProcessName()!=context.packageName){
+            val response=context.contentResolver.call(
+                Uri.parse("content://"+context.packageName+".session-cookies"),
+                "read_site_html",url,null)
+            val html=response?.getString("html")
+            if(html.isNullOrBlank())throw IllegalStateException(
+                response?.getString("error")?:
+                    "Connected provider browser could not supply accessible content")
+            return html
+        }
         val host=Uri.parse(url).host.orEmpty().lowercase().removePrefix("www.")
         val result=AtomicReference<String?>()
         val error=AtomicReference<String?>()
