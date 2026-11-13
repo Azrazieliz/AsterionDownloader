@@ -63,23 +63,16 @@ jobs:
             # Capture logs regardless of instrumentation exit status. Android
             # reports INSTRUMENTATION_CODE: 0 even when the process crashes.
             set +e
-            # Keep the foreground instrumentation output AND the on-device
-            # log. Snapshot thread stacks if startup or Python stays blocked.
-            (
-              sleep 75
-              adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true
-              sleep 90
-              adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true
-            ) > android-transfer-watchdog.txt 2>&1 &
-            watchdog_pid=$!
-            timeout --signal=TERM --kill-after=10s 290s adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation | tee android-transfer-simulation.txt
-            instrument_exit=$?
-            kill "$watchdog_pid" 2>/dev/null || true
+            # Android-emulator-runner executes each script line as a separate
+            # sh -c command. Multi-line shell groups and cross-line variables
+            # therefore break before instrumentation even starts.
+            (sleep 75; adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true; sleep 90; adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true) > android-transfer-watchdog.txt 2>&1 &
+            timeout --signal=TERM --kill-after=10s 290s adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation > android-transfer-simulation.txt 2>&1; printf '%s\n' "$?" > android-transfer-exit.txt
             adb logcat -b crash -d -v threadtime > android-transfer-crash-logcat.txt
             adb logcat -d -v threadtime > android-transfer-full-logcat.txt
             adb shell dumpsys activity processes > android-transfer-processes.txt
             set -e
-            test "$instrument_exit" -eq 0
+            grep -Fx '0' android-transfer-exit.txt
             if grep -q 'Process crashed' android-transfer-simulation.txt; then
               cat android-transfer-crash-logcat.txt
               exit 1
@@ -103,3 +96,4 @@ jobs:
             android-transfer-full-logcat.txt
             android-transfer-processes.txt
             android-transfer-watchdog.txt
+            android-transfer-exit.txt
