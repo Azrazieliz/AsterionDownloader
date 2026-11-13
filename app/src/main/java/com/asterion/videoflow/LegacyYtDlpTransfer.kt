@@ -17,6 +17,10 @@ internal object LegacyYtDlpTransfer {
     @Synchronized fun initialize(context:Context){
         if(!initialized){
             YtDlp.init(context.applicationContext)
+            // The Maven AAR was built with yt-dlp 2026.6.9. New provider
+            // extractor fixes are bundled as a checksum-pinned pure-Python
+            // wheel in the APK, with the AAR copy retained as fallback.
+            VideoExtractorVersion.activate(context.applicationContext)
             initialized=true
         }
     }

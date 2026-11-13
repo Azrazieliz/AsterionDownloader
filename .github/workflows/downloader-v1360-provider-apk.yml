@@ -27,6 +27,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Bundle verified current yt-dlp inside offline Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: yt-dlp==2026.10.26 -d app/src/main/assets
+          echo 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae  app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl' | sha256sum -c -
+          python3 -c "import zipfile; z=zipfile.ZipFile('app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl'); assert 'yt_dlp/version.py' in z.namelist()"
       - name: Run regression tests and build one provider-corrected Android app
         run: gradle --no-daemon testPilotUnitTest testProviderpilotUnitTest assembleProviderpilot --stacktrace --console=plain
       - name: Verify actual signed APK, package identity, version and checksums
@@ -42,6 +50,7 @@ jobs:
           "$TOOLS/apksigner" verify --verbose "$APK"
           "$TOOLS/apksigner" verify --print-certs "$APK" > APK-signer.txt
           unzip -t "$APK" >/dev/null
+          unzip -p "$APK" assets/yt_dlp-2026.10.26-py3-none-any.whl | sha256sum | grep -F 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae'
           test "$(unzip -Z1 "$APK" | grep -cE '^lib/arm64-v8a/.*\.so$')" -gt 0
           cp "$APK" Asterion-Downloader-v1.3.60-ProviderTest.apk
           sha256sum Asterion-Downloader-v1.3.60-ProviderTest.apk > Asterion-Downloader-v1.3.60-ProviderTest.sha256

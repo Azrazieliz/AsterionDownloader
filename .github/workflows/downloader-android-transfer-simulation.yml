@@ -5,6 +5,9 @@ on:
     branches:
       - work/downloader-single-build-staging-20261112
     paths:
+      - 'app/src/main/java/com/asterion/videoflow/**'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/**'
+      - '.github/workflows/downloader-android-transfer-simulation.yml'
       - 'app/src/androidTest/**'
       - 'app/src/phonepilot/AndroidManifest.xml'
       - 'app/src/main/java/com/azrael/pixivdumpsync/BootReceiver.kt'
@@ -31,6 +34,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Bundle verified current yt-dlp inside offline Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: yt-dlp==2026.10.26 -d app/src/main/assets
+          echo 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae  app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl' | sha256sum -c -
+          python3 -c "import zipfile; z=zipfile.ZipFile('app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl'); assert 'yt_dlp/version.py' in z.namelist()"
       - name: Compile target Android app and device test APK
         run: gradle --no-daemon assemblePhonepilot assemblePhonepilotAndroidTest --stacktrace --console=plain
       - name: Enable KVM emulator support
