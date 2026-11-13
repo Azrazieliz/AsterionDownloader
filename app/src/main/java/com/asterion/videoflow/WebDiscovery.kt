@@ -347,10 +347,20 @@ object WebDiscovery {
                     // These two players have source-specific provenance
                     // checks above. An unrelated site's fullscreen advert
                     // must not be mistaken for the selected publisher video.
-                    val specializedElsewhere=embedHost in
-                        setOf("nhplayer.com","mixdrop.ag")
-                    advertisedPlayer && !specializedElsewhere &&
-                        !adPath.containsMatchIn(path) && url.toString()!=source
+                    // Reject lookalike specialist domains too: an iframe
+                    // pointing at nhplayer.com.evil.example is not NHPlayer.
+                    // A cross-provider iframe titled as advertising is also
+                    // never evidence of the selected video.
+                    val specialistElsewhere=listOf(
+                        "nhplayer.com","mixdrop.ag").any{
+                        embedHost==it || embedHost.contains("."+it+".") ||
+                            embedHost.startsWith(it+".")
+                    }
+                    val advertisedAsAd=listOf("advertisement","banner","sponsored")
+                        .any{iframe.attr("title").contains(it,true)}
+                    advertisedPlayer && !specialistElsewhere &&
+                        !advertisedAsAd && !adPath.containsMatchIn(path) &&
+                        url.toString()!=source
                 }
             }
             if(!accepted)continue
