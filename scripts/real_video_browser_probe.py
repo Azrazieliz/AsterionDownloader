@@ -7,6 +7,8 @@ import json
 import re
 import time
 import urllib.parse
+import subprocess
+import sys
 import urllib.request
 import urllib.error
 import tempfile
@@ -129,6 +131,41 @@ try:
                     driver.get(urllib.parse.urljoin(url,route))
                     time.sleep(4)
                     evidence(name,"one real watch page")
+                    # Metadata-only extraction from the publisher's actually
+                    # embedded player. No video fragments or files saved.
+                    embeds=driver.execute_script("""
+                        return [...document.querySelectorAll('iframe[src]')]
+                          .map(el=>el.src)
+                          .filter(u=>/^https:\\/\\/mixdrop\\.ag\\/e\\/[A-Za-z0-9_-]{5,64}\\/?$/.test(u));
+                    """)
+                    if embeds:
+                        try:
+                            probe=subprocess.run([
+                                sys.executable,"-m","yt_dlp","--no-playlist",
+                                "--skip-download","--dump-single-json",
+                                "--no-warnings","--socket-timeout","12",
+                                "--retries","0","--extractor-retries","0",
+                                "--referer",driver.current_url,embeds[0]],
+                                capture_output=True,text=True,timeout=35)
+                            parsed=json.loads(probe.stdout) if probe.returncode==0 else {}
+                            stderr=probe.stderr.lower()
+                            failure=next((key for key in [
+                                "403","429","unsupported url","no video formats",
+                                "login required","sign in","unable to extract",
+                                "forbidden","timeout","not available"]
+                                if key in stderr),"other")
+                            out[name+" real embedded metadata"]={
+                                "attempted":True,"exit_code":probe.returncode,
+                                "extractor":parsed.get("extractor_key",""),
+                                "format_count":len(parsed.get("formats") or []),
+                                "duration_present":bool(parsed.get("duration")),
+                                "failure_class":failure if probe.returncode else None}
+                        except Exception as ex:
+                            out[name+" real embedded metadata"]={
+                                "attempted":True,"error":type(ex).__name__}
+                    else:
+                        out[name+" real embedded metadata"]={
+                            "attempted":False,"reason":"publisher did not expose an exact Mixdrop /e/ embed"}
                     for video in driver.find_elements(By.CSS_SELECTOR,"video")[:1]:
                         try:
                             driver.execute_script("""
