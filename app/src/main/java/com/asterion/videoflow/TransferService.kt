@@ -532,7 +532,7 @@ object VideoEngine {
                     }.getOrDefault(false)
                     NativeMediaDownloader.download(link,referer,parent,
                         cookieHeader=if(sameHost)
-                            SiteSession.cookie(link) else null,
+                            SiteSession.cookie(context,link) else null,
                         filenameStem=item.title+" ["+item.id+"]",
                         proxy=NetworkRoute.javaProxy(context,item.url),
                         progress={percent->db.progress(item.id,percent);status(percent)},
