@@ -57,6 +57,11 @@ object BrowserPageFetch {
         val latch=CountDownLatch(1)
         val main=Handler(Looper.getMainLooper())
         val instance=AtomicReference<WebView?>()
+        // The user has explicitly connected this site. Archivebate's normal
+        // public Continue step populates watch entries asynchronously without
+        // navigating to a new URL. Do not repeat the click or auto-accept a
+        // gateway for a source that the user has not connected.
+        var archivebateContinued=false
         main.post {
             try{
             val web=WebView(context)
@@ -71,6 +76,29 @@ object BrowserPageFetch {
                     return request.url.host.orEmpty().lowercase().removePrefix("www.")!=host
                 }
                 override fun onPageFinished(v:WebView,finished:String){
+                    if(host=="archivebate.com" &&
+                        SiteSession.bound(context,url) && !archivebateContinued){
+                        archivebateContinued=true
+                        main.postDelayed({
+                            if(latch.count==0L)return@postDelayed
+                            v.evaluateJavascript("""(function(){
+                                const action=[...document.querySelectorAll(
+                                    'button,a,[role="button"]')]
+                                    .find(el=>/^continue$/i.test(
+                                        (el.innerText||el.textContent||'').trim()));
+                                if(!action)return false;
+                                action.click();
+                                return true;
+                            })()"""){clicked->
+                                // Reinspect the actual DOM even if the public
+                                // gate was absent. No fake cards or media URLs.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },if(clicked=="true")1200L else 0L)
+                            }
+                        },400L)
+                        return
+                    }
                     main.postDelayed({
                         if(latch.count==0L)return@postDelayed
                         try{
