@@ -1,0 +1,44 @@
+name: Asterion Control verified APK delivery
+
+on:
+  push:
+    branches:
+      - work/downloader-single-build-staging-20261112
+    paths:
+      - '.github/workflows/downloader-control-delivery-34108825.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-verified-existing-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch EXACT already-passed provider APK, no rebuild
+        uses: actions/download-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.60-ProviderTest-APK
+          run-id: 43480762904
+          github-token: ${{ github.token }}
+          path: delivery
+
+      - name: Verify immutable approved APK and publish public transfer asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s delivery/Asterion-Downloader-v1.3.60-ProviderTest.apk
+          echo '18117d6a55764190b981de2f1670709e61b472247534efab5a5df9264251fe5e  delivery/Asterion-Downloader-v1.3.60-ProviderTest.apk' | sha256sum --check -
+          test "$(tr -d '\r\n' < delivery/Source-commit.txt)" = '341088253a0103924d3847589afe857418d745ac'
+          cp delivery/Asterion-Downloader-v1.3.60-ProviderTest.apk Asterion-Downloader-34108825-ProviderTest.apk
+          sha256sum Asterion-Downloader-34108825-ProviderTest.apk > Asterion-Downloader-34108825-ProviderTest.sha256
+          TAG='asterion-downloader-control-transfer-34108825'
+          gh release create "$TAG" Asterion-Downloader-34108825-ProviderTest.apk Asterion-Downloader-34108825-ProviderTest.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target '341088253a0103924d3847589afe857418d745ac' \
+            --title 'Asterion Downloader 34108825 — Control device transfer' \
+            --notes 'Existing CI-verified provider-test APK for owner-requested native phone transfer. NOT a production or verified end-to-end provider release. Signed separate test package.' \
+            --prerelease
