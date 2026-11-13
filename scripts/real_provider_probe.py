@@ -182,6 +182,39 @@ def main():
             except Exception as error:
                 report[name] = dict(error=type(error).__name__ + ": " + str(error)[:150])
 
+    # Verify Jav Guru fallback URLs with real image signatures. The publisher
+    # serves main posters and related thumbnails through distinct CDN layouts;
+    # do not claim a substitute hostname works without actual response bytes.
+    jav_images = report.get("Jav Guru detail", {}).get("_images", [])
+    for kind in ("poster", "thumb"):
+        sample = ""
+        for raw in jav_images:
+            candidate = absolute(TARGETS["Jav Guru detail"], raw)
+            u = urllib.parse.urlsplit(candidate)
+            if u.hostname not in ("cdn.javmiku.com", "cdn.javnorth.com"):
+                continue
+            if not re.fullmatch(r"/wp-content/uploads/(?:thumbs/)?\\d{4}/\\d{2}/[a-zA-Z0-9_.-]+\\.(?:jpg|jpeg|png|webp)", u.path):
+                continue
+            if ("/uploads/thumbs/" in u.path) == (kind == "thumb"):
+                sample = candidate
+                break
+        if not sample:
+            report["Jav Guru " + kind + " image fallback"] = dict(
+                blocked="No safe publisher CDN candidate in selected detail")
+            continue
+        path = urllib.parse.urlsplit(sample).path
+        checks = {}
+        for source, destination in (("cdn", sample),
+                                    ("publisher", "https://jav.guru" + path)):
+            fetched = fetch(destination, limit=32768,
+                            range_header="bytes=0-32767",
+                            referer=TARGETS["Jav Guru detail"])
+            meta, body = fetched if isinstance(fetched, tuple) else (fetched, b"")
+            checks[source] = dict(http=meta.get("http", 0),
+                bytes=len(body), valid_image_signature=body.startswith(
+                    (b"\\xff\\xd8\\xff", b"\\x89PNG", b"RIFF")))
+        report["Jav Guru " + kind + " image fallback"] = checks
+
     # Download a genuine Kiutaku publisher photo from its real image host
     # (not a homepage montage), validate magic bytes, and discard it.
     gallery = report.get("Kiutaku gallery", {})
