@@ -29,11 +29,6 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
-        <!-- Embedded Guardian Project Tor service. It is bound explicitly
-             by the user, runs in the main app process and only routes sites
-             explicitly selected for Tor. No system-wide VPN is claimed. -->
-        <service android:name="org.torproject.jni.TorService"
-            android:exported="false" />
         <!-- Receiver authenticates OS caller UID and installed signing certificate,
              then requires per-peer user approval for independent Asterion keys. -->
         <!-- Dedicated, non-exported process keeps STOP responsive during a

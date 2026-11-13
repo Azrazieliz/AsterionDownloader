@@ -25,7 +25,7 @@ val hasStablePreviewKey = listOf(
 
 android {
     namespace = "com.azrael.pixivdumpsync"
-    compileSdk = 37
+    compileSdk = 35
     // Android Gradle Plugin instruments only debug by default.
     // Run transfer simulation against the isolated PhoneTest target instead.
     testBuildType = "phonepilot"
@@ -153,10 +153,6 @@ dependencies {
     implementation("net.lingala.zip4j:zip4j:2.11.5")
     implementation("com.github.junrar:junrar:8.1.1")
     implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
-    // Real, free, user-initiated per-site IP exit rather than fake XFF headers
-    // or a proxy text field without an upstream relay.
-    implementation("info.guardianproject:tor-android:0.4.9.14")
-    implementation("info.guardianproject:jtorctl:0.4.5.7")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

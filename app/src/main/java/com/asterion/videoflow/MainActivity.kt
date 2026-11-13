@@ -409,38 +409,22 @@ class MainActivity:Activity() {
         add(content,quality,17)
         val routing=card()
         routing.addView(text("NETWORK / EXIT IP",12f,primary,true))
-        add(routing,text("FREE EMBEDDED IP CHANGER · Tor connects selected "+
-            "websites through a real remote exit, with no paid proxy. "+
-            "It never silently falls back to the French IP.",12f,grey),8)
-        add(routing,text("Per-site direct, Android VPN, or user-supplied HTTP/SOCKS5 proxy. A new public IP requires a real working exit server.",12f,grey),9)
-        val routeSite=edit("Site URL or domain","https://www.pornhub.com/")
+        add(routing,text("Connect a real Android VPN, then verify its external IP and country. No Tor or false geolocation changes.",12f,grey),9)
+        val routeSite=edit("Site URL or domain","https://www.eporner.com/")
         add(routing,routeSite,10)
-        val torCountries=TorExitCountries.choices
-        val torRegion=Spinner(this).apply {
-            adapter=ArrayAdapter(this@MainActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                torCountries.map{it.first})
-            background=rounded(elevated,12)
-            setSelection(1)
-        }
-        add(routing,torRegion,9)
-        val torStatus=text("Tor: Off · choose an exit country and enable",
-            12f,grey)
-        add(routing,torStatus,7)
-        add(routing,button("ENABLE REAL IP CHANGER"){
-            runCatching{
-                TorExitController.start(this,routeSite.text.toString(),
-                    torCountries[torRegion.selectedItemPosition].second){
-                        status->torStatus.text=status
-                    }
-            }.onFailure{torStatus.text="Tor startup error: "+
-                (it.message?:"Unknown error")}
+        add(routing,button("CONNECT ANDROID VPN",false){
+            runCatching{startActivity(Intent("android.settings.VPN_SETTINGS"))}
+                .onFailure{toast("Open Android Settings > Connections > VPN")}
         },9)
-        add(routing,button("STOP IP CHANGER",false){
-            TorExitController.stop(this)
-            torStatus.text="Tor stopped; website route reset to direct"
-        },7)
-        val routeChoices=listOf("Direct / system VPN","HTTP proxy","SOCKS5 proxy")
+        add(routing,button("VERIFY VPN EXIT COUNTRY",false){
+            val address=routeSite.text.toString()
+            kotlin.concurrent.thread(name="asterion-vpn-check"){
+                val result=runCatching{NetworkRoute.verifyVpnExit(this,address)}
+                    .getOrElse{it.message?:"VPN exit unavailable"}
+                runOnUiThread{toast(result)}
+            }
+        },9)
+        val routeChoices=listOf("Direct","Require Android VPN","HTTP proxy","SOCKS5 proxy")
         val routeMode=Spinner(this).apply{
             adapter=ArrayAdapter(this@MainActivity,
                 android.R.layout.simple_spinner_dropdown_item,routeChoices)
@@ -455,7 +439,7 @@ class MainActivity:Activity() {
         add(routing,routePort,8)
         add(routing,button("LOAD SITE ROUTE",false){
             val saved=NetworkRoute.configured(this,routeSite.text.toString())
-            routeMode.setSelection(when(saved?.mode){"http"->1;"socks5"->2;else->0})
+            routeMode.setSelection(when(saved?.mode){"vpn"->1;"http"->2;"socks5"->3;else->0})
             routeHost.setText(saved?.host.orEmpty())
             routePort.setText(saved?.port?.takeIf{it>0}?.toString().orEmpty())
             toast("Site route loaded")
@@ -463,7 +447,7 @@ class MainActivity:Activity() {
         add(routing,button("SAVE SITE ROUTE"){
             runCatching{
                 val mode=when(routeMode.selectedItemPosition){
-                    1->"http";2->"socks5";else->"direct"
+                    1->"vpn";2->"http";3->"socks5";else->"direct"
                 }
                 NetworkRoute.save(this,routeSite.text.toString(),mode,
                     routeHost.text.toString().trim(),

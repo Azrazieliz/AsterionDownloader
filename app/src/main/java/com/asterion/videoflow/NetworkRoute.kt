@@ -35,12 +35,12 @@ internal object NetworkRoute {
             return runCatching{
                 val obj=org.json.JSONObject(file.readText())
                 val mode=obj.getString("mode")
-                require(mode in setOf("direct","http","socks5","tor"))
+                require(mode in setOf("direct","http","socks5","vpn"))
                 Route(mode,obj.optString("host",""),obj.optInt("port",0))
             }.getOrElse{
                 // Corrupt routing metadata must NEVER silently expose traffic
                 // over the user's direct French public address.
-                Route("tor","",0)
+                Route("vpn","",0)
             }
         }
         val pref=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
@@ -51,12 +51,8 @@ internal object NetworkRoute {
     fun save(context:Context,url:String,mode:String,host:String,port:Int) {
         val site=siteKey(url)
         require(site.isNotBlank()){"Enter a valid site domain"}
-        require(mode in setOf("direct","http","socks5","tor")){"Invalid route mode"}
-        if(mode=="tor"){
-            require(host=="127.0.0.1" && port in 0..65535){
-                "Embedded Tor route must use local SOCKS only"
-            }
-        }else if(mode!="direct"){
+        require(mode in setOf("direct","http","socks5","vpn")){"Invalid route mode"}
+        if(mode!="direct" && mode!="vpn"){
             require(host.matches(Regex("""[A-Za-z0-9.-]{1,253}"""))){
                 "Use a valid proxy DNS name or IPv4 address"
             }
@@ -87,37 +83,11 @@ internal object NetworkRoute {
             .apply{mkdirs()}
         return java.io.File(directory,digest+".json")
     }
-    /** Bootstrap fail-closed: no site-specific direct connection before
-     * the Tor circuit and foreign exit IP have actually been confirmed.
-     */
-    fun waitForTor(context:Context,site:String){
-        save(context,site,"tor","127.0.0.1",0)
-    }
-    fun verifyTorExitAndActivate(context:Context,site:String,port:Int):String{
-        require(port in 1..65535){"Tor SOCKS listener not ready"}
-        val proxy=Proxy(Proxy.Type.SOCKS,
-            InetSocketAddress.createUnresolved("127.0.0.1",port))
-        val foreign=probeExitIp(proxy)
-        val direct=runCatching{probeExitIp(null)}.getOrNull()
-        require(direct==null || foreign!=direct){
-            "Tor did not change the public IP; leaving site route blocked"
-        }
-        save(context,site,"tor","127.0.0.1",port)
-        return "Tor exit IP verified: "+foreign+
-            if(direct==null)" (direct comparison unavailable)"
-            else " (different from direct connection)"
-    }
-    fun usesEmbeddedTor(context:Context?,url:String):Boolean =
-        configured(context,url)?.mode=="tor"
-
     fun javaProxy(context:Context?,url:String):Proxy? {
         val r=configured(context,url)?:return null
-        if(r.mode=="tor"){
-            check(r.port in 1..65535 && r.host=="127.0.0.1"){
-                "Embedded IP changer has not verified a Tor exit yet; direct traffic blocked"
-            }
-            return Proxy(Proxy.Type.SOCKS,
-                InetSocketAddress.createUnresolved("127.0.0.1",r.port))
+        if(r.mode=="vpn"){
+            requireVpn(context,url)
+            return null
         }
         if(r.mode !in setOf("http","socks5") || r.port !in 1..65535 ||
             r.host.isBlank())return null
@@ -126,16 +96,52 @@ internal object NetworkRoute {
     }
     fun extractorProxy(context:Context?,url:String):String? {
         val r=configured(context,url)?:return null
-        if(r.mode=="tor"){
-            check(r.port in 1..65535 && r.host=="127.0.0.1"){
-                "Embedded Tor exit not verified: refusing direct Python transfer"
-            }
-            return "socks5h://127.0.0.1:"+r.port
+        if(r.mode=="vpn"){
+            requireVpn(context,url)
+            return null
         }
         if(r.mode !in setOf("http","socks5") || r.port !in 1..65535 ||
             r.host.isBlank())return null
         val protocol=if(r.mode=="socks5")"socks5h" else "http"
         return protocol+"://"+r.host+":"+r.port
+    }
+    /** A real remote VPN exit is supplied by the Android VPN connection.
+     * The downloader does not spoof IP addresses or run Tor.
+     */
+    fun isVpnActive(context:Context?):Boolean {
+        if(context==null)return false
+        val cm=context.getSystemService(android.net.ConnectivityManager::class.java)
+            ?:return false
+        val active=cm.activeNetwork?:return false
+        return cm.getNetworkCapabilities(active)
+            ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)==true
+    }
+    fun requireVpn(context:Context?,url:String) {
+        if(configured(context,url)?.mode=="vpn")
+            check(isVpnActive(context)){
+                "Active Android VPN required for this site; connect a remote VPN exit"
+            }
+    }
+    fun verifyVpnExit(context:Context,url:String):String {
+        check(isVpnActive(context)){"No Android VPN connected"}
+        val conn=URL("https://ipwho.is/").openConnection() as HttpURLConnection
+        conn.connectTimeout=8000
+        conn.readTimeout=8000
+        try {
+            require(conn.responseCode==200){"VPN exit check HTTP "+conn.responseCode}
+            val data=org.json.JSONObject(conn.inputStream.bufferedReader().use{
+                it.readText().take(4000)})
+            require(data.optBoolean("success",false)){
+                "Cannot verify the VPN public exit country"
+            }
+            val code=data.optString("country_code").uppercase(Locale.ROOT)
+            require(code.matches(Regex("[A-Z]{2}"))){"Invalid VPN exit country"}
+            return "VPN public exit: "+data.optString("ip").take(64)+
+                " · "+code+
+                if(code=="FR" && siteKey(url)=="pornhub.com")
+                    " · Pornhub may still enforce French regional rules"
+                else " · verified"
+        } finally {conn.disconnect()}
     }
     /** A route configuration is not a claim of a changed public IP. Compare
      * the actual direct and configured exits with no browser cookies.
@@ -144,6 +150,10 @@ internal object NetworkRoute {
         val site=siteKey(url)
         require(site.isNotBlank()){"Enter the publisher site to check"}
         val configured=configured(context,url)
+        if(configured?.mode=="vpn"){
+            requireVpn(context,url)
+            return verifyVpnExit(context,url)
+        }
         if(configured==null || configured.mode=="direct"){
             return "Direct / Android system VPN: "+
                 checkExitIp(context,url)+

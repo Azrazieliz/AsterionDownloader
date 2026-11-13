@@ -485,7 +485,9 @@ object VideoEngine {
         AsterionCwd.enter(parent)
         try {
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
-        val viaProxy=prefs.getBoolean("tor_proxy",false)
+        // A stale Tor toggle must not disable normal video player/HTML discovery.
+        val viaProxy=prefs.getBoolean("tor_proxy",false) &&
+            Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
         val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
         // The old "tor_proxy" toggle suppressed ALL real HTML5 discovery and
         // publisher iframe inspection. Every source then fell straight back
@@ -493,7 +495,8 @@ object VideoEngine {
         // HTTP/SOCKS/Tor exit is configured, Jsoup inspection can safely use
         // that same route. Hidden .onion handling remains separate.
         val configuredExit=NetworkRoute.configured(context,item.url)?.mode
-            in setOf("http","socks5","tor")
+            in setOf("http","socks5","vpn")
+        NetworkRoute.requireVpn(context,item.url)
         val canInspectPublisherHtml=VideoCandidatePlan.mayInspectPublisher(
             viaProxy,hidden,configuredExit)
         require(!hidden||viaProxy){"Configure a SOCKS proxy before connecting to this source"}
