@@ -156,6 +156,11 @@ class TorrentTransferService : Service() {
         private const val NOTIFICATION = 56823
         private val inFlight = ConcurrentHashMap.newKeySet<String>()
         private val paused = ConcurrentHashMap.newKeySet<String>()
+        // A foreground-service expiry must interrupt the running native
+        // worker; otherwise the process can continue after Android revokes
+        // its dataSync foreground allowance.
+        private val stopRequests = ConcurrentHashMap.newKeySet<String>()
+        private val workers = ConcurrentHashMap<String,Thread>()
     }
     override fun onBind(intent: Intent?): IBinder? = null
     private fun notification(message: String, percent: Int = 0): Notification {
@@ -177,23 +182,36 @@ class TorrentTransferService : Service() {
             return false
         }
         if(!inFlight.add(id))return false
-        thread(name="asterion-torrent-$id"){
+        stopRequests.remove(id)
+        val worker=thread(name="asterion-torrent-$id"){
             try {
                 transfer(id,folder,indices)
                 getSharedPreferences("torrent_transfers",MODE_PRIVATE).edit()
                     .remove("job_folder_$id").remove("job_indices_$id")
                     .remove("job_paused_$id").apply()
             }catch(e:Throwable){
-                update(id,"FAILED: "+(e.message?:e.javaClass.simpleName))
+                if(e is InterruptedException || stopRequests.contains(id))
+                    update(id,"Paused · original pieces preserved; resume to continue")
+                else
+                    update(id,"FAILED: "+(e.message?:e.javaClass.simpleName))
             }finally {
+                workers.remove(id)
                 inFlight.remove(id)
-                if(inFlight.isEmpty())stopSelf()
+                if(inFlight.isEmpty()){
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
             }
         }
+        workers[id]=worker
         return true
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION, notification("Preparing torrent…"))
+        try { startForeground(NOTIFICATION, notification("Preparing torrent…")) }
+        catch(t:Exception){
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val id=intent?.getStringExtra("job")
         if(id.isNullOrBlank()){
             stopSelfResult(startId)
@@ -215,7 +233,7 @@ class TorrentTransferService : Service() {
                 val indices=prefs.getString("job_indices_$id","").orEmpty()
                 if(!inFlight.contains(id))startJob(id,folder,indices)
                 else update(id,"Resuming")
-                return START_REDELIVER_INTENT
+                return START_NOT_STICKY
             }
             ADD->{
                 val folder=intent.getStringExtra("folder")
@@ -228,12 +246,36 @@ class TorrentTransferService : Service() {
                 if(prefs.getBoolean("job_paused_$id",false))paused.add(id)
                 else paused.remove(id)
                 startJob(id,folder,indices)
-                return START_REDELIVER_INTENT
+                return START_NOT_STICKY
             }
         }
         stopSelfResult(startId)
         return START_NOT_STICKY
     }
+    /** Android 15+ expires dataSync foreground time. Unlike a redelivered
+     * service intent, this leaves a durable resumable job without crashing
+     * the main app or immediately restarting the same native operation.
+     */
+    override fun onTimeout(startId:Int,fgsType:Int) {
+        val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        for(id in inFlight){
+            stopRequests.add(id)
+            paused.add(id)
+            prefs.edit().putBoolean("job_paused_$id",true).apply()
+            workers[id]?.interrupt()
+            update(id,"Paused by Android · resume torrent to continue")
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+    override fun onDestroy() {
+        for(id in inFlight){
+            stopRequests.add(id)
+            workers[id]?.interrupt()
+        }
+        super.onDestroy()
+    }
+
     private fun update(id: String, state: String, progress: Int = 0) {
         TorrentTransfers.record(this, "job_$id", "${id.take(8)} · $state")
         getSystemService(NotificationManager::class.java)
@@ -276,10 +318,16 @@ class TorrentTransferService : Service() {
         var lastProgress=0f
         var lastAdvance=android.os.SystemClock.elapsedRealtime()
         while (true) {
+            if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
+                throw InterruptedException("Torrent transfer stopped; pieces retained")
             if (paused.contains(id)) {
                 handle.pause()
                 update(id, "Paused")
-                while (paused.contains(id)) Thread.sleep(500)
+                while (paused.contains(id)) {
+                    if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
+                        throw InterruptedException("Torrent paused by service timeout")
+                    Thread.sleep(500)
+                }
                 handle.resume()
                 lastAdvance=android.os.SystemClock.elapsedRealtime()
             }
@@ -306,6 +354,8 @@ class TorrentTransferService : Service() {
         update(id, "Verified. Exporting selected files…", 100)
         var copied = 0
         for (index in selected.sorted()) {
+            if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
+                throw InterruptedException("Torrent export interrupted; pieces retained")
             val filename = files.filePath(index)
             val source = File(destination, filename).canonicalFile
             require(source.path.startsWith(destination.canonicalPath + File.separator) && source.isFile) {

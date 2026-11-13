@@ -927,34 +927,67 @@ object VideoEngine {
 }
 
 class TransferService: Service() {
-    private val binder=Binder()
+    @Volatile private var active:java.util.concurrent.Future<*>?=null
+    @Volatile private var timedOut=false
     override fun onBind(intent: Intent?): IBinder? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if(timedOut){stopSelf();return START_NOT_STICKY}
         try {
             VideoEngine.makeChannel(this)
             startForeground(24014,VideoEngine.notification(this,"Preparing downloads"))
         }catch(t:Exception){
-            // Android can accept startForegroundService() but refuse the
-            // subsequent foreground promotion. That used to crash the
-            // process after launch() had already reported success.
+            // Keep pending originals in the durable database; JobScheduler may
+            // continue work when Android disallows foreground promotion.
             runCatching{Scheduling.requestPrimaryImmediate(applicationContext,
                 intent?.getBooleanExtra("scan",false)==true,
                 intent?.getStringExtra("target_site_host"))}
-            stopSelfResult(startId)
+            stopSelf()
             return START_NOT_STICKY
         }
-        VideoEngine.submit(applicationContext,
+        // A second tap while work is active should not spawn a duplicate
+        // lifecycle waiter. The existing VideoDb claims are shared across
+        // isolated processes and work() drains pending user selections.
+        if(active?.isDone==false)return START_NOT_STICKY
+        val future=VideoEngine.submit(applicationContext,
             intent?.getBooleanExtra("scan",false)==true,
-            intent?.getStringExtra("target_site_host")) { text ->
-            getSystemService(NotificationManager::class.java)
-                .notify(24014,VideoEngine.notification(this,text.take(80)))
-        }.let { future ->
-            Thread {
-                runCatching { future.get() }
-                stopSelfResult(startId)
-            }.start()
+            intent?.getStringExtra("target_site_host")) { message ->
+            if(!timedOut)runCatching{
+                getSystemService(NotificationManager::class.java)
+                    .notify(24014,VideoEngine.notification(this,message.take(80)))
+            }
         }
-        return START_REDELIVER_INTENT
+        active=future
+        Thread({
+            try { future.get() }
+            catch(_:Exception){ /* Recorded by VideoEngine, persisted in VideoDb. */ }
+            finally {
+                if(active===future)active=null
+                // stopSelfResult(old startId) silently failed after a newer
+                // start request, leaving dataSync foreground indefinitely.
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        },"videoflow-primary-lifecycle").start()
+        // Never replay a crashed service intent in an Android restart loop.
+        return START_NOT_STICKY
     }
-    override fun onDestroy() { super.onDestroy() }
+
+    /** Android 15+ enforces a finite quota for dataSync foreground services.
+     * Stop immediately on expiry and preserve the queue for a JobScheduler
+     * retry after stale in-flight leases recover; do not discard originals.
+     */
+    override fun onTimeout(startId:Int,fgsType:Int) {
+        timedOut=true
+        active?.cancel(true)
+        active=null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        runCatching{Scheduling.requestRetry(applicationContext,4L*60_000L)}
+    }
+    override fun onDestroy() {
+        active?.cancel(true)
+        active=null
+        super.onDestroy()
+    }
 }
