@@ -20,13 +20,22 @@ internal object NovelHttpPacing {
     private const val PREFS="asterion_epub_host_rate_limit_v1"
     private const val MIN_GAP_MS=1_750L
     private const val FALLBACK_MS=2L*60_000L
-    // Live FreeWebNovel reader test received HTTP 429 by its eighth chapter.
-    // Its long-reader route needs a slower per-host cadence; parallel workers
-    // must share this schedule instead of issuing rapid bursts.
+    // A hardcoded ten-second pause made every successful novel unnecessarily
+    // slow. Start conservatively, then adapt ONLY when the publisher actually
+    // rate-limits the host. The host lock still serializes entire responses.
     internal fun minimumGapMillis(host:String):Long=when(host.removePrefix("www.")){
-        "freewebnovel.com"->10_000L
-        "novelbuddy.me","novelbuddy.com"->4_000L
+        "freewebnovel.com"->2_500L
+        "novelbuddy.me","novelbuddy.com"->1_750L
         else->MIN_GAP_MS
+    }
+    internal fun adaptiveGapMillis(host:String,strikes:Int):Long {
+        val base=minimumGapMillis(host)
+        if(host.removePrefix("www.")!="freewebnovel.com" || strikes<=0)return base
+        return when(strikes){
+            1->5_000L
+            2->8_000L
+            else->12_000L
+        }
     }
     internal fun repeatedLimitDelayMillis(strikes:Int):Long=
         when(strikes.coerceAtLeast(1)){
@@ -109,7 +118,9 @@ internal object NovelHttpPacing {
             if(remaining>0L)
                 throw NovelRateLimited(System.currentTimeMillis()+remaining)
             val now=SystemClock.elapsedRealtime()
-            val minimum=minimumGapMillis(key)
+            val strikes=context.applicationContext.getSharedPreferences(
+                PREFS,Context.MODE_PRIVATE).getInt(key+"#strikes",0)
+            val minimum=adaptiveGapMillis(key,strikes)
             val delay=((recent[key]?:0L)+minimum-now)
                 .coerceIn(0L,minimum)
             if(delay>0L)try{Thread.sleep(delay)}
