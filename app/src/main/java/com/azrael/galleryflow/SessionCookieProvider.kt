@@ -21,13 +21,26 @@ class SessionCookieProvider:ContentProvider() {
     override fun onCreate():Boolean=true
 
     override fun call(method:String,arg:String?,extras:Bundle?):Bundle? {
-        if(method!="read_site_cookie")return super.call(method,arg,extras)
+        if(method !in setOf("read_site_cookie","read_site_html"))
+            return super.call(method,arg,extras)
         if(Binder.getCallingUid()!=Process.myUid())
             throw SecurityException("Cross-application session access denied")
         val ctx=context?:return Bundle()
         val url=arg.orEmpty()
         if(!SiteSession.validLoginUrl(url) || !SiteSession.bound(ctx,url))
             return Bundle()
+        if(method=="read_site_html") {
+            // Connected browser verification can only be resumed in the main
+            // process, which owns the login's WebView cookie jar. Binder has
+            // a bounded transaction size; fail rather than truncating HTML.
+            val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(ctx,url)
+            return Bundle().apply {
+                if(html.length<=340_000)putString("html",html)
+                else putString("error",
+                    "Authenticated page exceeded 340,000 characters; use a "+
+                    "provider-specific paginated scan")
+            }
+        }
         val cookie=SiteSession.cookie(url)
         return Bundle().apply{
             if(!cookie.isNullOrBlank())putString("cookie",cookie)
