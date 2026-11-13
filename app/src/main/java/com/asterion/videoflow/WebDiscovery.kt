@@ -48,6 +48,23 @@ object WebDiscovery {
      * attached afresh to each same-provider request, never forwarded through
      * an automatic third-party redirect.
      */
+    /** Some publishers return HTTP 200 with only an age/region gateway.
+     * Such pages contain no playable source, and yt-dlp then misleadingly
+     * reports a Python "No video formats" error.
+     */
+    internal fun epornerAccessGate(doc:Document):Boolean {
+        val host=runCatching{URI(doc.location()).host.orEmpty()
+            .lowercase().removePrefix("www.")}.getOrDefault("")
+        if(host!="eporner.com")return false
+        if(doc.outerHtml().length>16_000)return false
+        if(doc.select("video[src],video source[src],iframe[src][allowfullscreen]").isNotEmpty())
+            return false
+        val text=(doc.title()+" "+doc.text()).lowercase()
+        return listOf("parental control","age verification","over 18",
+            "must be 18","only for adults","restricted access",
+            "access not available").any{it in text}
+    }
+
     private fun open(url:String,context:Context?=null):Document{
         require(isUrl(url)){"Invalid public provider URL"}
         var current=url
@@ -97,6 +114,23 @@ object WebDiscovery {
                 // session instead of accepting a successful-but-empty shell.
                 val sourceHost=runCatching{URI(url).host.orEmpty()
                     .lowercase().removePrefix("www.")}.getOrDefault("")
+                if(epornerAccessGate(document)){
+                    if(context!=null && SiteSession.bound(context,current)){
+                        val html=com.azrael.pixivdumpsync.BrowserPageFetch
+                            .html(context,current)
+                        val browser=Jsoup.parse(html,current)
+                        require(!epornerAccessGate(browser)){
+                            "Eporner authorized browser still exposes only an "+
+                                "access gateway; complete the normal site "+
+                                "verification in CONNECT ACCOUNT"
+                        }
+                        return browser
+                    }
+                    throw IllegalStateException(
+                        "Eporner website returned an age/region access gateway, "+
+                            "not a video player. Connect an authorized browser "+
+                            "session; no extractor can download this shell.")
+                }
                 if(sourceHost=="archivebate.com" && context!=null &&
                     SiteSession.bound(context,current) &&
                     document.select("a[href*='/watch/']").isEmpty() &&
