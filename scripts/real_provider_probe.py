@@ -30,6 +30,18 @@ TARGETS = {
     "FreeWebNovel book": "https://freewebnovel.com/novel/dual-cultivation-novel",
     "NovelBuddy book": "https://novelbuddy.me/novel/dual-cultivation",
     "ReadNovelFull": "https://readnovelfull.com/",
+    # Previously reported failing VideoFlow publishers: record actual HTTP
+    # availability and first-party player metadata, never assume transfer success.
+    "Eporner": "https://www.eporner.com/",
+    "3DHentaiX": "https://3dhentaix.com/",
+    "JAVIDEO": "https://javideo.net/",
+    "Helloporn": "https://helloporn.com/",
+    "XXXClub": "https://xxxclub.to/",
+    "Notfans": "https://notfans.com/",
+    "FreePornVideos": "https://freepornvideos.xxx/",
+    "WatchPorn": "https://watchporn.to/",
+    "Pornhub": "https://www.pornhub.com/",
+    "OnlyHentai": "https://onlyhentaistuff.com/",
 }
 MAX_PAGE = 1600000
 TIMEOUT = 14
