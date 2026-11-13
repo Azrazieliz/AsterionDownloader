@@ -625,6 +625,9 @@ class AsterionHomeActivity:Activity(){
                 val showAll=bookUi.getBoolean("all_recent",false)
                 for(item in recent.take(if(showAll)12 else 3)){
                     val cached=NovelEpubService.cachedCount(this,item.url)
+                    val publisherCooling=item.state=="RETRY" &&
+                        item.error.orEmpty().contains("HTTP 429") &&
+                        item.retryAfter>System.currentTimeMillis()
                     val key="expanded:"+item.url.hashCode()
                     val expanded=bookUi.getBoolean(key,
                         item.state in setOf("WAIT_LOGIN","WORKING") ||
@@ -659,12 +662,20 @@ class AsterionHomeActivity:Activity(){
                     }
                     control.addView(sync,LinearLayout.LayoutParams(0,-2,1f))
                     control.addView(button("CHECK NEW"){
-                        val requested=NovelEpubQueue(this).use{
-                            it.requestedRefresh(item.url)
+                        if(publisherCooling){
+                            toast("Novel publisher asked for a cooldown; "+
+                                "saved chapters resume automatically after "+
+                                java.text.DateFormat.getDateTimeInstance()
+                                    .format(java.util.Date(item.retryAfter)))
+                        }else{
+                            val requested=NovelEpubQueue(this).use{
+                                it.requestedRefresh(item.url)
+                            }
+                            if(requested)NovelEpubService.schedule(this)
+                            else if(item.state=="WAIT_LOGIN")
+                                toast("Reconnect the website account")
+                            else toast("Novel already queued or running")
                         }
-                        if(requested)NovelEpubService.schedule(this)
-                        else if(item.state=="WAIT_LOGIN")toast("Reconnect the website account")
-                        else toast("Novel already queued or running")
                     })
                     put(archive,control,4)
                     if(item.lastCheck>0L)
@@ -672,7 +683,13 @@ class AsterionHomeActivity:Activity(){
                             java.text.DateFormat.getDateTimeInstance()
                                 .format(java.util.Date(item.lastCheck)),
                             11f,theme.secondary),3)
-                    if(!item.error.isNullOrBlank())
+                    if(publisherCooling)
+                        put(archive,text("Publisher cooldown until "+
+                            java.text.DateFormat.getDateTimeInstance()
+                                .format(java.util.Date(item.retryAfter))+
+                            " · $cached original chapters cached",
+                            11f,theme.secondary),3)
+                    else if(!item.error.isNullOrBlank())
                         put(archive,text(item.error.take(160),11f,theme.danger),3)
                     if(item.state=="WAIT_LOGIN")
                         put(archive,button("CONNECT ACCOUNT & RESUME"){
