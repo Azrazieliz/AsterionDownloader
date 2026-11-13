@@ -126,6 +126,34 @@ try:
             driver.get(url)
             time.sleep(3)
             evidence(name,"initial")
+            if name=="UncensoredHentai selected":
+                frames=driver.find_elements(By.CSS_SELECTOR,
+                    "iframe[src*='nhplayer.com/v/']")
+                if frames:
+                    try:
+                        driver.switch_to.frame(frames[0])
+                        time.sleep(3)
+                        selected=driver.execute_script("""
+                            const video=document.querySelector('video');
+                            const source=video?.currentSrc||video?.src||
+                              video?.querySelector('source[src]')?.src||'';
+                            const url=(()=>{try{return new URL(source)}
+                              catch(e){return null}})();
+                            return {
+                              has_video:!!video,
+                              ready:video?.readyState??null,
+                              duration_s:Number.isFinite(video?.duration)?
+                                Math.round(video.duration):null,
+                              media_host:url?.hostname||'',
+                              media_extension:url?.pathname?.split('.').pop()||'',
+                              iframe_title:document.title.slice(0,70)
+                            };
+                        """)
+                        out[name+" exact NHPlayer video"]=selected
+                    except Exception as ex:
+                        out[name+" exact NHPlayer video"]={"error":type(ex).__name__}
+                    finally:
+                        driver.switch_to.default_content()
             if name=="Archivebate":
                 # Normal public 18+ entry control, no account creation/captcha.
                 candidates=driver.find_elements(By.XPATH,
