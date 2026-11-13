@@ -246,8 +246,9 @@ object UnifiedDownloadsUi {
                     item.state=="WAIT_LOGIN"->State.HELD
                     item.state=="DONE" && !present->State.FAILED
                     item.state=="ERROR"->State.FAILED
-                    item.state=="RETRY" && item.error.orEmpty().startsWith(
-                        "Chapter extraction continuing:")->State.QUEUED
+                    item.state=="RETRY" && (item.error.isNullOrBlank() ||
+                        item.error.startsWith("Chapter extraction continuing:"))->
+                        State.QUEUED
                     item.state=="RETRY"->State.HELD
                     item.state=="WORKING"->State.ACTIVE
                     else->State.QUEUED
@@ -272,6 +273,9 @@ object UnifiedDownloadsUi {
                                     " · $cached chapters safely cached"
                             else "Automatic retry scheduled · "+item.error.orEmpty().take(90)
                         State.ACTIVE->"$cached chapters cached · Extracting"
+                        State.QUEUED->if(item.state=="RETRY")
+                            "$cached chapters cached · next chapter retrieval scheduled"
+                            else "$cached chapters cached · Waiting for original"
                         else->"$cached chapters cached · Continuing"
                     },state,null,item.updated,{
                     when(state){
@@ -297,7 +301,8 @@ object UnifiedDownloadsUi {
                     }
                 },if(present)item.savedUri else null,mime=mime,
                     actionText=if(providerCooling)"COOLDOWN"
-                        else if(item.state=="RETRY")"RETRY" else null)
+                        else if(item.state=="RETRY" && state==State.HELD)"RETRY"
+                        else null)
             }
         }
         XPhotoQueue(a).use{db->

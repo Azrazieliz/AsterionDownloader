@@ -554,11 +554,19 @@ object NovelEpubService {
             part.inputStream().use{ArchiveIntegrity.inspect(it,"EPUB")}
             val saved=commit(context,part,title,false)
             if(!scan.cacheReused)saveCatalog(context,task.url,scan)
+            // Successful local export is authoritative. A separate cloud
+            // connection failure must never turn an already published EPUB
+            // into a failed generation and duplicate the entire book.
             if(NduSettings.configured(context)){
-                NduCloudQueue(context).use{cloud->
-                    cloud.enqueue("books",safeName(title)+".epub",Uri.parse(saved))
+                runCatching{
+                    NduCloudQueue(context).use{cloud->
+                        cloud.enqueue("books",safeName(title)+".epub",Uri.parse(saved))
+                    }
+                    NduUploadService.launch(context)
+                }.onFailure{
+                    android.util.Log.w("AsterionEpub",
+                        "Local EPUB saved; cloud backup can be retried",it)
                 }
-                NduUploadService.launch(context)
             }
             return saved to signature
         }finally{part.delete()}

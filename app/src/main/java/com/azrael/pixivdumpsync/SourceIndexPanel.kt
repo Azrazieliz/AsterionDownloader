@@ -267,7 +267,7 @@ object SourceIndexPanel {
                 Toast.LENGTH_SHORT).show()
             return
         }
-        if(SelectedVideoRouter.isSelectedVideo(item.area,item.url)){
+        if(SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)){
             // Video page thumbnails, including provider-indexed cards with a
             // missing/incorrect "video" kind, need VideoFlow resolution.
             // Generic original-file resolution expects a direct file link and

@@ -369,9 +369,22 @@ object WebDiscovery {
         }
         return result.toList()
     }
-    fun embeddedCandidates(address:String,context:Context?=null):List<String> {
-        if(!isUrl(address) || !VideoSiteProfiles.isVideoPage(address))
+    fun embeddedCandidates(address:String,context:Context?=null,
+                           explicitlySelected:Boolean=false):List<String> {
+        if(!isUrl(address) ||
+            (!VideoSiteProfiles.isVideoPage(address) && !explicitlySelected))
             return emptyList()
+        // The user clicked this provider's actual media card even if the
+        // publisher has changed its slug pattern. Inspect its selected page
+        // rather than dropping every player because the old route mismatched.
+        if(explicitlySelected &&
+            !VideoSiteProfiles.coveredHosts.any{host->
+                val actual=runCatching{
+                    java.net.URI(address).host.orEmpty().lowercase()
+                        .removePrefix("www.").removePrefix("m.")
+                }.getOrDefault("")
+                actual==host
+            })return emptyList()
         val doc=open(address,context)
         return publishedEmbeds(doc,address)
     }

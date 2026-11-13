@@ -60,7 +60,10 @@ data class GalleryMeta(
     val title: String,
     val tags: List<String>,
     val publishedAt: String?,
-    val pageUrls: List<String>
+    val pageUrls: List<String>,
+    // Optional original publisher metadata. Existing persisted gallery
+    // records retain their schema; no unverified artist/date is fabricated.
+    val creator: String? = null
 )
 
 data class MediaRef(

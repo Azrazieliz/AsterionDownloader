@@ -21,5 +21,11 @@ class SelectedVideoRouterTest {
             "ADULT","https://javideo.net/en/category/jav"))
         assertFalse(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://unknown.example/gallery/123"))
+        assertTrue(SelectedVideoRouter.isSelectedVideo(
+            "ADULT","https://javideo.net/current-unknown-slug","video"))
+        assertTrue(SelectedVideoRouter.isSelectedVideo(
+            "ADULT","https://helloporn.com/current-unknown-slug","video"))
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
+            "COSPLAY","https://helloporn.com/current-unknown-slug","video"))
     }
 }

@@ -104,15 +104,15 @@ object TorrentTransfers {
                 files.filePath(it)
             })){"This torrent contains no identifiable game files. Video-only torrents are not shown as Games."}
             val options = Array(info.numFiles()) { i ->
-                "${files.filePath(i)}  (${files.fileSize(i) / 1024} KiB)"
+                val candidate=files.filePath(i)
+                val risk=TorrentContentRisk.reviewReason(candidate)
+                (if(risk!=null)"[REVIEW: $risk] " else "")+
+                    "$candidate  (${files.fileSize(i) / 1024} KiB)"
             }
             // A playable game may require DLL, data, assets and a launcher together.
             // Default to the whole torrent; the user may deselect unrelated extras.
             val selected = BooleanArray(info.numFiles()) { i ->
-                when(folder){
-                    "Books" -> files.fileName(i).endsWith(".epub",true)
-                    else -> true
-                }
+                TorrentContentRisk.selectByDefault(folder,files.filePath(i))
             }
             AlertDialog.Builder(a).setTitle("Select files: " + info.name())
                 .setMultiChoiceItems(options, selected) { _, index, checked -> selected[index] = checked }

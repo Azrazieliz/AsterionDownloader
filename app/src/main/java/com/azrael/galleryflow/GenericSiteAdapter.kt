@@ -80,6 +80,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         var next: String? = url
         var title: String? = null
         var tags: List<String> = emptyList()
+        var creator: String? = null
+        var publishedAt: String? = gallery.publishedAt
         while (next != null && visitedAlbumPages.size < MAX_GALLERY_PAGES) {
             if (!SyncControl.checkpoint()) throw SyncCancelledException()
             val current = next
@@ -89,6 +91,20 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 title = doc.selectFirst("h1")?.text()?.takeIf(String::isNotBlank)
                     ?: doc.title().ifBlank { gallery.title }
                 tags = extractTags(doc)
+                creator=doc.selectFirst(
+                    "meta[name=author],meta[property=article:author]")?.attr("content")
+                    ?.takeIf(String::isNotBlank)
+                    ?:doc.selectFirst(
+                        "[itemprop=author],.cosplayer-name,.model-name,a[rel=author]")?.text()
+                        ?.trim()?.takeIf(String::isNotBlank)
+                creator=creator?.take(85)
+                publishedAt=publishedAt
+                    ?:doc.selectFirst(
+                        "meta[property=article:published_time],"+
+                        "meta[itemprop=datePublished]")?.attr("content")
+                        ?.takeIf(String::isNotBlank)
+                    ?:doc.selectFirst("time[datetime]")?.attr("datetime")
+                        ?.takeIf(String::isNotBlank)
             }
             val photos = AlbumImageExtractor.photoPages(doc, url)
             photoLinks.addAll(photos)
@@ -126,8 +142,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 "the site may need login, JavaScript or a dedicated adapter.")
         }
         val meta = GalleryMeta(source, gallery.stableId, gallery.entityStableId, url,
-            title ?: gallery.title, tags, null, visitedAlbumPages.toList() +
-                photoLinks.toList())
+            title ?: gallery.title, tags, publishedAt, visitedAlbumPages.toList() +
+                photoLinks.toList(),creator)
         val media = images.values.mapIndexed { index, item ->
             val uri = URI(item.url)
             val normalized = URI(uri.scheme, uri.authority, uri.path, null, null).toString()

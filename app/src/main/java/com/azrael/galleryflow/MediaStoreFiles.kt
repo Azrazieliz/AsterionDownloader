@@ -348,8 +348,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
 
     // Every media entry, including extracted archive entries, lives in one flat folder.
     private fun relativePath(entity: EntityRecord, gallery: GalleryMeta): String =
-        Environment.DIRECTORY_DOWNLOADS + "/" +
-            context.getString(com.azrael.pixivdumpsync.R.string.gallery_download_folder) + "/"
+        CosplayStoragePolicy.relativePath(entity,gallery)
 
     private fun safe(value: String): String = value
         .replace(Regex("[\\\\/:*?\"<>|]"), "_")

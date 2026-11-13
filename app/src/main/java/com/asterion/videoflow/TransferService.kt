@@ -205,7 +205,10 @@ object VideoEngine {
                         VideoTransferJournal.record(context,next.id,"held")
                         onStatus("Full version unverified: ${next.title}")
                     }else{
-                        val reason=VideoErrorDetail.summary(t)
+                        val host=runCatching{
+                            java.net.URI(next.url).host.orEmpty()
+                        }.getOrDefault("Video provider")
+                        val reason=host+": "+VideoErrorDetail.summary(t)
                         db.scheduleRetry(next.id,reason)
                         VideoTransferJournal.record(context,next.id,"retry",
                             VideoFailurePolicy.classify(reason).name)
@@ -723,7 +726,8 @@ object VideoEngine {
             // Provider-owned iframe/media links remain alternatives; discovery
             // must not replace the actual item the user selected.
             if(viaProxy)emptyList() else runCatching{
-                WebDiscovery.embeddedCandidates(item.url,context)
+                WebDiscovery.embeddedCandidates(item.url,context,
+                    explicitlySelected=userRequested)
             }.getOrDefault(emptyList()))
         val watchPorn=if(viaProxy)null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
