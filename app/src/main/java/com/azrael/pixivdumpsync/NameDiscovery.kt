@@ -96,7 +96,6 @@ object NameCrawler {
                 com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
                 !ProviderRetirement.isRetired(it.url)}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
-            .take(240)
             .map{it.copy(source="Name match · "+it.source)}
             .toList()
     }
@@ -127,7 +126,6 @@ object NameCrawler {
                                     .isVideoPage(it.url) &&
                                 !ProviderRetirement.isRetired(it.url) &&
                                 SourceIndexParser.sameSite(it.source,it.url) }
-                            .take(240)
                             .map{RankedHit(it.title,it.url,
                                 "Name match · "+it.source,score=110,
                                 thumbnail=it.preview)}.toList()
@@ -136,7 +134,6 @@ object NameCrawler {
                         val live=runCatching{liveCandidates(context,watch.name)}
                         val matches=(live.getOrDefault(emptyList())+indexed)
                             .distinctBy{SearchRanking.canonicalKey(it.url)}
-                            .take(300)
                         SearchResultsDb(context).use{it.save(watch.name,matches)}
                         val diagnostic=when{
                             live.isFailure->"Live provider search failed: "+
@@ -166,7 +163,6 @@ object NameCrawler {
                         // titles that also explicitly name the followed actor.
                         .filter{SearchExactness.matches(watch.name,it.title)}
                         .distinctBy{SearchRanking.canonicalKey(it.url)}
-                        .take(120)
                         .map{RankedHit(it.title,it.url,
                             "Verified profile: "+watch.source,score=350,
                             thumbnail=it.preview)}.toList()
@@ -180,7 +176,7 @@ object NameCrawler {
                         results.save(watch.name,
                             (hits+live).distinctBy{
                                 SearchRanking.canonicalKey(it.url)
-                            }.take(300))
+                            })
                         VideoDb(context).use{videos->
                             for(hit in hits){
                                 if(watch.enabled &&
