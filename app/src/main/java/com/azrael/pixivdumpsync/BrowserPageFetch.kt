@@ -39,7 +39,8 @@ object BrowserPageFetch {
         // stored in the main process. Ask our non-exported provider to perform
         // the authorized DOM read in the actual owner process.
         if(android.os.Build.VERSION.SDK_INT>=28 &&
-            android.app.Application.getProcessName()!=context.packageName){
+            android.app.Application.getProcessName()!=context.packageName &&
+            com.azrael.galleryflow.SiteSession.bound(context,url)){
             val response=context.contentResolver.call(
                 Uri.parse("content://"+context.packageName+".session-cookies"),
                 "read_site_html",url,null)
