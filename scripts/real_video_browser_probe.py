@@ -24,6 +24,7 @@ SITES = {
     "HentaiHaven selected": "https://hentaihaven.xxx/watch/renseijutsushi-collet-no-h-na-shibo-shirage-monogatari/",
     "UncensoredHentai selected": "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/",
     "Rule34Video failed 4727221": "https://rule34video.com/video/4727221/",
+    "Rule34Video observed current detail": "https://rule34video.com/video/4727779/female-v-x-bbc-reverse-cowgirl/",
 }
 out = {}
 try:
