@@ -1,6 +1,7 @@
 package com.azrael.pixivdumpsync
 
 import android.content.Context
+import com.azrael.galleryflow.SiteSession
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
