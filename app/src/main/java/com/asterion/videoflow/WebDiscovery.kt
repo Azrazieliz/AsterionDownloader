@@ -344,8 +344,13 @@ object WebDiscovery {
                             (it.id()+" "+it.className()).contains("player",true)
                         }
                     val adPath=Regex("""(?i)(?:^|/)(?:ads?|banner|popunder|tracking|analytics|click|redirect)(?:/|$)""")
-                    advertisedPlayer && !adPath.containsMatchIn(path) &&
-                        url.toString()!=source
+                    // These two players have source-specific provenance
+                    // checks above. An unrelated site's fullscreen advert
+                    // must not be mistaken for the selected publisher video.
+                    val specializedElsewhere=embedHost in
+                        setOf("nhplayer.com","mixdrop.ag")
+                    advertisedPlayer && !specializedElsewhere &&
+                        !adPath.containsMatchIn(path) && url.toString()!=source
                 }
             }
             if(!accepted)continue
