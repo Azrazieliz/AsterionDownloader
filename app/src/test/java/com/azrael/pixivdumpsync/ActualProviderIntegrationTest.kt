@@ -146,6 +146,38 @@ sys.stdout.buffer.write(response.read(3000000))
         }finally{conn.disconnect()}
     }
 
+    @Test fun actualBuonduaGallerySelectionResolvesRealOriginalImages(){
+        enabled()
+        val base="https://buondua.com/"
+        val landing=page(base)
+        val cards=KyoraCreatorPreviews.parse(landing.outerHtml(),base)
+            .filter{SourceIndexParser.sameSite(base,it.url) &&
+                URI(it.url).path.orEmpty().trim('/').isNotBlank()}
+        assertTrue("Buondua public homepage exposed no provider-owned gallery cards",
+            cards.isNotEmpty())
+        val selected=cards.first()
+        val album=page(selected.url,base)
+        val photos=com.azrael.galleryflow.AlbumImageExtractor.directImages(album)
+        assertTrue("Buondua selected gallery opened but extracted zero original images",
+            photos.isNotEmpty())
+        val first=photos.first()
+        val connection=URL(URI(first.url).toASCIIString()).openConnection() as HttpURLConnection
+        connection.connectTimeout=15_000
+        connection.readTimeout=15_000
+        connection.setRequestProperty("User-Agent",
+            "Mozilla/5.0 (Linux; Android 17; Mobile)")
+        connection.setRequestProperty("Referer",selected.url)
+        connection.setRequestProperty("Range","bytes=0-2047")
+        try{
+            val code=connection.responseCode
+            assertTrue("Buondua original HTTP "+code,code in 200..206)
+            assertTrue("Provider returned no image bytes",
+                connection.inputStream.use{it.readNBytes(2048).isNotEmpty()})
+            println("LIVE_BUONDUA_GALLERY="+cards.size+
+                " SELECTED_PHOTOS="+photos.size+" SAMPLE_HTTP="+code)
+        }finally{connection.disconnect()}
+    }
+
     @Test fun actualRule34VideoCardsExposeThumbnailMetadata(){
         enabled()
         val url="https://rule34video.com/"
