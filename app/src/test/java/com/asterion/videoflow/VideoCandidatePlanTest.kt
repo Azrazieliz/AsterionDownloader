@@ -10,6 +10,12 @@ class VideoCandidatePlanTest {
         assertEquals("https://example.org/watch/a",VideoCandidatePlan.referer(
             "https://example.org/watch/a","https://cdn.example.org/e/abc"))
     }
+    @Test fun workingVerifiedExitCanDiscoverPublisherOwnedHtml5Player(){
+        assertTrue(VideoCandidatePlan.mayInspectPublisher(true,false,true))
+        assertTrue(VideoCandidatePlan.mayInspectPublisher(false,false,false))
+        assertFalse(VideoCandidatePlan.mayInspectPublisher(true,false,false))
+        assertFalse(VideoCandidatePlan.mayInspectPublisher(false,true,true))
+    }
     @Test fun selectedPageIsRetainedWhenNoIframeWasDiscovered(){
         assertEquals(listOf("https://example.org/watch/a"),
             VideoCandidatePlan.ordered("https://example.org/watch/a",

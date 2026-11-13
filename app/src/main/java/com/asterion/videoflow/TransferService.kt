@@ -487,6 +487,15 @@ object VideoEngine {
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
         val viaProxy=prefs.getBoolean("tor_proxy",false)
         val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
+        // The old "tor_proxy" toggle suppressed ALL real HTML5 discovery and
+        // publisher iframe inspection. Every source then fell straight back
+        // to the same failing generic Python parser. When an actual verified
+        // HTTP/SOCKS/Tor exit is configured, Jsoup inspection can safely use
+        // that same route. Hidden .onion handling remains separate.
+        val configuredExit=NetworkRoute.configured(context,item.url)?.mode
+            in setOf("http","socks5","tor")
+        val canInspectPublisherHtml=VideoCandidatePlan.mayInspectPublisher(
+            viaProxy,hidden,configuredExit)
         require(!hidden||viaProxy){"Configure a SOCKS proxy before connecting to this source"}
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
@@ -744,11 +753,11 @@ object VideoEngine {
             EpornerOriginalSource.videoCandidates(item.url,connected),
             // Provider-owned iframe/media links remain alternatives; discovery
             // must not replace the actual item the user selected.
-            if(viaProxy)emptyList() else runCatching{
+            if(!canInspectPublisherHtml)emptyList() else runCatching{
                 WebDiscovery.embeddedCandidates(item.url,context,
                     explicitlySelected=userRequested)
             }.getOrDefault(emptyList()))
-        val watchPorn=if(viaProxy)null else runCatching{
+        val watchPorn=if(!canInspectPublisherHtml)null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
         var last:Throwable?=null
@@ -810,6 +819,25 @@ object VideoEngine {
                 // Referer for third-party player and CDN hosts. Losing it
                 // caused HTTP 403 even after a valid player URL was found.
                 val candidateReferer=VideoCandidatePlan.referer(item.url,candidate)
+                // Resolve genuine first-party HTML5 <video> and contentUrl
+                // entries BEFORE running generic yt-dlp metadata/download.
+                // This works for any publisher with a real media element,
+                // without adding site-specific fake player links.
+                val directlyPublished=if(canInspectPublisherHtml)
+                    runCatching{WebDiscovery.directMedia(candidate,context)}
+                        .getOrNull() else null
+                if(userRequested &&
+                    !directlyPublished.isNullOrBlank() &&
+                    directlyPublished!=candidate &&
+                    NativeMediaDownloader.isNativeEligible(item.url,directlyPublished) &&
+                    !FullLengthVideoPolicy.isExplicitPreview(
+                        item.title,directlyPublished)){
+                    try{
+                        execute(directlyPublished,candidate)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                }
                 val trusted=FullLengthVideoPolicy.knownFullReferenceHost(candidate)
                 val decision=if(trusted)FullLengthVideoPolicy.assess(
                     item.title,item.title,candidate,null,null,
@@ -857,9 +885,7 @@ object VideoEngine {
                         }
                     }
                 }
-                val media=if(viaProxy)null else runCatching{
-                    WebDiscovery.directMedia(candidate,context)
-                }.getOrNull()
+                val media=directlyPublished
                 if(!media.isNullOrBlank() && media!=candidate){
                     if(trusted && NativeMediaDownloader.isNativeEligible(candidate,media)){
                         try{

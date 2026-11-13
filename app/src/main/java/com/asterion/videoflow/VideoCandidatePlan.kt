@@ -8,6 +8,13 @@ internal object VideoCandidatePlan {
     fun referer(selected:String,candidate:String):String? =
         selected.takeIf{it!=candidate}
 
+    /** A configured, working per-site proxy permits publisher page discovery.
+     * The legacy bare toggle without a relay must not send direct requests.
+     */
+    fun mayInspectPublisher(legacyProxy:Boolean,hidden:Boolean,
+                            verifiedExitConfigured:Boolean):Boolean =
+        !hidden && (!legacyProxy || verifiedExitConfigured)
+
     fun ordered(selected:String,providerAlternatives:List<String>,
                 embeddedAlternatives:List<String>):List<String> {
         val preferred=EpornerOriginalSource.officialEmbed(selected)
