@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoTransferReliabilityTest {
+    @Test fun archivebateSelectedWatchDoesNotMistakeRecommendedClipsForOriginal(){
+        // Real page /watch/16458050 has recommendation <video> sources and
+        // one separate publisher Mixdrop iframe. Never resolve recommendation
+        // MP4s as the selected recording simply because they play.
+        assertNull(WebDiscovery.directMedia("https://archivebate.com/watch/16458050"))
+    }
     @Test fun multilineExtractorJsonAfterWarnings(){
         val payload = """
           WARNING: trying a different format
