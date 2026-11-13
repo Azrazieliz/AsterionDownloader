@@ -301,18 +301,28 @@ object WebDiscovery {
     internal fun publishedEmbeds(doc:Document,source:String):List<String> {
         val origin=runCatching{URI(source)}.getOrNull()?:return emptyList()
         val host=origin.host.orEmpty().lowercase().removePrefix("www.")
-        if(host!="uncensoredhentai.xxx" || !VideoSiteProfiles.isVideoPage(source))
+        if(!VideoSiteProfiles.isVideoPage(source))return emptyList()
+        val authorizedArchivebate=host=="archivebate.com" &&
+            Regex("^/watch/[0-9]{1,16}/?$").matches(origin.path.orEmpty())
+        if(host!="uncensoredhentai.xxx" && !authorizedArchivebate)
             return emptyList()
         val result=LinkedHashSet<String>()
-        for(iframe in doc.select("iframe[src][allowfullscreen],"+
-            "iframe[src][allow*=fullscreen]").take(20)){
+        for(iframe in doc.select(
+            "iframe[src][allowfullscreen],iframe[src][allow*=fullscreen],"+
+            "iframe[src*='mixdrop.ag/e/']").take(20)){
             val url=runCatching{
                 URI(doc.location()).resolve(iframe.attr("src"))
             }.getOrNull()?:continue
-            if(url.scheme!="https" || url.userInfo!=null ||
-                url.host.orEmpty().lowercase().removePrefix("www.")!="nhplayer.com" ||
-                !Regex("""^/v/[A-Za-z0-9]{8,40}/?$""").matches(url.path.orEmpty()))
-                continue
+            if(url.scheme!="https" || url.userInfo!=null)continue
+            val embedHost=url.host.orEmpty().lowercase().removePrefix("www.")
+            val accepted=if(authorizedArchivebate)
+                embedHost=="mixdrop.ag" &&
+                    Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""")
+                        .matches(url.path.orEmpty())
+            else embedHost=="nhplayer.com" &&
+                Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                    .matches(url.path.orEmpty())
+            if(!accepted)continue
             result+=url.toString().substringBefore('#')
             if(result.size>=3)break
         }
