@@ -24,8 +24,9 @@ import java.io.File
 import java.security.MessageDigest
 import kotlin.concurrent.thread
 
-/** Actual HTTP downloading, safely resolved .torrent files, and Android torrent-client handoff.
- * The torrent transfer itself is performed by a compatible installed BitTorrent client.
+/** Actual HTTP downloading and securely resolved .torrent files. Native
+ * torrent transfers run in our isolated, app-private quarantine process;
+ * no external torrent client or unsafe public-export handoff is required.
  */
 object ResourceDownloads {
     private fun note(c:Context,message:String)=
@@ -77,7 +78,7 @@ object ResourceDownloads {
         torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
         torrent.addView(ui.text(a,
             "Game torrents: search by TITLE above, select a torrent result, choose the complete game files, then monitor verified peer "+
-            "transfers below. Completed files are exported to Downloads/AsterionDownloader/Games/Torrents; run only with a compatible external Android app.",
+            "transfers below. Torrent files remain in private quarantine after download. A verified malware scan is required before any export or installation.",
             12f,ui.secondary),ui.lp(a,7))
         torrent.addView(action(a,"ACTIVE / COMPLETED TORRENTS · PAUSE / RESUME"){
             TorrentTransfers.showQueue(a)
