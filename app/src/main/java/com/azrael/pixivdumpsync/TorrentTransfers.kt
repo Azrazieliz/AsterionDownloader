@@ -304,9 +304,10 @@ class TorrentTransferService : Service() {
         val priorities = Array(info.numFiles()) {
             if (it in selected) Priority.DEFAULT else Priority.IGNORE
         }
-        // Keep verified pieces in app-private durable storage even if
-        // external app storage is not mounted. The MediaStore export below
-        // still publishes selected finished files to public Downloads.
+        // ALL untrusted torrent payloads remain in private durable storage.
+        // BitTorrent piece hashes only verify integrity, never malware safety.
+        // No file is published to public Downloads without an independent
+        // trusted malware verdict. Existing partials remain resumable here.
         val storage = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: filesDir
         val destination = File(storage, "torrent-data/$id").apply { mkdirs() }
@@ -349,73 +350,62 @@ class TorrentTransferService : Service() {
                 lastProgress=currentProgress
                 lastAdvance=now
             }
-            // Do not leave a zero-peer torrent silently queued forever.
-            // Keep the descriptor and partial pieces for a later retry.
-            if(status.numPeers()==0 && now-lastAdvance>=10L*60_000L)
+            val connected=status.numPeers().coerceAtLeast(0)
+            val seeds=status.numSeeds().coerceIn(0,connected)
+            val leechers=(connected-seeds).coerceAtLeast(0)
+            val idle=now-lastAdvance
+            // Connected peers are not necessarily seeders; a swarm can have
+            // many leechers and still lack the pieces we need. Expose both.
+            // Preserve all previously verified pieces on a stalled transfer.
+            if(connected==0 && idle>=5L*60_000L)
                 throw java.io.IOException(
-                    "No peers transferred pieces for 10 minutes; torrent stalled, pieces retained")
-            if(now-lastAdvance>=20L*60_000L)
+                    "No connected peers for five minutes; torrent stalled; partials quarantined")
+            if(connected>0 && idle>=7L*60_000L)
                 throw java.io.IOException(
-                    "Torrent made no verified piece progress for 20 minutes; pieces retained")
+                    "Connected to $connected peers ($seeds seeders, $leechers leechers) "+
+                    "but no verified piece advanced for seven minutes; "+
+                    "torrent stalled; partials quarantined")
             val percent = (currentProgress * 100).toInt().coerceIn(0, 100)
-            update(id, "${info.name().take(32)} $percent% · ${status.downloadRate()/1024} KiB/s · ${status.numPeers()} peers", percent)
+            val speed=status.downloadRate().coerceAtLeast(0)/1024
+            val detail=TorrentPeerDiagnostics.describe(
+                percent,speed.toLong(),connected,seeds,idle)
+            update(id, "${info.name().take(32)} · $detail",percent)
             if (status.isFinished()) break // libtorrent has verified selected pieces
             Thread.sleep(2000)
         }
-        update(id, "Verified. Exporting selected files…", 100)
-        var copied = 0
-        for (index in selected.sorted()) {
-            if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
-                throw InterruptedException("Torrent export interrupted; pieces retained")
-            val filename = files.filePath(index)
-            val source = File(destination, filename).canonicalFile
-            require(source.path.startsWith(destination.canonicalPath + File.separator) && source.isFile) {
-                "Completed file is missing: $filename"
+        // Finish BitTorrent integrity verification, then enforce private
+        // quarantine. An untrusted payload must NEVER become a publicly
+        // accessible Downloads/ file merely because its pieces match hashes.
+        update(id,"Verifying selected files in private quarantine…",100)
+        var checked=0
+        val findings=ArrayList<String>()
+        for(index in selected.sorted()){
+            if(stopRequests.contains(id)||Thread.currentThread().isInterrupted)
+                throw InterruptedException("Torrent review interrupted; pieces quarantined")
+            val path=files.filePath(index)
+            val source=File(destination,path).canonicalFile
+            require(source.path.startsWith(destination.canonicalPath+File.separator) &&
+                source.isFile){"Quarantine file missing or unsafe: $path"}
+            require(source.length()==files.fileSize(index)){
+                "Quarantine file length mismatch: $path"
             }
-            require(source.length() == files.fileSize(index)) { "File size mismatch: $filename" }
-            val relative = filename.replace('\\','/').split('/')
-                .filter { it.isNotBlank() && it != "." && it != ".." }
-                .joinToString("/")
-            val targetDir = "Download/AsterionDownloader/$folder/Torrents/$id/" +
-                relative.substringBeforeLast('/', "").let { if (it.isBlank()) "" else "$it/" }
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, source.name)
-                put(MediaStore.Downloads.MIME_TYPE, when (source.extension.lowercase()) {
-                    "zip" -> "application/zip"
-                    "apk" -> "application/vnd.android.package-archive"
-                    "pdf" -> "application/pdf"
-                    "epub" -> "application/epub+zip"
-                    "mp4" -> "video/mp4"
-                    "webm" -> "video/webm"
-                    "mkv" -> "video/x-matroska"
-                    else -> "application/octet-stream"
-                })
-                put(MediaStore.Downloads.RELATIVE_PATH, targetDir)
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: error("Cannot publish ${source.name}")
-            try {
-                contentResolver.openOutputStream(uri, "w")!!.use { output ->
-                    source.inputStream().use { input -> input.copyTo(output, 131072) }
-                }
-                val published=contentResolver.update(uri, ContentValues().apply {
-                    put(MediaStore.Downloads.IS_PENDING, 0)
-                }, null, null)
-                check(published==1){
-                    "Downloaded torrent file was written but not published to Downloads"
-                }
-            } catch (e: Throwable) {
-                contentResolver.delete(uri, null, null)
-                throw e
-            }
-            copied++
-            update(id, "Exported $copied/${selected.size}: ${source.name}", 100)
+            val review=TorrentQuarantineGate.preliminaryReview(source,path)
+            findings+=path+" | "+review
+            checked++
+            update(id,"Private quarantine · reviewed $checked/${selected.size}",100)
         }
-        update(id, "COMPLETED · $copied verified files in Downloads", 100)
-        // Public files are now independently accessible; avoid retaining a duplicate multi-GB cache.
-        destination.deleteRecursively()
-        descriptor.delete()
-        File(File(filesDir,"torrent-jobs"),"$id.manifest.json").delete()
+        val report=File(File(filesDir,"torrent-jobs"),"$id.security-review.txt")
+        val temp=File(report.parentFile,"$id.security-review.tmp")
+        temp.writeText("UNTRUSTED - NOT CLEARED FOR RELEASE\\n"+
+            "BitTorrent verification only; no certified malware scan completed.\\n"+
+            findings.joinToString("\\n"))
+        check(temp.renameTo(report) || run{
+            report.delete();temp.renameTo(report)
+        }){"Cannot persist quarantine review"}
+        // Descriptor and original payloads are deliberately preserved. A
+        // future scanner must explicitly approve each selected file and
+        // record a verified result before any export is implemented.
+        update(id,"QUARANTINED · $checked files retained privately; malware scan required",100)
+
     }
 }
