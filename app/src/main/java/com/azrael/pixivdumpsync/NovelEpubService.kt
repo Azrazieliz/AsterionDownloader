@@ -219,6 +219,7 @@ object NovelEpubService {
                                      stop:()->Boolean):Discovery {
         val landing=page(context,url,url)
         val indexed=NovelEpubParser.chapters(landing,url)
+        val indexedByUrl=indexed.associateBy{it.url.trimEnd('/')}
         val first=indexed.minWithOrNull(compareBy<NovelChapter>{it.number}
             .thenBy{it.url})
             ?:error("FreeWebNovel chapter list has no numbered starting chapter")
@@ -274,7 +275,8 @@ object NovelEpubService {
             if(state.chapters.containsKey(next))
                 error("Reader chapter cursor loops before end of series")
             val page=page(context,next,url)
-            val chapter=NovelEpubParser.readerChapter(page,next)
+            val chapter=NovelEpubParser.readerChapter(
+                page,next,indexedByUrl[next.trimEnd('/')])
             val text=NovelEpubParser.chapterText(page)
             storeChapterText(chapter,text,directory)
             state.chapters[next]=chapter
@@ -310,12 +312,15 @@ object NovelEpubService {
         var current:String?=url
         var title="Novel"
         var visible=""
+        var minimumChapters=0
         while(current!=null && seen.size<500 && !stop()){
             if(!seen.add(current))break
             val doc=page(context,current,url)
             if(seen.size==1)title=doc.selectFirst("h1")?.text()?.take(180)
                 ?.takeIf{it.isNotBlank()}?:doc.title().take(180)
             val onPage=NovelEpubParser.chapters(doc,url)
+            minimumChapters=maxOf(minimumChapters,
+                NovelEpubParser.chapterCountHint(doc))
             if(seen.size==1){
                 visible=fingerprint(onPage)
                 // FreeWebNovel's first catalogue page may remain unchanged
@@ -381,6 +386,10 @@ object NovelEpubService {
         val chapters=found.values.sortedWith(compareBy<NovelChapter>{it.number}
             .thenBy{it.url})
         require(chapters.isNotEmpty()){"No accessible numbered chapters discovered"}
+        require(minimumChapters==0 || chapters.size>=minimumChapters){
+            "Incomplete provider chapter catalog: found ${chapters.size} of at least "+
+                minimumChapters+" listed chapters; EPUB withheld"
+        }
         return Discovery(title,chapters,visible,false)
     }
     private fun cacheDir(context:Context,url:String):File{
@@ -392,7 +401,7 @@ object NovelEpubService {
     /** Real count of completed chapter-cache records, never a guessed percentage. */
     fun cachedCount(context:Context,url:String):Int=
         cacheDir(context,url).listFiles()?.count{
-            it.isFile && it.name.endsWith(".json")
+            it.isFile && it.name.matches(Regex("[a-f0-9]{20}\\.json"))
         }?:0
 
     private fun chapterKey(url:String):String =
