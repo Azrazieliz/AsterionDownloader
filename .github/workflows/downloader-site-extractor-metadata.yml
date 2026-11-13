@@ -1,0 +1,28 @@
+name: Asterion Downloader exact-site yt-dlp metadata diagnostics
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - 'scripts/site_extractor_metadata.py'
+      - '.github/workflows/downloader-site-extractor-metadata.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-selected-player-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check --no-deps yt-dlp==2026.10.26
+      - name: Diagnose exact selected video pages without downloading
+        run: python scripts/site_extractor_metadata.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-source-extractor-diagnostics
+          if-no-files-found: warn
+          path: site-extractor-metadata.json
