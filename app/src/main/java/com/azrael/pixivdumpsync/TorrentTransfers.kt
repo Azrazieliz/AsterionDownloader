@@ -95,12 +95,22 @@ object TorrentTransfers {
         AlertDialog.Builder(a).setTitle("BitTorrent transfers")
             .setItems(labels){_,index->
                 val id=keys[index]
-                val controls=arrayOf("Pause transfer","Resume transfer","Show current status")
+                val controls=arrayOf("Pause transfer","Resume transfer",
+                    "Show current status","Quarantine security report")
                 AlertDialog.Builder(a).setTitle(labels[index])
                     .setItems(controls){_,which->
-                        if(which==2){
-                            AlertDialog.Builder(a).setTitle("Torrent "+id.take(8))
-                                .setMessage(status(a,id,prefs))
+                        if(which>=2){
+                            val details=if(which==3)runCatching{
+                                val report=File(statusDir(a),"$id.security-review.txt")
+                                if(report.isFile)report.readText().take(3500)
+                                else "No completed security review. All unverified "+
+                                    "torrent pieces remain in private storage."
+                            }.getOrDefault("Security review unavailable. Keep quarantined.")
+                                else status(a,id,prefs)
+                            AlertDialog.Builder(a).setTitle(
+                                if(which==3)"Quarantine: "+id.take(8)
+                                else "Torrent "+id.take(8))
+                                .setMessage(details)
                                 .setPositiveButton("Close",null).show()
                         }else{
                             a.startForegroundService(
