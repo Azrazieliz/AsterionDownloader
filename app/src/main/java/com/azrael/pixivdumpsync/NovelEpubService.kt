@@ -65,20 +65,23 @@ object NovelEpubService {
             }
             // Serialize requests for the same novel host across both EPUB
             // workers. A server's 429 Retry-After survives subsequent jobs.
-            NovelHttpPacing.beforeRequest(context,url)
-            val response=Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
-                .timeout(24000).maxBodySize(6_000_000)
-                .followRedirects(false).ignoreHttpErrors(true)
-                .apply{
-                    NetworkRoute.javaProxy(context,url)?.let{proxy(it)}
-                    SiteSession.cookie(url)?.let{header("Cookie",it)}
-                }
-                .execute()
-            if(response.statusCode()==429 ||
-                (response.statusCode()==503 && response.header("Retry-After")!=null)){
-                val until=NovelHttpPacing.recordRateLimit(
-                    context,url,response.header("Retry-After"))
-                throw NovelRateLimited(until)
+            val response=NovelHttpPacing.serializedRequest(context,url){
+                Jsoup.connect(url).userAgent(HttpClient.USER_AGENT)
+                    .timeout(24000).maxBodySize(6_000_000)
+                    .followRedirects(false).ignoreHttpErrors(true)
+                    .apply{
+                        NetworkRoute.javaProxy(context,url)?.let{proxy(it)}
+                        SiteSession.cookie(context,url)?.let{header("Cookie",it)}
+                    }
+                    .execute().also{received->
+                        if(received.statusCode()==429 ||
+                            (received.statusCode()==503 &&
+                                received.header("Retry-After")!=null)){
+                            val until=NovelHttpPacing.recordRateLimit(
+                                context,url,received.header("Retry-After"))
+                            throw NovelRateLimited(until)
+                        }
+                    }
             }
             if(response.statusCode() in 300..399){
                 val destination=response.header("Location")
