@@ -64,12 +64,16 @@ def evidence(name,label):
     urls=[{"tag":e["tag"],"host":host(e["src"]),
            "poster_host":host(e["poster"]),"ready":e.get("ready")}
            for e in values["players"]]
+    iframe_shapes=sorted(set(
+        re.sub(r'[A-Za-z0-9_-]{6,}', 'ID', urllib.parse.urlsplit(e["src"]).path)
+        for e in values["players"] if e["tag"]=="IFRAME" and e["src"]
+    ))[:8]
     out[name+" "+label]={"page_host":host(driver.current_url),
          "html_bytes":len(html.encode("utf-8")),"watch_links":values["watchLinks"],
          "cards":values["cards"],"player_elements":urls,
          "title":values["title"],"heading":values["heading"],
          "watch_paths":values["watchPaths"],"age_gate":values["ageGate"],
-         "controls":values["streamControls"]}
+         "controls":values["streamControls"],"iframe_shapes":iframe_shapes}
 try:
     for name,url in SITES.items():
         try:
@@ -157,4 +161,11 @@ finally:
 with open("real-browser-player-results.json","w",encoding="utf8") as file:
     json.dump(out,file,indent=2,ensure_ascii=False)
 for name,val in out.items():
-    print(name,json.dumps(val,ensure_ascii=False)[:450])
+    # Keep diagnostic video routes visible in CI logs, without exposing CDN
+    # tokens, actual media URLs, or scene identifiers.
+    short={k:val.get(k) for k in (
+        "title","heading","watch_paths","iframe_shapes","age_gate","controls")
+        if isinstance(val,dict) and k in val}
+    print(name,json.dumps(short,ensure_ascii=False)[:1400])
+    if name=="observed_real_media_responses":
+        print("LIVE_MEDIA",json.dumps(val,ensure_ascii=False)[:450])
