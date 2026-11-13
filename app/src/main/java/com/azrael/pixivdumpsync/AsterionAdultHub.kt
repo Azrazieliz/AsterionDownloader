@@ -323,7 +323,7 @@ object AsterionAdultHub {
                             }
                             if(submitted)VideoEngine.launch(a,false)
                             Toast.makeText(a,if(submitted)
-                                "Original queued · "+indexItem.title.take(45)
+                                "Selected video queued for verification · "+indexItem.title.take(45)
                                 else "Already in Downloads · "+indexItem.title.take(45),
                                 Toast.LENGTH_SHORT).show()
                         }else SourceIndexPanel.details(a,indexItem)
@@ -335,7 +335,7 @@ object AsterionAdultHub {
                             }
                             if(created)VideoEngine.launch(a,false)
                             Toast.makeText(a,
-                                if(created)"Original queued · "+hit.title.take(45)
+                                if(created)"Selected video queued for verification · "+hit.title.take(45)
                                 else "Already in Downloads · "+hit.title.take(45),
                                 Toast.LENGTH_SHORT).show()
                         }else if(public.any{it.url==tile.url}){
@@ -349,7 +349,7 @@ object AsterionAdultHub {
                                 }
                                 if(created)VideoEngine.launch(a,false)
                                 Toast.makeText(a,
-                                    if(created)"Original queued · "+tile.title.take(45)
+                                    if(created)"Selected video queued for verification · "+tile.title.take(45)
                                     else "Already in Downloads · "+tile.title.take(45),
                                     Toast.LENGTH_SHORT).show()
                             }else{
@@ -484,8 +484,10 @@ object AsterionAdultHub {
                     // challenge; never present it as mandatory account login.
                     card.addView(ui.action(a,
                         if(loginRequired)"CONNECT ACCOUNT" else "OPEN SITE",false){
-                        a.startActivity(Intent(a,SiteLoginActivity::class.java)
-                            .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                        if(loginRequired)
+                            a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                                .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                        else a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(site.url)))
                     },ui.lp(a,5))
                 }
             }

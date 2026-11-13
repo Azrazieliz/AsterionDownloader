@@ -42,6 +42,20 @@ internal object ApprovedCosplayActions {
                 ?:error("Approved Cosplay source could not be enrolled")
         }
     }
+    /** An indexed gallery page needs GalleryFlow's selected-album parser.
+     * Direct file links still belong to the original-file transfer engine.
+     * This distinction is independent of whether the source was previously
+     * enrolled or whether a thumbnail was successfully loaded.
+     */
+    internal fun isGalleryPage(address:String):Boolean {
+        if(!SourceIndexParser.safe(address))return false
+        val path=runCatching{URI(address).path.orEmpty().trim('/')}
+            .getOrDefault("")
+        if(path.isBlank())return false
+        return !Regex("""(?i)\.(?:jpe?g|png|webp|avif|gif|mp4|webm|mkv|zip|rar|7z)(?:[?#]|$)""")
+            .containsMatchIn(address)
+    }
+
     fun backfill(a:Activity,address:String):String {
         if(!AppPower.enabled(a))return "Resume downloads first"
         val enrolled=source(a.applicationContext,address)
