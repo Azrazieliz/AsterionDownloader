@@ -69,22 +69,22 @@ object CrashDiagnostics {
                     }
                 }.getOrNull().orEmpty()
                 "Android recorded: "+type+
-                    "\\nTimestamp: "+java.util.Date(item.timestamp)+
-                    "\\nProcess: "+item.processName+
-                    "\\nDescription: "+item.description.orEmpty().take(500)+
-                    if(trace.isNotBlank())"\\nAndroid trace:\\n"+trace else ""
+                    "\nTimestamp: "+java.util.Date(item.timestamp)+
+                    "\nProcess: "+item.processName+
+                    "\nDescription: "+item.description.orEmpty().take(500)+
+                    (if(trace.isNotBlank())"\nAndroid trace:\n"+trace else "")
             }
         }.getOrNull() else null
         if(local.isNullOrBlank())return os
         if(os.isNullOrBlank())return local
         // Preserve both sources; a native crash or system ANR can happen
         // after an unrelated old Java stack trace.
-        return os+"\\n\\nPrevious Java exception record:\\n"+local
+        return os+"\n\nPrevious Java exception record:\n"+local
     }
     fun safeForClipboard(context:Context):String?=
         lastReport(context)?.replace(
-            Regex("""(?i)https?://[^\\s'\\"<>]+"""),"[URL redacted]")
+            Regex("""(?i)https?://[^\s'\\"<>]+"""),"[URL redacted]")
             ?.replace(Regex(
-                """(?i)(?:cookie|authorization|token|password|signature)\\s*[:=]\\s*[^\\s;,]+"""),
+                """(?i)(?:cookie|authorization|token|password|signature)\s*[:=]\s*[^\s;,]+"""),
                 "[credential redacted]")?.take(48_000)
 }
