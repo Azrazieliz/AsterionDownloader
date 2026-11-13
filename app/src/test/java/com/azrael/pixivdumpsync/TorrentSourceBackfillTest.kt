@@ -5,6 +5,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TorrentSourceBackfillTest {
+    @Test fun onejav403DoesNotTriggerRapidAutomaticRetry(){
+        val now=1_700_000_000_000L
+        assertFalse(TorrentSourceBackfill.autoRetryAllowed("ONEJAV",
+            now-1_000L,"Torrent listing HTTP 403",now))
+        assertFalse(TorrentSourceBackfill.autoRetryAllowed("ONEJAV",
+            now-60_000L,"Source access blocked",now))
+        assertTrue(TorrentSourceBackfill.autoRetryAllowed("ONEJAV",
+            now-6L*60L*60_000L,"Torrent listing HTTP 403",now))
+        assertTrue(TorrentSourceBackfill.autoRetryAllowed("SUKEBEI",
+            now-1_000L,"Torrent listing HTTP 403",now))
+        assertTrue(TorrentSourceBackfill.autoRetryAllowed("ONEJAV",
+            now-1_000L,null,now))
+    }
     @Test fun onejavIndexesTorrentDetailsNotSiteNavigation(){
         val home=TorrentFeedParser.onejav
         val doc=Jsoup.parse("""<main>
