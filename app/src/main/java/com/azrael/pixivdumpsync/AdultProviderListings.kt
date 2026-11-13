@@ -84,8 +84,11 @@ internal object AdultProviderListings {
             if(name.isBlank())continue
             val parent=link.closest("article,.post,.video-item,.video-card,.video-block,.thumb,.item,.card")
             val image=link.selectFirst("img")?:parent?.selectFirst("img")
+            val publisherPoster=(link.selectFirst("video[poster]")
+                ?:parent?.selectFirst("video[poster]"))
+                ?.absUrl("poster")?.takeIf{SearchRanking.validUrl(it)}
             val cover=image?.let{SitePreviewImage.best(it)}
-                ?.takeIf{SearchRanking.validUrl(it)}
+                ?.takeIf{SearchRanking.validUrl(it)}?:publisherPoster
             val current=found[url]
             if(current==null || (current.preview.isNullOrBlank() && cover!=null)){
                 found[url]=IndexedItem(url,name,cover,source,area,"video",time,false)
