@@ -18,6 +18,10 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install --disable-pip-version-check --no-deps yt-dlp==2026.10.26
+      - name: Install local media container verifier
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
       - name: Full selected-original HTTP transfer and local ffprobe verification
         run: |
           command -v ffprobe
