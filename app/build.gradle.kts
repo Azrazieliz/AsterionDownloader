@@ -122,6 +122,10 @@ android {
             applicationIdSuffix = ".acceptance"
             versionNameSuffix = "-acceptance"
             isDebuggable = true
+            // Stable Windows-owned signer allows REAL in-place updates.
+            // CI's per-run debug key must never be published for this package.
+            signingConfig = if (hasStablePreviewKey)
+                signingConfigs.getByName("stablePreviewKey") else null
             matchingFallbacks += listOf("debug")
         }
         release {
