@@ -211,8 +211,10 @@ def main():
                             referer=TARGETS["Jav Guru detail"])
             meta, body = fetched if isinstance(fetched, tuple) else (fetched, b"")
             checks[source] = dict(http=meta.get("http", 0),
-                bytes=len(body), valid_image_signature=body.startswith(
-                    (b"\\xff\\xd8\\xff", b"\\x89PNG", b"RIFF")))
+                mime=meta.get("mime", ""), content_range=meta.get("content_range", ""),
+                first_bytes_hex=body[:12].hex(), bytes=len(body),
+                valid_image_signature=body.startswith(
+                    (b"\xff\xd8\xff", b"\x89PNG", b"RIFF")))
         report["Jav Guru " + kind + " image fallback"] = checks
 
     # Download a genuine Kiutaku publisher photo from its real image host
