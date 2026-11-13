@@ -951,9 +951,14 @@ object VideoEngine {
             val access=listOfNotNull(renderedPlayerFailure,discoveryFailure)
                 .firstOrNull{failure->
                     val message=failure.message.orEmpty()
+                    // Preserve real HTTP 404/410 and rate limits from the
+                    // SELECTED publisher page. Previously a later generic
+                    // yt-dlp No video formats obscured the actual source 404.
                     message.contains("short preview clips",true) ||
-                        VideoFailurePolicy.classify(message)==
-                            VideoFailurePolicy.Kind.AUTH
+                        VideoFailurePolicy.classify(message) in setOf(
+                            VideoFailurePolicy.Kind.AUTH,
+                            VideoFailurePolicy.Kind.GONE,
+                            VideoFailurePolicy.Kind.RATE_LIMIT)
                 }
             // Never hide a genuine server 403/429 or Python runtime crash.
             // Only replace an unrecognized-URL extractor error with concrete,
