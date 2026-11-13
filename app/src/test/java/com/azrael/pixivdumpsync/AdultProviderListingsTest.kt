@@ -39,6 +39,24 @@ class AdultProviderListingsTest {
             "https://archivebate.com/"),"https://archivebate.com/","ADULT",1L)
         assertTrue(result.isEmpty())
     }
+    @Test fun actualArchivebatePostContinueLinksNeedNoArticleOrText(){
+        // Actual public Chrome observation on 2026-11-13 yielded real
+        // numeric watch links without any article/video-card wrappers.
+        val html=(16458050 downTo 16458015).joinToString(""){
+            "<a href=\"/watch/"+it+"\"><div class=\"thumb\">"+
+                "<video poster=\"https://cdn.freefile.io/poster.jpg\"></video>"+
+            "</div></a>"
+        }
+        val entries=AdultProviderListings.entries(
+            Jsoup.parse(html,"https://archivebate.com/"),
+            "https://archivebate.com/","ADULT",System.currentTimeMillis())
+        assertEquals(36,entries.size)
+        assertEquals("Archivebate recording #16458050",entries.first().title)
+        assertEquals("https://archivebate.com/watch/16458050",
+            entries.first().url)
+        assertEquals("video",entries.first().kind)
+    }
+
     @Test fun archivebateAdmitsOnlyActualFirstPartyWatchPages(){
         val html="""<article><h3><a href="/watch/12345">Published recording</a></h3>
           <img src="https://archivebate.com/cover.jpg"></article>
