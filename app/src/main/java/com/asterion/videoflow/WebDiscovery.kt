@@ -123,7 +123,10 @@ object WebDiscovery {
         }catch(error:Exception){
             // Retry as an authenticated WebView only after the user connected
             // this exact site. Do not bypass access controls on public sources.
-            if(context==null || !SiteSession.bound(context,address))throw error
+            if(context==null || (
+                !SiteSession.bound(context,address) &&
+                !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(address)))
+                throw error
             val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(context,address)
             Jsoup.parse(html,address)
         }
