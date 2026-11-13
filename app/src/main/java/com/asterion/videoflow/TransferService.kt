@@ -717,13 +717,17 @@ object VideoEngine {
         // For Eporner use the verified publisher's own embed first. Never
         // silently bypass an age/login requirement or send cookies cross-site.
         // Other providers retain existing canonical-URL behavior.
-        val variants=(EpornerOriginalSource.videoCandidates(item.url,connected)+
-            // UncensoredHentai's watch pages use an authorized native iframe
-            // player. yt-dlp cannot extract the WordPress watch page itself.
-            // Resolve only a page-owned, explicitly supported player embed.
-            (if(viaProxy)emptyList() else runCatching{
+        // Always attempt the explicitly selected source page with the original
+        // standalone extractor. Previously only discovered iframe candidates
+        // were attempted: a valid video page with no detectable iframe could
+        // never download, even when yt-dlp supported its page directly.
+        val variants=VideoCandidatePlan.ordered(item.url,
+            EpornerOriginalSource.videoCandidates(item.url,connected),
+            // Provider-owned iframe/media links remain alternatives; discovery
+            // must not replace the actual item the user selected.
+            if(viaProxy)emptyList() else runCatching{
                 WebDiscovery.embeddedCandidates(item.url,context)
-            }.getOrDefault(emptyList()))).distinct()
+            }.getOrDefault(emptyList()))
         val watchPorn=if(viaProxy)null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
@@ -803,7 +807,22 @@ object VideoEngine {
                                 break
                             }catch(t:Exception){last=t}
                         }else heldReason=verified.reason
-                    }else last=checked.exceptionOrNull()
+                    }else{
+                        last=checked.exceptionOrNull()
+                        // A metadata parser can reject an otherwise playable
+                        // page. Explicitly selected downloads get a real transfer
+                        // attempt through the original engine, with final byte,
+                        // container and MediaStore verification unchanged.
+                        // Automatic discovery still requires its existing policy.
+                        if(userRequested &&
+                            !FullLengthVideoPolicy.isExplicitPreview(item.title,candidate)){
+                            try{
+                                execute(candidate)
+                                downloaded=true
+                                break
+                            }catch(t:Exception){last=t}
+                        }
+                    }
                 }
                 val media=if(viaProxy)null else runCatching{
                     WebDiscovery.directMedia(candidate,context)
@@ -827,7 +846,17 @@ object VideoEngine {
                                     break
                                 }catch(t:Exception){last=t}
                             }else heldReason=verified.reason
-                        }else last=checked.exceptionOrNull()
+                        }else{
+                            last=checked.exceptionOrNull()
+                            if(userRequested &&
+                                !FullLengthVideoPolicy.isExplicitPreview(item.title,media)){
+                                try{
+                                    execute(media,candidate)
+                                    downloaded=true
+                                    break
+                                }catch(t:Exception){last=t}
+                            }
+                        }
                     }
                 }
             }

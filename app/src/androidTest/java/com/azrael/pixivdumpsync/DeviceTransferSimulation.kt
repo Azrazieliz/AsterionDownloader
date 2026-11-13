@@ -28,8 +28,10 @@ class DeviceTransferSimulation:Instrumentation() {
         })
     }
     override fun onStart(){
+        Log.i("ASTERION_SIM","AST_SIM: INSTRUMENTATION_ON_START")
         super.onStart()
         thread(name="android-real-downloader-simulation") {
+            Log.i("ASTERION_SIM","AST_SIM: WORKER_STARTED")
             val context=targetContext
             val root=File(context.cacheDir,"actual-download-simulation")
             root.mkdirs()
@@ -61,13 +63,16 @@ class DeviceTransferSimulation:Instrumentation() {
             val url="http://127.0.0.1:"+server.localPort+"/genuine-original.mp4"
             try {
                 status("BEGIN "+context.packageName)
+                Log.i("ASTERION_SIM","AST_SIM: SERVER_LISTENING "+server.localPort)
                 val native=File(root,"native").apply{mkdirs()}
+                Log.i("ASTERION_SIM","AST_SIM: NATIVE_BEGIN")
                 val completed=NativeMediaDownloader.download(url,null,native)
                 check(completed.readBytes().contentEquals(payload)){
                     "Native Android transfer produced corrupted bytes"
                 }
                 status("NATIVE_OK "+completed.length()+" bytes / exact SHA-equivalent")
                 val embedded=File(root,"chaquopy").apply{mkdirs()}
+                Log.i("ASTERION_SIM","AST_SIM: PYTHON_BEGIN")
                 LegacyYtDlpTransfer.initialize(context)
                 EmbeddedYtDlpMetadata.checkRuntime()
                 status("PYTHON_RUNTIME_OK")
