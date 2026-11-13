@@ -68,7 +68,7 @@ def fetch(url, *, limit=MAX_PAGE, range_header=None, referer=None):
         headers["Referer"] = referer
     # Publisher media paths legitimately contain Unicode names (Kiutaku/Mitaku).
     # urllib's HTTP request target must be ASCII percent-encoded.
-    request_url = urllib.parse.quote(url, safe=":/?#[]@!    req = urllib.request.Request(url, headers=headers)'()*+,;=%")
+    request_url = urllib.parse.quote(url, safe=":/?#[]@!    request_url = urllib.parse.quote(url, safe=":/?#[]@!    req = urllib.request.Request(url, headers=headers)'()*+,;=%")'()*+,;=%")
     req = urllib.request.Request(request_url, headers=headers)
     started = time.monotonic()
     try:
