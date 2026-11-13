@@ -99,6 +99,9 @@ def examine(name,url):
                             "content_range":bool(response.headers.get("Content-Range")),
                             "mp4_magic":len(fragment)>=12 and fragment[4:8]==b"ftyp",
                             "source_host":urllib.parse.urlsplit(href).hostname,
+                            "media_path_extension":urllib.parse.urlsplit(href).path.rsplit(".",1)[-1].lower()
+                              if "." in urllib.parse.urlsplit(href).path.rsplit("/",1)[-1] else "",
+                            "media_link_has_query":bool(urllib.parse.urlsplit(href).query),
                             "retained_media_bytes":0}
                 except Exception as exc:
                     result["media_range"]={
