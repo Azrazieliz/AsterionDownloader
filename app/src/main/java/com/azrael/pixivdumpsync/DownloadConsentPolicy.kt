@@ -8,7 +8,8 @@ package com.azrael.pixivdumpsync
 object DownloadConsentPolicy {
     private val selectedOnly=setOf(
         "BOOKS","COMICS","GAMES","ASSETS","MODS","VOICE",
-        "STUDIO","MMD","LIVE2D","ANIMATION"
+        "STUDIO","MMD","LIVE2D","ANIMATION",
+        "VIDEOS","ADULT","HENTAI","CREATORS"
     )
     fun automaticAllowed(area:String,sourceExplicitlyEnabled:Boolean):Boolean =
         sourceExplicitlyEnabled && area !in selectedOnly
