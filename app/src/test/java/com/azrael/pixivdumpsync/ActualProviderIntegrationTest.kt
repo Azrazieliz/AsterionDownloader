@@ -20,12 +20,40 @@ class ActualProviderIntegrationTest {
         assumeTrue("Live HTTP checks run only in the dedicated provider job",
             System.getenv("ASTERION_LIVE_PROVIDERS")=="1")
     }
-    private fun page(address:String,referer:String?=null)=
-        Jsoup.connect(address).timeout(20_000).maxBodySize(3_000_000)
-            .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) "+
-                "AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
-            .apply{if(referer!=null)referrer(referer)}
-            .get()
+    private fun page(address:String,referer:String?=null):org.jsoup.nodes.Document {
+        return try{
+            Jsoup.connect(address).timeout(20_000).maxBodySize(3_000_000)
+                .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) "+
+                    "AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36")
+                .apply{if(referer!=null)referrer(referer)}
+                .get()
+        }catch(blocked:org.jsoup.HttpStatusException){
+            if(blocked.statusCode!=403 ||
+                !address.startsWith("https://freewebnovel.com/"))throw blocked
+            // The actual Java HTTP client gets 403 for public novel pages
+            // which ordinary browser-compatible HTTP retrieves with 200.
+            // Feed those REAL remote HTML bytes into the APP's Kotlin EPUB
+            // parser/writer; production uses BrowserPageFetch instead.
+            println("LIVE_EPUB_JAVA_403_BROWSER_CLIENT_FALLBACK")
+            val code="""
+import sys,urllib.request
+headers={'User-Agent':'Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36',
+         'Accept-Language':'en-US,en;q=0.9','Accept-Encoding':'identity','Accept':'*/*'}
+if len(sys.argv)>2 and sys.argv[2]:headers['Referer']=sys.argv[2]
+response=urllib.request.urlopen(urllib.request.Request(sys.argv[1],headers=headers),timeout=18)
+if response.status!=200:raise RuntimeError('real provider HTTP '+str(response.status))
+sys.stdout.buffer.write(response.read(3000000))
+""".trimIndent()
+            val process=ProcessBuilder(
+                "python3","-c",code,address,referer.orEmpty()).start()
+            val downloaded=process.inputStream.readNBytes(3_000_000)
+            val exited=process.waitFor(25,java.util.concurrent.TimeUnit.SECONDS)
+            require(exited && process.exitValue()==0 && downloaded.size>1500){
+                "Public novel browser-compatible HTTP fallback failed"
+            }
+            Jsoup.parse(String(downloaded,Charsets.UTF_8),address)
+        }
+    }
 
     @Test fun actualFreeWebNovelChaptersBeyondTwelveProduceCompleteEpub(){
         enabled()
