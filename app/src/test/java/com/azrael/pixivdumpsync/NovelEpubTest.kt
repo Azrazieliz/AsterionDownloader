@@ -108,6 +108,23 @@ class NovelEpubTest {
         assertEquals(sourceUrl+"/chapter-2",
             NovelEpubParser.nextReader(document,sourceUrl,chapterUrl))
     }
+    @Test fun providerWithoutVisibleChapterNumberUsesExactVerifiedIndexEntryOnly(){
+        val address=source+"/chapter-1596"
+        val page=Jsoup.parse("""<html><head><title>Book title</title></head>
+            <body><h1>Book title</h1><div id="article">
+            <p>Complete genuine chapter content from this reader page with
+            sufficient words to satisfy the content extractor.</p>
+            </div></body></html>""",address)
+        val indexed=NovelChapter(1314.0,"Chapter 1314: Verified display title",address)
+        assertEquals(1314.0,NovelEpubParser.readerChapter(page,address,indexed).number,0.0)
+        assertThrows(IllegalStateException::class.java){
+            NovelEpubParser.readerChapter(page,address, indexed.copy(url=source+"/chapter-5"))
+        }
+        assertThrows(IllegalStateException::class.java){
+            NovelEpubParser.readerChapter(page,address)
+        }
+    }
+
     @Test fun freeWebNovelUsesDisplayedNumberNotOpaqueUrlIdInMetadata(){
         val url="https://freewebnovel.com/novel/example/chapter-1596"
         val page=Jsoup.parse("""<html><head><title>Book - Chapter 1314: Agreement | Free Web Novel</title>
