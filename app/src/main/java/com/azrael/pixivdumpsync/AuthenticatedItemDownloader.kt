@@ -6,6 +6,7 @@ import android.content.Intent
 import android.widget.Toast
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
+import com.asterion.videoflow.VideoSiteProfiles
 import com.azrael.galleryflow.SiteLoginActivity
 import com.azrael.galleryflow.SiteSession
 import org.json.JSONObject
@@ -15,7 +16,29 @@ object AuthenticatedItemDownloader {
     private const val PREF="asterion_access_retry"
     private const val PENDING="pending_item"
     private fun preferences(a:Activity)=a.getSharedPreferences(PREF,Activity.MODE_PRIVATE)
+    /** A selected publisher watch page is NOT itself a direct video file.
+     * The generic image/archive resolver previously looked for static <a
+     * download> and emitted "No verified original" before VideoFlow was
+     * reached. Only actual approved, explicit video-page records use this
+     * source-specific download engine; cards/listings remain excluded.
+     */
+    internal fun usesVideoEngine(item:IndexedItem):Boolean =
+        item.kind.equals("video",true) &&
+        item.area.uppercase() in setOf("ADULT","HENTAI","VIDEOS") &&
+        SourceIndexParser.safe(item.url) &&
+        VideoSiteProfiles.isVideoPage(item.url)
+
     fun download(a:Activity,item:IndexedItem){
+        if(usesVideoEngine(item)){
+            val wasNew=VideoDb(a).use{
+                it.addVideo(item.url,item.title,origin="user")
+            }
+            if(wasNew)VideoEngine.launch(a,false)
+            Toast.makeText(a,
+                if(wasNew)"Selected video queued for provider extraction"
+                else "Video already queued or saved",Toast.LENGTH_LONG).show()
+            return
+        }
         if(item.area=="COMICS" && NhentaiChapters.isGallery(item.url)){
             ChapterQueue(a).use{it.enqueue(item.url,item.title)}
             ChapterArchives.start(a)
