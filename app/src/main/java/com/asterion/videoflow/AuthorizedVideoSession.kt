@@ -15,7 +15,7 @@ internal object AuthorizedVideoSession {
         if(uri.scheme!="https")return null
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
         if(host.isBlank()||host.contains("\t")||host.contains("\n"))return null
-        val cookie=SiteSession.cookie(videoUrl).orEmpty()
+        val cookie=SiteSession.cookie(context,videoUrl).orEmpty()
         val rows=cookie.split(';').mapNotNull { part->
             val token=part.trim()
             val eq=token.indexOf('=')
