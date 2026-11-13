@@ -54,9 +54,10 @@ object AuthenticatedItemDownloader {
                 }.onFailure{error->
                     val message=error.message.orEmpty()
                     val failure=error as? OriginalAccessException
-                    val requiresLogin=failure?.reason==OriginalAccessCause.SIGN_IN ||
-                        (failure?.reason==OriginalAccessCause.NO_ORIGINAL &&
-                            !SiteSession.bound(a,item.source))
+                    // A public gallery without a direct-file link is a
+                    // parser gap, not proof the user needs an account.
+                    // Only an explicit authentication response may prompt login.
+                    val requiresLogin=failure?.reason==OriginalAccessCause.SIGN_IN
                     val restricted=failure?.reason==OriginalAccessCause.ENTITLEMENT
                     if((requiresLogin || restricted) && SourceIndexParser.safe(item.source)){
                         val data=JSONObject().apply{
@@ -89,7 +90,7 @@ object AuthenticatedItemDownloader {
                             OriginalAccessCause.NOT_FOUND->
                                 "Original no longer exists on the provider."
                             OriginalAccessCause.NO_ORIGINAL->
-                                "No original download is exposed by this account."
+                                "No verified original found on this page; provider adapter needs a gallery/original parser."
                             else->"Original unavailable: "+message.take(180)
                         }
                         Toast.makeText(a,summary,Toast.LENGTH_LONG).show()
