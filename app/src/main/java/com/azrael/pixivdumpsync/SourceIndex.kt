@@ -1243,12 +1243,9 @@ object SourceIndex {
                         // Automated catalog discovery must NEVER claim the
                         // user individually selected this original. Preserve
                         // the full-length provenance policy for backfills.
-                        VideoDb(context).use{videos->
-                            if(videos.addVideo(item.url,item.title,origin="website")){
-                                enqueued++
-                                acceptedVideoPage=true
-                            }else acceptedVideoPage=videos.hasVideo(item.url)
-                        }
+                        // Recognize a real video page without turning
+                        // a provider BACKFILL into a bulk-download command.
+                        acceptedVideoPage=true
                     }
                     SourceIndexDb(context).use{db->
                         for(file in originals){
@@ -1457,16 +1454,9 @@ object SourceIndex {
                                  onDirectEnqueued:(Long)->Unit={}):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
         if(item.kind=="video"){
-            // A website indexing original is not an explicit manual selection.
-            val queued=VideoDb(context).use{
-                it.addVideo(item.url,item.title,origin="website")
-            }
-            if(queued)VideoEngine.launch(context,false)
-            // Existing downloads, including strict full-length holds, are owned by
-            // VideoFlow and must not be enqueued repeatedly by the source scanner.
-            return queued || VideoDb(context).use{
-                it.stateForUrl(item.url) in setOf("queued","running","retry_wait","done")
-            }
+            // No automatic video transfers. Explicit user-tapped video cards
+            // are queued by their own UI action, not by catalog traversal.
+            return false
         }
         if(!SourceIndexParser.autoOriginal(item))return false
         if(item.area=="COMICS" && (NhentaiChapters.isGallery(item.url) ||
