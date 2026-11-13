@@ -459,19 +459,13 @@ object VideoEngine {
         // Native yt-dlp may run in a read-only working directory on Android.
         // Force every output and .part file into a writable private staging area.
         val previous=File(context.cacheDir,"videoflow-staging/${item.id}")
-        // Restore the original standalone VideoFlow's persistent staging
-        // location. Android may evict cacheDir while the app is in the
-        // background; partially downloaded originals are durable work.
-        // Preserve and resume any partial bytes from the previous cache
-        // directory rather than abandoning them during the upgrade.
         val storage=context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
             ?:context.filesDir
         val durable=File(storage,"videoflow-staging/${item.id}")
-        val previousHasBytes=previous.isDirectory &&
-            (previous.listFiles()?.any{it.isFile && it.length()>0L}==true)
-        val parent=if(previousHasBytes)previous else durable
-        if(!parent.isDirectory && !parent.mkdirs())
-            throw java.io.IOException("Cannot create private download staging directory")
+        // Android may delete cacheDir between job attempts. Keep the old
+        // partials, but copy them into persistent storage before resuming.
+        // Never continue streaming into the evictable old cache directory.
+        val parent=VideoStaging.prepare(previous,durable)
         val probe=File.createTempFile(".write-probe",null,parent)
         check(probe.delete()){"Cannot clean up download staging probe"}
         val template=File(parent,"%(title).160s [%(id)s].%(ext)s").absolutePath
