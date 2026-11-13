@@ -70,8 +70,12 @@ object BrowserPageFetch {
                                     // native provider-specific gallery selectors.
                                     const tile=el.closest('article,.post-card,.video-item,'+
                                         '.gallery-item,.post-item,.media-item,.card');
+                                    // Keep real publisher headings for provider-specific
+                                    // article selectors (including Jav Guru).
+                                    const heading=el.closest('h1,h2,h3,h4');
+                                    const item=heading?'<h2>'+link+'</h2>':link;
                                     return tile?'<article class="'+esc(tile.className||'')+
-                                        '">'+link+'</article>':link;
+                                        '">'+item+'</article>':item;
                                 }).join('');
                             const reader=document.querySelectorAll(
                                 '.reading-content img,.chapter-content img,#reader img,'+
@@ -86,6 +90,16 @@ object BrowserPageFetch {
                                 return '<img class="'+esc(el.className||'')+'" '+keys.map(k=>
                                     k+'="'+esc(el.getAttribute(k)||'')+'"').join(' ')+'/>';
                             }).join('');
+                            // Preserve only video URLs genuinely present in
+                            // the user's authenticated browser DOM.
+                            const players=[...document.querySelectorAll(
+                                'main video,article video,.video-player video,video source[src]')]
+                                .slice(0,120).map(el=>{
+                                    const video=el.tagName.toLowerCase()==='video'?el:el.closest('video');
+                                    const src=el.getAttribute('src')||'';
+                                    const poster=video?.getAttribute('poster')||'';
+                                    return '<video src="'+esc(src)+'" poster="'+esc(poster)+'"></video>';
+                                }).join('');
                             const chapter=document.querySelector(
                                 '#article,#chapter-content,.chapter-content,'+
                                 '#chapterContent,.reading-content,.read-content,'+
@@ -99,7 +113,8 @@ object BrowserPageFetch {
                             return '<html><head><title>'+esc(title)+
                                 '</title></head><body><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
-                                paragraphs+'</div><div id="reader">'+images+
+                                paragraphs+'</div><div class="video-player">'+players+
+                                '</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
