@@ -29,7 +29,10 @@ class SearchResultsDb(context:Context):
         var stored=0
         db.beginTransaction()
         try {
-            for(item in hits.take(300)){
+            // Persist every discovered match; truncation previously erased
+            // later providers and made valid performers appear unrecognized.
+            // SQLite transactions keep large result sets off the UI thread.
+            for(item in hits){
                 val q=query.trim()
                 val key=SearchRanking.canonicalKey(item.url)
                 val row=ContentValues().apply {
@@ -61,7 +64,7 @@ class SearchResultsDb(context:Context):
         val records=ArrayList<SavedSearchHit>()
         readableDatabase.rawQuery("""SELECT query,title,url,source,score,queued,checked_at,thumbnail
             FROM results WHERE query=? ORDER BY score DESC, checked_at DESC LIMIT ?""",
-            arrayOf(query.trim(),limit.coerceIn(1,300).toString())).use{c->
+            arrayOf(query.trim(),limit.coerceIn(1,5000).toString())).use{c->
             while(c.moveToNext())records.add(SavedSearchHit(
                 c.getString(0),c.getString(1),c.getString(2),c.getString(3),
                 c.getInt(4),c.getInt(5)==1,c.getLong(6),c.getString(7)))
@@ -72,7 +75,7 @@ class SearchResultsDb(context:Context):
         val records=ArrayList<SavedSearchHit>()
         readableDatabase.rawQuery("""SELECT query,title,url,source,score,queued,checked_at,thumbnail
             FROM results ORDER BY checked_at DESC,score DESC LIMIT ?""",
-            arrayOf(limit.coerceIn(1,300).toString())).use { c ->
+            arrayOf(limit.coerceIn(1,5000).toString())).use { c ->
             while(c.moveToNext())records.add(SavedSearchHit(
                 c.getString(0),c.getString(1),c.getString(2),c.getString(3),
                 c.getInt(4),c.getInt(5)==1,c.getLong(6),c.getString(7)))
