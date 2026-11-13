@@ -329,7 +329,14 @@ object TorrentSourceBackfill {
                     if(!seen.add(current))continue
                     try{
                         val doc=document(ctx,current)
-                        TorrentFeedParser.entries(doc,site).forEach(db::record)
+                        val entries=TorrentFeedParser.entries(doc,site)
+                        // HTTP 200 can still be a JS/age-gate shell.
+                        // Do not advance OneJAV's historical cursor or call
+                        // its nonexistent torrent list a completed scan.
+                        if(site=="ONEJAV" && current==home && entries.isEmpty())
+                            error("OneJAV returned no public torrent cards; "+
+                                "connect the website account or provider adapter needs repair")
+                        entries.forEach(db::record)
                         val next=TorrentFeedParser.next(doc,site,current)
                         db.checked(site,next)
                         if(next!=null && next !in seen)queue.addLast(next)
