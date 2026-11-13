@@ -181,8 +181,11 @@ def main():
             for raw in gallery.get("_anchors", [])
             if "mitaku.net" in absolute(TARGETS["Kiutaku gallery"], raw)), "")
     if candidate:
+        # Mitaku is the image publisher behind Kiutaku. The app's loader
+        # already sends this host's own Referer (not kiutaku.com).
+        # Confirm the actual CDN behavior using the same request headers.
         fetched = fetch(candidate,limit=4_000_000,
-            referer=TARGETS["Kiutaku gallery"])
+            referer="https://mitaku.net/")
         meta,data = fetched if isinstance(fetched,tuple) else (fetched,b"")
         image = data.startswith((b"\xff\xd8\xff",b"\x89PNG\r\n\x1a\n",
                                 b"RIFF",b"GIF87a",b"GIF89a"))
