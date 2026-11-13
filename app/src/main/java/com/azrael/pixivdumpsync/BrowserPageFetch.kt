@@ -159,6 +159,25 @@ object BrowserPageFetch {
                                     const poster=video?.getAttribute('poster')||'';
                                     return '<video src="'+esc(src)+'" poster="'+esc(poster)+'"></video>';
                                 }).join('');
+                            // Archivebate's selected /watch/ID page publishes
+                            // a real Mixdrop /e/ID iframe. Preserve only this
+                            // narrow publisher-authorized embed. Reject ads,
+                            // unrelated iframes, third-party listing embeds.
+                            const archivePage=location.hostname.replace(/^www\\./,'')===
+                                'archivebate.com' &&
+                                /^\\/watch\\/\\d{1,16}\\/?$/.test(location.pathname);
+                            const embeds=archivePage?[...document.querySelectorAll(
+                                'iframe[src]')].filter(el=>{
+                                    try{
+                                        const u=new URL(el.getAttribute('src'),location.href);
+                                        return u.protocol==='https:' &&
+                                            u.hostname.replace(/^www\\./,'')==='mixdrop.ag' &&
+                                            /^\\/e\\/[A-Za-z0-9_-]{5,64}\\/?$/.test(u.pathname);
+                                    }catch(_){return false;}
+                                }).slice(0,3).map(el=>
+                                    '<iframe src="'+esc(new URL(
+                                        el.getAttribute('src'),location.href).href)+
+                                    '" allowfullscreen></iframe>').join(''):'';
                             const chapter=document.querySelector(
                                 '#article,#chapter-content,.chapter-content,'+
                                 '#chapterContent,.reading-content,.read-content,'+
@@ -175,7 +194,7 @@ object BrowserPageFetch {
                                 '</h1><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+players+
-                                '</div><div id="reader">'+images+
+                                embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
