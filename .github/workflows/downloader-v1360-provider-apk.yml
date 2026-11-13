@@ -5,6 +5,10 @@ on:
     branches: [work/downloader-single-build-staging-20261112]
     paths:
       - '.github/workflows/downloader-v1360-provider-apk.yml'
+      - 'app/src/main/java/**'
+      - 'app/src/test/java/**'
+      - 'app/src/main/AndroidManifest.xml'
+      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
