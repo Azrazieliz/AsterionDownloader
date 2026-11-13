@@ -163,16 +163,16 @@ object BrowserPageFetch {
                             // a real Mixdrop /e/ID iframe. Preserve only this
                             // narrow publisher-authorized embed. Reject ads,
                             // unrelated iframes, third-party listing embeds.
-                            const archivePage=location.hostname.replace(/^www\\./,'')===
+                            const archivePage=location.hostname.replace(/^www\./,'')===
                                 'archivebate.com' &&
-                                /^\\/watch\\/\\d{1,16}\\/?$/.test(location.pathname);
+                                /^\/watch\/\d{1,16}\/?$/.test(location.pathname);
                             const embeds=archivePage?[...document.querySelectorAll(
                                 'iframe[src]')].filter(el=>{
                                     try{
                                         const u=new URL(el.getAttribute('src'),location.href);
                                         return u.protocol==='https:' &&
-                                            u.hostname.replace(/^www\\./,'')==='mixdrop.ag' &&
-                                            /^\\/e\\/[A-Za-z0-9_-]{5,64}\\/?$/.test(u.pathname);
+                                            u.hostname.replace(/^www\./,'')==='mixdrop.ag' &&
+                                            /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
                                     }catch(_){return false;}
                                 }).slice(0,3).map(el=>
                                     '<iframe src="'+esc(new URL(
