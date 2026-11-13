@@ -130,6 +130,47 @@ try:
             driver.get(url)
             time.sleep(3)
             evidence(name,"initial")
+            if name=="FreePornVideos Serena selected":
+                # No file retained: only a small HTTP byte range from the
+                # selected player, never preview tiles or advertising frames.
+                player=driver.execute_script("""
+                    const p=document.querySelector('main video,article video,'+
+                      '.video-player video,#player video,video');
+                    if(!p)return null;
+                    const value=p.currentSrc||p.src||
+                      p.querySelector('source[src]')?.src||'';
+                    const link=(()=>{try{return new URL(value)}catch(e){return null}})();
+                    if(!link || !/^https:$/.test(link.protocol))return null;
+                    return {src:link.href,
+                      duration:Number.isFinite(p.duration)?p.duration:null,
+                      ready:p.readyState};
+                """)
+                if player and player.get("src"):
+                    src=player["src"]
+                    req=urllib.request.Request(src,headers={
+                        "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile)",
+                        "Referer":driver.current_url,"Range":"bytes=0-32767"})
+                    try:
+                        with urllib.request.urlopen(req,timeout=12) as response:
+                            data=response.read(32768)
+                            out[name+" actual media range"]={
+                                "http":response.status,
+                                "mime":response.headers.get("Content-Type",""),
+                                "bytes":len(data),
+                                "duration_s":player.get("duration"),
+                                "mp4_header":len(data)>12 and data[4:8]==b"ftyp",
+                                "content_range":bool(response.headers.get("Content-Range")),
+                                "media_host":urllib.parse.urlsplit(src).hostname,
+                                "retained_media_bytes":0}
+                    except Exception as ex:
+                        out[name+" actual media range"]={
+                            "error":type(ex).__name__,
+                            "status":getattr(ex,"code",None),
+                            "retained_media_bytes":0}
+                else:
+                    out[name+" actual media range"]={
+                        "result":"No selected HTML5 media URL exposed",
+                        "retained_media_bytes":0}
             if name=="UncensoredHentai selected":
                 frames=driver.find_elements(By.CSS_SELECTOR,
                     "iframe[src*='nhplayer.com/v/']")
