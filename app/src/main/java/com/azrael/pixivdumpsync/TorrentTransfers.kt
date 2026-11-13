@@ -31,7 +31,9 @@ import kotlin.concurrent.thread
  * to public Downloads; in-progress pieces remain in app-private external storage.
  * Supports both magnet metadata retrieval and .torrent descriptors. */
 object TorrentTransfers {
-    private val engine = SessionManager()
+    // Never instantiate the native engine in the main Android process.
+    // Metadata and download calls are routed to :torrent via a service.
+    private val engine by lazy(LazyThreadSafetyMode.SYNCHRONIZED){SessionManager()}
     @Volatile private var running = false
     @Synchronized internal fun session(): SessionManager {
         if (!running) { engine.start(); running = true }
@@ -76,73 +78,10 @@ object TorrentTransfers {
             .setNegativeButton("Close", null).show()
     }
     fun prepareMagnet(a: Activity, magnet: String, folder: String) {
-        Toast.makeText(a, "Retrieving torrent file list from peers…", Toast.LENGTH_LONG).show()
-        thread(name = "asterion-magnet-metadata") {
-            val result = runCatching {
-                require(magnet.startsWith("magnet:?xt=urn:btih:", true) ||
-                    magnet.startsWith("magnet:?xt=urn:btmh:", true)) { "Invalid magnet info hash" }
-                session().fetchMagnet(magnet, 100, a.cacheDir)
-                    ?: error("No peers returned torrent metadata")
-            }
-            a.runOnUiThread {
-                result.onSuccess { prepareDescriptor(a, it, folder) }
-                    .onFailure {
-                        AlertDialog.Builder(a).setTitle("Magnet metadata unavailable")
-                            .setMessage(it.message ?: "Could not retrieve peer metadata")
-                            .setPositiveButton("Close", null).show()
-                    }
-            }
-        }
+        TorrentMetadataBridge.prepareMagnet(a,magnet,folder)
     }
     fun prepareDescriptor(a: Activity, bytes: ByteArray, folder: String) {
-        runCatching {
-            require(bytes.size in 33..8_388_608) { "Invalid torrent descriptor size" }
-            val info = TorrentInfo(bytes)
-            require(info.isValid() && info.numFiles() in 1..20000) { "Invalid torrent file list" }
-            val files = info.files()
-            if(folder=="Games")require(GameTorrentPolicy.hasGamePayload((0 until info.numFiles()).map{
-                files.filePath(it)
-            })){"This torrent contains no identifiable game files. Video-only torrents are not shown as Games."}
-            val options = Array(info.numFiles()) { i ->
-                val candidate=files.filePath(i)
-                val risk=TorrentContentRisk.reviewReason(candidate)
-                (if(risk!=null)"[REVIEW: $risk] " else "")+
-                    "$candidate  (${files.fileSize(i) / 1024} KiB)"
-            }
-            // A playable game may require DLL, data, assets and a launcher together.
-            // Default to the whole torrent; the user may deselect unrelated extras.
-            val selected = BooleanArray(info.numFiles()) { i ->
-                TorrentContentRisk.selectByDefault(folder,files.filePath(i))
-            }
-            AlertDialog.Builder(a).setTitle("Select files: " + info.name())
-                .setMultiChoiceItems(options, selected) { _, index, checked -> selected[index] = checked }
-                .setPositiveButton("DOWNLOAD SELECTED") { _, _ ->
-                    if (!selected.any { it }) {
-                        Toast.makeText(a, "Select at least one file", Toast.LENGTH_LONG).show()
-                    } else if(folder=="Books" && selected.indices.any{ i ->
-                        selected[i] && !files.fileName(i).endsWith(".epub",true)
-                    }) {
-                        Toast.makeText(a, "Books only supports EPUB files.", Toast.LENGTH_LONG).show()
-                    } else {
-                        val hash = MessageDigest.getInstance("SHA-256").digest(bytes)
-                            .take(12).joinToString("") { "%02x".format(it) }
-                        val descriptor = File(File(a.filesDir, "torrent-jobs").apply { mkdirs() }, "$hash.torrent")
-                        descriptor.writeBytes(bytes)
-                        val indices = selected.indices.filter { selected[it] }.joinToString(",")
-                        val intent = Intent(a, TorrentTransferService::class.java).apply {
-                            action = TorrentTransferService.ADD
-                            putExtra("job", hash)
-                            putExtra("folder", folder)
-                            putExtra("indices", indices)
-                        }
-                        a.startForegroundService(intent)
-                        Toast.makeText(a, "Starting native peer transfer", Toast.LENGTH_LONG).show()
-                    }
-                }.setNegativeButton("Cancel", null).show()
-        }.onFailure {
-            AlertDialog.Builder(a).setTitle("Invalid torrent")
-                .setMessage(it.message).setPositiveButton("Close", null).show()
-        }
+        TorrentMetadataBridge.prepareDescriptor(a,bytes,folder)
     }
 }
 
@@ -152,6 +91,8 @@ class TorrentTransferService : Service() {
         const val ADD = "asterion.torrent.ADD"
         const val PAUSE = "asterion.torrent.PAUSE"
         const val RESUME = "asterion.torrent.RESUME"
+        const val PREPARE_MAGNET = "asterion.torrent.PREPARE_MAGNET"
+        const val PREPARE_DESCRIPTOR = "asterion.torrent.PREPARE_DESCRIPTOR"
         private const val CHANNEL = "asterion_peer_transfers"
         private const val NOTIFICATION = 56823
         private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -162,6 +103,7 @@ class TorrentTransferService : Service() {
         private val stopRequests = ConcurrentHashMap.newKeySet<String>()
         private val workers = ConcurrentHashMap<String,Thread>()
     }
+    private val metadataWorkers=ConcurrentHashMap.newKeySet<Thread>()
     override fun onBind(intent: Intent?): IBinder? = null
     private fun notification(message: String, percent: Int = 0): Notification {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -212,6 +154,34 @@ class TorrentTransferService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if(intent?.action==PREPARE_MAGNET || intent?.action==PREPARE_DESCRIPTOR){
+            val action=intent.action.orEmpty()
+            val chosen=intent.getStringExtra("folder").orEmpty()
+            @Suppress("DEPRECATION")
+            val receiver=if(Build.VERSION.SDK_INT>=33)
+                intent.getParcelableExtra(TorrentMetadataBridge.RECEIVER,
+                    android.os.ResultReceiver::class.java)
+                else intent.getParcelableExtra<android.os.ResultReceiver>(
+                    TorrentMetadataBridge.RECEIVER)
+            val worker=thread(name="asterion-torrent-metadata"){
+                try{
+                    val hash=TorrentMetadataBridge.prepareInTorrentProcess(
+                        applicationContext,action,intent,chosen)
+                    receiver?.send(1,android.os.Bundle().apply{putString("job",hash)})
+                }catch(t:Throwable){
+                    receiver?.send(0,android.os.Bundle().apply{
+                        putString("error",t.message?:t.javaClass.simpleName)})
+                }finally{
+                    metadataWorkers.remove(Thread.currentThread())
+                    if(metadataWorkers.isEmpty() && inFlight.isEmpty()){
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
+            }
+            metadataWorkers.add(worker)
+            return START_NOT_STICKY
+        }
         val id=intent?.getStringExtra("job")
         if(id.isNullOrBlank()){
             stopSelfResult(startId)
@@ -258,6 +228,7 @@ class TorrentTransferService : Service() {
      */
     override fun onTimeout(startId:Int,fgsType:Int) {
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        metadataWorkers.toList().forEach{it.interrupt()}
         for(id in inFlight){
             stopRequests.add(id)
             paused.add(id)
@@ -269,6 +240,7 @@ class TorrentTransferService : Service() {
         stopSelf()
     }
     override fun onDestroy() {
+        metadataWorkers.toList().forEach{it.interrupt()}
         for(id in inFlight){
             stopRequests.add(id)
             workers[id]?.interrupt()
@@ -405,5 +377,6 @@ class TorrentTransferService : Service() {
         // Public files are now independently accessible; avoid retaining a duplicate multi-GB cache.
         destination.deleteRecursively()
         descriptor.delete()
+        File(File(filesDir,"torrent-jobs"),"$id.manifest.json").delete()
     }
 }
