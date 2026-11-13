@@ -72,6 +72,28 @@ object UnifiedDownloadsUi {
     }
     private fun collect(a:Activity):List<Row>{
         val rows=ArrayList<Row>()
+        // An Android native crash/ANR or OOM may never reach the application's
+        // Java uncaught handler. Surface the OS's real last-exit diagnostic
+        // instead of requiring another speculative APK.
+        CrashDiagnostics.safeForClipboard(a)?.let{report->
+            val prefs=a.getSharedPreferences("asterion_crash_reviewed",0)
+            val key=report.hashCode()
+            if(prefs.getInt("last_copied",Int.MIN_VALUE)!=key){
+                val title=report.lineSequence().firstOrNull()
+                    .orEmpty().take(160)
+                rows+=Row("Diagnostics","Previous Android process failure",
+                    title.ifBlank{"Android crash, ANR or memory exit was recorded"},
+                    State.HELD,null,System.currentTimeMillis(),{
+                    val clipboard=a.getSystemService(
+                        android.content.ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                        "Asterion Downloader crash report",report))
+                    prefs.edit().putInt("last_copied",key).apply()
+                    Toast.makeText(a,"Crash report copied; saved files unchanged",
+                        Toast.LENGTH_LONG).show()
+                },actionText="COPY CRASH REPORT")
+            }
+        }
         VideoRuntimeState.failure(a)?.let{failure->
             rows+=Row("Video engine","Video engine unavailable",
                 "Embedded Python startup failed · "+failure.take(160),
