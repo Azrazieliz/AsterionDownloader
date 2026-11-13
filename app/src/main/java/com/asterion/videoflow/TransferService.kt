@@ -758,6 +758,24 @@ object VideoEngine {
             if(!downloaded) for(candidate in variants.distinct()){
                 if(stopRequests.contains(item.id))
                     throw java.util.concurrent.CancellationException("Video paused")
+                if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,candidate)){
+                    // This selected /watch/<id> points to an actual Mixdrop
+                    // player. yt-dlp reports Unsupported URL for its /e/<id>.
+                    // Read the exact selected HTML5 player instead; never
+                    // take recommendation MP4s from the parent watch page.
+                    if(!userRequested){
+                        heldReason="Select the exact Archivebate recording before downloading"
+                        continue
+                    }
+                    try{
+                        val media=ArchivebateSelectedMedia.resolve(
+                            context,item.url,candidate)
+                        execute(media,candidate)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                    continue
+                }
                 val trusted=FullLengthVideoPolicy.knownFullReferenceHost(candidate)
                 val decision=if(trusted)FullLengthVideoPolicy.assess(
                     item.title,item.title,candidate,null,null,
@@ -860,7 +878,11 @@ object VideoEngine {
             }
             val size=context.contentResolver.openAssetFileDescriptor(uri,"r")?.use { it.length } ?: -1
             if(size>=0 && size!=file.length()) error("Copy verification failed")
-            context.contentResolver.update(uri,ContentValues().apply {put(MediaStore.Downloads.IS_PENDING,0)},null,null)
+            val published=context.contentResolver.update(uri,
+                ContentValues().apply{put(MediaStore.Downloads.IS_PENDING,0)},null,null)
+            check(published==1){
+                "Video bytes were received but Android Downloads publication failed"
+            }
             parent.listFiles()?.forEach { it.delete() }
             parent.delete()
             return uri.toString()
