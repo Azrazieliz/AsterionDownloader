@@ -75,6 +75,13 @@ object WebDiscovery {
                 }
                 current=target
             }else{
+                if(response.statusCode() in setOf(401,403) &&
+                    context!=null &&
+                    (SiteSession.bound(context,current) ||
+                        com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current))){
+                    val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(context,current)
+                    return org.jsoup.Jsoup.parse(html,current)
+                }
                 require(response.statusCode() in 200..299){
                     "Provider HTTP "+response.statusCode()+
                         if(response.statusCode() in setOf(401,403))
