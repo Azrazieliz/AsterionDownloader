@@ -82,22 +82,34 @@ object KyoraCreatorPreviews {
             ".video-card a:has(img),.thumb a:has(img),.thumbs a:has(img),"+
             ".video-thumb a:has(img),.clip a:has(img),.movie a:has(img),"+
             ".items a:has(img),.post-item a:has(img)")
-        val rich=doc.select("a:has(video[poster]),a:has([style*=background-image])")
+        val rich=doc.select("a:has(video[poster]),a:has([style*=background-image]),"+
+            "a[data-preview][href],a[data-poster][href],a[data-thumbnail][href]")
+        val provider=SiteControls.key(base)
+        // Rule34 video tiles can be lazy-rendered and keep their poster
+        // attribute on the card rather than as a nested <img>.
+        val directVideo=if(provider=="rule34video.com")
+            doc.select("a[href*='/video/'],a[href*='/videos/']") else emptyList()
         val anchors=if(sections.isEmpty())doc.select("a:has(img)") else sections
-        for(anchor in (anchors+rich).distinct().take(1500)){
+        for(anchor in (anchors+rich+directVideo).distinct().take(1500)){
             val page=anchor.absUrl("href")
             if(!SearchRanking.validUrl(page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
             if(target.scheme!="https" ||
                 !SourceIndexParser.sameSite(base,page))continue
-            val img=anchor.selectFirst("img")
+            val card=anchor.closest(
+                ".video-item,.video-card,.item,.thumb,.video-block,.card,.item-inner")
+            val img=anchor.selectFirst("img")?:card?.selectFirst("img")
             val video=anchor.selectFirst("video[poster],video[data-poster]")
+                ?:card?.selectFirst("video[poster],video[data-poster]")
             val poster=video?.let {
                 val raw=it.attr("poster").ifBlank{it.attr("data-poster")}
                 runCatching{URI(doc.location()).resolve(raw).toString()}.getOrNull()
                     ?.takeIf{url->SourceIndexParser.safe(url)}
             }
-            val background=anchor.selectFirst("[style*=background-image]")
+            val background=(anchor.selectFirst("[style*=background-image]")
+                ?:card?.selectFirst("[style*=background-image]")
+                ?:anchor.takeIf{it.attr("style").contains("background-image")}
+                ?:card?.takeIf{it.attr("style").contains("background-image")})
                 ?.attr("style")?.let{style->
                     Regex("""(?i)background-image\s*:\s*url\s*\(\s*['"]?([^)'"]+)""")
                         .find(style)?.groupValues?.getOrNull(1)
@@ -105,7 +117,9 @@ object KyoraCreatorPreviews {
                     runCatching{URI(doc.location()).resolve(raw).toString()}.getOrNull()
                         ?.takeIf{url->SourceIndexParser.safe(url)}
                 }
-            val cover=img?.let{SitePreviewImage.best(it)}?:poster?:background?:continue
+            val cover=img?.let{SitePreviewImage.best(it)}?:poster?:background
+                ?:SitePreviewImage.best(anchor)
+                ?:card?.let{SitePreviewImage.best(it)} ?:continue
             val imgPath=URI(cover).path.lowercase()
             if(listOf("logo","icon","avatar","sprite","banner","pixel","advert")
                 .any{imgPath.contains(it)})continue
