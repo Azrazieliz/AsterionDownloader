@@ -61,6 +61,15 @@ class VideoProviderRoutingTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://fr.xvideos.com/video.fake/"))
     }
+    @Test fun accessGatesAndPreviewOnlyPlayersAreNotGenericPythonErrors(){
+        assertEquals(VideoFailurePolicy.Kind.AUTH,VideoFailurePolicy.classify(
+            "Publisher only exposed short preview clips; full video authentication required"))
+        assertEquals(VideoFailurePolicy.Kind.AUTH,VideoFailurePolicy.classify(
+            "Provider browser verification required; connect an authorized account"))
+        assertTrue(SourceDiagnostics.summary(
+            "Video: Publisher only exposed short preview clips; authentication required"
+        ).contains("short previews"))
+    }
     @Test fun failureClassificationsPreserveHttpMeaning(){
         assertEquals(VideoFailurePolicy.Kind.AUTH,
             VideoFailurePolicy.classify("Provider HTTP 403; account unavailable"))

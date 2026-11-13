@@ -8,7 +8,7 @@ internal object VideoFailurePolicy {
     fun classify(reason:String):Kind {
         val text=reason.lowercase(Locale.ROOT)
         return when {
-            Regex("""(?:\b401\b|\b403\b|forbidden|unauthorized|login required|sign in|authentication required|access denied|captcha|verify you are human)""").containsMatchIn(text)->Kind.AUTH
+            Regex("""(?:\b401\b|\b403\b|forbidden|unauthorized|login required|sign in|authentication required|access denied|captcha|verify you are human|browser verification required|website verification page|short preview clips)""").containsMatchIn(text)->Kind.AUTH
             Regex("""(?:\b429\b|too many requests|rate limit|ratelimit)""").containsMatchIn(text)->Kind.RATE_LIMIT
             Regex("""(?:\b404\b|\b410\b|not found|gone|removed video|video unavailable)""").containsMatchIn(text)->Kind.GONE
             Regex("""(?:unsupported url|no suitable extractor|unsupported site|extractor not supported|drm protected|unable to extract hash|unable to extract short video id|no video formats found|player metadata unavailable|extractor repair required)""").containsMatchIn(text)->Kind.UNSUPPORTED
