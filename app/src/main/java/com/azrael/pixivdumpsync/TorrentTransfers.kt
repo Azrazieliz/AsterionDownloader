@@ -39,43 +39,80 @@ object TorrentTransfers {
         if (!running) { engine.start(); running = true }
         return engine
     }
+    private fun statusDir(context:Context)=
+        File(context.filesDir,"torrent-jobs").apply{mkdirs()}
+    private fun validJob(id:String)=id.matches(Regex("[a-f0-9]{24}"))
+    private fun statusFile(context:Context,id:String):File {
+        require(validJob(id)){"Invalid torrent job id"}
+        return File(statusDir(context),"$id.status")
+    }
+    /** SharedPreferences is cached per Android process and is NOT a reliable
+     * interprocess progress ledger. A small atomic status file is shared
+     * across the main UI and isolated libtorrent engine processes.
+     */
     internal fun record(c: Context, id: String, value: String) {
         c.getSharedPreferences("torrent_transfers", Context.MODE_PRIVATE)
             .edit().putString(id, value).apply()
+        val hash=id.removePrefix("job_")
+        if(!id.startsWith("job_") || !validJob(hash))return
+        runCatching{
+            val file=statusFile(c,hash)
+            val tmp=File(file.parentFile,hash+".status.tmp")
+            tmp.writeText(value.take(350))
+            check(tmp.renameTo(file) || run{
+                file.delete()
+                tmp.renameTo(file)
+            }){"Cannot update torrent status"}
+        }
+    }
+    private fun status(c:Context,id:String,prefs:android.content.SharedPreferences):String {
+        val stored=runCatching{
+            val file=statusFile(c,id)
+            if(!file.isFile)return@runCatching null
+            val value=file.readText().take(350)
+            val interrupted=System.currentTimeMillis()-file.lastModified()>15L*60_000L &&
+                value.contains('%') && !value.contains("COMPLETED",true)
+            if(interrupted)"$id · Last transfer progress is stale; resume to check peers"
+            else value
+        }.getOrNull()
+        return stored ?: prefs.getString("job_$id","").orEmpty()
     }
     fun showQueue(a: Activity) {
         val prefs = a.getSharedPreferences("torrent_transfers", Context.MODE_PRIVATE)
-        // job_folder_*, job_indices_* and job_paused_* are metadata,
-        // NOT transfers. Previously each was presented as another torrent,
-        // so Pause/Resume could address a fabricated or missing job.
-        val keys = prefs.all.keys.filter {
-            it.startsWith("job_") &&
-                !it.startsWith("job_folder_") &&
-                !it.startsWith("job_indices_") &&
-                !it.startsWith("job_paused_") &&
-                it.removePrefix("job_").matches(Regex("[a-f0-9]{24}"))
-        }.sortedDescending()
-        if (keys.isEmpty()) {
-            Toast.makeText(a, "No torrent transfers yet", Toast.LENGTH_LONG).show(); return
+        val existing=prefs.all.keys.filter{
+            it.startsWith("job_") && validJob(it.removePrefix("job_"))
+        }.map{it.removePrefix("job_")}
+        val fileIds=statusDir(a).listFiles().orEmpty()
+            .filter{it.isFile && it.name.endsWith(".status")}
+            .map{it.name.removeSuffix(".status")}
+            .filter(::validJob)
+        val keys=(existing+fileIds).distinct().sortedDescending()
+        if(keys.isEmpty()){
+            Toast.makeText(a,"No torrent transfers yet",Toast.LENGTH_LONG).show()
+            return
         }
-        val labels = keys.map { prefs.getString(it, "") ?: "" }.toTypedArray()
+        val labels=keys.map{status(a,it,prefs)}.toTypedArray()
         AlertDialog.Builder(a).setTitle("BitTorrent transfers")
-            .setItems(labels) { _, which ->
-                val id = keys[which].removePrefix("job_")
-                val controls = arrayOf("Pause transfer", "Resume transfer", "Show current status")
-                AlertDialog.Builder(a).setTitle(labels[which]).setItems(controls) { _, option ->
-                    if (option == 2) {
-                        showQueue(a)
-                    } else {
-                        val intent = Intent(a, TorrentTransferService::class.java).apply {
-                            action = if (option == 0) TorrentTransferService.PAUSE else TorrentTransferService.RESUME
-                            putExtra("job", id)
+            .setItems(labels){_,index->
+                val id=keys[index]
+                val controls=arrayOf("Pause transfer","Resume transfer","Show current status")
+                AlertDialog.Builder(a).setTitle(labels[index])
+                    .setItems(controls){_,which->
+                        if(which==2){
+                            AlertDialog.Builder(a).setTitle("Torrent "+id.take(8))
+                                .setMessage(status(a,id,prefs))
+                                .setPositiveButton("Close",null).show()
+                        }else{
+                            a.startForegroundService(
+                                Intent(a,TorrentTransferService::class.java).apply{
+                                    action=if(which==0)TorrentTransferService.PAUSE
+                                        else TorrentTransferService.RESUME
+                                    putExtra("job",id)
+                                })
                         }
-                        a.startForegroundService(intent)
-                    }
-                }.setNegativeButton("Close", null).show()
-            }.setPositiveButton("Refresh") { _, _ -> showQueue(a) }
-            .setNegativeButton("Close", null).show()
+                    }.setNegativeButton("Close",null).show()
+            }.setPositiveButton("Refresh"){_,_->showQueue(a)}
+            .setNegativeButton("Close",null).show()
     }
     fun prepareMagnet(a: Activity, magnet: String, folder: String) {
         TorrentMetadataBridge.prepareMagnet(a,magnet,folder)
