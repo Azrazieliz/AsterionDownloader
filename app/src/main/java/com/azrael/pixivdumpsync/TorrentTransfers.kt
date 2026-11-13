@@ -125,7 +125,7 @@ class TorrentTransferService : Service() {
         }
         if(!inFlight.add(id))return false
         stopRequests.remove(id)
-        val worker=thread(name="asterion-torrent-$id"){
+        val worker=thread(start=false,name="asterion-torrent-$id"){
             try {
                 transfer(id,folder,indices)
                 getSharedPreferences("torrent_transfers",MODE_PRIVATE).edit()
@@ -139,13 +139,14 @@ class TorrentTransferService : Service() {
             }finally {
                 workers.remove(id)
                 inFlight.remove(id)
-                if(inFlight.isEmpty()){
+                if(inFlight.isEmpty() && metadataWorkers.isEmpty()){
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
             }
         }
         workers[id]=worker
+        worker.start()
         return true
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -163,7 +164,7 @@ class TorrentTransferService : Service() {
                     android.os.ResultReceiver::class.java)
                 else intent.getParcelableExtra<android.os.ResultReceiver>(
                     TorrentMetadataBridge.RECEIVER)
-            val worker=thread(name="asterion-torrent-metadata"){
+            val worker=thread(start=false,name="asterion-torrent-metadata"){
                 try{
                     val hash=TorrentMetadataBridge.prepareInTorrentProcess(
                         applicationContext,action,intent,chosen)
@@ -180,6 +181,7 @@ class TorrentTransferService : Service() {
                 }
             }
             metadataWorkers.add(worker)
+            worker.start()
             return START_NOT_STICKY
         }
         val id=intent?.getStringExtra("job")
