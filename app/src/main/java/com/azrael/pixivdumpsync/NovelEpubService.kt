@@ -411,7 +411,20 @@ object NovelEpubService {
     private fun storeChapterText(chapter:NovelChapter,text:NovelText,directory:File){
         val id=chapterKey(chapter.url)
         val cached=File(directory,id+".json")
-        if(cached.isFile)return
+        // A torn JSON cache can survive an interrupted job. Validate before
+        // trusting it; the old unconditional early return made every retry
+        // reuse the same broken chapter and could never heal the EPUB.
+        if(cached.isFile){
+            val valid=runCatching{
+                val obj=JSONObject(cached.readText())
+                val entries=obj.getJSONArray("paragraphs")
+                entries.length()>0 && (0 until entries.length()).sumOf{
+                    entries.getString(it).length
+                }>80
+            }.getOrDefault(false)
+            if(valid)return
+            check(cached.delete()){"Unable to repair corrupt cached chapter"}
+        }
         val body=JSONObject().apply{
             put("title",chapter.title)
             put("paragraphs",JSONArray(text.paragraphs))
