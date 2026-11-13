@@ -299,7 +299,7 @@ object AsterionAdultHub {
                     url=item.url,title=item.title,
                     thumbnail=item.preview.orEmpty(),
                     attribution=site.name,
-                    referer=item.source,
+                    referer=item.url,
                     video=item.kind=="video"
                 )}
                 val searchTiles=searches.map{item->KurohaMediaPreview.Tile(
@@ -310,7 +310,7 @@ object AsterionAdultHub {
                 )}
                 val publicTiles=public.map{item->KurohaMediaPreview.Tile(
                     url=item.url,title=item.title,thumbnail=item.cover,
-                    attribution=site.name,referer=site.url,video=true)}
+                    attribution=site.name,referer=item.url,video=true)}
                 KurohaMediaPreview.render(a,card,
                     "website:"+area+":"+site.host,
                     mediaTiles+searchTiles+publicTiles){tile->

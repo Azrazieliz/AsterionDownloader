@@ -43,8 +43,22 @@ object VideoSearchPreviews {
                     setRequestProperty("User-Agent",
                         "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36")
                     setRequestProperty("Accept","image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-                    if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer))
+                    if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer)) {
+                        // A poster CDN often accepts the exact publisher media
+                        // page as Referer, not the catalog's homepage.
                         setRequestProperty("Referer",referer)
+                        val sameHost=runCatching{
+                            val poster=java.net.URI(url).host.orEmpty().lowercase()
+                            val publisher=java.net.URI(referer).host.orEmpty().lowercase()
+                            poster==publisher
+                        }.getOrDefault(false)
+                        // Never expose browser cookies to third-party artwork
+                        // hosts or unrelated video player / advertising sites.
+                        if(sameHost)
+                            com.azrael.galleryflow.SiteSession.cookie(app,referer)
+                                ?.takeIf{it.isNotBlank()}
+                                ?.let{setRequestProperty("Cookie",it)}
+                    }
                 }
                 val mime=connection.contentType.orEmpty().lowercase()
                 val bytes=connection.getInputStream().use{input->

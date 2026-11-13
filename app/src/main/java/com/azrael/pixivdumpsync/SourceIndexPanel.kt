@@ -92,7 +92,7 @@ object SourceIndexPanel {
                         visual.map{item->KurohaMediaPreview.Tile(
                             url=item.url,title=item.title,
                             thumbnail=item.preview.orEmpty(),
-                            attribution=display,referer=item.source,
+                            attribution=display,referer=item.url,
                             video=item.kind=="video"
                         )}){tile->
                         visual.firstOrNull{it.url==tile.url}
