@@ -206,7 +206,7 @@ object VideoEngine {
                         VideoTransferJournal.record(context,next.id,"held")
                         onStatus("Full version unverified: ${next.title}")
                     }else{
-                        val reason=t.message?:t.javaClass.simpleName
+                        val reason=VideoErrorDetail.summary(t)
                         db.scheduleRetry(next.id,reason)
                         VideoTransferJournal.record(context,next.id,"retry",
                             VideoFailurePolicy.classify(reason).name)
