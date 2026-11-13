@@ -442,10 +442,16 @@ object AsterionAdultHub {
                     Toast.makeText(a,"Resume first",Toast.LENGTH_SHORT).show()
                 else thread(name="asterion-site-backfill"){
                     val result=runCatching{
-                        val src=site.source
-                        if(src!=null && src.adapter=="native")
+                        val src=site.source ?: SourceIndexDb(a).use{db->
+                            // A site shown in the approved catalog must have
+                            // a real source record before Backfill is offered.
+                            db.add(site.url,site.name,area,
+                                if(site.host=="onejav.com")"native" else "generic")
+                            db.sources().firstOrNull{it.url==site.url}
+                        }
+                        if(src?.adapter=="native")
                             ProviderBackfillActions.request(a,src)
-                        else if(SiteRunControl.start(a,site.url,area))
+                        else if(SiteRunControl.start(a,src?.url?:site.url,area))
                             "History queued · "+site.name
                         else "Already checking · "+site.name
                     }.getOrElse{it.message?:"Source error"}
@@ -464,12 +470,16 @@ object AsterionAdultHub {
                     else->issue.take(116)
                 }
                 card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,6))
-                if(issue.contains("401")||issue.contains("403")||
-                    issue.contains("login",true)||
-                    issue.contains("sign in",true)||
-                    issue.contains("session expired",true)||
-                    issue.contains("authorized session",true)){
-                    card.addView(ui.action(a,"CONNECT ACCOUNT",false){
+                val loginRequired=issue.contains("401") ||
+                    issue.contains("login required",true) ||
+                    issue.contains("sign in",true) ||
+                    issue.contains("session expired",true)
+                val verificationBlocked=issue.contains("403") && !loginRequired
+                if(loginRequired || verificationBlocked){
+                    // HTTP 403 from a public site may be a browser or network
+                    // challenge; never present it as mandatory account login.
+                    card.addView(ui.action(a,
+                        if(loginRequired)"CONNECT ACCOUNT" else "OPEN SITE",false){
                         a.startActivity(Intent(a,SiteLoginActivity::class.java)
                             .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
                     },ui.lp(a,5))
