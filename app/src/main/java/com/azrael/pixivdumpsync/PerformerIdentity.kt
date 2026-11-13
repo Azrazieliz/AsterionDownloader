@@ -15,7 +15,10 @@ import java.util.concurrent.TimeUnit
  */
 internal object PerformerIdentity {
     data class Proof(val displayName:String,val profileUrl:String,val provider:String)
-    private val acceptedHosts=setOf("pornhub.com","watchporn.to")
+    // FullPorner publishes first-party /pornstar/<slug> profiles too.
+    // Search discovery spans all approved providers separately; identity
+    // verification requires an actual first-party person page.
+    private val acceptedHosts=setOf("pornhub.com","watchporn.to","fullporner.com")
     private val namePath=Regex("""^/(?:model|pornstar|models|pornstars|profiles)/([a-z0-9-]+)/?$""",
         RegexOption.IGNORE_CASE)
 
@@ -38,7 +41,7 @@ internal object PerformerIdentity {
     fun matchesEvidence(name:String,address:String,document:Document):Boolean {
         if(!isProfileUrl(name,address))return false
         val prominent=document.select(
-            "h1,.model-name,.pornstar-name,[itemprop=name]").eachText()
+            "h1,.model-name,.pornstar-name,.performer-name,[itemprop=name]").eachText()
             .map{slug(it)}
         val canonical=document.selectFirst("link[rel=canonical]")
             ?.absUrl("href").orEmpty()
@@ -64,7 +67,8 @@ internal object PerformerIdentity {
         val urls=listOf(
             "https://www.pornhub.com/model/$handle",
             "https://www.pornhub.com/pornstar/$handle",
-            "https://watchporn.to/models/$handle/"
+            "https://watchporn.to/models/$handle/",
+            "https://fullporner.com/pornstar/$handle"
         )
         val pool=Executors.newFixedThreadPool(4)
         val completion=ExecutorCompletionService<Proof?>(pool)
