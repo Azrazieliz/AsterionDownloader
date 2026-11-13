@@ -25,6 +25,8 @@ SITES = {
     "UncensoredHentai selected": "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/",
     "Rule34Video failed 4727221": "https://rule34video.com/video/4727221/",
     "Rule34Video observed current detail": "https://rule34video.com/video/4727779/female-v-x-bbc-reverse-cowgirl/",
+    "FreePornVideos Serena selected": "https://www.freepornvideos.xxx/videos/93823084/serena-gomes-a-savage-debut-in-a-gangbang-with-double-anal/",
+    "Eporner Gachinco selected": "https://www.eporner.com/video-MSADu4C0K92/",
 }
 out = {}
 try:
