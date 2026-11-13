@@ -67,7 +67,20 @@ internal object AdultProviderListings {
         for(link in doc.select(selector).take(5000)){
             val url=link.absUrl("href").substringBefore('#')
             if(!isListingPage(source,url))continue
-            val name=title(link)
+            // Archivebate's real post-Continue catalog exposes verified
+            // /watch/<numeric ID> anchors without article/card wrappers or
+            // descriptive anchor text. Chrome on 2026-11-13 returned 36 of
+            // these links, including /watch/16458050, and played one.
+            // Keep an observed ID as the neutral label rather than dropping
+            // all entries or inventing a scene/performer title.
+            val name=title(link).ifBlank {
+                if(host=="archivebate.com"){
+                    val id=runCatching{URI(url).path.orEmpty().trimEnd('/')
+                        .substringAfterLast('/')}.getOrDefault("")
+                    if(id.matches(Regex("[0-9]{1,16}")))
+                        "Archivebate recording #"+id else ""
+                }else ""
+            }
             if(name.isBlank())continue
             val parent=link.closest("article,.post,.video-item,.video-card,.video-block,.thumb,.item,.card")
             val image=link.selectFirst("img")?:parent?.selectFirst("img")
