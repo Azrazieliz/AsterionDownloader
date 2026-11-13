@@ -494,8 +494,8 @@ object VideoEngine {
         // to the same failing generic Python parser. When an actual verified
         // HTTP/SOCKS/Tor exit is configured, Jsoup inspection can safely use
         // that same route. Hidden .onion handling remains separate.
-        val configuredExit=NetworkRoute.configured(context,item.url)?.mode
-            in setOf("http","socks5","vpn")
+        val configuredExit=NetworkRoute.configured(context,item.url)?.mode in
+            setOf("http","socks5","vpn")
         NetworkRoute.requireVpn(context,item.url)
         val canInspectPublisherHtml=VideoCandidatePlan.mayInspectPublisher(
             viaProxy,hidden,configuredExit)
