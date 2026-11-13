@@ -111,6 +111,14 @@ object UnifiedDownloadsUi {
                     item.status=="running"->State.ACTIVE
                     else->State.QUEUED
                 }
+                val isArchivebateSelected=runCatching{
+                    val source=java.net.URI(item.url)
+                    source.scheme=="https" &&
+                        source.host.orEmpty().lowercase().removePrefix("www.")==
+                            "archivebate.com" &&
+                        Regex("""^/watch/[0-9]{1,16}/?$""")
+                            .matches(source.path.orEmpty())
+                }.getOrDefault(false)
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
@@ -129,14 +137,27 @@ object UnifiedDownloadsUi {
                     info,state,if(item.status=="running")item.progress else null,item.updated,{
                         when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
-                            State.FAILED->{VideoDb(a).use{it.retry(item.id)};VideoEngine.launch(a,false)}
+                            State.FAILED->{
+                                if(isArchivebateSelected)
+                                    a.startActivity(Intent(a,ArchivebateWatchActivity::class.java)
+                                        .putExtra(ArchivebateWatchActivity.WATCH_URL,item.url)
+                                        .putExtra(ArchivebateWatchActivity.VIDEO_TITLE,item.title))
+                                else{
+                                    VideoDb(a).use{it.retry(item.id)}
+                                    VideoEngine.launch(a,false)
+                                }
+                            }
                             State.ACTIVE,State.QUEUED->VideoEngine.pauseVideo(a,item.id)
                             State.PAUSED->VideoEngine.resumeVideo(a,item.id)
                             State.HELD->{
-                                // A manual retry is an explicit original request, not
-                                // another silent automatic verification hold.
-                                VideoDb(a).use{it.retry(item.id)}
-                                VideoEngine.launch(a,false)
+                                if(isArchivebateSelected)
+                                    a.startActivity(Intent(a,ArchivebateWatchActivity::class.java)
+                                        .putExtra(ArchivebateWatchActivity.WATCH_URL,item.url)
+                                        .putExtra(ArchivebateWatchActivity.VIDEO_TITLE,item.title))
+                                else{
+                                    VideoDb(a).use{it.retry(item.id)}
+                                    VideoEngine.launch(a,false)
+                                }
                             }
                             else->{}
                         }
@@ -146,7 +167,8 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
-                        State.HELD->"RETRY"
+                        State.HELD->if(isArchivebateSelected)"OPEN PLAYER" else "RETRY"
+                        State.FAILED->if(isArchivebateSelected)"OPEN PLAYER" else null
                         else->null
                     },
                     onRemove=if(state==State.DONE)null else ({
@@ -621,7 +643,7 @@ object UnifiedDownloadsUi {
             if(item.state in setOf(State.DONE,State.FAILED,State.HELD,
                     State.PAUSED) || item.actionText!=null){
                 val command=when(item.state){
-                    State.DONE->"OPEN";State.FAILED->"RETRY"
+                    State.DONE->"OPEN";State.FAILED->item.actionText?:"RETRY"
                     State.HELD->item.actionText?:"SIGN IN"
                     State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText.orEmpty()
                 }
