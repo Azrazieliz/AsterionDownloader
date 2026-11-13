@@ -103,12 +103,13 @@ android {
             isDebuggable = true
             matchingFallbacks += listOf("debug")
         }
-        // Final provider-repair trial is deliberately isolated from existing
-        // CI-signed phone pilots. CI has no retained acceptance signing key;
-        // do not pretend a new ephemeral signature can upgrade an old install.
+        // Final provider-repair trial uses a fresh, isolated package because
+        // the owner's .testphone1114 is already installed with a DIFFERENT
+        // CI-ephemeral signing certificate. Never erase that app or its data.
+        // Production acceptance updates must instead use one retained signer.
         create("providerpilot") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".testphone1114"
+            applicationIdSuffix = ".testphone1115"
             versionNameSuffix = "-provider-test"
             isDebuggable = true
             matchingFallbacks += listOf("debug")
