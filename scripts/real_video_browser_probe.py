@@ -45,6 +45,27 @@ def evidence(name,label):
           .filter(el=>/\\/watch\\/|\\/video\\//i.test(el.getAttribute('href')||''))
           .length,
         cards:document.querySelectorAll('article,.video-card,.video-item,.video-box').length,
+        // Diagnose the exact publisher DOM structure without saving video
+        // URLs, account information, thumbnails, titles or media bytes.
+        cardShapes:[...document.querySelectorAll('a[href*="/watch/"]')].slice(0,5)
+          .map(a=>{
+            const media=a.querySelector('video,img') ||
+              a.parentElement?.querySelector('video,img') ||
+              a.parentElement?.parentElement?.querySelector('video,img');
+            const poster=media?.getAttribute('poster')||
+              media?.getAttribute('src')||'';
+            return {
+              route:new URL(a.href,location.href).pathname,
+              textLength:(a.innerText||'').trim().length,
+              hasDirectImage:!!a.querySelector('img'),
+              hasDirectVideo:!!a.querySelector('video'),
+              parentTag:a.parentElement?.tagName||'',
+              parentClass:(a.parentElement?.className||'').toString().slice(0,90),
+              mediaTag:media?.tagName||'',
+              mediaHost:(()=>{try{return new URL(poster,location.href).hostname}
+                        catch(e){return ''}})()
+            };
+          }),
         title:document.title.slice(0,120),
         heading:(document.querySelector('h1')?.textContent||'').trim().slice(0,120),
         watchPaths:[...document.querySelectorAll('a[href]')].filter(el=>
@@ -73,7 +94,8 @@ def evidence(name,label):
          "cards":values["cards"],"player_elements":urls,
          "title":values["title"],"heading":values["heading"],
          "watch_paths":values["watchPaths"],"age_gate":values["ageGate"],
-         "controls":values["streamControls"],"iframe_shapes":iframe_shapes}
+         "controls":values["streamControls"],"iframe_shapes":iframe_shapes,
+         "card_shapes":values["cardShapes"]}
 try:
     for name,url in SITES.items():
         try:
