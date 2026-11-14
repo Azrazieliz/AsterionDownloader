@@ -27,6 +27,29 @@ class GallerySiteOriginalExtractorsTest {
         assertEquals(listOf("https://cdn.example/media/large001.webp"),
             GallerySiteOriginalExtractors.originals(doc,page)?.map{it.url})
     }
+    @Test fun pornpicsPublisherOriginalAnchorsWithoutFixedGalleryId() {
+        val page="https://www.pornpics.com/galleries/a-real-album-12345/"
+        val doc=Jsoup.parse("""
+            <main>
+              <a href="https://cdn.example/photos/001.jpg">Full image 1</a>
+              <a href="https://cdn.example/photos/002.jpg">Full image 2</a>
+              <div class="related"><a href="https://cdn.example/other/003.jpg">
+                <img src="https://cdn.example/other/thumb003.jpg"/></a></div>
+            </main>
+        """.trimIndent(),page)
+        assertEquals(listOf("https://cdn.example/photos/001.jpg",
+            "https://cdn.example/photos/002.jpg"),
+            GallerySiteOriginalExtractors.originals(doc,page)?.map{it.url})
+    }
+
+    @Test fun pornpicsCategoryCannotBeMistakenForSelectedGallery() {
+        val doc=Jsoup.parse("""
+            <main><a href="https://cdn.example/photos/001.jpg">Advertised image</a></main>
+        """.trimIndent(),"https://www.pornpics.com/channels/channel/")
+        assertTrue(GallerySiteOriginalExtractors.originals(
+            doc,"https://www.pornpics.com/channels/channel/").orEmpty().isEmpty())
+    }
+
     @Test fun unrelatedSitesUseExistingNativeOrGenericAdapter(){
         val page="https://kiutaku.com/7440"
         assertNull(GallerySiteOriginalExtractors.originals(
