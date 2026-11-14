@@ -76,7 +76,11 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(24,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(23,VideoSiteProfiles.coveredHosts.size)
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://xxxclub.to/torrents/details/480815"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://xxxclub.to/video/example"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://pornhits.com/video/retired"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://hentaibros.net/muramata-san-no-aijou-episode-2/"))
