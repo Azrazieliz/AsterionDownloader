@@ -109,7 +109,7 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             // Dedicated gallery publishers expose originals on the selected
             // page itself. Do not crawl unrelated recommendation/photo cards
             // when a parser reports no images on that page.
-            val photos = if(GallerySiteOriginalExtractors.isSpecial(url))
+            val photos = if(GallerySiteOriginalExtractors.isStrictAlbum(url))
                 emptyList() else AlbumImageExtractor.photoPages(doc,url)
             photoLinks.addAll(photos)
             if (photoLinks.size > MAX_PHOTO_PAGES)
@@ -129,9 +129,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 "images were not marked complete.")
 
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
-        if (GallerySiteOriginalExtractors.isSpecial(url)) {
-            // An empty source-specific parse is a failure, not permission to
-            // import thumbnail/recommendation galleries from another album.
+        if (GallerySiteOriginalExtractors.isStrictAlbum(url)) {
+            // An empty PornPics original parse is a failure, not permission
+            // to import recommendations or thumbnails from another album.
+            images.putAll(inlineImages)
+        } else if (GallerySiteOriginalExtractors.isSpecial(url) &&
+            inlineImages.isNotEmpty()) {
+            // Preserve previously supported Celeb.st direct originals.
             images.putAll(inlineImages)
         } else if (photoLinks.isNotEmpty()) {
             // Photo detail pages frequently expose the original that the album
