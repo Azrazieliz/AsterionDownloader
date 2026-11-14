@@ -108,48 +108,80 @@ object Scheduling {
 }
 class PollJobService: JobService() {
     private val exec=Executors.newSingleThreadExecutor()
+    private val tokens=java.util.concurrent.ConcurrentHashMap<Int,Any>()
+    private val tasks=java.util.concurrent.ConcurrentHashMap<Int,
+        java.util.concurrent.FutureTask<Unit>>()
     override fun onStartJob(params: JobParameters?): Boolean {
+        val job=params?:return false
         if(!com.azrael.pixivdumpsync.AppPower.enabled(this))return false
-        val manual=params?.jobId==42682 || params?.jobId==42683
+        val manual=job.jobId==42682 || job.jobId==42683
         if(!manual &&
             !getSharedPreferences("video_options",MODE_PRIVATE).getBoolean("auto",true))
             return false
-        val scan=if(manual)params?.extras?.getBoolean("scan",false)?:false else true
-        val target=if(manual)params?.extras?.getString("target_site_host") else null
-        if(VideoEngine.launch(applicationContext,scan,target,allowJobFallback=false))
-            return false
-        exec.submit {
+        val scan=if(manual)job.extras.getBoolean("scan",false) else true
+        val target=if(manual)job.extras.getString("target_site_host") else null
+        // This JobScheduler invocation IS the primary process fallback.
+        // Launching both services here could start only the secondary FGS,
+        // falsely report success and leave the primary queue lane idle.
+        val token=Any()
+        val task=java.util.concurrent.FutureTask<Unit> {
             try {
-                // JobScheduler is permitted when Android forbids starting the FGS.
                 runCatching{VideoEngine.work(applicationContext,scan,targetHost=target)}
+                Unit
             }finally{
-                jobFinished(params,false)
+                if(tokens.remove(job.jobId,token) &&
+                    !Thread.currentThread().isInterrupted)
+                    jobFinished(job,false)
             }
+        }
+        tokens[job.jobId]=token
+        tasks.put(job.jobId,task)?.cancel(true)
+        exec.execute(task)
+        return true
+    }
+    override fun onStopJob(params: JobParameters?): Boolean {
+        params?.jobId?.let{id->
+            tokens.remove(id)
+            tasks.remove(id)?.cancel(true)
         }
         return true
     }
-    override fun onStopJob(params: JobParameters?): Boolean = true
 }
 // Runs in :videoflow_secondary, independently of the primary process.
 // Both agents rely on VideoDb.claimNext() leases; a queued original is owned
 // by only one process. Download job completion is not treated as file receipt.
 class SecondaryPollJobService:JobService(){
     private val executor=Executors.newSingleThreadExecutor()
-    @Volatile private var active:java.util.concurrent.Future<*>?=null
+    private val tokens=java.util.concurrent.ConcurrentHashMap<Int,Any>()
+    private val tasks=java.util.concurrent.ConcurrentHashMap<Int,
+        java.util.concurrent.FutureTask<Unit>>()
     override fun onStartJob(params:JobParameters?):Boolean{
+        val job=params?:return false
         if(!com.azrael.pixivdumpsync.AppPower.enabled(this))return false
-        val manual=params?.jobId==42685 || params?.jobId==42686
+        val manual=job.jobId==42685 || job.jobId==42686
         if(!manual && !getSharedPreferences("video_options",MODE_PRIVATE)
                 .getBoolean("auto",true))return false
-        active=executor.submit{
+        val token=Any()
+        val task=java.util.concurrent.FutureTask<Unit> {
             try{
                 runCatching{VideoEngine.work(applicationContext,false)}
-            }finally{jobFinished(params,false)}
+                Unit
+            }finally{
+                if(tokens.remove(job.jobId,token) &&
+                    !Thread.currentThread().isInterrupted)
+                    jobFinished(job,false)
+            }
         }
+        tokens[job.jobId]=token
+        tasks.put(job.jobId,task)?.cancel(true)
+        executor.execute(task)
         return true
     }
     override fun onStopJob(params:JobParameters?):Boolean{
-        active?.cancel(true)
+        params?.jobId?.let{id->
+            tokens.remove(id)
+            tasks.remove(id)?.cancel(true)
+        }
         return true
     }
 }
