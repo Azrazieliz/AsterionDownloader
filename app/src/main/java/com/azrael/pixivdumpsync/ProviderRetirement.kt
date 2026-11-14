@@ -24,6 +24,34 @@ object ProviderRetirement {
     fun disableExisting(context:Context) {
         val app=context.applicationContext
         val pref=app.getSharedPreferences("asterion_provider_retirements_v1",0)
+        // Archivebate is explicitly restored by the owner. Older releases
+        // disabled saved Archivebate subscriptions through this migration
+        // ledger; restore them once without disturbing any other provider.
+        // Never rerun the migration after the owner changes follow settings.
+        if(pref.getBoolean("archivebate.com-disabled",false) &&
+            !pref.getBoolean("archivebate.com-reactivated-v1",false)){
+            fun isArchivebate(address:String):Boolean {
+                val host=runCatching { URI(address).host.orEmpty()
+                    .lowercase(Locale.ROOT) }.getOrDefault("")
+                return host=="archivebate.com" ||
+                    host.endsWith(".archivebate.com")
+            }
+            val indexed=runCatching {
+                SourceIndexDb(app).use { db->
+                    db.sources().filter{isArchivebate(it.url)}.forEach {
+                        db.enable(it.url,true)
+                    }
+                }
+            }.isSuccess
+            val watched=runCatching {
+                com.asterion.videoflow.VideoDb(app).use { db->
+                    db.listWatches().filter{isArchivebate(it.address)}
+                        .forEach{db.enableWatch(it.id,true)}
+                }
+            }.isSuccess
+            if(indexed && watched)
+                pref.edit().putBoolean("archivebate.com-reactivated-v1",true).apply()
+        }
         // Migrate retirement one provider at a time. The old builds may
         // have already saved pornhits-disabled=true; that must never cause
         // newly retired OMG aliases to be skipped.
