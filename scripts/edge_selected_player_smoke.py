@@ -33,8 +33,8 @@ def inspect(item):
         "--autoplay-policy=user-gesture-required","--user-data-dir="+d,
         "--virtual-time-budget=9000","--dump-dom",url]
   try:
-   result=subprocess.run(args,text=True,capture_output=True,timeout=28)
-   page=result.stdout
+   result=subprocess.run(args,capture_output=True,timeout=28)
+   page=result.stdout.decode('utf-8','replace')
    p=Selected();p.feed(page)
    raw=sum(1 for n in p.videos if (n.get("src","") or n.get("data-src","")).startswith("http"))
    videos=[{"src_type": ("https" if (n.get("src","") or "").startswith("https:") else
@@ -52,7 +52,7 @@ def inspect(item):
       "valid_https_videos":raw,"video_info":videos,
       "iframe_hosts":hosts[:4],
       "site_gate":bool(re.search(r"(?i)just a moment|verify you are human|not available in your country",page[:200000]))})
-  except Exception as e:return (name,{"error":type(e).__name__})
+  except Exception as e:return (name,{"error":type(e).__name__+":"+str(e)[:80]})
 if __name__=="__main__":
  targets=[v for k,v in TARGETS.items() if len(sys.argv)==1 or k in sys.argv[1:]]
  pairs=[(k,v) for k,v in TARGETS.items() if v in targets]
