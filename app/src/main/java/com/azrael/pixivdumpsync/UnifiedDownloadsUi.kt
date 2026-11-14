@@ -74,8 +74,53 @@ object UnifiedDownloadsUi {
         return name?.takeIf{it.isNotBlank()}?.take(130)
             ?:fallback.substringAfterLast('/').substringBefore('?').take(130)
     }
+    /** User-exportable failure receipt from real on-device jobs.
+     * Never include source URLs, signed media URLs, cookies or authentication. */
+    private fun videoFailureReport(a:Activity):String=buildString {
+        appendLine("ASTERION DOWNLOADER — DEVICE TRANSFER DIAGNOSTIC")
+        appendLine("Generated: "+java.text.DateFormat.getDateTimeInstance()
+            .format(java.util.Date()))
+        appendLine("Device: "+android.os.Build.MODEL+" / Android "+android.os.Build.VERSION.RELEASE)
+        appendLine("Fields: local ID, source host, state, progress, transfer stage, verified bytes, sanitized failure")
+        val credentials=Regex(
+            """(?i)(?:cookie|authorization|bearer|token|password|signature|apikey|api_key)\\s*[:=]\\s*[^\\s;,]+""")
+        val urls=Regex("""(?i)https?://[^\\s'"<>]+""")
+        VideoDb(a).use{db->
+            for(tab in listOf("Active","Failed","Held","Queued","Paused","Saved")){
+                val entries=db.listVideosForTab(tab,80)
+                appendLine("[$tab] sampled="+entries.size)
+                for(item in entries){
+                    val host=runCatching{java.net.URI(item.url).host.orEmpty()}
+                        .getOrDefault("unavailable").take(90)
+                    val transfer=VideoTransferJournal.current(a,item.id)
+                    val message=item.error.orEmpty().replace(urls,"[url]")
+                        .replace(credentials,"[redacted]")
+                        .replace(Regex("""[\\r\\n\\t]+""")," ").take(250)
+                    append("id=").append(item.id).append(" host=").append(host)
+                        .append(" state=").append(item.status)
+                        .append(" progress=").append(item.progress)
+                        .append(" stage=").append(transfer?.stage?:"none")
+                        .append(" verified_bytes=").append(transfer?.verifiedBytes?:0L)
+                        .append(" last_stage_detail=").append(
+                            transfer?.detail.orEmpty().replace(urls,"[url]")
+                                .replace(credentials,"[redacted]").take(100))
+                        .append(" error=").appendLine(message)
+                }
+            }
+        }
+    }
+
     private fun collect(a:Activity):List<Row>{
         val rows=ArrayList<Row>()
+        rows+=Row("Diagnostics","Export actual download failures",
+            "Copies source hosts, failed stages, byte counts and exact error categories; no account data",
+            State.HELD,null,System.currentTimeMillis(),{
+                val text=videoFailureReport(a)
+                a.getSystemService(android.content.ClipboardManager::class.java)
+                    .setPrimaryClip(android.content.ClipData.newPlainText(
+                        "Asterion Downloader transfer diagnostic",text))
+                Toast.makeText(a,"Download diagnostic copied",Toast.LENGTH_SHORT).show()
+            },actionText="COPY FAILURE REPORT")
         // An Android native crash/ANR or OOM may never reach the application's
         // Java uncaught handler. Surface the OS's real last-exit diagnostic
         // instead of requiring another speculative APK.
