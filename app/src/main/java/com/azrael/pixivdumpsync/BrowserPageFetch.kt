@@ -23,7 +23,12 @@ object BrowserPageFetch {
     private val publicBrowserHosts=setOf("jav.guru","rule34video.com",
         "kiutaku.com","freewebnovel.com","novelbuddy.me",
         "novelbuddy.com","readnovelfull.com",
-        "hentaibros.net","3dhentaix.com")
+        "hentaibros.net","3dhentaix.com",
+        // Exact first-party player/article pages. These are not generalized
+        // Aloha-style media detectors, just the publishers' JS video players.
+        "fullporner.com","myxstudio.top","nhplayer.com",
+        "hqpornerxxx.com","helloporn.com","javideo.net",
+        "hentaihaven.xxx","mp4hentai.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
