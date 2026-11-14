@@ -847,6 +847,18 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(runCatching{
+                    java.net.URI(source.url).path.orEmpty().matches(
+                        Regex("""(?i)^.*\\.(?:m3u8|mpd)$"""))
+                }.getOrDefault(false)){
+                    // A published HLS/DASH manifest is itself an exact
+                    // selected stream. The retained transfer engine handles
+                    // fragments, interruption and final local media validation.
+                    try{
+                        execute(source.url,source.referer)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,source.url)){
                     try {
                         execute(ArchivebateSelectedMedia.resolve(
