@@ -38,7 +38,7 @@ internal object NativeMediaDownloader {
      */
     internal data class FullRange(val start:Long,val end:Long,val total:Long)
     internal fun completeRange(value:String,offset:Long):FullRange? {
-        val match=Regex("""bytes\\s+([0-9]+)-([0-9]+)/([0-9]+)""",
+        val match=Regex("""bytes\s+([0-9]+)-([0-9]+)/([0-9]+)""",
             RegexOption.IGNORE_CASE).matchEntire(value.trim())?:return null
         val start=match.groupValues[1].toLongOrNull()?:return null
         val end=match.groupValues[2].toLongOrNull()?:return null
