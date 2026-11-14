@@ -167,6 +167,16 @@ internal object PublisherOriginalExtractors {
             return fromHtml(selected,rendered)
         }
         val page=WebDiscovery.selectedDocument(selected,context)
+        // The broken providers do not share one CSS media contract. Their
+        // own selected-player resolver handles site-owned iframe, WordPress
+        // post, authorized rendered player or file hoster metadata.
+        if(SiteSpecificOriginalSources.owns(selected)){
+            val resolved=SiteSpecificOriginalSources.resolve(context,selected,page)
+            // Retain publisher-attested fallbacks only; never substitute
+            // generic page thumbnails, ads, or another selected item.
+            return (resolved+fromHtml(selected,page.outerHtml()))
+                .distinctBy{it.url}
+        }
         if(host=="eporner.com") {
             // The first-party Eporner xhr/video JSON is authoritative for
             // selected quality variants; og:video and page thumbnails are not.
