@@ -7,6 +7,28 @@ import org.junit.Test
 
 class KiutakuAdapterTest {
     @Test
+    fun selectedAlbumUsesArticleFulltextNotNeighborRecommendations() {
+        val doc=Jsoup.parse("""
+            <article>
+              <div class="article-fulltext"><img src="https://cdn.example/7440/001.jpg"/></div>
+              <div class="related"><img src="https://cdn.example/other/999.jpg"/></div>
+            </article>
+        """.trimIndent(),"https://kiutaku.com/7440")
+        assertEquals(listOf("https://cdn.example/7440/001.jpg"),
+            KiutakuAdapter(HttpClient()).imageCandidates(doc))
+    }
+
+    @Test
+    fun publisherEndPageExpandsMissingIntermediatePages() {
+        val doc=Jsoup.parse("""
+            <div class="pagination-list"><a href="?page=2">2</a>
+                <a href="?page=7">End</a><span>7</span></div>
+        """.trimIndent(),"https://kiutaku.com/7440")
+        assertEquals(7,KiutakuAdapter(HttpClient())
+            .advertisedGalleryPage(doc,"https://kiutaku.com/7440"))
+    }
+
+    @Test
     fun imageCandidatesPreferGalleryImagesAndIgnoreIcons() {
         val html = """
             <html><body><main>
