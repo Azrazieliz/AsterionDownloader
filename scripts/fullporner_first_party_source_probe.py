@@ -23,6 +23,6 @@ for f in p.frames:
     if u.hostname!="fullporner.com" or not re.fullmatch(r"/player/[0-9]{1,12}/[0-9]{1,4}/?",u.path):continue
     inner=fetch(u.geturl(),PAGE)
     print("FRAME",u.path,"CHARS",len(inner))
-    for expr in (r"\.mp4",r"(?i)file\s*:",r"(?i)src\s*:",r"(?i)source\s*:",r"(?i)playback|player|duration"):
-        for m in list(re.finditer(expr,inner))[:9]:
-            print("KEY",expr,"CTX",redact(inner[max(0,m.start()-130):min(len(inner),m.end()+180)])[:360],flush=True)
+    for expr in (r"\.mp4",r"(?i)file\s*:",r"(?i)src\s*:",r"(?i)source\s*:"):
+        for m in list(re.finditer(expr,inner))[:4]:
+            print("KEY",expr,"CTX",redact(inner[max(0,m.start()-85):min(len(inner),m.end()+110)])[:190],flush=True)
