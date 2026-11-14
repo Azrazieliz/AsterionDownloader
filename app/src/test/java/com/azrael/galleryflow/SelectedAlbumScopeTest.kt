@@ -1,0 +1,56 @@
+package com.azrael.galleryflow
+
+import org.jsoup.Jsoup
+import org.junit.Assert.*
+import org.junit.Test
+
+class SelectedAlbumScopeTest {
+    @Test fun declared37PhotoAlbumNeverAbsorbs17RecommendedPhotos() {
+        val photos=(1..37).joinToString(""){i->
+            "<img src='https://cdn.cosplaytele.com/set/$i.jpg' alt='photo'/>"
+        }
+        val related=(1..17).joinToString(""){i->
+            "<img src='https://cdn.cosplaytele.com/related/$i.jpg' alt='photo'/>"
+        }
+        val doc=Jsoup.parse("""
+            <html><body><article><div class="entry-content">$photos
+            <aside class="related">$related</aside></div></article></body></html>
+        """.trimIndent(),"https://cosplaytele.com/post/one/")
+        val extracted=SelectedAlbumScope.originals(
+            doc,"https://cosplaytele.com/post/one/")
+        assertEquals(37,extracted.size)
+        assertTrue(extracted.all{"/set/" in it.url})
+        assertEquals(37,SelectedAlbumScope.advertisedCount(
+            "linhi_cute Complete [3.88GB-37photos]"))
+        SelectedAlbumScope.verifyAdvertisedCount(37,extracted.size)
+    }
+
+    @Test fun countMismatchFailsBeforeTransferringEvenIfAllImagesLookValid(){
+        val doc=Jsoup.parse("<article><div class='post-content'>"+
+            (1..54).joinToString(""){i->
+                "<img src='https://cdn.cosplaytele.com/$i.jpg' alt='photo'/>"
+            }+"</div></article>","https://cosplaytele.com/post/one/")
+        val images=SelectedAlbumScope.originals(
+            doc,"https://cosplaytele.com/post/one/")
+        assertEquals(54,images.size)
+        assertThrows(AdapterException::class.java){
+            SelectedAlbumScope.verifyAdvertisedCount(37,images.size)
+        }
+    }
+
+    @Test fun unrecognisedPublisherLayoutCannotFallBackToWholePageAds(){
+        val doc=Jsoup.parse("<main><div class='recommended'>"+
+            "<img src='https://cdn.cosplaytele.com/other.jpg'></div></main>",
+            "https://cosplaytele.com/post/one/")
+        assertThrows(AdapterException::class.java){
+            SelectedAlbumScope.originals(doc,
+                "https://cosplaytele.com/post/one/")
+        }
+    }
+
+    @Test fun onlyKnownPublisherSitesGetStrictAlbumRules(){
+        assertTrue(SelectedAlbumScope.owns("https://cosplaytele.com/post/one"))
+        assertTrue(SelectedAlbumScope.owns("https://4khd.com/gallery/123"))
+        assertFalse(SelectedAlbumScope.owns("https://evilcosplaytele.com/post/one"))
+    }
+}
