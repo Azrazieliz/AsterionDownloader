@@ -362,7 +362,12 @@ object SourceIndexPanel {
                     }else thread(name="asterion-check-provider"){
                         SiteControls.applyToEngines(a.applicationContext,site.url)
                         val result=runCatching{
-                            if(site.adapter=="generic"){
+                            if(site.area=="COSPLAY" &&
+                                AlohaSources.by(AlohaArea.COSPLAY).any{
+                                    SiteControls.key(it.url)==host
+                                })
+                                ApprovedCosplayActions.backfill(a,site.url)
+                            else if(site.adapter=="generic"){
                                 if(SiteRunControl.start(a,site.url,site.area))
                                     "Backfill started for "+name
                                 else "Already checking "+name
