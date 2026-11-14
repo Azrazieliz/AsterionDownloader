@@ -56,14 +56,29 @@ class DeviceTransferSimulation:Instrumentation() {
                             val reader=socket.getInputStream()
                                 .bufferedReader(Charsets.ISO_8859_1)
                             val request=reader.readLine().orEmpty()
-                            while(true){if(reader.readLine().isNullOrEmpty())break}
-                            val out=socket.getOutputStream()
-                            val header=("HTTP/1.1 200 OK\r\n"+
+                            var rangeHeader=""
+                            while(true){
+                                val line=reader.readLine().orEmpty()
+                                if(line.isEmpty())break
+                                if(line.startsWith("Range:",true))rangeHeader=line
+                            }
+                            val chunked=request.contains("/chunked-original.mp4")
+                            val offset=if(chunked)Regex("""bytes=([0-9]+)-""")
+                                .find(rangeHeader)?.groupValues?.get(1)?.toIntOrNull()?:0 else 0
+                            check(offset in 0 until payload.size)
+                            val end=if(chunked)minOf(offset+16_383,payload.size-1)
+                                else payload.size-1
+                            val length=end-offset+1
+                            val header=(if(chunked){
+                                "HTTP/1.1 206 Partial Content\r\n"+
+                                "Content-Range: bytes "+offset+"-"+end+"/"+payload.size+"\r\n"
+                            }else "HTTP/1.1 200 OK\r\n")+
                                 "Content-Type: video/mp4\r\nContent-Length: "+
-                                payload.size+"\r\nConnection: close\r\n\r\n")
-                                .toByteArray(Charsets.US_ASCII)
-                            out.write(header)
-                            if(!request.startsWith("HEAD "))out.write(payload)
+                                length+"\r\nETag: \"local-static-test\"\r\n"+
+                                "Connection: close\r\n\r\n"
+                            val out=socket.getOutputStream()
+                            out.write(header.toByteArray(Charsets.US_ASCII))
+                            if(!request.startsWith("HEAD "))out.write(payload,offset,length)
                             out.flush()
                         }
                     }
@@ -80,6 +95,14 @@ class DeviceTransferSimulation:Instrumentation() {
                     "Native Android transfer produced corrupted bytes"
                 }
                 status("NATIVE_OK "+completed.length()+" bytes / exact SHA-equivalent")
+                val ranged=File(root,"chunked").apply{mkdirs()}
+                val rangeResult=NativeMediaDownloader.download(
+                    "http://127.0.0.1:"+server.localPort+"/chunked-original.mp4",
+                    null,ranged)
+                check(rangeResult.readBytes().contentEquals(payload)){
+                    "Contiguous 206 chunks failed to reconstruct complete original"
+                }
+                status("NATIVE_206_OK "+rangeResult.length()+" bytes / exact SHA-equivalent")
                 val embedded=File(root,"chaquopy").apply{mkdirs()}
                 Log.i("ASTERION_SIM","AST_SIM: PYTHON_BEGIN")
                 LegacyYtDlpTransfer.initialize(context)
