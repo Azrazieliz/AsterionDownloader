@@ -16,6 +16,7 @@ class SyncForegroundService : Service() {
         const val ACTION_PAUSE = "com.azrael.galleryflow.PAUSE"
         const val ACTION_RESUME = "com.azrael.galleryflow.RESUME"
         const val ACTION_STOP = "com.azrael.galleryflow.STOP"
+        const val ACTION_RECOVER = "com.azrael.galleryflow.RECOVER_SELECTED"
         const val EXTRA_MODE = "sync_mode"
         const val EXTRA_SITE_ID = "target_site_id"
         const val EXTRA_SITE_HOST = "target_site_host"
@@ -25,9 +26,8 @@ class SyncForegroundService : Service() {
 
     private val executor = Executors.newSingleThreadExecutor()
     @Volatile private var currentRun: Future<*>? = null
-    private data class Request(val mode:SyncMode,val entityId:String?,
-                               val siteHost:String?)
-    private val pending=ArrayDeque<Request>()
+    @Volatile private var activeRequest:GalleryRequestLedger.Request?=null
+    private val pending=ArrayDeque<GalleryRequestLedger.Request>()
 
     override fun onCreate() {
         super.onCreate()
@@ -53,6 +53,7 @@ class SyncForegroundService : Service() {
             ACTION_RESUME->{SyncControl.resume();notifyNow();return START_NOT_STICKY}
             ACTION_STOP->{
                 synchronized(pending){pending.clear()}
+                GalleryRequestLedger.clear(this)
                 SyncControl.stop()
                 currentRun?.cancel(true)
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -70,19 +71,34 @@ class SyncForegroundService : Service() {
         val mode=runCatching{
             SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE)?:SyncMode.LIVE.name)
         }.getOrDefault(SyncMode.LIVE)
-        val requested=Request(mode,intent?.getStringExtra(EXTRA_SITE_ID),
-            intent?.getStringExtra(EXTRA_SITE_HOST))
+        val requested=if(intent?.action==ACTION_RECOVER)null
+            else GalleryRequestLedger.Request(
+                mode,intent?.getStringExtra(EXTRA_SITE_ID),
+                intent?.getStringExtra(EXTRA_SITE_HOST))
+        if(requested?.targeted==true)GalleryRequestLedger.remember(this,requested)
+        // Recover unfinished album taps first. An untargeted automatic Live
+        // run is not persisted and cannot turn an opted-out Sync back on.
+        val jobs=(GalleryRequestLedger.pending(this)+listOfNotNull(requested))
+            .distinctBy{it.signature()}
         synchronized(pending){
-            // A second site's BACKFILL previously disappeared here.
-            // Deduplicate active requests and execute the rest serially.
             if(currentRun?.isDone==false){
-                if(requested !in pending)pending.addLast(requested)
+                for(job in jobs){
+                    if(job!=activeRequest && job !in pending)pending.addLast(job)
+                }
                 notifyNow()
                 return START_NOT_STICKY
             }
+            if(jobs.isEmpty()){
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
+            pending.clear()
+            pending.addAll(jobs.drop(1))
+            activeRequest=jobs.first()
             currentRun=executor.submit{
                 try{
-                    var next:Request?=requested
+                    var next:GalleryRequestLedger.Request?=jobs.first()
                     while(next!=null &&
                         com.azrael.pixivdumpsync.AppPower.enabled(applicationContext)){
                         val job=next
@@ -90,14 +106,21 @@ class SyncForegroundService : Service() {
                             SyncEngine(applicationContext).run(job.mode,
                                 targetEntityId=job.entityId,
                                 targetSiteHost=job.siteHost){notifyNow()}
+                            // Only remove after the engine has returned.
+                            // Failed originals remain in GalleryDb retry rows.
+                            GalleryRequestLedger.completed(applicationContext,job)
                         }
                         next=synchronized(pending){
-                            if(pending.isEmpty())null else pending.removeFirst()
+                            val following=if(pending.isEmpty())null
+                                else pending.removeFirst()
+                            activeRequest=following
+                            following
                         }
                     }
                 }finally{
                     synchronized(pending){
                         pending.clear()
+                        activeRequest=null
                         currentRun=null
                     }
                     runCatching{notifyNow()}
