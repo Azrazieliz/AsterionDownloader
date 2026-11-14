@@ -146,6 +146,8 @@ internal object ApprovedCosplayActions {
         require(when(site.host){
             "pornpics.com"->path.matches(Regex("""(?i)galleries/[^/]+"""))
             "kiutaku.com"->path.matches(Regex("""[0-9]{1,9}"""))
+            "4khd.com","cosplaytele.com"->
+                SiteBackfillProfiles.recognizesGalleryPage(site.url,tile.url)
             else->true
         }){"Select an individual "+site.name+" album, not a category or source"}
         val origin=source(a.applicationContext,site.url)
