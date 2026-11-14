@@ -12,7 +12,7 @@ data class Video(val id: Long, val url: String, val title: String, val status: S
 class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", null, 5) {
     private val appContext = context.applicationContext
     init { setWriteAheadLoggingEnabled(true) }
-    private val staleLeaseMs=180_000L
+    private val staleLeaseMs=90_000L
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE watches(id INTEGER PRIMARY KEY, address TEXT UNIQUE NOT NULL, label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_check INTEGER NOT NULL DEFAULT 0, error TEXT, cursor TEXT, backfill_complete INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE TABLE videos(id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, title TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0, saved_uri TEXT, error TEXT, watch_id INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, retry_after INTEGER NOT NULL DEFAULT 0, request_origin TEXT NOT NULL DEFAULT 'user', lease INTEGER NOT NULL DEFAULT 0, heartbeat_at INTEGER NOT NULL DEFAULT 0)")
@@ -186,7 +186,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "SELECT state FROM videos WHERE url=? LIMIT 1",
             arrayOf(normalized)).use{c->if(c.moveToFirst())c.getString(0)else null}
     }
-    fun next(): Video? {
+    fun next(nativeOnly:Boolean=false): Video? {
         val now=System.currentTimeMillis().toString()
         // Enforce explicit episode order inside ONE recognisable series only.
         // Only episodes actually eligible to transfer now block later
@@ -228,6 +228,10 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             while(c.moveToNext()){
                 if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(c.getString(1)))
                     continue
+                // Secondary agent streams real HTTP media in parallel but
+                // must never instantiate a duplicate embedded Python runtime.
+                if(nativeOnly && !NativeMediaDownloader.isNativeEligible(
+                        c.getString(1),c.getString(1)))continue
                 val watchId=c.getLong(7)
                 if(watchId!=0L){
                     val origin=c.getString(8)
@@ -261,11 +265,11 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
      * sync/backfill eligibility; this wraps selection and claiming in one
      * SQLite write transaction.
      */
-    fun claimNext():Video?{
+    fun claimNext(nativeOnly:Boolean=false):Video?{
         val db=writableDatabase
         db.beginTransactionNonExclusive()
         try{
-            val next=next()
+            val next=next(nativeOnly)
             if(next==null){db.setTransactionSuccessful();return null}
             val oldLease=android.database.DatabaseUtils.longForQuery(
                 db,"SELECT lease FROM videos WHERE id=?",
@@ -503,9 +507,16 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         // Never reset another live agent's download merely because a second
         // service starts. Only crashed workers with stale heartbeats recover.
         val deadline=System.currentTimeMillis()-staleLeaseMs
+        // Recover a killed transfer once without losing partial files. A
+        // repeated Android low-memory kill cannot cycle this row forever.
         writableDatabase.execSQL(
-            "UPDATE videos SET state='queued', progress=0, lease=lease+1 "+
-                "WHERE state='running' AND heartbeat_at<?",
+            """UPDATE videos SET
+                state=CASE WHEN attempts>=1 THEN 'error' ELSE 'queued' END,
+                progress=0, attempts=attempts+1, lease=lease+1,
+                error=CASE WHEN attempts>=1 THEN
+                  'Transfer process repeatedly terminated; retry manually'
+                  ELSE error END
+                WHERE state='running' AND heartbeat_at<?""",
             arrayOf(deadline))
     }
     /** Permanent, reversible-from-manual-selection tombstone: auto backfill
