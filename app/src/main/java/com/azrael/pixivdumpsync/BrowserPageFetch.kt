@@ -165,6 +165,23 @@ object BrowserPageFetch {
                             // Do NOT claim short trailers as full originals:
                             // preserve duration for the receiving resolver to
                             // reject clips below the selected-video threshold.
+                            // FullPorner's exact /player/<video>/<layout> JS
+                            // initializes fluidPlayer around #flvv. Request
+                            // the selected element's normal HTML5 source,
+                            // never intercept unrelated browser requests.
+                            const selectedPlayerHost=location.hostname.replace(/^www\\./,'');
+                            if(selectedPlayerHost==='fullporner.com' &&
+                                /^\\/player\\/\\d{1,12}\\/\\d{1,4}\\/?$/.test(
+                                    location.pathname)){
+                                const v=document.querySelector('video#flvv');
+                                if(v){
+                                    try{v.load();}catch(_){}
+                                    if(v.paused)try{
+                                        const p=v.play();
+                                        if(p&&p.catch)p.catch(()=>{});
+                                    }catch(_){}
+                                }
+                            }
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,'+
                                 '#player video,.video-js video,video source[src]')]
