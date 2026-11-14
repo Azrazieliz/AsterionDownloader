@@ -31,6 +31,8 @@ def main() -> None:
     parser.add_argument("--repo", default=r"D:\AsterionDownloader")
     parser.add_argument("--control", default="http://192.168.1.133:8911")
     parser.add_argument("--input", default=None)
+    parser.add_argument("--built-commit", required=True,
+                        help="Exact git commit used when the APK was compiled")
     args = parser.parse_args()
 
     root = Path(args.repo)
@@ -38,10 +40,13 @@ def main() -> None:
         root / "app" / "build" / "outputs" / "apk" / "acceptance" / "app-acceptance.apk")
     if not original.is_file() or original.stat().st_size < 1_000_000:
         raise RuntimeError("Built owner-signed acceptance APK is missing")
-    commit = subprocess.check_output(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
-    if len(commit) != 40:
-        raise RuntimeError("Source commit does not match a full Git SHA")
+    commit = args.built_commit.strip().lower()
+    if len(commit) != 40 or any(ch not in "0123456789abcdef" for ch in commit):
+        raise RuntimeError("Built commit must be an exact 40-character Git SHA")
+    subprocess.run(["git","-C",str(root),"cat-file","-e",commit+"^{commit}"],
+                   check=True,stdout=subprocess.DEVNULL)
+    # Do not label an older signed APK as a newer source commit.
+    # The caller must explicitly identify the build source on every transfer.
     filename = f"Asterion-Downloader-v1.3.60-{commit[:8]}-Owner-Signed-Acceptance.apk"
     source_digest = sha256(original)
     token_path = (Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) /
