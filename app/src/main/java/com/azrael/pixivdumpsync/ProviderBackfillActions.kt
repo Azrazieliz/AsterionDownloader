@@ -17,10 +17,14 @@ object ProviderBackfillActions {
     fun request(a:Activity,site:IndexedSource):String{
         if(!AppPower.enabled(a))return "App is paused in Settings"
         val host=SiteControls.key(site.url)
-        if(host in setOf("onejav.com","sukebei.nyaa.si")){
+        if(host in setOf("onejav.com","sukebei.nyaa.si","xxxclub.to")){
             // scanAsync runs only feeds with automatic Sync enabled. A manual
             // BACKFILL must check the requested feed even when Sync is off.
-            val feed=if(host=="onejav.com")"ONEJAV" else "SUKEBEI"
+            val feed=when(host) {
+                "onejav.com"->"ONEJAV"
+                "xxxclub.to"->"XXXCLUB"
+                else->"SUKEBEI"
+            }
             val started=TorrentSourceBackfill.startSite(a.applicationContext,feed)
             return if(started)"Torrent history check started · "+feed
                 else "Torrent history already scanning or app paused · "+feed
