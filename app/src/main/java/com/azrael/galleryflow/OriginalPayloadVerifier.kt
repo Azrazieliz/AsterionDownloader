@@ -22,7 +22,7 @@ internal object OriginalPayloadVerifier {
         if(n>=6 && ascii(data,0,6) in setOf("GIF87a","GIF89a"))return "gif"
         if(n>=12 && ascii(data,0,4)=="RIFF" &&
             ascii(data,8,4)=="WEBP")return "webp"
-        if(n>=16 && ascii(data,4,4)=="ftyp"){
+        if(n>=12 && ascii(data,4,4)=="ftyp"){
             val brands=ascii(data,8,minOf(n-8,24))
             if(listOf("avif","avis").any{brands.contains(it)})return "avif"
             return "mp4"
