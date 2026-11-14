@@ -11,7 +11,9 @@ class NativeMediaDownloaderTest {
     /** Plain JVM socket fixture: does not require the jdk.httpserver module
      * which is unavailable to Android Gradle's test compilation classpath.
      */
-    private fun serve(mime:String,payload:ByteArray,use:(Int)->Unit) {
+    private fun serve(mime:String,payload:ByteArray,
+                      statusLine:String="HTTP/1.1 200 OK",
+                      contentRange:String?=null,use:(Int)->Unit) {
         ServerSocket(0,1,InetAddress.getByName("127.0.0.1")).use{server->
             val peer=thread(name="native-media-fixture"){
                 runCatching{
@@ -30,8 +32,9 @@ class NativeMediaDownloaderTest {
                             }
                             previous=current
                         }
-                        val response="HTTP/1.1 200 OK\r\n"+
+                        val response=statusLine+"\r\n"+
                             "Content-Type: $mime\r\n"+
+                            (contentRange?.let{"Content-Range: $it\r\n"}?:"")+
                             "Content-Length: ${payload.size}\r\n"+
                             "ETag: \"stable-test\"\r\n"+
                             "Connection: close\r\n\r\n"
@@ -45,6 +48,45 @@ class NativeMediaDownloaderTest {
             }
             try{use(server.localPort)}
             finally{server.close();peer.join(3_000)}
+        }
+    }
+    @Test fun completeRangesRequireEveryRemainingByte() {
+        assertEquals(10L,NativeMediaDownloader.completeRange("bytes 0-9/10",0L)?.total)
+        assertEquals(10L,NativeMediaDownloader.completeRange("bytes 5-9/10",5L)?.total)
+        assertNull(NativeMediaDownloader.completeRange("bytes 0-4/10",0L))
+        assertNull(NativeMediaDownloader.completeRange("bytes 5-7/10",5L))
+        assertNull(NativeMediaDownloader.completeRange("bytes 4-9/10",5L))
+        assertNull(NativeMediaDownloader.completeRange("bytes 0-9/*",0L))
+        assertNull(NativeMediaDownloader.completeRange("bytes 0-9/0",0L))
+        assertNull(NativeMediaDownloader.completeRange("bad header",0L))
+    }
+    @Test fun unsolicitedPartialResponseCannotBecomeSavedOriginal(){
+        val payload=ByteArray(1024){(it%127).toByte()}
+        serve("video/mp4",payload,
+            statusLine="HTTP/1.1 206 Partial Content",
+            contentRange="bytes 0-1023/4096"){port->
+            val dir=java.nio.file.Files.createTempDirectory("native-partial-").toFile()
+            try {
+                val result=runCatching{NativeMediaDownloader.download(
+                    "http://127.0.0.1:$port/scene.mp4",null,dir)}
+                assertTrue(result.isFailure)
+                assertTrue(result.exceptionOrNull()?.message.orEmpty()
+                    .contains("incomplete or mismatched byte range"))
+                assertFalse(File(dir,"video.mp4").exists())
+            }finally{dir.deleteRecursively()}
+        }
+    }
+    @Test fun fullLength206ResponseIsAllowed(){
+        val payload=ByteArray(1024){(it%127).toByte()}
+        serve("video/mp4",payload,
+            statusLine="HTTP/1.1 206 Partial Content",
+            contentRange="bytes 0-1023/1024"){port->
+            val dir=java.nio.file.Files.createTempDirectory("native-complete-").toFile()
+            try {
+                val result=NativeMediaDownloader.download(
+                    "http://127.0.0.1:$port/scene.mp4",null,dir)
+                assertArrayEquals(payload,result.readBytes())
+            }finally{dir.deleteRecursively()}
         }
     }
     @Test fun onlyConcreteMediaUrlsUseNativeStreamingLane(){
