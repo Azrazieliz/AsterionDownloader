@@ -64,7 +64,11 @@ internal object EpornerOriginalSource {
         val found=LinkedHashSet<String>()
         val kinds=sources.keys()
         while(kinds.hasNext()) {
-            val group=sources.optJSONObject(kinds.next())?:continue
+            val kind=kinds.next().lowercase(java.util.Locale.ROOT)
+            // Only documented publisher video variants. Teaser, advertising,
+            // thumbnail and subtitle branches are not downloadable originals.
+            if(kind !in setOf("mp4","hls","dash"))continue
+            val group=sources.optJSONObject(kind)?:continue
             val formats=group.keys()
             while(formats.hasNext()){
                 val format=group.optJSONObject(formats.next())?:continue
