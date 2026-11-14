@@ -40,7 +40,9 @@ class GalleryDetailActivity : Activity() {
         if (source == null || id.isEmpty()) { finish(); return }
         images = GalleryDb(this).use { db ->
             db.galleryMedia(source, id).filter {
-                it.contentUri != null && it.state == TransferState.COMPLETE
+                it.contentUri != null && it.state == TransferState.COMPLETE &&
+                    it.filename.orEmpty().matches(
+                        Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$"""))
             }
         }
         val shell = LinearLayout(this).apply {

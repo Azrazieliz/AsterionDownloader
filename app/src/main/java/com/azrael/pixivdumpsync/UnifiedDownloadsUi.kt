@@ -37,7 +37,8 @@ object UnifiedDownloadsUi {
         val saved:String?=null,val image:String?=null,val mime:String="*/*",
         val actionText:String?=null,
         val receivedBytes:Long=0L,
-        val onRemove:(()->Unit)?=null
+        val onRemove:(()->Unit)?=null,
+        val hasPrimaryAction:Boolean=true
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -134,14 +135,7 @@ object UnifiedDownloadsUi {
                     item.status=="running"->State.ACTIVE
                     else->State.QUEUED
                 }
-                val isArchivebateSelected=runCatching{
-                    val source=java.net.URI(item.url)
-                    source.scheme=="https" &&
-                        source.host.orEmpty().lowercase().removePrefix("www.")==
-                            "archivebate.com" &&
-                        Regex("""^/watch/[0-9]{1,16}/?$""")
-                            .matches(source.path.orEmpty())
-                }.getOrDefault(false)
+                val retired=ProviderRetirement.isRetired(item.url)
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
@@ -150,7 +144,8 @@ object UnifiedDownloadsUi {
                         else "Video · "+item.error.orEmpty()
                             .ifBlank{"Previous source verification was inconclusive; manual retry available"}
                             .take(110)
-                    State.PAUSED->"Video · Paused by user; original and progress retained"
+                    State.PAUSED->if(retired)"Video · Source retired"
+                        else "Video · Paused by user; original and progress retained"
                     State.QUEUED->"Video · Waiting for transfer worker"
                     State.ACTIVE->"Video · "+when {
                         bytes>0L->"Receiving original · "+received
@@ -164,31 +159,14 @@ object UnifiedDownloadsUi {
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
                     info,state,if(item.status=="running" && item.progress>0)
                         item.progress else null,item.updated,{
-                        when(state){
+                        if(!retired || state==State.DONE)when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
-                            State.FAILED->{
-                                if(isArchivebateSelected)
-                                    a.startActivity(Intent(a,ArchivebateWatchActivity::class.java)
-                                        .putExtra(ArchivebateWatchActivity.WATCH_URL,item.url)
-                                        .putExtra(ArchivebateWatchActivity.VIDEO_TITLE,item.title))
-                                else{
-                                    VideoDb(a).use{it.retry(item.id)}
-                                    VideoEngine.launch(a,false)
-                                }
+                            State.FAILED,State.HELD->{
+                                VideoDb(a).use{it.retry(item.id)}
+                                VideoEngine.launch(a,false)
                             }
                             State.ACTIVE,State.QUEUED->VideoEngine.pauseVideo(a,item.id)
                             State.PAUSED->VideoEngine.resumeVideo(a,item.id)
-                            State.HELD->{
-                                if(isArchivebateSelected)
-                                    a.startActivity(Intent(a,ArchivebateWatchActivity::class.java)
-                                        .putExtra(ArchivebateWatchActivity.WATCH_URL,item.url)
-                                        .putExtra(ArchivebateWatchActivity.VIDEO_TITLE,item.title))
-                                else{
-                                    VideoDb(a).use{it.retry(item.id)}
-                                    VideoEngine.launch(a,false)
-                                }
-                            }
-                            else->{}
                         }
                     },if(present)item.savedUri else null,mime="video/*",
                     receivedBytes=bytes,
@@ -196,13 +174,12 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
-                        State.HELD->if(isArchivebateSelected)"OPEN PLAYER" else "RETRY"
-                        State.FAILED->if(isArchivebateSelected)"OPEN PLAYER" else null
+                        State.HELD->"RETRY"
                         else->null
                     },
                     onRemove=if(state==State.DONE)null else ({
                         VideoEngine.cancelVideo(a.applicationContext,item.id)
-                    }))
+                    }),hasPrimaryAction=!retired || state==State.DONE)
             }
         }
         ChapterQueue(a).use{db->
@@ -702,8 +679,9 @@ object UnifiedDownloadsUi {
             // The old parent-level Clear rendered as a huge detached button
             // immediately above the next unrelated download row.
             val actions=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            if(item.state in setOf(State.DONE,State.FAILED,State.HELD,
-                    State.PAUSED) || item.actionText!=null){
+            if(item.hasPrimaryAction && (item.state in setOf(
+                    State.DONE,State.FAILED,State.HELD,State.PAUSED) ||
+                    item.actionText!=null)){
                 val command=when(item.state){
                     State.DONE->"OPEN";State.FAILED->item.actionText?:"RETRY"
                     State.HELD->item.actionText?:"SIGN IN"

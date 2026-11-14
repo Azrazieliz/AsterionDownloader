@@ -1102,14 +1102,23 @@ object VideoEngine {
             val retriever=MediaMetadataRetriever()
             try {
                 retriever.setDataSource(file.absolutePath)
+                val track=if(audioOnly)MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO
+                    else MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO
+                require(retriever.extractMetadata(track)=="yes"){
+                    "Downloaded container has no playable "+(if(audioOnly)"audio" else "video")+" track"
+                }
                 retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull()?.div(1000L)
+                    ?.toLongOrNull()
             }finally{retriever.release()}
-        }.getOrNull()
-        // Trusted sources have no arbitrary runtime threshold. Native HTTP
-        // checks actual received byte counts; embedded yt-dlp must exit zero.
-        if(actual!=null && actual<=0L)
-            throw java.io.IOException("Saved container has invalid playback duration")
+        }.getOrElse { failure ->
+            file.delete()
+            throw java.io.IOException("Downloaded container could not be played",failure)
+        }
+        val minimum=expectedDuration?.minus(5L)?.coerceAtLeast(0L)?.times(1000L)?:0L
+        if(actual==null || actual<=0L || actual<minimum){
+            file.delete()
+            throw java.io.IOException("Downloaded video is incomplete or has invalid playback duration")
+        }
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
         val values=ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
