@@ -24,6 +24,8 @@ internal object VideoExtractorErrors {
                 prefix+" unavailable (HTTP 404/410)"
             VideoFailurePolicy.Kind.UNSUPPORTED->
                 prefix+" unsupported by embedded extractor"
+            VideoFailurePolicy.Kind.DNS->
+                prefix+" cannot resolve provider hostname; retry after network recovers"
             VideoFailurePolicy.Kind.TRANSIENT->
                 prefix+" network/host error (timeout or HTTP 5xx)"
             VideoFailurePolicy.Kind.METADATA->
