@@ -12,7 +12,14 @@ def red(s):
  s=re.sub(r"[A-Za-z0-9_-]{35,}","[ID]",s)
  return re.sub(r"\s+"," ",s)[:700]
 print("chars",len(txt),flush=True)
-links=re.findall(r'<a\\b[^>]{0,850}href=["\\']([^"\\']{1,400})["\\']',txt,re.I)
+from html.parser import HTMLParser
+class SiteLinks(HTMLParser):
+ def __init__(self):super().__init__();self.hrefs=[]
+ def handle_starttag(self,tag,attrs):
+  a=dict(attrs)
+  if tag=="a" and a.get("href"):self.hrefs.append(a["href"])
+tags=SiteLinks();tags.feed(txt)
+links=tags.hrefs
 paths=[]
 for raw in links:
  url=urllib.parse.urlsplit(urllib.parse.urljoin(URL,raw))
