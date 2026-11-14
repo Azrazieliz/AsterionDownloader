@@ -24,11 +24,14 @@ class ApprovedProviderCoverageTest {
                     SiteBackfillProfiles.supports(host)
                 AlohaArea.ADULT,AlohaArea.HENTAI ->
                     host in VideoSiteProfiles.coveredHosts
-                AlohaArea.VIDEOS -> host=="onejav.com"
+                AlohaArea.TORRENTS ->
+                    TorrentFeedParser.source(site.url) in
+                        setOf("ONEJAV","SUKEBEI","XXXCLUB")
+                AlohaArea.VIDEOS -> host in VideoSiteProfiles.coveredHosts
                 AlohaArea.BOOKS ->
                     host=="mp4directs.com" || SiteBackfillProfiles.supports(host)
                 AlohaArea.COMICS -> SiteBackfillProfiles.supports(host)
-                AlohaArea.GAMES -> host=="sukebei.nyaa.si"
+                AlohaArea.GAMES -> false
                 AlohaArea.ASSETS -> host=="db.bepis.moe"
                 else->false
             }
