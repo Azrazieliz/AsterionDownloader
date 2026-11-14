@@ -7,6 +7,8 @@ import com.asterion.videoflow.NativeMediaDownloader
 import com.asterion.videoflow.EmbeddedYtDlpMetadata
 import com.asterion.videoflow.EmbeddedYtDlpTransfer
 import com.asterion.videoflow.LegacyYtDlpTransfer
+import com.asterion.videoflow.VideoExtractorVersion
+import com.chaquo.python.Python
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -81,8 +83,20 @@ class DeviceTransferSimulation:Instrumentation() {
                 val embedded=File(root,"chaquopy").apply{mkdirs()}
                 Log.i("ASTERION_SIM","AST_SIM: PYTHON_BEGIN")
                 LegacyYtDlpTransfer.initialize(context)
+                // This MUST confirm actual loaded Python code. A successful
+                // APK compilation and packaged wheel alone do not establish
+                // that Chaquopy imports the current extractor rather than
+                // the old AAR copy cached in sys.modules.
+                check(VideoExtractorVersion.activate(context)){
+                    "Pinned embedded Python extractor was not activated"
+                }
+                val runtime=Python.getInstance().getModule("yt_dlp.version")
+                    .get("__version__")?.toString().orEmpty()
+                check(runtime==VideoExtractorVersion.VERSION){
+                    "Wrong active extractor version: $runtime"
+                }
                 EmbeddedYtDlpMetadata.checkRuntime()
-                status("PYTHON_RUNTIME_OK")
+                status("PYTHON_RUNTIME_OK version="+runtime)
                 val template=File(embedded,"original.%(ext)s").absolutePath
                 val exit=EmbeddedYtDlpTransfer.download(
                     url,null,null,null,embedded,template,"best")

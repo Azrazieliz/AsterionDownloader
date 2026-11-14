@@ -59,6 +59,21 @@ internal object VideoExtractorVersion {
             // zipimport supports .whl archives containing pure Python sources.
             // This runs before the upstream ytdlp_runner first imports yt_dlp.
             path.callAttr("insert",0,wheel.absolutePath)
+            // The upstream Android AAR calls YtDlp.init() FIRST to start
+            // Chaquopy and may already import its bundled 2026.6.9 yt_dlp.
+            // sys.path alone does not supersede Python's sys.modules cache.
+            // Purge only that module tree, before the first transfer starts,
+            // so metadata and download both use the pinned current wheel.
+            val imported=python.getModule("sys").get("modules")
+                ?:error("Python sys.modules unavailable")
+            val keys=python.getBuiltins().callAttr(
+                "list",imported.callAttr("keys")).asList()
+            val old=keys.map{it.toString()}.filter{
+                it=="yt_dlp" || it.startsWith("yt_dlp.")
+            }
+            for(name in old.sortedByDescending{it.length})
+                imported.callAttr("pop",name)
+            python.getModule("importlib").callAttr("invalidate_caches")
             val version=python.getModule("yt_dlp.version")
                 .get("__version__")?.toString().orEmpty()
             check(version==VERSION){
