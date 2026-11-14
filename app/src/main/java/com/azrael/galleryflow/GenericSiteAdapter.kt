@@ -106,7 +106,11 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                     ?:doc.selectFirst("time[datetime]")?.attr("datetime")
                         ?.takeIf(String::isNotBlank)
             }
-            val photos = AlbumImageExtractor.photoPages(doc, url)
+            // Dedicated gallery publishers expose originals on the selected
+            // page itself. Do not crawl unrelated recommendation/photo cards
+            // when a parser reports no images on that page.
+            val photos = if(GallerySiteOriginalExtractors.isSpecial(url))
+                emptyList() else AlbumImageExtractor.photoPages(doc,url)
             photoLinks.addAll(photos)
             if (photoLinks.size > MAX_PHOTO_PAGES)
                 throw AdapterException("Album has more than $MAX_PHOTO_PAGES photo pages; " +
@@ -125,8 +129,9 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 "images were not marked complete.")
 
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
-        if (GallerySiteOriginalExtractors.isSpecial(url) &&
-            inlineImages.isNotEmpty()) {
+        if (GallerySiteOriginalExtractors.isSpecial(url)) {
+            // An empty source-specific parse is a failure, not permission to
+            // import thumbnail/recommendation galleries from another album.
             images.putAll(inlineImages)
         } else if (photoLinks.isNotEmpty()) {
             // Photo detail pages frequently expose the original that the album
