@@ -56,6 +56,8 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
             val uri = createRow(filename, mime, relativePath(entity, gallery))
             val digest = MessageDigest.getInstance("SHA-256")
             var bytes = 0L
+            val signature=ByteArray(40)
+            var signatureSize=0
             try {
                 context.contentResolver.openOutputStream(uri, "w")!!.use { out ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 4)
@@ -64,12 +66,18 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                         val read = response.input.read(buffer)
                         if (read < 0) break
                         out.write(buffer, 0, read)
+                        if(signatureSize<signature.size){
+                            val amount=minOf(read,signature.size-signatureSize)
+                            buffer.copyInto(signature,signatureSize,0,amount)
+                            signatureSize+=amount
+                        }
                         digest.update(buffer, 0, read)
                         bytes += read
                     }
                 }
                 if (bytes <= 0L || (response.contentLength > 0L && bytes != response.contentLength))
                     throw java.io.IOException("Incomplete download: " + bytes + " of " + response.contentLength)
+                OriginalPayloadVerifier.verify(media.kind,bytes,signature,signatureSize)
                 finishRow(uri)
                 val primary = DownloadResult(
                     contentUri = uri.toString(),
