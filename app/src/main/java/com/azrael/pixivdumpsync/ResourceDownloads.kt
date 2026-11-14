@@ -211,13 +211,15 @@ object ResourceDownloads {
         }
         val path=runCatching{URI(raw).path.orEmpty().lowercase()}.getOrDefault("")
         when{
-            path.endsWith(".torrent")->fetchTorrent(a,raw,folder)
+            path.endsWith(".torrent") || XXXClubTorrentSource.isDescriptor(raw)->
+                fetchTorrent(a,raw,folder)
             raw.contains("nyaa.si/view/")||raw.contains("sukebei.nyaa.si/view/")||
                 raw.contains("thepiratebay.")||raw.contains("1337x.")||
                 (URI(raw).host.orEmpty().removePrefix("www.")=="ggbases.com" &&
                     path=="/view.so")||
                 (URI(raw).host.orEmpty().removePrefix("www.")=="onejav.com" &&
-                    path.startsWith("/torrent/"))->
+                    path.startsWith("/torrent/")) ||
+                XXXClubTorrentSource.isDetail(raw)->
                 openTorrentSource(a,raw,folder)
             else->http(a,raw,folder)
         }
@@ -293,12 +295,16 @@ object ResourceDownloads {
             val failure=runCatching{
                 val page=Jsoup.connect(url).userAgent("Mozilla/5.0 (Linux; Android 17) Chrome/131.0")
                     .timeout(25000).maxBodySize(2000000).followRedirects(true).get()
+                val exact=if(XXXClubTorrentSource.isDetail(url))
+                    XXXClubTorrentSource.original(page.outerHtml(),url) else null
                 val magnets=page.select("a[href^=magnet:]").map{it.attr("href")}
                 val files=page.select("a[href$=.torrent],a[href*='.torrent?']")
                     .map{it.absUrl("href")}.filter{SearchRanking.validUrl(it)}
-                val magnet=magnets.firstOrNull()
-                if(magnet!=null)a.runOnUiThread{openMagnet(a,magnet,folder)}
-                else if(files.isNotEmpty())a.runOnUiThread{fetchTorrent(a,files.first(),folder)}
+                val chosen=exact?:magnets.firstOrNull()?:files.firstOrNull()
+                if(chosen?.startsWith("magnet:?",true)==true)
+                    a.runOnUiThread{openMagnet(a,chosen,folder)}
+                else if(!chosen.isNullOrBlank())
+                    a.runOnUiThread{fetchTorrent(a,chosen,folder)}
                 else a.runOnUiThread {
                     note(a,"No magnet or torrent descriptor was found on that page. Opening original listing.")
                     a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))
