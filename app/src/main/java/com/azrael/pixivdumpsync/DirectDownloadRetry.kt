@@ -76,7 +76,7 @@ internal object DirectRetryVault {
                     obj.getString("name"),obj.optString("referer").takeIf{it.isNotBlank()},
                     obj.optInt("attempts"),obj.optLong("after"))
             }.getOrNull()
-        }.take(250)
+        }.sortedByDescending{it.id}.take(250)
     }
 }
 object DirectDownloadRetry {
@@ -113,6 +113,28 @@ object DirectDownloadRetry {
         if(id<=0||!SearchRanking.validUrl(url))return
         DirectRetryVault.remember(ctx,DirectRetryVault.Request(id,url,folder,name,referer,0,0))
         scheduleStallCheck(ctx)
+    }
+    /** Stop a selected OS-owned transfer, not the entire download engine.
+     * Release the URL claim and encrypted retry record so the user can
+     * intentionally add that original again later. Never delete a saved file.
+     */
+    fun cancel(ctx:Context,id:Long):Boolean{
+        if(manualScheduled.contains(id) || !inFlight.add(id))return false
+        return try{
+            val current=DirectDownloadTracker.states(ctx,250)
+                .firstOrNull{it.job.id==id}?:return false
+            if(current.status !in setOf(DownloadManager.STATUS_PENDING,
+                    DownloadManager.STATUS_RUNNING,DownloadManager.STATUS_PAUSED))
+                return false
+            val manager=ctx.getSystemService(DownloadManager::class.java)
+            manager.remove(id)
+            CrossSourceDedup(ctx).use{it.releaseById(id)}
+            DirectRetryVault.remove(ctx,id)
+            DirectDownloadTracker.forget(ctx,id)
+            OriginalReceiptState.clear(ctx,id)
+            true
+        }catch(_:Exception){false}
+        finally{inFlight.remove(id)}
     }
     fun retryNow(ctx:Context,id:Long):Boolean{
         if(!AppPower.enabled(ctx))return false
