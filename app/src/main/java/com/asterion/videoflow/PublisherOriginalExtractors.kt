@@ -92,10 +92,10 @@ internal object PublisherOriginalExtractors {
         // unrelated recommendation JSON must not become the selected file.
         for(script in doc.select("script[type=application/ld+json]").take(12)){
             val content=script.data().ifBlank{script.html()}
-            val matches=Regex("""(?is)"@type"\\s*:\\s*"VideoObject"[^}]{0,10000}""")
+            val matches=Regex("""(?is)"@type"\s*:\s*"VideoObject"[^}]{0,10000}""")
                 .findAll(content)
             for(match in matches){
-                val src=Regex("""(?i)"contentUrl"\\s*:\\s*"([^"]+)"""")
+                val src=Regex("""(?i)"contentUrl"\s*:\s*"([^"]+)"""")
                     .find(match.value)?.groupValues?.get(1)?:continue
                 found+=src.replace("\\/","/").replace("\\u0026","&")
             }
