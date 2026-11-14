@@ -364,7 +364,37 @@ internal object SiteSpecificOriginalSources {
         return exact.values.toList().ifEmpty{frames}
     }
 
+    /**
+     * 3DHentaiX previously downloaded a playable OTHER scene from a nearby
+     * card/player. Only a SINGLE selected article/main player may publish this
+     * scene's source. Never scrape unrelated media or global script URLs.
+     */
+    internal fun threeDHentaiSelected(doc:Document,selected:String):List<Source>{
+        if(host(selected)!="3dhentaix.com" ||
+            !VideoSiteProfiles.isVideoPage(selected))return emptyList()
+        val controls=doc.select("main .video-player,main #player,article .video-player,article #player")
+            .filter{it.closest("aside,.related,.recommendations,.suggestions,"+
+                ".ads,.advertisement,.banner,.sidebar,.more-videos,"+
+                ".recommended-videos,[data-ad]")==null}
+        // Nested wrappers can refer to one player; identify the innermost
+        // actual video-bearing container and reject multiple independent ones.
+        val players=controls.filter{it.select("video[src],video source[src]").isNotEmpty()}
+            .filter{it.select("main .video-player,main #player,article .video-player,article #player")
+                .none{nested->nested!==it &&
+                    nested.select("video[src],video source[src]").isNotEmpty()}}
+        if(players.size!=1)return emptyList()
+        val isolated=Jsoup.parse("<main><div class='video-player'>"+
+            players.single().select("video[src],video source[src]")
+                .joinToString(""){it.outerHtml()}+"</div></main>",selected)
+        val sources=mediaElements(isolated,selected,
+            "main .video-player video[src],main .video-player video source[src]",
+            minimumRuntime=true)
+        // Competing media URLs cannot be attributed to the selected work.
+        return sources.takeIf{it.size==1}.orEmpty()
+    }
+
     internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
+        if(owner=="3dhentaix.com")return threeDHentaiSelected(doc,selected)
         val css=when(owner){
             "helloporn.com"->"#player video[src],#player source[src],"+
                 ".video-player video[src],.video-player source[src],"+
