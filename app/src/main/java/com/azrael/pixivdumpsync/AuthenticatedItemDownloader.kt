@@ -25,6 +25,10 @@ object AuthenticatedItemDownloader {
         SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)
 
     fun download(a:Activity,item:IndexedItem){
+        if(XXXClubTorrentSource.isDetail(item.url)){
+            ResourceDownloads.openTorrentSource(a,item.url,"Videos")
+            return
+        }
         if(usesVideoEngine(item)){
             val wasNew=VideoDb(a).use{
                 it.addVideo(item.url,item.title,origin="user")
