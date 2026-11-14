@@ -35,6 +35,7 @@ class FourKhdOriginalArchiveTest {
         assertEquals(MediaKind.ARCHIVE,media.single().kind)
         assertEquals("https://m.4khd.com/45ycnl",media.single().url)
         assertEquals("4KHD",media.single().archivePassword)
+        assertEquals(212,media.single().expectedArchivePhotos)
         assertFalse(media.any { it.url.contains("preview.jpg") })
         assertEquals(212,SelectedAlbumScope.advertisedCount(meta.title))
     }

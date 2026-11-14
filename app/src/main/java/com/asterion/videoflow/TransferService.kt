@@ -26,6 +26,7 @@ object VideoEngine {
     // timed-out publisher extractors must not reject the next selection.
     // Separate pools retain the native transfer lane when Python is stuck.
     private val metadataExecutor=VideoExecutionPools.create("videoflow-metadata",2)
+    private val publisherExecutor=VideoExecutionPools.create("videoflow-publisher",2)
     private val transferExecutor=VideoExecutionPools.create("videoflow-extractor",2)
     private val nativeExecutor=VideoExecutionPools.create("videoflow-native",2)
     /** Keep the Python-specific failures scoped to Python-required media.
@@ -510,6 +511,43 @@ object VideoEngine {
         check(db.touchClaim(item.id,item.lease)){
             "Download claim is no longer owned by this worker"
         }
+        fun <T> inspectPublisher(inspect:()->T):T {
+            val future=publisherExecutor.submit<T>{inspect()}
+            extractionJobs[item.id]=future
+            try {
+                while(true){
+                    if(stopRequests.contains(item.id) || Thread.currentThread().isInterrupted ||
+                        !db.touchClaim(item.id,item.lease))
+                        throw java.util.concurrent.CancellationException("Transfer paused or superseded")
+                    val remaining=VideoTransferLimits.NO_BYTES_RESOLVE_MS-
+                        (android.os.SystemClock.elapsedRealtime()-preparationStart)
+                    if(remaining<=0L)
+                        throw java.util.concurrent.TimeoutException(
+                            "Selected publisher did not expose a transferable original "+
+                                "within the resolver time budget")
+                    try {
+                        return future.get(minOf(remaining,VideoTransferLimits.POLL_MS),
+                            java.util.concurrent.TimeUnit.MILLISECONDS)
+                    }catch(_:java.util.concurrent.TimeoutException){
+                        // Keep the download lease alive while the publisher responds.
+                    }catch(failure:java.util.concurrent.ExecutionException){
+                        throw (failure.cause?:failure)
+                    }
+                }
+            }catch(interrupted:InterruptedException){
+                Thread.currentThread().interrupt()
+                throw java.util.concurrent.CancellationException("Publisher inspection interrupted")
+            }finally{
+                future.cancel(true)
+                extractionJobs.remove(item.id,future)
+                VideoExecutionPools.discardCancelled(publisherExecutor)
+            }
+        }
+        fun <T> publisherResult(inspect:()->T):Result<T> =
+            runCatching{inspectPublisher(inspect)}.onFailure{
+                if(it is java.util.concurrent.CancellationException ||
+                    it is VirtualMachineError || it is ThreadDeath)throw it
+            }
         // The third-party Java request wrapper silently discards several
         // essential yt-dlp options (including its output paths). Invoke the
         // embedded Python YoutubeDL API with typed options instead. The
@@ -745,15 +783,16 @@ object VideoEngine {
         // scheduled site sync. The old resolver fetched the same HTML
         // repeatedly through generic discovery and WatchPorn on EVERY site
         // before reaching the relevant provider, stalling parallel slots.
+        try {
         val publisherOriginals=if(canInspectPublisherHtml &&
             PublisherOriginalExtractors.owns(item.url) &&
             VideoSiteProfiles.isVideoPage(item.url))
-            runCatching{PublisherOriginalExtractors.resolve(context,item.url)}
+            publisherResult{PublisherOriginalExtractors.resolve(context,item.url)}
         else Result.success(emptyList())
         val publishedOriginals=publisherOriginals.getOrDefault(emptyList())
         val publishedPlayerInspection=if(!canInspectPublisherHtml ||
             publishedOriginals.isNotEmpty())
-            Result.success(emptyList<String>()) else runCatching {
+            Result.success(emptyList<String>()) else publisherResult {
                 WebDiscovery.embeddedCandidates(item.url,context,
                     explicitlySelected=userRequested)
             }
@@ -763,14 +802,13 @@ object VideoEngine {
             EpornerOriginalSource.videoCandidates(item.url,connected),
             publishedPlayerInspection.getOrDefault(emptyList()))
         val watchPorn=if(!canInspectPublisherHtml ||
-            NetworkRoute.siteKey(item.url)!="watchporn.to")null else runCatching{
+            NetworkRoute.siteKey(item.url)!="watchporn.to")null else publisherResult{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
         var heldReason:String?=null
-        try {
             // Real selected FreePornVideos HTML5MediaEmbed exposes 3 verified
             // HTTPS MP4 formats but its selected file URL has no .mp4 suffix.
             // The old native lane rejected it and retried a Python page
@@ -780,7 +818,7 @@ object VideoEngine {
             if(!downloaded && userRequested &&
                 FreePornVideosOriginalSource.selectedPage(item.url) &&
                 !FullLengthVideoPolicy.isExplicitPreview(item.title,item.url)){
-                val format=runCatching{
+                val format=publisherResult{
                     ensureExtractor(context)
                     val selected=connectedCookies?.takeIf{
                         it.isFile&&it.length()>0L}
@@ -859,8 +897,8 @@ object VideoEngine {
                     }catch(t:Exception){last=t}
                 }else if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,source.url)){
                     try {
-                        execute(ArchivebateSelectedMedia.resolve(
-                            context,item.url,source.url),source.url)
+                        execute(inspectPublisher{ArchivebateSelectedMedia.resolve(
+                            context,item.url,source.url)},source.url)
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
@@ -900,8 +938,8 @@ object VideoEngine {
                         continue
                     }
                     try{
-                        val media=ArchivebateSelectedMedia.resolve(
-                            context,item.url,candidate)
+                        val media=inspectPublisher{ArchivebateSelectedMedia.resolve(
+                            context,item.url,candidate)}
                         execute(media,candidate)
                         downloaded=true
                         break
@@ -917,7 +955,7 @@ object VideoEngine {
                 // This works for any publisher with a real media element,
                 // without adding site-specific fake player links.
                 val directlyPublished=if(canInspectPublisherHtml)
-                    runCatching{WebDiscovery.directMedia(candidate,context)}
+                    publisherResult{WebDiscovery.directMedia(candidate,context)}
                         .onFailure{cause->
                             // A real browser may show ONLY preview clips or a
                             // verification interstitial. Prefer that diagnosis
@@ -1022,10 +1060,6 @@ object VideoEngine {
                     }
                 }
             }
-        } finally {
-            // Do not keep browser authentication in the file system after transfer.
-            connectedCookies?.delete()
-        }
         if(stopRequests.contains(item.id))
             throw java.util.concurrent.CancellationException("Video paused")
         if(!downloaded){
@@ -1105,6 +1139,9 @@ object VideoEngine {
         } catch(t:Exception) {
             context.contentResolver.delete(uri,null,null)
             throw t
+        }
+        } finally {
+            connectedCookies?.delete()
         }
         } finally {
             runCatching { AsterionCwd.enter(context.filesDir) }

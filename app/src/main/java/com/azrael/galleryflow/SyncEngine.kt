@@ -464,29 +464,32 @@ class SyncEngine(private val context: Context) {
             }
 
             var officialArchiveComplete=true
-            if(SelectedAlbumScope.is4khdAlbum(meta.canonicalUrl)){
-                val expected=SelectedAlbumScope.advertisedCount(
-                    ref.title,meta.title)
+            val officialArchive=mediaItems.singleOrNull {
+                it.expectedArchivePhotos!=null
+            }
+            val expected=officialArchive?.expectedArchivePhotos
+            if(officialArchive!=null && expected!=null){
+                val memberPrefix="archive:"+officialArchive.normalizedUrl+"#"
                 val extracted=db.galleryMedia(meta.source,meta.stableId)
                     .filter{record->
-                        record.url.startsWith("archive:") &&
+                        record.url.startsWith(memberPrefix) &&
                         record.filename.orEmpty().matches(
                             Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$""")) &&
                         record.state==TransferState.COMPLETE &&
                         files.exists(record.contentUri)
                     }
-                if(expected==null || extracted.size!=expected){
+                if(extracted.size!=expected){
                     officialArchiveComplete=false
                     progress("4KHD full-HD archive incomplete: "+
-                        extracted.size+" extracted photos, expected "+
-                        (expected?.toString()?:"publisher count unavailable"))
+                        extracted.size+" extracted photos, expected "+expected)
                 }else{
                     // Only a verified original archive of exactly the
                     // advertised size can displace old webpage previews.
                     db.detachUnverifiedSelectedAlbumMedia(
                         meta.source,meta.stableId,
-                        mediaItems.map{it.stableId}.toSet()+
-                            extracted.map{it.mediaId}.toSet())
+                        db.galleryMedia(meta.source,meta.stableId)
+                            .filter { it.url.startsWith(memberPrefix) }
+                            .map { it.mediaId }.toSet()+officialArchive.stableId)
                     db.updateGalleryMeta(meta,expected)
                 }
             }

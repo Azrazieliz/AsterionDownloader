@@ -174,7 +174,10 @@ object AsterionCosplayGallery {
                         val original=GalleryDb(a).use{db->
                             db.galleryCanonicalUrl(gallery.source,gallery.galleryId)
                         }
-                        if(gallery.state!="complete" &&
+                        val declared=com.azrael.galleryflow.SelectedAlbumScope
+                            .advertisedCount(gallery.title)
+                        val needsReconciliation=declared!=null && declared!=gallery.count
+                        if((gallery.state!="complete" || needsReconciliation) &&
                             !original.isNullOrBlank() &&
                             ApprovedCosplayActions.isGalleryPage(original)){
                             thread(name="asterion-cosplay-retry-album"){

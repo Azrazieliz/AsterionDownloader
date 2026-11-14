@@ -99,8 +99,8 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     media.kind != MediaKind.ARCHIVE -> emptyList()
                     isZip(filename, mime) -> extractZip(entity, gallery, media, uri)
                     isRar(filename, mime) -> extractRar(entity, gallery, media, uri)
-                    media.archiveVideosOnly ->
-                        throw AdapterException("Supplemental video archive format is not supported: $filename")
+                    media.archiveVideosOnly || media.expectedArchivePhotos!=null ->
+                        throw AdapterException("Archive format is not supported: $filename")
                     else -> emptyList()
                 }
                 return DownloadOutcome(primary, extracted)
@@ -238,6 +238,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                 out += ExtractedDownload(media, result)
                 extractedIndex++
             }
+            verifyArchivePhotos(archive, out)
             if (out.isEmpty()) {
                 val expected = if (archive.archiveVideosOnly) "video files" else "supported image/video files"
                 throw AdapterException("ZIP contained no $expected.")
@@ -328,6 +329,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     extractedIndex++
                 }
 
+                verifyArchivePhotos(archive, out)
                 if (out.isEmpty()) {
                     val expected = if (archive.archiveVideosOnly) "video files" else "supported image/video files"
                     throw AdapterException("RAR contained no $expected.")
@@ -421,8 +423,24 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
             .find(value)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
     }
 
+    private fun verifyArchivePhotos(archive: MediaRef, files: List<ExtractedDownload>) {
+        val expected=archive.expectedArchivePhotos ?: return
+        val images=files.filter { it.media.kind==MediaKind.IMAGE }
+        SelectedAlbumScope.verifyAdvertisedCount(expected, images.size)
+        for(image in images){
+            val first=context.contentResolver.openInputStream(Uri.parse(image.result.contentUri))
+                ?.buffered()?.use { input ->
+                    ByteArray(minOf(image.result.bytes,40L).toInt()).also {
+                        java.io.DataInputStream(input).readFully(it)
+                    }
+                } ?: byteArrayOf()
+            OriginalPayloadVerifier.verify(MediaKind.IMAGE,image.result.bytes,first,first.size)
+        }
+    }
+
     private fun isZip(filename: String, mime: String): Boolean =
-        filename.endsWith(".zip", true) || mime.contains("zip", true)
+        filename.endsWith(".zip", true) || mime.equals("application/zip",true) ||
+            mime.equals("application/x-zip-compressed",true)
 
     private fun isRar(filename: String, mime: String): Boolean =
         filename.endsWith(".rar", true) || mime.contains("rar", true)

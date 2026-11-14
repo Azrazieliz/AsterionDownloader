@@ -2,6 +2,7 @@ package com.azrael.galleryflow
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import java.net.URI
 import java.util.Locale
 
@@ -87,25 +88,48 @@ internal object SelectedAlbumScope {
                 ?.takeIf{it in 1..10_000}
         }
 
-    fun originals(doc:Document,selectedUrl:String):List<AlbumImageExtractor.Item> {
-        val body=bodySelectors.firstNotNullOfOrNull { selector ->
+    private fun articleBody(doc:Document):Element =
+        bodySelectors.firstNotNullOfOrNull { selector ->
             doc.selectFirst(selector)?.takeIf { element ->
                 element.select("img,picture source,a[href]").isNotEmpty()
             }
         }?:throw AdapterException(
             "Selected album lacks an identifiable publisher image body; "+
                 "refusing to mix it with related galleries")
-        val isolated=Jsoup.parse(body.outerHtml(),selectedUrl)
+
+    fun originals(doc:Document,selectedUrl:String):List<AlbumImageExtractor.Item> {
+        val body=articleBody(doc)
+        val post=body.closest("article")
+        val postId=post?.classNames()?.firstNotNullOfOrNull {
+            Regex("^post-([0-9]+)$").matchEntire(it)?.groupValues?.get(1)
+        } ?: post?.id()?.removePrefix("post-")?.takeIf { it.matches(Regex("[0-9]+")) }
+        val wordpressGalleries=body.select(".gallery[class*=galleryid-]")
+        val selectedGalleries=postId?.let { id ->
+            wordpressGalleries.filter { it.hasClass("galleryid-$id") }
+        }
+        if(postId!=null && wordpressGalleries.isNotEmpty() && selectedGalleries.isNullOrEmpty())
+            throw AdapterException("The selected post did not expose its own photo gallery")
+        val content=selectedGalleries?.takeIf { it.isNotEmpty() }?.joinToString("") {
+            it.outerHtml()
+        } ?: body.outerHtml()
+        val isolated=Jsoup.parse(content,doc.baseUri().ifBlank { selectedUrl })
         isolated.select(excluded).remove()
         // Strip links to other album pages, but keep only image/media links
         // and the current album's own lazy-original anchors.
         isolated.select("a[href]").forEach{anchor->
-            val candidate=runCatching{URI(selectedUrl).resolve(anchor.attr("href"))}
+            val candidate=runCatching{URI(isolated.baseUri()).resolve(anchor.attr("href"))}
                 .getOrNull()
             val path=candidate?.path.orEmpty().lowercase(Locale.ROOT)
-            if(!Regex("""\.(?:jpe?g|png|gif|webp|avif)$""")
-                    .containsMatchIn(path) &&
-                anchor.select("img,picture").isEmpty())
+            if(Regex("""\.(?:jpe?g|png|gif|webp|avif)$""").containsMatchIn(path)) {
+                // Keep one representation when an explicit original wraps a
+                // responsive picture, whose source URLs are alternate encodings.
+                if(anchor.select("img,picture").isNotEmpty()){
+                    anchor.attr("download","")
+                    anchor.select("picture,img").remove()
+                }
+            }else if(anchor.select("img,picture").isEmpty()) anchor.remove()
+            else if(candidate!=null && samePublisher(selectedUrl,candidate) &&
+                candidate.path.trimEnd('/')!=URI(selectedUrl).path.trimEnd('/'))
                 anchor.remove()
         }
         val originals=AlbumImageExtractor.originals(isolated,selectedUrl)
@@ -120,6 +144,10 @@ internal object SelectedAlbumScope {
         }
         return seen.values.toList()
     }
+
+    private fun samePublisher(url:String,uri:URI):Boolean =
+        URI(url).host.orEmpty().removePrefix("www.").equals(
+            uri.host.orEmpty().removePrefix("www."),ignoreCase=true)
 
     fun verifyAdvertisedCount(expected:Int?,actual:Int){
         if(expected!=null && actual!=expected)

@@ -5,6 +5,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SelectedAlbumScopeTest {
+    @Test fun wordpressAlbumUsesOnlyTheSelectedPostsGallery() {
+        val selected="https://cosplaytele.com/literal-selected-set/"
+        val doc=Jsoup.parse("""
+            <article id="post-532484" class="post-532484">
+              <div class="article-inner"><div class="entry-content single-page">
+                <img src="https://cdn.cosplaytele.com/cover.jpg">
+                <div class="gallery galleryid-532484">
+                  <figure><a href="/files/original.jpg">
+                    <picture><source srcset="/files/reencoded.webp 2048w">
+                      <img src="/files/display.jpg">
+                    </picture>
+                  </a></figure>
+                </div>
+                <div class="gallery galleryid-123">
+                  <img src="/files/other-album.jpg">
+                </div>
+              </div></div>
+            </article>
+        """,selected)
+        assertEquals(listOf("https://cosplaytele.com/files/original.jpg"),
+            SelectedAlbumScope.originals(doc,selected).map{it.url})
+    }
+
     @Test fun declared37PhotoAlbumNeverAbsorbs17RecommendedPhotos() {
         val photos=(1..37).joinToString(""){i->
             "<img src='https://cdn.cosplaytele.com/set/$i.jpg' alt='photo'/>"

@@ -150,15 +150,17 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             val meta=GalleryMeta(source,gallery.stableId,
                 gallery.entityStableId,url,title?:gallery.title,tags,
                 publishedAt,visitedAlbumPages.toList(),creator)
-            val archives=officialArchives.mapIndexed{index,bridge->
-                val normalized=URI(bridge).let{
-                    URI(it.scheme,it.authority,it.path,null,null).toString()
-                }
-                MediaRef(source,digest(url+"|original-archive|"+normalized).take(32),
-                    gallery.stableId,index,bridge,normalized,url,
-                    "application/zip",MediaKind.ARCHIVE,"4KHD","4KHD")
+            val expected=SelectedAlbumScope.advertisedCount(meta.title,gallery.title)
+                ?:throw AdapterException("4KHD did not publish a photo count for this album")
+            val bridge=officialArchives.first()
+            val normalized=URI(bridge).let{
+                URI(it.scheme,it.authority,it.path,null,null).toString()
             }
-            return meta to archives
+            return meta to listOf(MediaRef(source,
+                digest(url+"|original-archive|"+normalized).take(32),
+                gallery.stableId,0,bridge,normalized,url,
+                "application/zip",MediaKind.ARCHIVE,"4KHD","4KHD",
+                expectedArchivePhotos=expected))
         }
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
         if (GallerySiteOriginalExtractors.isStrictAlbum(url) ||

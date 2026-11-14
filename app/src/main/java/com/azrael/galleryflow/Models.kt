@@ -79,7 +79,8 @@ data class MediaRef(
     val provider: String? = null,
     val archivePassword: String? = null,
     val archiveVideosOnly: Boolean = false,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    val expectedArchivePhotos: Int? = null
 )
 
 data class EntityRecord(
