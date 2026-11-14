@@ -195,6 +195,17 @@ object BrowserPageFetch {
                             // the selected element's normal HTML5 source,
                             // never intercept unrelated browser requests.
                             const selectedPlayerHost=location.hostname.replace(/^www\./,'');
+                            // JAVIDEO's visible Play control activates the
+                            // selected StreamTape iframe. The initial page's
+                            // only HTML5 video is an unrelated muted ad; never
+                            // serialize that ad as the requested original.
+                            if(selectedPlayerHost==='javideo.net'){
+                                const play=document.querySelector('#clickfakeplayer');
+                                if(play && !play.dataset.asterionActivated){
+                                    play.dataset.asterionActivated='true';
+                                    play.click();
+                                }
+                            }
                             if(selectedPlayerHost==='hentaibros.net'){
                                 const play=document.querySelector(
                                     '.video-player .flowplayer.is-splash .fp-play');
@@ -225,6 +236,7 @@ object BrowserPageFetch {
                                 '#player video,.video-js video,video source[src],'+
                                 (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net','hentaihaven.xxx']
                                     .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
+                                .filter(el=>selectedPlayerHost!=='javideo.net')
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
                                     !!el && list.indexOf(el)===i &&
@@ -257,6 +269,16 @@ object BrowserPageFetch {
                                     return /^\/watch\/\d{1,16}\/?$/.test(currentPath) &&
                                         host==='mixdrop.ag' &&
                                         /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
+                                if(publisher==='javideo.net'){
+                                    const wrapper=el.closest('.embed-responsive.player');
+                                    if(!wrapper || wrapper.classList.contains('d-none'))
+                                        return false;
+                                    return ['streamtape.com','streamtape.to',
+                                        'streamtape.net','streamtape.site',
+                                        'sbtape.com'].includes(host) &&
+                                        /^\/(?:e|v|embed)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                            .test(u.pathname);
+                                }
                                 if(publisher==='uncensoredhentai.xxx')
                                     return /^\/(?:watch|video)\//.test(currentPath) &&
                                         host==='nhplayer.com' &&
