@@ -233,6 +233,9 @@ object TorrentSourceBackfill {
     private val busy=AtomicBoolean(false)
     fun ensure(ctx:Context){
         if(!AppPower.enabled(ctx))return
+        // Existing installs may retain old XXXClub cards inside Adult.
+        // Preserve their rows and progress while correcting their module.
+        SourceIndexDb(ctx).use{it.migrateNativeTorrentPlacement()}
         val jobs=ctx.getSystemService(JobScheduler::class.java)
         if(jobs.allPendingJobs.none{it.id==PERIODIC}){
             jobs.schedule(JobInfo.Builder(PERIODIC,
@@ -356,17 +359,6 @@ object TorrentSourceBackfill {
                             error("OneJAV returned no public torrent cards; "+
                                 "connect the website account or provider adapter needs repair")
                         entries.forEach(db::record)
-                        if(site=="XXXCLUB"){
-                            // Preserve selected torrent cards in the existing
-                            // unified ADULT results, not a detached Torrent UI.
-                            SourceIndexDb(ctx).use{index->
-                                for(entry in entries){
-                                    index.upsert(IndexedItem(entry.page,
-                                        entry.title,null,home,"ADULT",
-                                        "torrent",entry.discovered,false))
-                                }
-                            }
-                        }
                         val next=TorrentFeedParser.next(doc,site,current)
                         db.checked(site,next)
                         if(next!=null && next !in seen)queue.addLast(next)
