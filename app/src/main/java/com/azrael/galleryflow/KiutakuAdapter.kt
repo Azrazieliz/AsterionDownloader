@@ -89,7 +89,21 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
         // the first document. Traverse each newly found page until exhausted.
         val pending = ArrayDeque<String>()
         val queued = hashSetOf(gallery.canonicalUrl)
+        var advertisedLastPage = 1
         fun enqueue(doc: Document) {
+            // Kiutaku often shows only a first/last pagination link. An
+            // explicit "End" or last-page count is publisher evidence for
+            // every intermediate ?page=N in this SAME gallery.
+            val last = advertisedGalleryPage(doc,gallery.canonicalUrl)
+            if(last > MAX_GALLERY_PAGES) throw AdapterException(
+                "Kiutaku advertises $last pages; bounded album retry required.")
+            if(last > advertisedLastPage){
+                for(page in advertisedLastPage+1..last){
+                    val link=gallery.canonicalUrl+"?page="+page
+                    if(queued.add(link))pending.addLast(link)
+                }
+                advertisedLastPage=last
+            }
             doc.select("a[href]")
                 .map { absolute(it, "href") }
                 .filter { isGalleryPaginationUrl(gallery.canonicalUrl, it) }
@@ -143,9 +157,13 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
     }
 
     internal fun imageCandidates(doc: Document): List<String> {
+        // On real Kiutaku articles only .article-fulltext owns the album.
+        // Generic article/main images can be sponsored posts or unrelated sets.
+        val published = doc.select(".article-fulltext img")
         val preferred = listOf("article img", ".entry-content img", ".post-content img", "main img")
             .flatMap { doc.select(it) }.distinct()
-        val elements = if (preferred.isNotEmpty()) preferred else doc.select("img")
+        val elements = if(published.isNotEmpty())published
+            else if (preferred.isNotEmpty()) preferred else doc.select("img")
         return elements.mapNotNull { img ->
             val raw = listOf("data-src", "data-lazy-src", "data-original", "srcset", "src")
                 .mapNotNull { attr -> img.attr(attr).takeIf { it.isNotBlank() } }
@@ -186,6 +204,18 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
                 ?: anchor.text().trim().toIntOrNull()
             if (page == null) null else page to href
         }.minByOrNull { it.first }?.second
+    }
+
+    internal fun advertisedGalleryPage(doc: Document,base: String): Int {
+        val end = doc.select("a[href]").mapNotNull { link ->
+            if(!link.text().trim().equals("End",ignoreCase=true))return@mapNotNull null
+            val url=absolute(link,"href")
+            if(!isGalleryPaginationUrl(base,url))return@mapNotNull null
+            paginationNumber(base,url).takeIf{it!=Int.MAX_VALUE}
+        }.maxOrNull()
+        val count=doc.selectFirst(".pagination-list > span:last-child")
+            ?.text()?.trim()?.toIntOrNull()
+        return maxOf(1,end?:1,count?:1)
     }
 
     private fun isGalleryPaginationUrl(base: String, candidate: String): Boolean {
