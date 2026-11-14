@@ -34,6 +34,7 @@ class ArchivebateWatchActivity:Activity() {
     private var player:WebView?=null
     override fun onCreate(state:Bundle?){
         super.onCreate(state)
+        ArchivebateDiagnostics.record(this,"watch_open")
         val watch=intent.getStringExtra(WATCH_URL).orEmpty()
         val title=intent.getStringExtra(VIDEO_TITLE)
             ?.take(180)?.ifBlank{"Archivebate recording"}?:"Archivebate recording"
@@ -99,6 +100,8 @@ class ArchivebateWatchActivity:Activity() {
                     JSONTokener(response).nextValue() as? String
                 }.getOrNull().orEmpty()
                 if(!ArchivebateSelectedMedia.isSelectedMedia(observed)){
+                    ArchivebateDiagnostics.record(this,"no_selected_media",
+                        "Player has no verified original MP4 after user playback")
                     Toast.makeText(this,
                         "The selected player has not exposed an original MP4. "+
                         "Play the recording first; protected or unavailable media "+
@@ -109,22 +112,31 @@ class ArchivebateWatchActivity:Activity() {
                     db.addVideo(observed,title,0L,origin="user")
                 }
                 if(queued){
+                    ArchivebateDiagnostics.record(this,"queued_original")
                     VideoEngine.launch(applicationContext,false)
                     Toast.makeText(this,
                         "Selected original queued. Verify its transfer in Downloads.",
                         Toast.LENGTH_LONG).show()
                     finish()
                 }else{
+                    ArchivebateDiagnostics.record(this,"already_present")
                     Toast.makeText(this,"This original is already queued or saved",
                         Toast.LENGTH_LONG).show()
                 }
             }
         },LinearLayout.LayoutParams(0,-2,2f))
         root.addView(actions)
+        root.addView(ui.action(this,"COPY PLAYER DIAGNOSTIC"){
+            getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(android.content.ClipData.newPlainText(
+                    "Archivebate player diagnostics",ArchivebateDiagnostics.report(this)))
+            Toast.makeText(this,"Archivebate diagnostic copied",Toast.LENGTH_SHORT).show()
+        })
         setContentView(root)
 
         info.text="Locating this exact recording's published player…"
         thread(name="asterion-selected-archivebate-player"){
+            ArchivebateDiagnostics.record(applicationContext,"embed_lookup_started")
             val response=runCatching{
                 WebDiscovery.embeddedCandidates(watch,applicationContext)
                     .firstOrNull{ArchivebateSelectedMedia.isSelectedEmbed(watch,it)}
@@ -133,10 +145,13 @@ class ArchivebateWatchActivity:Activity() {
             runOnUiThread{
                 if(isFinishing || isDestroyed)return@runOnUiThread
                 response.onSuccess{embed->
+                    ArchivebateDiagnostics.record(this,"selected_embed_found")
                     info.text="Play the selected recording, then download "+
                         "only its actual original."
                     video.loadUrl(embed,mapOf("Referer" to watch))
                 }.onFailure{error->
+                    ArchivebateDiagnostics.record(this,"embed_lookup_failed",
+                        error.javaClass.simpleName+": "+error.message.orEmpty())
                     info.text="Selected original unavailable: "+
                         error.message.orEmpty().take(170)+
                         " · reconnect the site or retry this recording."
