@@ -38,8 +38,8 @@ for host,url in SITES.items():
         paths=[]
         for href in dom.hrefs:
             u=urllib.parse.urlsplit(urllib.parse.urljoin(url,href))
-            if u.scheme!="https" or u.hostname is None or
-                not(u.hostname==host or u.hostname in ("www."+host,"m."+host)):continue
+            if (u.scheme!="https" or u.hostname is None or
+                not(u.hostname==host or u.hostname in ("www."+host,"m."+host))):continue
             path=u.path
             if path in ("","/") or len(path)>135:continue
             if path in paths:continue
