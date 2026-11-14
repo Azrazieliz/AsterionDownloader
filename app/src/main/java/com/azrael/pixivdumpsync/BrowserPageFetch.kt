@@ -71,12 +71,21 @@ object BrowserPageFetch {
         // gateway for a source that the user has not connected.
         var archivebateContinued=false
         var archivebateWaits=0
+        // Only the explicitly selected publishers with JS-loaded players.
+        // This waits for the actual HTML5 media and metadata to appear;
+        // it does not intercept arbitrary network requests or browse pages.
+        var selectedPlayerWaits=0
+        val selectedPlayerHost=host in setOf(
+            "fullporner.com","mydaddy.cc","nhplayer.com",
+            "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
+            "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com")
         main.post {
             try{
             val web=WebView(context)
             instance.set(web)
             web.settings.javaScriptEnabled=true
             web.settings.domStorageEnabled=true
+            if(selectedPlayerHost)web.settings.mediaPlaybackRequiresUserGesture=false
             web.settings.allowFileAccess=false
             web.settings.allowContentAccess=false
             CookieManager.getInstance().setAcceptCookie(true)
@@ -184,7 +193,9 @@ object BrowserPageFetch {
                             }
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,video#flvv,'+
-                                '#player video,.video-js video,video source[src]')]
+                                '#player video,.video-js video,video source[src],'+
+                                (['mydaddy.cc','nhplayer.com','hentaihaven.xxx']
+                                    .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
                                     !!el && list.indexOf(el)===i &&
@@ -269,6 +280,17 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
+                            }else if(selectedPlayerHost &&
+                                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) &&
+                                selectedPlayerWaits++<6 &&
+                                !Regex("""<video\\s+src="https://[^"]+"""")
+                                    .containsMatchIn(page)){
+                                // The original video isn't published until the
+                                // selected player's JS initialization. An HTTP
+                                // 200 response with no source is not success.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_400L)
                             }else{
                                 result.set(page)
                                 latch.countDown()
