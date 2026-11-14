@@ -19,6 +19,11 @@ internal object SiteSpecificOriginalSources {
         URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
     }.getOrDefault("")
     fun owns(url:String)=host(url) in owners
+    /** File-hosting landing pages are not MP4 media even if their title
+     * ends in .mp4. Their provider must resolve them separately.
+     */
+    internal fun isHosterPage(link:String):Boolean =
+        host(link) in setOf("k2s.cc","nitroflare.com","uploadgig.com")
     private fun https(raw:String,base:String):String? {
         if(raw.isBlank() || listOf("blob:","javascript:","data:").any{
             raw.startsWith(it,true)})return null
@@ -69,7 +74,7 @@ internal object SiteSpecificOriginalSources {
         }
         return found.values.toList()
     }
-    private fun playerLink(doc:Document,owner:String):String? {
+    internal fun playerLink(doc:Document,owner:String):String? {
         val target=when(owner){
             "fullporner.com" -> "fullporner.com"
             "hqpornerxxx.com" -> "myxstudio.top"
@@ -176,7 +181,7 @@ internal object SiteSpecificOriginalSources {
      * NOT a stream. These URLs remain hoster landing pages to be resolved by
      * their own hoster transfer; a .mp4 path alone is NOT a media receipt.
      */
-    private fun roshy(doc:Document,selected:String):List<Source>{
+    internal fun roshy(doc:Document,selected:String):List<Source>{
         val out=LinkedHashMap<String,Source>()
         for(a in doc.select("article a[href],.entry-content a[href],main a[href]")
             .take(250)){
@@ -200,7 +205,7 @@ internal object SiteSpecificOriginalSources {
      * selected playback page. Extract the actual media from that selected
      * video's player; never download page HTML or unrelated article anchors.
      */
-    private fun mp4hentai(doc:Document,selected:String):List<Source>{
+    internal fun mp4hentai(doc:Document,selected:String):List<Source>{
         if(!Regex("""^/20[0-9]{2}/(?:0[1-9]|1[0-2])/[^?#]{3,300}/?$""")
                 .matches(URI(selected).path.orEmpty()))return emptyList()
         val player=mediaElements(doc,selected,
@@ -212,7 +217,7 @@ internal object SiteSpecificOriginalSources {
         // No file in an unrelated recommendation/sidebar is an original.
         return (player+jsSources(doc,selected)).distinctBy{it.url}
     }
-    private fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
+    internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
         val css=when(owner){
             "helloporn.com"->"#player video[src],#player source[src],"+
                 ".video-player video[src],.video-player source[src],"+
