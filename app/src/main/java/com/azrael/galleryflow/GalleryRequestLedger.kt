@@ -18,9 +18,12 @@ internal object GalleryRequestLedger {
     private val lock=Any()
 
     data class Request(val mode:SyncMode,val entityId:String?=null,
-                       val siteHost:String?=null) {
-        val targeted get()=entityId!=null || siteHost!=null
-        fun signature():String=mode.name+"|"+entityId.orEmpty()+"|"+siteHost.orEmpty()
+                       val siteHost:String?=null,
+                       val albumUrl:String?=null,
+                       val albumTitle:String?=null) {
+        val targeted get()=entityId!=null || siteHost!=null || albumUrl!=null
+        fun signature():String=mode.name+"|"+entityId.orEmpty()+"|"+
+            siteHost.orEmpty()+"|"+albumUrl.orEmpty()
     }
 
     private fun read(context:Context):MutableList<Request>{
@@ -35,7 +38,9 @@ internal object GalleryRequestLedger {
                         .getOrNull()?:continue
                     val entity=value.optString("entity").takeIf{it.isNotBlank()}
                     val host=value.optString("host").takeIf{it.isNotBlank()}
-                    val req=Request(mode,entity,host)
+                    val album=value.optString("album").takeIf{it.isNotBlank()}
+                    val title=value.optString("title").takeIf{it.isNotBlank()}
+                    val req=Request(mode,entity,host,album,title)
                     if(req.targeted && none{it.signature()==req.signature()})
                         add(req)
                 }
@@ -48,7 +53,9 @@ internal object GalleryRequestLedger {
         requests.forEach{r->
             array.put(JSONObject().put("mode",r.mode.name)
                 .put("entity",r.entityId.orEmpty())
-                .put("host",r.siteHost.orEmpty()))
+                .put("host",r.siteHost.orEmpty())
+                .put("album",r.albumUrl.orEmpty())
+                .put("title",r.albumTitle.orEmpty()))
         }
         check(context.getSharedPreferences(PREF,Context.MODE_PRIVATE)
             .edit().putString(KEY,array.toString()).commit()){
