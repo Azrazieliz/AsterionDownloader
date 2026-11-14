@@ -77,6 +77,7 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         val visitedAlbumPages = linkedSetOf<String>()
         val photoLinks = linkedSetOf<String>()
         val inlineImages = linkedMapOf<String, AlbumImageExtractor.Item>()
+        val officialArchives=linkedSetOf<String>()
         var next: String? = url
         var title: String? = null
         var tags: List<String> = emptyList()
@@ -106,6 +107,15 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                     ?:doc.selectFirst("time[datetime]")?.attr("datetime")
                         ?.takeIf(String::isNotBlank)
             }
+            if(SelectedAlbumScope.is4khdAlbum(url)){
+                // The actual full-resolution files are supplied through
+                // 4KHD's own TeraBox download bridge, not its paginated
+                // article preview images.
+                officialArchives.addAll(
+                    SelectedAlbumScope.officialOriginalArchives(doc,url))
+                next=null
+                continue
+            }
             // Dedicated gallery publishers expose originals on the selected
             // page itself. Do not crawl unrelated recommendation/photo cards
             // when a parser reports no images on that page.
@@ -133,6 +143,23 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             throw AdapterException("Album pagination exceeds $MAX_GALLERY_PAGES pages; " +
                 "images were not marked complete.")
 
+        if(SelectedAlbumScope.is4khdAlbum(url)){
+            if(officialArchives.isEmpty())throw AdapterException(
+                "4KHD album has no publisher-confirmed full-HD TeraBox "+
+                    "download link. Webpage previews are not originals.")
+            val meta=GalleryMeta(source,gallery.stableId,
+                gallery.entityStableId,url,title?:gallery.title,tags,
+                publishedAt,visitedAlbumPages.toList(),creator)
+            val archives=officialArchives.mapIndexed{index,bridge->
+                val normalized=URI(bridge).let{
+                    URI(it.scheme,it.authority,it.path,null,null).toString()
+                }
+                MediaRef(source,digest(url+"|original-archive|"+normalized).take(32),
+                    gallery.stableId,index,bridge,normalized,url,
+                    "application/zip",MediaKind.ARCHIVE,"4KHD","4KHD")
+            }
+            return meta to archives
+        }
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
         if (GallerySiteOriginalExtractors.isStrictAlbum(url) ||
             SelectedAlbumScope.owns(url)) {
