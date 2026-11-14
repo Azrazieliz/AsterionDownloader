@@ -262,21 +262,21 @@ object SourceIndexPanel {
             }
             return
         }
-        if(item.queued){
-            Toast.makeText(a,"Already queued · check Downloads",
-                Toast.LENGTH_SHORT).show()
-            return
-        }
         if(SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)){
-            // Video page thumbnails, including provider-indexed cards with a
-            // missing/incorrect "video" kind, need VideoFlow resolution.
-            // Generic original-file resolution expects a direct file link and
-            // incorrectly reports "No verified original" for these pages.
-            val created=VideoDb(a).use{it.addVideo(item.url,item.title)}
-            if(created)VideoEngine.launch(a,false)
+            // Index queued flags are not the authoritative video transfer
+            // state. An old index flag must not block an explicit retry.
+            // addVideo safely reclaims failed/paused rows; launching the
+            // worker also rescues accepted but unscheduled queued rows.
+            val created=VideoDb(a).use{
+                it.addVideo(item.url,item.title,origin="user")
+            }
+            VideoEngine.launch(a,false)
             Toast.makeText(a,
-                if(created)"Selected video queued for verification · "+item.title.take(45)
-                else "Already in Downloads · "+item.title.take(45),
+                if(created)"Selected original queued · "+item.title.take(45)
+                else "Existing download checked · "+item.title.take(45),
+                Toast.LENGTH_SHORT).show()
+        }else if(item.queued){
+            Toast.makeText(a,"Already queued · check Downloads",
                 Toast.LENGTH_SHORT).show()
         }else if(item.area=="BOOKS" && NovelEpubParser.supportedSeries(item.url)){
             val created=NovelEpubService.enqueue(a,item.url,item.title)
