@@ -137,6 +137,21 @@ object DirectDownloadTracker {
             card.addView(ui.text(a,item.job.folder+" · "+item.job.sourceHost+
                 " · "+label,12f,if(item.status==DownloadManager.STATUS_FAILED ||
                     receipt=="INVALID") ui.danger else ui.secondary),ui.lp(a,5))
+            // The encrypted retry vault already retains the original URL,
+            // referer and dedup claim. Expose its real recovery operation in
+            // Downloads instead of leaving failed/stalled rows as dead ends.
+            if(item.status==DownloadManager.STATUS_FAILED ||
+                item.status==DownloadManager.STATUS_PAUSED ||
+                (item.status==DownloadManager.STATUS_SUCCESSFUL &&
+                    receipt=="INVALID")) {
+                card.addView(ui.action(a,"RETRY DOWNLOAD",false){
+                    val scheduled=DirectDownloadRetry.retryNow(a,item.job.id)
+                    Toast.makeText(a,if(scheduled)
+                        "Retry requested · original will be rechecked"
+                    else "Retry unavailable · check account or source access",
+                        Toast.LENGTH_LONG).show()
+                },ui.lp(a,7))
+            }
             if(item.status==DownloadManager.STATUS_SUCCESSFUL){
                 card.addView(ui.action(a,"OPEN FILE",false){
                     val manager=a.getSystemService(DownloadManager::class.java)
