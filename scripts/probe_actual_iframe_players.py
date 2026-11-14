@@ -58,8 +58,15 @@ def probe(pair):
    "manifest":r"\.m3u8|\.mpd","mp4":r"\.mp4",
    "source":r"\bsources?\s*[:=]","file":r"\bfile\s*[:=]",
    "gate":r"just a moment|captcha|access denied|verify you are human"}.items()}
+  snippets=[]
+  for match in list(re.finditer(r"(?i)\\.mp4|\\bsources\\b|\\bfile\\b|\\bvideoUrl\\b",source))[:10]:
+   context=source[max(0,match.start()-70):min(len(source),match.end()+90)]
+   context=re.sub(r"https?://[^\\s'\\\"<>]+","[URL]",context)
+   context=re.sub(r"[A-Za-z0-9_-]{50,}","[TOKEN]",context)
+   snippets.append(re.sub(r"[\\r\\n\\t]+"," ",context)[:140])
   out.append("player="+shape(nested)+" http="+str(status)+
-    " bytes="+str(len(source))+" actual_video_tags="+str(direct[:3])+" hints="+str(hints))
+    " bytes="+str(len(source))+" actual_video_tags="+str(direct[:3])+" hints="+str(hints)+
+    " snippets="+str(snippets[:7]))
  return " | ".join(out)
 if __name__=="__main__":
  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
