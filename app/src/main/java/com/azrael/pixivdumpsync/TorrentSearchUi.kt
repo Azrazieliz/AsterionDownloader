@@ -119,7 +119,7 @@ object TorrentSearchUi {
         val registered=TorrentFeedDb(a).use{it.status()}
         val shown=when(area){
             TorrentArea.GAMES->registered.filter{it.source=="NYAA_MIRROR"}
-            TorrentArea.ADULT->registered.filter{it.source in setOf("ONEJAV","SUKEBEI")}
+            TorrentArea.ADULT->registered.filter{it.source in setOf("ONEJAV","SUKEBEI","XXXCLUB")}
             TorrentArea.BOOKS->emptyList()
         }
         val settings=a.getSharedPreferences("asterion_torrent_source_ui",0)
@@ -140,6 +140,7 @@ object TorrentSearchUi {
             val friendly=when(feed.source){
                 "SUKEBEI"->"Sukebei"
                 "ONEJAV"->"OneJAV"
+                "XXXCLUB"->"XXXClub"
                 else->"Nyaa"
             }
             val busy=TorrentSourceBackfill.isRunning(feed.source)
