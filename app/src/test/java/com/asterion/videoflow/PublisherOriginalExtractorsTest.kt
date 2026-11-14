@@ -92,6 +92,17 @@ class PublisherOriginalExtractorsTest {
                 PublisherOriginalExtractors.fromHtml(page,full).map{it.url})
         }
     }
+    @Test fun exactSelectedPlayerHlsManifestIsDistinctFromPreview(){
+        val selected=cases.getValue("helloporn.com")
+        val html="""<main>
+            <video src="https://cdn.example/preview.mp4"></video>
+            <div id="player">
+              <source src="https://cdn.example/selected/master.m3u8"
+                      type="application/vnd.apple.mpegurl"/>
+            </div></main>"""
+        assertEquals(listOf("https://cdn.example/selected/master.m3u8"),
+            PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
+    }
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
         val html="""<div id="player"><video src="https://cdn.example/original.mp4"></video></div>"""
         assertTrue(PublisherOriginalExtractors.fromHtml(
