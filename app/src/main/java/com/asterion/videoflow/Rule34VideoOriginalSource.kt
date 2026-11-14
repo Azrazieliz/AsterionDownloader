@@ -15,7 +15,11 @@ import java.util.Locale
 internal object Rule34VideoOriginalSource {
     data class Original(val url:String,val quality:Int,val format:String)
     private val videoPath=Regex("""^/videos?/([0-9]{1,12})(?:/[^?#]*)?/?$""")
-    private val videoLabel=Regex("""(?i)\b(mp4|m4v|webm)\s+(\d{3,4})\s*p\b""")
+    // Real publisher labels concatenate quality and file size:
+    // "MP4 720p3 MB", not only "MP4 720p". The prior word boundary
+    // silently discarded EVERY original on the selected live page.
+    private val videoLabel=Regex(
+        """(?i)\b(mp4|m4v|webm)\s+(\d{3,4})\s*p(?=\b|\d+\s*(?:MB|GB)\b)""")
     fun videoId(page:String):String?{
         val u=runCatching{URI(page)}.getOrNull()?:return null
         if(u.scheme!="https" || u.userInfo!=null || u.port!=-1 ||
