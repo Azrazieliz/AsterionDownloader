@@ -48,8 +48,7 @@ try {
             # wrapper batch file. Reuse the already-installed local Gradle
             # 8.13 distribution from the owner's existing Android builds.
             $homeDist = Join-Path $env:USERPROFILE '.gradle\wrapper\dists\gradle-8.13-bin'
-            $gradleCmd = (Get-ChildItem $homeDist -Filter 'gradle.bat' -File
-                -Recurse -ErrorAction Stop | Select-Object -First 1).FullName
+            $gradleCmd = (Get-ChildItem $homeDist -Filter 'gradle.bat' -File -Recurse -ErrorAction Stop | Select-Object -First 1).FullName
         }
         if (!(Test-Path $gradleCmd)) { throw 'Retained Gradle 8.13 executable missing' }
         & $gradleCmd --no-daemon :app:assembleAcceptance
