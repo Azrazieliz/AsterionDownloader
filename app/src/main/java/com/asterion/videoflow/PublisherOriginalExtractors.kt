@@ -30,7 +30,7 @@ internal object PublisherOriginalExtractors {
         Site("helloporn.com","#player video[src],#player source[src],.video-player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
-        Site("xxxclub.to","#player video[src],#player source[src],.video-player video[src],meta[itemprop=contentUrl]"),
+
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("omg.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("hentaibros.net","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
