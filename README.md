@@ -1,5 +1,7 @@
 # Kuroha
 
+For the current Asterion Downloader staging branch, see the [14 November 2026 repair and acceptance handoff](docs/production/DOWNLOADER_STAGING_HANDOFF_2026-11-14.md) and the [adult live and full-video provider shortlist](docs/production/DOWNLOADER_ADULT_PROVIDER_SHORTLIST_2026-11-14.md).
+
 Kuroha is an Android-first private Pixiv archiver for followed and explicitly watched artists.
 
 ## Current behavior
