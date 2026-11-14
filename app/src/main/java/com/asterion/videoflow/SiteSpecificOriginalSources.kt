@@ -145,7 +145,18 @@ internal object SiteSpecificOriginalSources {
     }
     private fun fromPlayer(context:Context,doc:Document,selected:String,
                            owner:String):List<Source>{
-        val link=playerLink(doc,owner)?:return emptyList()
+        // A publisher may insert its selected iframe only after the watch
+        // page initializes JavaScript. Inspect that exact page once before
+        // returning no candidates to the generic, unsupported yt-dlp path.
+        val initial=playerLink(doc,owner)
+        val rendered=if(initial==null &&
+            (BrowserPageFetch.publicEligible(selected) ||
+             SiteSession.bound(context,selected)))
+            runCatching {
+                Jsoup.parse(BrowserPageFetch.html(context,selected),selected)
+            }.getOrNull() else null
+        val link=initial ?: rendered?.let{playerLink(it,owner)}
+            ?:return emptyList()
         var player=selectedPlayer(context,link,selected,owner)
         var playerPage=link
         // HQPorner publishes myxstudio.top/embed/<id>. That exact embedded
