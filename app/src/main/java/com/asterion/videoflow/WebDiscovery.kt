@@ -156,6 +156,10 @@ object WebDiscovery {
         }
         error("Provider exceeded five same-site redirects")
     }
+    /** One exact selected page for its site-specific original extractor. */
+    internal fun selectedDocument(address:String,context:Context):Document =
+        open(address,context)
+
     fun findOnPage(address:String,limit:Int=15):List<VideoHit> {
         require(isUrl(address)){"Invalid public HTTP(S) page"}
         val root=open(address)
