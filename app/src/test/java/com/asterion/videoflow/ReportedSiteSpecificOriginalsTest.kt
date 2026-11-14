@@ -142,9 +142,11 @@ class ReportedSiteSpecificOriginalsTest {
               <source src="$video"></source>
               <aside><source src="https://ads.example/ad.mp4"></source></aside>
               </div>""",hello),hello,"helloporn.com").map{it.url})
-        assertEquals(listOf(video),SiteSpecificOriginalSources.selectedStatic(
+        // JAVIDEO's public page contains an autoplay advertisement video.
+        // Only the actual selected server iframe is attributable.
+        assertTrue(SiteSpecificOriginalSources.selectedStatic(
             Jsoup.parse("""<article><video src="$video"></video></article>""",jav),
-            jav,"javideo.net").map{it.url})
+            jav,"javideo.net").isEmpty())
     }
     @Test fun hentaiBrosAnd3dHentaiRejectClipsWithoutFullDuration(){
         for(pair in listOf(
