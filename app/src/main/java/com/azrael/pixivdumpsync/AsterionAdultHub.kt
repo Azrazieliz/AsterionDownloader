@@ -118,6 +118,20 @@ object AsterionAdultHub {
             AsterionUnifiedFollowing.adult(a,parent,refresh)
             return
         }
+        if(isAdult){
+            val live=ui.card(a,15)
+            live.addView(ui.text(a,"Chaturbate",17f,ui.white,true))
+            live.addView(ui.text(a,"Live rooms · official player",12f,ui.secondary),ui.lp(a,3))
+            live.addView(ui.action(a,"WATCH LIVE",false){
+                val opened=runCatching{
+                    a.startActivity(Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://chaturbate.com/")))
+                }
+                if(opened.isFailure)Toast.makeText(a,
+                    "No browser available to open Chaturbate",Toast.LENGTH_SHORT).show()
+            },ui.lp(a,8))
+            parent.addView(live,ui.lp(a,11))
+        }
         // Query by provider rather than relying on the first 1,000 entries
         // across all sources. A busy provider must not crowd newer catalogs
         // (3DHentai and EPORNER) completely off the visible shelf.

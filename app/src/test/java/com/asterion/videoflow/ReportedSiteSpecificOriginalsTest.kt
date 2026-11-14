@@ -46,6 +46,20 @@ class ReportedSiteSpecificOriginalsTest {
         }
     }
 
+    @Test fun roshyUsesTheSelectedBeeteamPlayerConfiguration() {
+        val page="https://roshy.tv/video/test-original-scene/"
+        val embed="https://kamehaus.net/e/242urr647yem"
+        val html="""<div id="main-content">
+          <div class="is-single-post-main-player"><div id="beeteam368_player_123"></div></div>
+          <script>jQuery('#beeteam368_player_123').beeteam368_pro_player(
+            {"video_mode":"embed","video_url":"<iframe src='$embed'></iframe>"});
+          jQuery('#beeteam368_player_999').beeteam368_pro_player(
+            {"video_mode":"embed","video_url":"<iframe src='https://kamehaus.net/e/anotherScene'></iframe>"});</script>
+          </div>"""
+        assertEquals(listOf(embed),SiteSpecificOriginalSources.roshy(
+            Jsoup.parse(html,page),page).map{it.url})
+    }
+
     @Test fun fullPornerVerifiedOriginalHasNoMp4ExtensionButActualMediaBytes() {
         val selected="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
         val player="https://fullporner.com/player/9509933/14"

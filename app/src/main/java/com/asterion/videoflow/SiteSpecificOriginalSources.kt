@@ -4,6 +4,7 @@ import android.content.Context
 import com.azrael.galleryflow.SiteSession
 import com.azrael.pixivdumpsync.BrowserPageFetch
 import org.json.JSONObject
+import org.json.JSONTokener
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -221,6 +222,28 @@ internal object SiteSpecificOriginalSources {
      */
     internal fun roshy(doc:Document,selected:String):List<Source>{
         val out=LinkedHashMap<String,Source>()
+        val mainPlayer=doc.selectFirst(
+            "#main-content .is-single-post-main-player [id^=beeteam368_player_]")
+        if(mainPlayer!=null){
+            val configStart=Regex("""jQuery\(\s*['"]#${Regex.escape(mainPlayer.id())}['"]\s*\)\s*\.beeteam368_pro_player\(\s*""")
+            for(script in doc.select("script:not([src])").take(90)){
+                val body=script.data()
+                val start=configStart.find(body)?:continue
+                val config=runCatching {
+                    JSONTokener(body.substring(start.range.last+1)).nextValue() as? JSONObject
+                }.getOrNull()?:continue
+                val raw=config.optString("video_url")
+                val link=if(config.optString("video_mode")=="embed"){
+                    val frame=Jsoup.parseBodyFragment(raw,selected).selectFirst("iframe[src]")
+                    https(frame?.attr("src").orEmpty(),selected)?.takeIf {
+                        host(it)=="kamehaus.net" &&
+                            Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""").matches(URI(it).path)
+                    }
+                } else https(raw,selected)?.takeIf(::isMedia)
+                if(link!=null)out[link]=Source(link,selected)
+                break
+            }
+        }
         for(a in doc.select("article a[href],.entry-content a[href],main a[href]")
             .take(250)){
             val link=https(a.attr("href"),selected)?:continue
@@ -372,7 +395,17 @@ internal object SiteSpecificOriginalSources {
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->{
                 val initial=roshy(doc,selected)
-                if(initial.any{!isHosterPage(it.url)})initial.distinctBy{it.url} else {
+                val player=initial.firstOrNull { host(it.url)=="kamehaus.net" }
+                val stream=player?.let {
+                    runCatching {
+                        val rendered=BrowserPageFetch.html(context,it.url,
+                            playerReferer=selected)
+                        mediaElements(Jsoup.parse(rendered,it.url),it.url,
+                            "main .video-player video[src]")
+                    }.getOrDefault(emptyList())
+                }.orEmpty()
+                if(player!=null || initial.any{isMedia(it.url)})
+                    (stream+initial).distinctBy{it.url} else {
                 // Beeteam368 may create the original player after JS loads.
                 // Inspect only that selected player; no new browser module.
                 val rendered=runCatching {

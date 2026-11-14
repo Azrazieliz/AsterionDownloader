@@ -27,7 +27,7 @@ object BrowserPageFetch {
         // Exact first-party player/article pages. These are not generalized
         // Aloha-style media detectors, just the publishers' JS video players.
         "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
-        "voe.sx",
+        "voe.sx","kamehaus.net",
         "hqpornerxxx.com","helloporn.com","javideo.net",
         "hentaihaven.xxx","mp4hentai.com","roshy.tv")
     fun publicEligible(url:String):Boolean {
@@ -77,7 +77,7 @@ object BrowserPageFetch {
         // it does not intercept arbitrary network requests or browse pages.
         var selectedPlayerWaits=0
         val selectedPlayerHost=host in setOf(
-            "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx",
+            "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
             "roshy.tv")
@@ -90,7 +90,7 @@ object BrowserPageFetch {
                     .matches(Uri.parse(url).path.orEmpty())
                 "nhplayer.com" -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
-                "voe.sx" -> Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                "voe.sx","kamehaus.net" -> Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
@@ -223,7 +223,7 @@ object BrowserPageFetch {
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,video#flvv,'+
                                 '#player video,.video-js video,video source[src],'+
-                                (['mydaddy.cc','nhplayer.com','voe.sx','hentaihaven.xxx']
+                                (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net','hentaihaven.xxx']
                                     .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
