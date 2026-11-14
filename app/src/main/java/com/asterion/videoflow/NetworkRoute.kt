@@ -140,52 +140,76 @@ internal object NetworkRoute {
     private data class VerifiedExit(val ip:String,val country:String,
                                     val checkedAt:Long)
     @Volatile private var cachedVpnExit:VerifiedExit?=null
+
+    /**
+     * Check the PUBLIC exit used by this app and the selected publisher's
+     * transport. A configured per-site HTTP/SOCKS5 proxy must be checked
+     * THROUGH that proxy: previously Pornhub was rejected for not using a
+     * system VPN even when an actual remote publisher-specific exit existed.
+     */
+    private fun probeCountry(proxy:Proxy?,now:Long):VerifiedExit {
+        val endpoint=URL("https://ipwho.is/")
+        val conn=(if(proxy==null)endpoint.openConnection()
+            else endpoint.openConnection(proxy)) as HttpURLConnection
+        conn.connectTimeout=8000
+        conn.readTimeout=8000
+        try {
+            require(conn.responseCode==200){
+                "Selected public exit country check HTTP "+conn.responseCode
+            }
+            val data=org.json.JSONObject(conn.inputStream.bufferedReader().use{
+                it.readText().take(4000)})
+            require(data.optBoolean("success",false)){
+                "Selected public exit country could not be verified"
+            }
+            val country=data.optString("country_code").uppercase(Locale.ROOT)
+            val ip=data.optString("ip").trim()
+            require(country.matches(Regex("[A-Z]{2}")) &&
+                ip.length in 3..64 && ip.matches(Regex("[0-9a-fA-F:.]+"))){
+                "Selected public exit returned invalid IP/country"
+            }
+            return VerifiedExit(ip,country,now)
+        }finally{conn.disconnect()}
+    }
     @Synchronized private fun actualVpnExit(context:Context):VerifiedExit {
         check(isVpnActive(context)){
-            "Pornhub requires an active Android VPN connection. "+
-            "The app cannot invent a remote public IP."
+            "Pornhub requires a real remote exit; connect an Android VPN "+
+            "or configure an authorized per-site HTTP/SOCKS5 proxy."
         }
         val now=android.os.SystemClock.elapsedRealtime()
         cachedVpnExit?.takeIf{
             now-it.checkedAt in 0 until 90_000L
         }?.let{return it}
-        val conn=URL("https://ipwho.is/").openConnection() as HttpURLConnection
-        conn.connectTimeout=8000
-        conn.readTimeout=8000
-        try {
-            require(conn.responseCode==200){"VPN public exit check HTTP "+conn.responseCode}
-            val data=org.json.JSONObject(conn.inputStream.bufferedReader().use{
-                it.readText().take(4000)})
-            require(data.optBoolean("success",false)){
-                "Unable to verify the phone's actual VPN exit"
-            }
-            val code=data.optString("country_code").uppercase(Locale.ROOT)
-            val ip=data.optString("ip").trim()
-            require(code.matches(Regex("[A-Z]{2}")) &&
-                ip.length in 3..64 && ip.matches(Regex("[0-9a-fA-F:.]+"))){
-                "Public VPN exit verification returned invalid IP/country"
-            }
-            return VerifiedExit(ip,code,now).also{cachedVpnExit=it}
-        } finally {conn.disconnect()}
+        return probeCountry(null,now).also{cachedVpnExit=it}
     }
-
-    /** Fail closed BEFORE Pornhub's HTML, metadata or media requests.
-     * Source, www, mobile and regional variants use one canonical site key.
-     * Legitimate publisher account, age and content rules still apply.
+    private fun publisherExit(context:Context,url:String):VerifiedExit {
+        val selected=configured(context,url)
+        if(selected?.mode in setOf("http","socks5")){
+            // Use the exact same configured route that the first-party HTML,
+            // yt-dlp and native media clients use. Do not test an unrelated
+            // default network path and mistakenly claim a region change.
+            return probeCountry(javaProxy(context,url),
+                android.os.SystemClock.elapsedRealtime())
+        }
+        return actualVpnExit(context)
+    }
+    /** Fail closed on an unverified or still-French public exit. An actual
+     * network route is necessary; no fabricated IP address or site-wide
+     * browser proxy is installed by the app.
      */
     fun requirePublisherExit(context:Context,url:String) {
         if(!needsVerifiedForeignExit(url))return
-        val exit=actualVpnExit(context)
+        val exit=publisherExit(context,url)
         check(exit.country!="FR"){
-            "Pornhub still sees a French VPN public exit (FR). "+
-            "Select a genuine non-French VPN server and verify that this "+
-            "Android app is included in the VPN tunnel."
+            "Pornhub's selected route still exits in France (FR). "+
+            "Use a remote per-site proxy or Android VPN with a real "+
+            "non-French exit; the app will verify it before transfer."
         }
     }
 
     fun verifyVpnExit(context:Context,url:String):String {
-        val exit=actualVpnExit(context)
-        return "VPN public exit: "+exit.ip+" · "+exit.country+
+        val exit=publisherExit(context,url)
+        return "Publisher's actual public exit: "+exit.ip+" · "+exit.country+
             if(exit.country=="FR" && needsVerifiedForeignExit(url))
                 " · French restriction remains"
             else " · verified"
