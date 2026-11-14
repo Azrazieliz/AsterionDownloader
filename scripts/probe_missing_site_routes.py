@@ -50,8 +50,11 @@ for host,url in SITES.items():
             shape=re.sub(r"/[0-9]{2,12}(?=/|$)","/{n}",path)
             shape=re.sub(r"/[a-z0-9_-]{22,}(?=/|$)","/{slug}",shape)
             frequencies[shape.split("/")[1] if "/" in shape else shape]+=1
+        examples=( [p for p in paths if p.startswith("/torrents/") and
+                        not p.startswith("/torrents/browse/")][:8]
+                    if host=="xxxclub.to" else paths[:4])
         print(host,"HTTP",status,"TITLE"," ".join(dom.titlebuf)[:60],
               "LINKS",len(paths),"TOP",frequencies.most_common(10),
-              "EXAMPLES",paths[:4],flush=True)
+              "EXAMPLES",examples,flush=True)
     except Exception as e:
         print(host,type(e).__name__,str(e)[:100],flush=True)
