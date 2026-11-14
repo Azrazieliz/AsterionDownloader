@@ -92,11 +92,18 @@ object UnifiedDownloadsUi {
                 for(item in entries){
                     val host=runCatching{java.net.URI(item.url).host.orEmpty()}
                         .getOrDefault("unavailable").take(90)
+                    // A selected watch-page path identifies the broken player
+                    // without exporting signed CDN URLs, queries or credentials.
+                    val selectedPath=runCatching{
+                        java.net.URI(item.url).rawPath.orEmpty()
+                            .take(180).replace(Regex("""[^A-Za-z0-9/_%.+~-]"""),"_")
+                    }.getOrDefault("")
                     val transfer=VideoTransferJournal.current(a,item.id)
                     val message=item.error.orEmpty().replace(urls,"[url]")
                         .replace(credentials,"[redacted]")
                         .replace(Regex("""[\r\n\t]+""")," ").take(250)
                     append("id=").append(item.id).append(" host=").append(host)
+                        .append(" selected_path=").append(selectedPath)
                         .append(" state=").append(item.status)
                         .append(" progress=").append(item.progress)
                         .append(" stage=").append(transfer?.stage?:"none")
