@@ -35,7 +35,7 @@ a transferred APK do **not** satisfy this.
 
 | Site / selected item | Observed public evidence | Code status | Full file on owner's device |
 | --- | --- | --- | --- |
-| FreePornVideos Serena, /videos/93823084/... | yt-dlp 2026.10.26 HTML5MediaEmbed produced 3 HTTPS MP4 formats. A selected first-party format without filename extension returned HTTP 206, Content-Range and 32768 valid MP4 bytes. | `9d8bfab3` adds strict first-party metadata→native MP4 handoff; `44590425` tightens host provenance, `b92d4443` rejects unsolicited incomplete ranges. Full local verification separate. | NOT VERIFIED |
+| FreePornVideos Serena, /videos/93823084/... | yt-dlp 2026.10.26 HTML5MediaEmbed produced 3 HTTPS MP4 formats. A selected first-party format without filename extension returned HTTP 206, Content-Range and 32768 valid MP4 bytes. | `9d8bfab3` adds strict first-party metadata→native MP4 handoff; `44590425` tightens host provenance, `b92d4443` rejects unsolicited incomplete ranges. Full local verification separate. | USER-OBSERVED WORKING; complete-file phone receipt not captured |
 | Eporner selected MSADu4C0K92 | Public watch URL HTTP 200, ~3.5 KiB age-verification shell; yt-dlp also reported player hash extraction error. | `08871c4a` detects gate and requires authorized browser source. Cannot substitute the shell as MP4. | NOT VERIFIED |
 | Rule34Video selected 4727221 | Bare /video/4727221/ returns HTTP 404 from Windows and GitHub; browser also showed a verification shell. Canonical slugged path unknown. | `8eef8183` preserves observed first-party 404 instead of generic Python failure. | NOT VERIFIED |
 | 3DHentaiX NTR Compilation | Selected page HTTP 200; real Chrome exposed short ~30-second player, no public selected full original; yt-dlp Unsupported URL. | Guarded rendered-player resolver rejects teaser. | NOT VERIFIED |
@@ -45,7 +45,7 @@ a transferred APK do **not** satisfy this.
 | UncensoredHentai selected recording | NHPlayer iframe exists; inspected iframe has no verified full HTML5 media. yt-dlp Unsupported URL. | NHPlayer first-party selection guarded. | NOT VERIFIED |
 | JAVIDEO sampled FC2 release | yt-dlp Unsupported URL on selected sample; landing HTTP 200 not indicative of file. | Current source admission and media source adapter not proven. | NOT VERIFIED |
 | Archivebate | 18+ Continue shell before genuine watch list; public Chrome yielded 36 numeric watch links after Continue. | `AdultProviderListings` parses exact watch links. Account-connected DOM required when source shell remains. | NOT VERIFIED |
-| WatchPorn | Source adapter expects independent matching duration fields + genuine /get_file/ MP4. | No device saved-file receipt for selected user item. | NOT VERIFIED |
+| WatchPorn | Source adapter expects independent matching duration fields + genuine /get_file/ MP4. | User reports some selected downloads working; preserve existing path. | USER-OBSERVED WORKING; edge cases unresolved |
 | Helloporn | Public homepage reachable, no exact selected original/media bytes verified. | Extraction status unresolved. | NOT VERIFIED |
 | XXXClub | Public homepage reachable, no exact selected original/media bytes verified. | Extraction status unresolved. | NOT VERIFIED |
 | Notfans | Public homepage reachable, no exact selected original/media bytes verified. | Extraction status unresolved. | NOT VERIFIED |
@@ -74,3 +74,12 @@ a transferred APK do **not** satisfy this.
 Auto-APK build workflow changed to manual invocation (`715aa6ee`).
 Do not publish a test APK as a fix for external provider failures without
 selected original saved-file proof. Source/CI fixtures remain separate.
+
+## 2026-11-14 focused continuation (critical)
+
+- User confirms SOME FreePornVideos and WatchPorn items worked. Preserve those native/first-party paths; do not rebuild or universally mark them broken. Their selected full-file identities still need exact phone receipts for completion.
+- Tested isolated official yt-dlp prerelease **2026.11.04.232659** with exact pages: FreePornVideos selected item 3 formats; Eporner still player-hash extraction failure; Rule34Video id 4727221 public 404; HentaiBros, 3DHentaiX, FullPorner, HentaiHaven, UncensoredHentai and JAVIDEO remained unsupported without authorized sessions. Do not simply replace the pinned stable wheel: the newer prerelease does not repair these sources.
+- Commit `28cb78f8` fixes potential Python `sys.modules` caching of old AAR `yt_dlp` even after a newer wheel is inserted at `sys.path[0]`. Android instrumentation now asserts the real loaded Python version equals the pinned wheel version, not merely APK packaging. CI source passed; exact emulator run `43532159809` was pending at this checkpoint. Do not claim device acceptance before result.
+- Real Windows Defender is active, real-time protected, signature age 0 on the owner's paired Windows machine. Commit `1f90ba78` added `tools/Invoke-TorrentDefenderRelease.ps1`; commit `10744ad2` cleans the redundant quarantine original only after a scanner-clean result and post-copy SHA-256 verification. Two independent paired-PC tests passed on benign fixtures: actual clean scan/release, deliberate wrong-hash refusal with quarantine retention, and clean release with duplicate cleanup. Scanner engines/signatures observed: 1.1.26100.4 / 1.463.283.0.
+- **Scanner caveat:** This real clean-file path is functional on Windows, but **NOT integrated into Android private torrent jobs**. Do not label the Android app's preliminary archive checks antivirus and do not claim Android torrents automatically release clean files. A secure phone→Windows scan→approved phone return is still needed (or a genuine, integrated on-device antivirus). No unverified executable may be published automatically.
+- The explicit time-pressure request to finish before Nexus does not change the acceptance criterion. Do not invent working sites, full-file playback, signed update, or 1-hour delivery. Preserve the installed `.acceptance` app's data and retained signing identity.
