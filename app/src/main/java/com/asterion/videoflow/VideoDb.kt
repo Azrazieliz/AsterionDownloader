@@ -382,6 +382,28 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "id=? AND state='done'",arrayOf(id.toString()))==1
     }
 
+    /** A JobScheduler interruption is NOT a user pause. Persist a bounded
+     * automatic retry, retaining the staged original and all saved records.
+     */
+    fun workerInterrupted(id:Long,lease:Long):Boolean {
+        val db=writableDatabase
+        val attempts=db.rawQuery("SELECT attempts FROM videos WHERE id=? AND lease=?",
+            arrayOf(id.toString(),lease.toString())).use{c->
+            if(c.moveToFirst())c.getInt(0)+1 else return false
+        }
+        val now=System.currentTimeMillis()
+        val cv=ContentValues().apply{
+            put("state",if(attempts>=3)"error" else "retry_wait")
+            put("attempts",attempts)
+            put("retry_after",if(attempts>=3)0L else now+60_000L)
+            put("updated",now)
+            put("error","Android stopped transfer worker; partial bytes preserved")
+        }
+        return db.update("videos",cv,
+            "id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+    }
+
     fun retry(id: Long) {
         val target=readableDatabase.rawQuery(
             "SELECT url FROM videos WHERE id=?",arrayOf(id.toString())).use{
