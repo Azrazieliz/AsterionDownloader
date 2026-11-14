@@ -115,6 +115,15 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        // Rule34Video publishes quality-labelled download=true links in the
+        // selected page, not <video> sources. Its own first-party resolver
+        // checks the selected ID and anchor label before admission.
+        if(host=="rule34video.com") {
+            for(original in Rule34VideoOriginalSource.parse(html,selected)){
+                found.putIfAbsent(original.url,
+                    Candidate(original.url,selected,host))
+            }
+        }
         fun add(raw:String,isFrame:Boolean=false,duration:Long?=null) {
             val link=url(selected,raw)?:return
             if(FullLengthVideoPolicy.isExplicitPreview("",link))return
