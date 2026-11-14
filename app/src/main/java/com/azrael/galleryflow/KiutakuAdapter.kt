@@ -162,17 +162,38 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
         val published = doc.select(".article-fulltext img")
         val preferred = listOf("article img", ".entry-content img", ".post-content img", "main img")
             .flatMap { doc.select(it) }.distinct()
-        val elements = if(published.isNotEmpty())published
-            else if (preferred.isNotEmpty()) preferred else doc.select("img")
+        val elements = (if(published.isNotEmpty())published
+            else if (preferred.isNotEmpty()) preferred else doc.select("img"))
+            .filter{it.closest("aside,.related,.related-posts,.recommended,"+
+                ".recommendations,.you-may-like,.sidebar,nav,header,footer,"+
+                ".advertisement,.ads")==null}
         return elements.mapNotNull { img ->
-            val raw = listOf("data-src", "data-lazy-src", "data-original", "srcset", "src")
-                .mapNotNull { attr -> img.attr(attr).takeIf { it.isNotBlank() } }
-                .firstOrNull() ?: return@mapNotNull null
-            val firstUrl = if (raw.contains(',')) raw.substringBefore(',').trim().substringBefore(' ') else raw.trim()
+            // Explicit publisher full-size attributes override image previews.
+            // Responsive srcset picks its largest width/density, NEVER the
+            // first (normally low-resolution) listed thumbnail.
+            val raw=listOf("data-original","data-full","data-full-src",
+                "data-highres","data-zoom").firstNotNullOfOrNull{attribute->
+                img.attr(attribute).takeIf(String::isNotBlank)
+            } ?: highestSrcset(img.attr("srcset"))
+                ?: listOf("data-src","data-lazy-src","src").firstNotNullOfOrNull{
+                    img.attr(it).takeIf(String::isNotBlank)
+                } ?: return@mapNotNull null
+            val firstUrl=raw.trim().substringBefore(' ')
             val absolute = runCatching { URI(doc.baseUri()).resolve(firstUrl).toString() }.getOrDefault(firstUrl)
             if (isGalleryImage(img, absolute)) absolute else null
         }.distinct()
     }
+
+    private fun highestSrcset(value:String):String? =
+        value.split(',').mapNotNull { entry ->
+            val parts=entry.trim().split(Regex("""\s+"""))
+            val url=parts.firstOrNull().orEmpty().takeIf(String::isNotBlank)
+                ?:return@mapNotNull null
+            val descriptor=parts.getOrNull(1).orEmpty()
+            val score=descriptor.removeSuffix("w").removeSuffix("x")
+                .toFloatOrNull()?:0f
+            score to url
+        }.maxByOrNull{it.first}?.second
 
     private fun isGalleryImage(img: Element, url: String): Boolean {
         if (!url.startsWith("http://") && !url.startsWith("https://")) return false
@@ -185,7 +206,10 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
         if (!imageLike) return false
         val width = img.attr("width").toIntOrNull()
         val height = img.attr("height").toIntOrNull()
-        return !(width != null && height != null && width < 200 && height < 200)
+        val publishedOriginal=listOf("data-original","data-full",
+            "data-full-src","data-highres","data-zoom").any{img.hasAttr(it)}
+        return publishedOriginal ||
+            !(width != null && height != null && width < 200 && height < 200)
     }
 
     private fun nextListingPage(doc: Document, entityUrl: String, visited: Set<String>): String? {
