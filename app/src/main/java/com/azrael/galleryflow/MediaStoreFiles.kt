@@ -20,7 +20,15 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
     fun exists(contentUri: String?): Boolean {
         if (contentUri.isNullOrBlank()) return false
         return runCatching {
-            context.contentResolver.openFileDescriptor(Uri.parse(contentUri), "r")?.use { true } ?: false
+            context.contentResolver.openFileDescriptor(Uri.parse(contentUri), "r")?.use { fd ->
+                when {
+                    fd.statSize > 0L -> true
+                    fd.statSize == 0L -> false
+                    else -> java.io.FileInputStream(fd.fileDescriptor).use {
+                        it.read() != -1
+                    }
+                }
+            } ?: false
         }.getOrDefault(false)
     }
 
