@@ -771,6 +771,13 @@ object VideoEngine {
         val watchPorn=if(!canInspectPublisherHtml)null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
+        // A selected item is routed through its OWN publisher's player parser
+        // before the generic yt-dlp page fallback. This is still the unified
+        // downloader, using the existing queue and media receipt contracts.
+        val publisherOriginals=if(userRequested && canInspectPublisherHtml &&
+            PublisherOriginalExtractors.owns(item.url))
+            runCatching{PublisherOriginalExtractors.resolve(context,item.url)}
+        else Result.success(emptyList())
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
@@ -825,7 +832,46 @@ object VideoEngine {
                     }catch(t:Exception){last=t}
                 }else heldReason=decision.reason
             }
-            if(!downloaded) for(candidate in variants.distinct()){
+            // Direct original links specifically published by the selected
+            // site's actual player take precedence over unsupported generic
+            // page extractors. A legal page, thumbnail or short teaser is
+            // never accepted as a downloaded original.
+            if(!downloaded)for(source in publisherOriginals.getOrDefault(emptyList())){
+                if(stopRequests.contains(item.id))
+                    throw java.util.concurrent.CancellationException("Video paused")
+                if(FullLengthVideoPolicy.isExplicitPreview(item.title,source.url))
+                    continue
+                if(NativeMediaDownloader.isDirectMediaUrl(source.url)){
+                    try {
+                        execute(source.url,source.referer)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                }else if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,source.url)){
+                    try {
+                        execute(ArchivebateSelectedMedia.resolve(
+                            context,item.url,source.url),source.url)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                }else{
+                    val checked=runCatching{preflight(source.url,source.referer)}
+                    if(checked.isSuccess &&
+                        checked.getOrThrow().second.verdict==
+                            FullLengthVideoPolicy.Verdict.ACCEPT){
+                        try {
+                            execute(source.url,source.referer)
+                            expectedDuration=checked.getOrThrow().first
+                            downloaded=true
+                            break
+                        }catch(t:Exception){last=t}
+                    }else if(checked.isFailure){
+                        last=checked.exceptionOrNull()
+                    }else heldReason=checked.getOrThrow().second.reason
+                }
+            }
+            if(!downloaded) for(candidate in (publisherOriginals
+                .getOrDefault(emptyList()).map{it.url}+variants).distinct()){
                 if(VideoTransferLimits.resolvingStalled(
                         android.os.SystemClock.elapsedRealtime()-preparationStart,
                         VideoPayloadBytes.count(parent)))
@@ -978,7 +1024,8 @@ object VideoEngine {
             val category=attempted?.let{
                 VideoFailurePolicy.classify(VideoErrorDetail.summary(it))
             }
-            val access=listOfNotNull(renderedPlayerFailure,discoveryFailure)
+            val access=listOfNotNull(publisherOriginals.exceptionOrNull(),
+                renderedPlayerFailure,discoveryFailure)
                 .firstOrNull{failure->
                     val message=failure.message.orEmpty()
                     // Preserve real HTTP 404/410 and rate limits from the
