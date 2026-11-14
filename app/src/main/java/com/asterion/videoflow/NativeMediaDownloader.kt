@@ -26,6 +26,7 @@ internal object NativeMediaDownloader {
      * of the source category. Hentai watch pages still use their own extractor.
      */
     fun isNativeEligible(sourceUrl:String,mediaUrl:String,verifiedMp4:Boolean=false):Boolean =
+        !SiteSpecificOriginalSources.isHosterPage(mediaUrl) &&
         (if(verifiedMp4)
             FreePornVideosOriginalSource.firstPartyFormat(sourceUrl,mediaUrl) ||
                 Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl)
@@ -61,7 +62,8 @@ internal object NativeMediaDownloader {
                     "freepornvideos.xxx" ||
                     Rule34VideoOriginalSource.isPublisherMediaUrl(address))
             }.getOrDefault(false)
-            else isDirectMediaUrl(address)){
+            else isDirectMediaUrl(address) &&
+                !SiteSpecificOriginalSources.isHosterPage(address)){
             "Not a verified first-party direct original media URL"
         }
         require(directory.isDirectory && directory.canWrite()){
