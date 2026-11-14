@@ -18,6 +18,7 @@ import com.asterion.videoflow.VideoEngine
 import com.asterion.videoflow.WebDiscovery
 import com.azrael.galleryflow.AdapterRegistry
 import com.azrael.galleryflow.GalleryDb
+import com.azrael.galleryflow.GalleryRequestLedger
 import com.azrael.galleryflow.SyncMode
 import java.net.URI
 
@@ -281,6 +282,7 @@ class AsterionHomeActivity:Activity(){
                     stopBackgroundNow()
                 }else {
                     AppPower.set(this@AsterionHomeActivity,true)
+                    GalleryRequestLedger.recoverOnAppOpen(this@AsterionHomeActivity)
                     render()
                 }
             }
@@ -366,6 +368,7 @@ class AsterionHomeActivity:Activity(){
                 runCatching{
                     GalleryDb(applicationContext).use{it.seedCatalogOnce(applicationContext)}
                 }
+                runCatching{GalleryRequestLedger.recoverOnAppOpen(applicationContext)}
                 runCatching{AlohaDefaults.ensure(applicationContext)}
                 runCatching{SourceIndex.ensure(applicationContext)}
                 runCatching{KoikatsuFollowing.ensure(applicationContext)}
