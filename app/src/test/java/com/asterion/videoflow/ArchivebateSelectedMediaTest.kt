@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ArchivebateSelectedMediaTest {
+    @Test fun selectedWatchPageFindsPublishedMixdropIframeWithoutGenericPlayerCss(){
+        val page="https://archivebate.com/watch/16458050"
+        val player="https://mixdrop.ag/e/z1p3lkkjhv17mj"
+        val html="""<main><section class="recording"><iframe
+            src="$player" allowfullscreen></iframe>
+            <aside><iframe src="https://ads.example/redirect"></iframe></aside>
+            </section></main>"""
+        val candidates=PublisherOriginalExtractors.fromHtml(page,html)
+        assertEquals(listOf(player),candidates.map{it.url})
+        assertEquals(page,candidates.single().referer)
+    }
+
     @Test fun onlyPublisherOwnedSelectedRecordingWithRealPublishedPlayer(){
         val watch="https://archivebate.com/watch/16458050"
         assertTrue(ArchivebateSelectedMedia.isSelectedEmbed(watch,
