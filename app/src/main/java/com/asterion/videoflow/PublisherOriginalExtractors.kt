@@ -158,14 +158,9 @@ internal object PublisherOriginalExtractors {
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
-        // These two sites render a working HTML5 element only after JavaScript.
-        // Parse the genuine in-app browser DOM and its real duration; their
-        // static HTML contains clips that must not become saved originals.
-        if(host=="hentaibros.net" || host=="3dhentaix.com"){
-            val rendered=com.azrael.pixivdumpsync.BrowserPageFetch.html(
-                context,selected)
-            return fromHtml(selected,rendered)
-        }
+        // Do not short-circuit HentaiBros or 3DHentai ahead of their
+        // publisher-specific resolver: the old early return silently skipped
+        // the real player and only inspected static teaser tags.
         val page=WebDiscovery.selectedDocument(selected,context)
         // The broken providers do not share one CSS media contract. Their
         // own selected-player resolver handles site-owned iframe, WordPress
