@@ -12,6 +12,15 @@ def red(s):
  s=re.sub(r"[A-Za-z0-9_-]{35,}","[ID]",s)
  return re.sub(r"\s+"," ",s)[:700]
 print("chars",len(txt),flush=True)
+links=re.findall(r'<a\\b[^>]{0,850}href=["\\']([^"\\']{1,400})["\\']',txt,re.I)
+paths=[]
+for raw in links:
+ url=urllib.parse.urlsplit(urllib.parse.urljoin(URL,raw))
+ if url.hostname not in ("helloporn.com","www.helloporn.com"):continue
+ if url.path in ("","/"):continue
+ if url.path not in paths:paths.append(url.path)
+print("long_single_slug", [p for p in paths if p.count("/")==1 and len(p)>16][:18],flush=True)
+print("multi_segment_routes",[p for p in paths if p.count("/")>=2][:14],flush=True)
 for label,pat in [
  ("video_tag",r"<video\b"),("html_data_video",r"data-video-(?:id|url|src)"),
  ("player",r"id=[\"'](?:player|video-player)"),("watch_slug",r"href=[\"'][^\"']{2,180}(?:watch|videos|video)[^\"']*[\"']"),
