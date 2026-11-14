@@ -329,19 +329,31 @@ object DirectDownloadRetry {
 }
 class DirectRetryJob:JobService(){
     private val executor=java.util.concurrent.Executors.newSingleThreadExecutor()
-    @Volatile private var active:java.util.concurrent.Future<*>?=null
+    private val tokens=java.util.concurrent.ConcurrentHashMap<Int,Any>()
+    private val tasks=java.util.concurrent.ConcurrentHashMap<Int,
+        java.util.concurrent.FutureTask<Unit>>()
     override fun onStartJob(params:JobParameters):Boolean{
-        active=executor.submit{
-            try{DirectDownloadRetry.retry(applicationContext)}
-            finally{
-                if(!Thread.currentThread().isInterrupted)jobFinished(params,false)
+        val token=Any()
+        val task=java.util.concurrent.FutureTask<Unit> {
+            try {
+                DirectDownloadRetry.retry(applicationContext)
+                Unit
+            }finally{
+                if(tokens.remove(params.jobId,token)){
+                    tasks.remove(params.jobId)
+                    if(!Thread.currentThread().isInterrupted)
+                        jobFinished(params,false)
+                }
             }
         }
+        tokens[params.jobId]=token
+        tasks.put(params.jobId,task)?.cancel(true)
+        executor.execute(task)
         return true
     }
     override fun onStopJob(params:JobParameters):Boolean{
-        active?.cancel(true)
-        active=null
+        tokens.remove(params.jobId)
+        tasks.remove(params.jobId)?.cancel(true)
         return true
     }
 }
