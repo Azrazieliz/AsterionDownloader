@@ -918,8 +918,8 @@ object VideoEngine {
                     }else heldReason=checked.getOrThrow().second.reason
                 }
             }
-            if(!downloaded) for(candidate in (publisherOriginals
-                .getOrDefault(emptyList()).map{it.url}+variants).distinct()){
+            val publisherReferers=publishedOriginals.associate{it.url to it.referer}
+            if(!downloaded) for(candidate in (publisherReferers.keys+variants)){
                 if(VideoTransferLimits.resolvingStalled(
                         android.os.SystemClock.elapsedRealtime()-preparationStart,
                         VideoPayloadBytes.count(parent)))
@@ -949,7 +949,8 @@ object VideoEngine {
                 // The publisher's selected watch page is the required HTTP
                 // Referer for third-party player and CDN hosts. Losing it
                 // caused HTTP 403 even after a valid player URL was found.
-                val candidateReferer=VideoCandidatePlan.referer(item.url,candidate)
+                val candidateReferer=publisherReferers[candidate]
+                    ?:VideoCandidatePlan.referer(item.url,candidate)
                 // Resolve genuine first-party HTML5 <video> and contentUrl
                 // entries BEFORE running generic yt-dlp metadata/download.
                 // This works for any publisher with a real media element,

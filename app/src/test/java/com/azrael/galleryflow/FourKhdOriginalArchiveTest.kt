@@ -38,5 +38,10 @@ class FourKhdOriginalArchiveTest {
         assertEquals(212,media.single().expectedArchivePhotos)
         assertFalse(media.any { it.url.contains("preview.jpg") })
         assertEquals(212,SelectedAlbumScope.advertisedCount(meta.title))
+        val (backfillMeta, backfillMedia)=FourKhdAdapter(fake).fetchGallery(
+            album.copy(source=SourceId.FOUR_K_HD))
+        assertEquals(SourceId.FOUR_K_HD,backfillMeta.source)
+        assertEquals(SourceId.FOUR_K_HD,backfillMedia.single().source)
+        assertEquals(media.single().url,backfillMedia.single().url)
     }
 }

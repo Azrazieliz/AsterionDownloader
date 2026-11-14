@@ -189,7 +189,7 @@ private fun titleOf(doc: Document, fallback: String): String =
 class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
     override val source = SourceId.FOUR_K_HD
     override val enabled = true
-    override val statusLabel = "Enabled • direct album images • TeraBox fallback"
+    override val statusLabel = "Enabled • publisher full-resolution album archive"
 
     // ONE logical 4KHD provider. Categories are pages INSIDE the provider,
     // never separate subscriptions. Old gallery records remain in the DB.
@@ -236,88 +236,24 @@ class FourKhdAdapter(private val http: HttpClient) : SourceAdapter {
                 if (!SyncControl.checkpoint()) throw SyncCancelledException()
                 val doc = http.document(next)
                 for (a in doc.select("a[href*=/content/]")) {
-                val href = absoluteUrl(a, "href")
-                val uri = runCatching { URI(href) }.getOrNull() ?: continue
-                val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
-                if (host != "4khd.com" && host != "www.4khd.com") continue
-                val path = uri.path.trimEnd('/')
-                if (!path.startsWith("/content/") || !path.endsWith(".html")) continue
-                val id = path.removePrefix("/content/").removeSuffix(".html")
-                if (!seen.add(id)) continue
-                yield(GalleryRef(source, id, entity.stableId, "https://www.4khd.com$path", a.text().trim().ifBlank { id }))
-            }
+                    val href = absoluteUrl(a, "href")
+                    if (!SelectedAlbumScope.is4khdAlbum(href)) continue
+                    val path = URI(href).path.trimEnd('/')
+                    val id = path.removePrefix("/content/").removeSuffix(".html")
+                    if (!seen.add(id)) continue
+                    yield(GalleryRef(source, id, entity.stableId,
+                        "https://www.4khd.com$path", a.text().trim().ifBlank { id }))
+                }
                 next = nextListing(doc, start, visited)
             }
         }
     }
 
     override fun fetchGallery(gallery: GalleryRef): Pair<GalleryMeta, List<MediaRef>> {
-        val docs = linkedMapOf<String, Document>()
-        val first = http.document(gallery.canonicalUrl)
-        docs[gallery.canonicalUrl] = first
-
-        for (pageUrl in galleryPages(first, gallery.canonicalUrl)) {
-            if (!SyncControl.checkpoint()) throw SyncCancelledException()
-            if (pageUrl !in docs) docs[pageUrl] = http.document(pageUrl, gallery.canonicalUrl)
+        require(SelectedAlbumScope.is4khdAlbum(gallery.canonicalUrl)) {
+            "Select an individual 4KHD album"
         }
-
-        val title = titleOf(first, gallery.title)
-        val meta = GalleryMeta(
-            source, gallery.stableId, gallery.entityStableId, gallery.canonicalUrl,
-            title, emptyList(), gallery.publishedAt, docs.keys.toList()
-        )
-
-        val direct = docs.flatMap { (pageUrl, pageDoc) -> directPageAssets(pageDoc, pageUrl) }
-            .distinctBy { normalizedUrl(it.url) }
-        if (direct.isNotEmpty()) {
-            return meta to mediaRefs(source, gallery.stableId, direct)
-        }
-
-        // Fallback only when the site did not expose any browsable gallery media.
-        val links = first.select("a[href]").mapNotNull { a ->
-            val href = absoluteUrl(a, "href")
-            val text = a.text().lowercase(Locale.ROOT)
-            val host = runCatching { URI(href).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
-            if ("terabox" in text || "terabox" in host || host == "m.4khd.com") href else null
-        }.distinct()
-        if (links.isEmpty()) throw AdapterException("4KHD gallery exposed neither direct media nor a TeraBox fallback.")
-
-        val chosen = links.first()
-        return meta to listOf(
-            MediaRef(
-                source = source,
-                stableId = shaText("archive:$chosen").take(24),
-                galleryStableId = gallery.stableId,
-                index = 0,
-                url = chosen,
-                normalizedUrl = normalizedUrl(chosen),
-                referer = gallery.canonicalUrl,
-                mimeHint = "application/zip",
-                kind = MediaKind.ARCHIVE,
-                provider = "TeraBox",
-                archivePassword = "4KHD"
-            )
-        )
-    }
-
-    private fun galleryPages(first: Document, baseUrl: String): List<String> {
-        val base = URI(baseUrl)
-        val basePath = base.path.trimEnd('/')
-        return first.select("a[href]").mapNotNull { a ->
-            val href = absoluteUrl(a, "href")
-            val uri = runCatching { URI(href) }.getOrNull() ?: return@mapNotNull null
-            if (uri.host?.lowercase(Locale.ROOT) !in setOf("4khd.com", "www.4khd.com")) return@mapNotNull null
-            val path = uri.path.trimEnd('/')
-            val suffix = if (path.startsWith(basePath + "/")) path.removePrefix(basePath + "/") else ""
-            val page = suffix.toIntOrNull()
-                ?: if (path == basePath) {
-                    Regex("(?:^|&)(?:page|p)=(\\d+)").find(uri.query.orEmpty())
-                        ?.groupValues?.get(1)?.toIntOrNull()
-                } else null
-            if (page == null || page <= 1) null else page to href
-        }.distinctBy { it.second }
-            .sortedBy { it.first }
-            .map { it.second }
+        return GenericSiteAdapter(http).fetchGallery(gallery)
     }
 
     private fun nextListing(doc: Document, baseUrl: String, visited: Set<String>): String? {

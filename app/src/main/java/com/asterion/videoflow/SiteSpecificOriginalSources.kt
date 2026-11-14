@@ -181,7 +181,8 @@ internal object SiteSpecificOriginalSources {
         // every frame on the publisher page or unrelated browser traffic.
         val html=if(BrowserPageFetch.publicEligible(playerPage) ||
             SiteSession.bound(context,playerPage))
-            runCatching{BrowserPageFetch.html(context,playerPage)}.getOrNull()
+            runCatching{BrowserPageFetch.html(context,playerPage,
+                playerReferer=if(playerPage==link)selected else link)}.getOrNull()
         else null
         if(!html.isNullOrBlank()){
             val rendered=Jsoup.parse(html,playerPage)
@@ -314,7 +315,7 @@ internal object SiteSpecificOriginalSources {
                 // The player can set currentSrc only after its JS runs.
                 // Capture that selected HTML5 source, not network ads.
                 val browser=runCatching{
-                    BrowserPageFetch.html(context,frame.url)
+                    BrowserPageFetch.html(context,frame.url,playerReferer=selected)
                 }.getOrNull()
                 if(!browser.isNullOrBlank()){
                     val rendered=Jsoup.parse(browser,frame.url)

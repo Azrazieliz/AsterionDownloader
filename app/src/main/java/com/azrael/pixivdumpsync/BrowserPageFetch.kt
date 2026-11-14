@@ -36,7 +36,7 @@ object BrowserPageFetch {
         return uri.scheme=="https" && uri.userInfo==null &&
             host in publicBrowserHosts
     }
-    fun html(context:Context,url:String):String {
+    fun html(context:Context,url:String,playerReferer:String?=null):String {
         com.asterion.videoflow.NetworkRoute.requireVpn(context,url)
         require(com.azrael.galleryflow.SiteSession.bound(context,url) ||
             publicEligible(url)) {
@@ -95,6 +95,7 @@ object BrowserPageFetch {
                 else -> false
             })
         main.post {
+            if(latch.count==0L)return@post
             try{
             val web=WebView(context)
             instance.set(web)
@@ -328,16 +329,21 @@ object BrowserPageFetch {
                     },1800L)
                 }
             }
-            web.loadUrl(url)
+            if(playerReferer==null)web.loadUrl(url)
+            else web.loadUrl(url,mapOf("Referer" to playerReferer))
             }catch(t:Throwable){
                 error.set("WebView initialization failed: "+t.javaClass.simpleName)
                 latch.countDown()
             }
         }
-        val completed=latch.await(45,TimeUnit.SECONDS)
-        main.post{runCatching{
-            instance.getAndSet(null)?.apply{stopLoading();destroy()}
-        }}
+        val completed=try {
+            latch.await(45,TimeUnit.SECONDS)
+        }finally{
+            latch.countDown()
+            main.post{runCatching{
+                instance.getAndSet(null)?.apply{stopLoading();destroy()}
+            }}
+        }
         if(!completed)throw IllegalStateException("Browser page retrieval timed out: "+url)
         return result.get()?:throw IllegalStateException(
             error.get()?:"Browser could not load this chapter.")

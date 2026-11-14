@@ -147,7 +147,7 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             if(officialArchives.isEmpty())throw AdapterException(
                 "4KHD album has no publisher-confirmed full-HD TeraBox "+
                     "download link. Webpage previews are not originals.")
-            val meta=GalleryMeta(source,gallery.stableId,
+            val meta=GalleryMeta(gallery.source,gallery.stableId,
                 gallery.entityStableId,url,title?:gallery.title,tags,
                 publishedAt,visitedAlbumPages.toList(),creator)
             val expected=SelectedAlbumScope.advertisedCount(meta.title,gallery.title)
@@ -156,7 +156,7 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             val normalized=URI(bridge).let{
                 URI(it.scheme,it.authority,it.path,null,null).toString()
             }
-            return meta to listOf(MediaRef(source,
+            return meta to listOf(MediaRef(gallery.source,
                 digest(url+"|original-archive|"+normalized).take(32),
                 gallery.stableId,0,bridge,normalized,url,
                 "application/zip",MediaKind.ARCHIVE,"4KHD","4KHD",
