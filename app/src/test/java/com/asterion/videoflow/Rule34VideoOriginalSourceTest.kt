@@ -18,6 +18,19 @@ class Rule34VideoOriginalSourceTest {
         assertEquals(originals[0].url,
             PublisherOriginalExtractors.fromHtml(selected,html).first().url)
     }
+    @Test fun currentLiveDownloadLabelsConcatenateQualityAndFileSize() {
+        val html="""<div class="download-options">
+            <a href="/get_file/2026/1/quality_360.mp4?download=true">MP4 360p1 MB</a>
+            <a href="/get_file/2026/1/quality_720.mp4?download=true">MP4 720p3 MB</a>
+            <a href="/get_file/2026/1/quality_480.mp4?download=true">MP4 480p2 MB</a>
+            <a href="/get_file/2026/1/preview.mp4?download=true">MP4 1080preview</a>
+            </div>"""
+        val formats=Rule34VideoOriginalSource.parse(html,selected)
+        assertEquals(listOf(720,480,360),formats.map{it.quality})
+        assertTrue(formats.all{it.url.contains("/get_file/")})
+        assertTrue(formats.all{NativeMediaDownloader.isNativeEligible(
+            selected,it.url,true)})
+    }
     @Test fun noUnrelatedAdPosterPreviewOrNoDownloadLink() {
         val html="""<div><a href="https://cdn.bad.example/preview.mp4">MP4 1080p</a>
            <a href="https://ads.example/thing?download=true">Advertising banner</a>
