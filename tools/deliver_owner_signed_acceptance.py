@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import time
 
-import httpx
+import urllib.request
 
 
 def sha256(path: Path) -> str:
@@ -58,34 +58,40 @@ def main() -> None:
     token = token_path.read_text("utf-8").strip()
     if not token:
         raise RuntimeError("Asterion Control token is empty")
-    with httpx.Client(timeout=20, trust_env=False, follow_redirects=False,
-                      headers={"Authorization": "Bearer " + token}) as client:
-        req = client.post(
-            args.control + "/api/v1/phone/transfers",
-            json={"pc_path": str(destination), "name": filename})
-        req.raise_for_status()
-        transfer_id = req.json().get("id")
-        if not transfer_id:
-            raise RuntimeError("Control transfer request gave no transfer ID")
-        info = None
-        for _ in range(2000):
-            receipt = client.get(args.control +
-                                 "/api/v1/phone/transfers/" + transfer_id)
-            receipt.raise_for_status()
-            info = receipt.json()
-            if info.get("state") in ("completed", "failed", "cancelled"):
-                break
-            time.sleep(0.25)
-        if not info or info.get("state") != "completed":
-            raise RuntimeError("Control delivery not complete: " +
-                               str((info or {}).get("state")))
-        proof = info.get("result") or {}
-        verified = str(proof.get("sha256", "")).lower()
-        if verified != source_digest:
-            raise RuntimeError("Samsung SHA256 receipt mismatch")
-        if (info.get("bytes_sent") is not None and
-                int(info["bytes_sent"]) != destination.stat().st_size):
-            raise RuntimeError("Samsung transfer byte count mismatch")
+    # Use only Python stdlib: the owner's Windows Python has no httpx.
+    # Disable ambient HTTP proxies; this is the paired private Control host.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    auth = {"Authorization": "Bearer " + token}
+    payload = json.dumps({"pc_path": str(destination), "name": filename}).encode("utf-8")
+    request = urllib.request.Request(
+        args.control + "/api/v1/phone/transfers",
+        data=payload, method="POST",
+        headers={**auth, "Content-Type": "application/json"})
+    with opener.open(request, timeout=20) as res:
+        started = json.load(res)
+    transfer_id = started.get("id")
+    if not transfer_id:
+        raise RuntimeError("Control transfer request gave no transfer ID")
+    info = None
+    for _ in range(2000):
+        request = urllib.request.Request(
+            args.control + "/api/v1/phone/transfers/" + transfer_id,
+            headers=auth, method="GET")
+        with opener.open(request, timeout=20) as res:
+            info = json.load(res)
+        if info.get("state") in ("completed", "failed", "cancelled"):
+            break
+        time.sleep(0.25)
+    if not info or info.get("state") != "completed":
+        raise RuntimeError("Control delivery not complete: " +
+                           str((info or {}).get("state")))
+    proof = info.get("result") or {}
+    verified = str(proof.get("sha256", "")).lower()
+    if verified != source_digest:
+        raise RuntimeError("Samsung SHA256 receipt mismatch")
+    if (info.get("bytes_sent") is not None and
+            int(info["bytes_sent"]) != destination.stat().st_size):
+        raise RuntimeError("Samsung transfer byte count mismatch")
 
     print(json.dumps({
         "status": "transferred_not_installed",
