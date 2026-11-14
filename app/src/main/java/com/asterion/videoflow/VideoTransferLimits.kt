@@ -10,7 +10,7 @@ internal object VideoTransferLimits {
     // This only bounds zero-original-byte resolving. Once an original
     // starts transferring, regular progress/idle rules apply without any
     // artificial file-size or length restriction.
-    const val NO_BYTES_RESOLVE_MS = 4L * 60_000L
+    const val NO_BYTES_RESOLVE_MS = 80_000L
     fun resolvingStalled(elapsedMs:Long,bytes:Long):Boolean =
         bytes<=0L && elapsedMs>=NO_BYTES_RESOLVE_MS
     const val TRANSFER_MAX_MS = 48L * 60L * 60_000L
