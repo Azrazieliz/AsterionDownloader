@@ -240,8 +240,16 @@ object RounderDispatch {
             val manager=context.getSystemService(DownloadManager::class.java)
             CrossSourceDedup(context).use{dedup->
                 for(item in DirectDownloadTracker.states(context,200)){
-                    if(item.status==DownloadManager.STATUS_SUCCESSFUL)
-                        dedup.completeById(item.job.id)
+                    if(item.status==DownloadManager.STATUS_SUCCESSFUL){
+                        // Android DownloadManager SUCCESSFUL means its HTTP
+                        // transaction finished. It does NOT prove the bytes
+                        // are a real original rather than a saved login page.
+                        // Verify the owner-retained receipt before a completed
+                        // URL claim can suppress all future downloads.
+                        if(OriginalReceiptState.get(context,item.job.id)=="VERIFIED" ||
+                            DirectDownloadRetry.validateCompleted(context,item.job.id))
+                            dedup.completeById(item.job.id)
+                    }
                     if(item.status==DownloadManager.STATUS_FAILED)
                         dedup.releaseById(item.job.id)
                 }
