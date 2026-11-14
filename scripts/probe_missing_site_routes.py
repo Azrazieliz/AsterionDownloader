@@ -51,6 +51,6 @@ for host,url in SITES.items():
             frequencies[shape.split("/")[1] if "/" in shape else shape]+=1
         print(host,"HTTP",status,"TITLE"," ".join(dom.titlebuf)[:60],
               "LINKS",len(paths),"TOP",frequencies.most_common(10),
-              "EXAMPLES",paths[:16],flush=True)
+              "EXAMPLES",paths[:4],flush=True)
     except Exception as e:
         print(host,type(e).__name__,str(e)[:100],flush=True)
