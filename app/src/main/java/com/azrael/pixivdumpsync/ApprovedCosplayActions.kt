@@ -149,36 +149,40 @@ internal object ApprovedCosplayActions {
             else->true
         }){"Select an individual "+site.name+" album, not a category or source"}
         val origin=source(a.applicationContext,site.url)
-        // Use the dedicated Kiutaku adapter for numeric gallery detail
-        // pages; all other currently approved hosts use their generic
-        // first-party gallery adapter for the EXACT selected URL.
-        val knownKiutaku=site.host=="kiutaku.com" &&
-            path.matches(Regex("[0-9]{1,9}"))
-        val entity=if(knownKiutaku){
-            // KiutakuAdapter.resolveEntity() intentionally follows a post's
-            // cosplayer tag when building a subscription. That is WRONG for
-            // a thumbnail tap: it silently changes one gallery into an
-            // artist-wide backfill. Explicit selections must stay gallery_only.
-            exactKiutakuAlbum(tile.url,tile.title)
-        }else{
-            val digest=MessageDigest.getInstance("SHA-256")
-                .digest(tile.url.toByteArray(Charsets.UTF_8))
-                .joinToString(""){"%02x".format(it)}
-            SourceEntity(SourceId.GENERIC,"url:"+digest.take(32),
-                tile.title.take(120).ifBlank{site.name+" gallery"},
-                tile.url,"selected_album")
+        // An album is NOT a provider. Reuse the site's existing durable
+        // subscription; only the gallery record gets an individual identity.
+        // Do not invoke resolveEntity(album), which can turn one post into a
+        // creator/tag subscription or spawn an extra "generic" provider card.
+        val entity=GalleryDb(a).use{db->
+            val sourceId=if(site.host=="kiutaku.com")
+                SourceId.KIUTAKU else SourceId.GENERIC
+            val existing=db.listEntities().firstOrNull{
+                it.kind=="site" && it.source==sourceId &&
+                SiteControls.key(it.canonicalUrl)==site.host
+            }
+            val root=existing?.let{record->
+                SourceEntity(record.source,record.entityId,record.displayName,
+                    record.canonicalUrl,"site")
+            }?:SourceEntity(sourceId,"site:"+site.host,site.name,
+                site.url,"site")
+            if(existing==null) {
+                db.addEntity(root)
+                db.setLiveEnabled(root.source,root.stableId,
+                    SiteControls.sync(a,site.url,false))
+            }
+            root
         }
-        GalleryDb(a).use{db->
-            db.addEntity(entity)
-            db.setSelected(entity.source,entity.stableId,true)
-            db.setLiveEnabled(entity.source,entity.stableId,false)
-        }
-        GalleryRequestLedger.remember(a,GalleryRequestLedger.Request(
-            SyncMode.BACKFILL,entity.stableId))
+        val exactUrl=tile.url.substringBefore('#')
+        val request=GalleryRequestLedger.Request(SyncMode.BACKFILL,
+            entity.stableId,albumUrl=exactUrl,
+            albumTitle=tile.title.take(160))
+        GalleryRequestLedger.remember(a,request)
         a.startForegroundService(Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
             .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
-            .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId))
+            .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId)
+            .putExtra(SyncForegroundService.EXTRA_ALBUM_URL,exactUrl)
+            .putExtra(SyncForegroundService.EXTRA_ALBUM_TITLE,request.albumTitle))
         return "Selected gallery queued · "+site.name+
             " · actual files are verified in Downloads"
     }
