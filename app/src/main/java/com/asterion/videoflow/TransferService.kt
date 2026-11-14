@@ -741,13 +741,18 @@ object VideoEngine {
         // For Eporner use the verified publisher's own embed first. Never
         // silently bypass an age/login requirement or send cookies cross-site.
         // Other providers retain existing canonical-URL behavior.
-        // Always attempt the explicitly selected source page with the original
-        // standalone extractor. Previously only discovered iframe candidates
-        // were attempted: a valid video page with no detectable iframe could
-        // never download, even when yt-dlp supported its page directly.
-        // Keep page-verification / authorization failures rather than silently
-        // discarding them and later displaying the SAME vague Python error.
-        val publishedPlayerInspection=if(!canInspectPublisherHtml)
+        // The exact selected publisher parser goes FIRST, including
+        // scheduled site sync. The old resolver fetched the same HTML
+        // repeatedly through generic discovery and WatchPorn on EVERY site
+        // before reaching the relevant provider, stalling parallel slots.
+        val publisherOriginals=if(canInspectPublisherHtml &&
+            PublisherOriginalExtractors.owns(item.url) &&
+            VideoSiteProfiles.isVideoPage(item.url))
+            runCatching{PublisherOriginalExtractors.resolve(context,item.url)}
+        else Result.success(emptyList())
+        val publishedOriginals=publisherOriginals.getOrDefault(emptyList())
+        val publishedPlayerInspection=if(!canInspectPublisherHtml ||
+            publishedOriginals.isNotEmpty())
             Result.success(emptyList<String>()) else runCatching {
                 WebDiscovery.embeddedCandidates(item.url,context,
                     explicitlySelected=userRequested)
@@ -757,16 +762,10 @@ object VideoEngine {
         val variants=VideoCandidatePlan.ordered(item.url,
             EpornerOriginalSource.videoCandidates(item.url,connected),
             publishedPlayerInspection.getOrDefault(emptyList()))
-        val watchPorn=if(!canInspectPublisherHtml)null else runCatching{
+        val watchPorn=if(!canInspectPublisherHtml ||
+            NetworkRoute.siteKey(item.url)!="watchporn.to")null else runCatching{
             WatchPornOriginalSource.resolve(item.url,context)
         }.getOrNull()
-        // A selected item is routed through its OWN publisher's player parser
-        // before the generic yt-dlp page fallback. This is still the unified
-        // downloader, using the existing queue and media receipt contracts.
-        val publisherOriginals=if(userRequested && canInspectPublisherHtml &&
-            PublisherOriginalExtractors.owns(item.url))
-            runCatching{PublisherOriginalExtractors.resolve(context,item.url)}
-        else Result.success(emptyList())
         var last:Throwable?=null
         var downloaded=false
         var expectedDuration:Long?=null
