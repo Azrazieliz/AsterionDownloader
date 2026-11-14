@@ -34,8 +34,12 @@ class ArchivebateWatchActivity:Activity() {
     private var player:WebView?=null
     override fun onCreate(state:Bundle?){
         super.onCreate(state)
-        ArchivebateDiagnostics.record(this,"watch_open")
         val watch=intent.getStringExtra(WATCH_URL).orEmpty()
+        val recordingId=runCatching{java.net.URI(watch).path
+            .orEmpty().trimEnd('/').substringAfterLast('/')}
+            .getOrDefault("").takeIf{it.matches(Regex("[0-9]{1,16}"))}
+            .orEmpty()
+        ArchivebateDiagnostics.record(this,"watch_open","recording="+recordingId)
         val title=intent.getStringExtra(VIDEO_TITLE)
             ?.take(180)?.ifBlank{"Archivebate recording"}?:"Archivebate recording"
         if(!WebDiscovery.isVideoPage(watch) ||
