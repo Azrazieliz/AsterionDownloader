@@ -22,7 +22,8 @@ internal object VideoFailurePolicy {
     fun actionable(kind:Kind)=kind in setOf(Kind.AUTH,Kind.GONE,Kind.UNSUPPORTED)
     fun maxRetries(kind:Kind):Int=when(kind){
         Kind.AUTH,Kind.GONE,Kind.UNSUPPORTED->0
-        Kind.RATE_LIMIT,Kind.METADATA,Kind.DNS->1
+        Kind.RATE_LIMIT,Kind.DNS->1
+        Kind.METADATA->2
         Kind.TRANSIENT,Kind.OTHER->2
     }
     fun delayMs(kind:Kind,attempt:Int):Long {
