@@ -26,6 +26,20 @@ class Rule34VideoOriginalSourceTest {
            </div>"""
         assertTrue(Rule34VideoOriginalSource.parse(html,selected).isEmpty())
     }
+    @Test fun extensionlessPublisherDownloadUsesVerifiedNativeMp4NotGenericPage() {
+        val address="https://rule34video.com/get_file/123/long-real-content-id?download=true"
+        assertTrue(Rule34VideoOriginalSource.firstPartyDownload(selected,address))
+        assertTrue(Rule34VideoOriginalSource.isPublisherMediaUrl(address))
+        assertTrue(NativeMediaDownloader.isNativeEligible(selected,address,true))
+        assertFalse(NativeMediaDownloader.isDirectMediaUrl(address))
+        assertFalse(Rule34VideoOriginalSource.firstPartyDownload(
+            selected,"https://rule34video.com/get_file/123/not-media?download=false"))
+        assertFalse(Rule34VideoOriginalSource.firstPartyDownload(
+            selected,"https://lookalike.rule34video.com.evil.example/get_file/123/?download=true"))
+        assertFalse(Rule34VideoOriginalSource.firstPartyDownload(
+            selected,"https://rule34video.com/tags/123/?download=true"))
+    }
+
     @Test fun exactPublisherRoutesOnly() {
         assertEquals("4727779",Rule34VideoOriginalSource.videoId(selected))
         assertNull(Rule34VideoOriginalSource.videoId("https://rule34video.com/"))
