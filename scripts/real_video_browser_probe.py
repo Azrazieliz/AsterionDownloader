@@ -307,6 +307,50 @@ try:
                                         """)
                                     except Exception as ex:
                                         selected["click_error"]=type(ex).__name__
+                                # Probe ONLY the selected Mixdrop iframe's
+                                # actual HTML5 media, never the parent page's
+                                # unrelated recommendation <video> elements.
+                                selected_src=driver.execute_script("""
+                                    const v=document.querySelector('video');
+                                    return v?.currentSrc||v?.src||
+                                        v?.querySelector('source[src]')?.src||'';
+                                """) or ""
+                                source=urllib.parse.urlsplit(selected_src)
+                                if (source.scheme=="https" and
+                                    source.hostname=="cdn.freefile.io" and
+                                    re.search(r"\\.(?:mp4|m4v)(?:/|$)",source.path,re.I)):
+                                    try:
+                                        req=urllib.request.Request(selected_src,
+                                            headers={
+                                            "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36",
+                                            "Referer":embeds[0],
+                                            "Accept":"video/mp4,*/*",
+                                            "Accept-Encoding":"identity",
+                                            "Range":"bytes=0-131071"})
+                                        with urllib.request.urlopen(req,timeout=16) as reply:
+                                            payload=reply.read(131072)
+                                            status=reply.status
+                                            mime=reply.headers.get("Content-Type","").split(";")[0]
+                                            content_range=reply.headers.get("Content-Range","")
+                                        with tempfile.TemporaryDirectory(prefix="archivebate-selected-") as tmp:
+                                            sample=pathlib.Path(tmp)/"selected.part"
+                                            sample.write_bytes(payload)
+                                            verified=sample.read_bytes()==payload
+                                        out["Archivebate exact selected iframe bytes"]={
+                                            "http":status,"mime":mime,
+                                            "bytes":len(payload),
+                                            "starts_mp4":len(payload)>=12 and payload[4:8]==b"ftyp",
+                                            "range_present":bool(content_range),
+                                            "saved_and_verified":verified,
+                                            "temporary_sample_deleted":True,
+                                            "limitation":"Range probe only; full selected file not accepted"}
+                                    except Exception as ex:
+                                        out["Archivebate exact selected iframe bytes"]={
+                                            "error":type(ex).__name__,
+                                            "http":getattr(ex,"code",None)}
+                                else:
+                                    out["Archivebate exact selected iframe bytes"]={
+                                        "blocked":"No direct selected video URL from exact embedded player"}
                                 out[name+" selected Mixdrop iframe playback"]=selected
                             except Exception as ex:
                                 out[name+" selected Mixdrop iframe playback"]={
