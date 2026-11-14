@@ -104,6 +104,7 @@ object DirectDownloadRetry {
         val delay=DirectTransferStallPolicy.ZERO_BYTE_TIMEOUT_MS
         scheduler.schedule(JobInfo.Builder(STALL_JOB,
             ComponentName(ctx,DirectRetryJob::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setMinimumLatency(delay)
             .setOverrideDeadline(delay+60_000L)
             .build())
