@@ -68,16 +68,22 @@ class SyncEngine(private val context: Context) {
         targetEntityId: String? = null,
         targetSiteHost: String? = null
     ) {
+        val targeted=targetEntityId!=null || targetSiteHost!=null
         val entities = db.listEntities().filter {
-            it.selected && it.liveEnabled &&
-                com.azrael.pixivdumpsync.SiteControls.sync(context,it.canonicalUrl,it.liveEnabled) &&
+            it.selected &&
+                (targeted || (it.liveEnabled &&
+                    com.azrael.pixivdumpsync.SiteControls.sync(context,
+                        it.canonicalUrl,it.liveEnabled))) &&
                 (targetEntityId == null || it.entityId == targetEntityId) &&
                 (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
             if (!SyncControl.checkpoint()) return
-            if(!com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
+            // Manual Check New must work independently from the automatic
+            // Sync toggle; scheduled Live runs still require opt-in.
+            if(!targeted &&
+                !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                 continue
             val adapter = AdapterRegistry.forSource(entity.source,context)
             if (!adapter.enabled) {
@@ -88,17 +94,33 @@ class SyncEngine(private val context: Context) {
             SyncControl.updateMessage(message)
             progress(message)
             try {
-                val galleries = adapter.enumerateGalleries(entity.toSourceEntity()).toList()
+                // A first manual check gets the newest ONE album rather than
+                // silently creating a cursor and downloading nothing. Backfill
+                // remains the separate action for the complete site history.
+                val galleries = if(targeted && entity.liveCursor.isNullOrBlank())
+                    adapter.enumerateGalleries(entity.toSourceEntity()).take(1).toList()
+                else adapter.enumerateGalleries(entity.toSourceEntity()).toList()
                 val newest = galleries.firstOrNull()?.stableId
                 if (entity.liveCursor.isNullOrBlank()) {
-                    db.setLiveCursor(entity.source, entity.entityId, newest)
-                    progress(entity.displayName + ": Live baseline established")
+                    if(targeted && galleries.isNotEmpty()){
+                        val latest=galleries.first()
+                        if(processGallery(entity,latest,adapter,db,files,flow,stats,progress)){
+                            db.setLiveCursor(entity.source,entity.entityId,newest)
+                        }else{
+                            db.queueRetry(latest,"Initial new-album check incomplete")
+                            stats.incompleteGalleries++
+                        }
+                    }else{
+                        db.setLiveCursor(entity.source, entity.entityId, newest)
+                        progress(entity.displayName + ": Live baseline established")
+                    }
                     continue
                 }
                 val newOnes = galleries.takeWhile { it.stableId != entity.liveCursor }
                 for (gallery in newOnes.asReversed()) {
                     if (!SyncControl.checkpoint()) return
-                    if(!com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                         break
                     if (processGallery(entity, gallery, adapter, db, files, flow, stats, progress)) {
                         db.setLiveCursor(entity.source, entity.entityId, gallery.stableId)
