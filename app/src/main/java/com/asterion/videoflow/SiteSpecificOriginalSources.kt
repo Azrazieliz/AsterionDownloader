@@ -274,6 +274,55 @@ internal object SiteSpecificOriginalSources {
         }
         return out.values.toList()
     }
+    /** Resolve a HelloPorn-selected VOE iframe to the media it actually
+     * exposes. Passing the iframe page to the generic extractor first returns
+     * Unsupported URL and leaves the original queue stuck at zero bytes.
+     */
+    internal fun helloPornOriginals(
+        context:Context,doc:Document,selected:String
+    ):List<Source>{
+        val frames=helloPorn(doc,selected)
+        if(frames.isEmpty())return emptyList()
+        val exact=LinkedHashMap<String,Source>()
+        for(frame in frames){
+            val player=runCatching{
+                Jsoup.connect(frame.url)
+                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) "+
+                        "AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+                    .header("Referer",selected)
+                    .header("Accept","text/html,application/xhtml+xml")
+                    .ignoreHttpErrors(true).followRedirects(false)
+                    .timeout(12_000).maxBodySize(1_800_000)
+                    .apply{NetworkRoute.javaProxy(context,selected)
+                        ?.let{proxy(it)}}
+                    .execute()
+            }.getOrNull()
+            if(player!=null && player.statusCode() in 200..299){
+                val page=Jsoup.parse(player.body(),frame.url)
+                for(src in (mediaElements(page,frame.url,
+                    "video[src],video source[src],source[type^=video][src],"+
+                    "meta[itemprop=contentUrl][content]")+
+                    jsSources(page,frame.url)).distinctBy{it.url})
+                    exact.putIfAbsent(src.url,src)
+            }
+            if(exact.isEmpty()){
+                // The player can set currentSrc only after its JS runs.
+                // Capture that selected HTML5 source, not network ads.
+                val browser=runCatching{
+                    BrowserPageFetch.html(context,frame.url)
+                }.getOrNull()
+                if(!browser.isNullOrBlank()){
+                    val rendered=Jsoup.parse(browser,frame.url)
+                    for(src in (mediaElements(rendered,frame.url,
+                        "main .video-player video[src],video[src]")+
+                        jsSources(rendered,frame.url)).distinctBy{it.url})
+                        exact.putIfAbsent(src.url,src)
+                }
+            }
+        }
+        return exact.values.toList().ifEmpty{frames}
+    }
+
     internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
         val css=when(owner){
             "helloporn.com"->"#player video[src],#player source[src],"+
@@ -327,7 +376,7 @@ internal object SiteSpecificOriginalSources {
                 }.getOrDefault(emptyList())
             }
             "helloporn.com"->{
-                val exact=helloPorn(doc,selected)
+                val exact=helloPornOriginals(context,doc,selected)
                 if(exact.isNotEmpty())exact
                 else selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
                     runCatching {
