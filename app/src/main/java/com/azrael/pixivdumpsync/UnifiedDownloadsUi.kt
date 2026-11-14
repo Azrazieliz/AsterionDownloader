@@ -567,7 +567,7 @@ object UnifiedDownloadsUi {
                 "$attention need action · $failed failed · $saved saved (recent)",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
         val shortcuts=ui.row(a)
-        shortcuts.addView(ui.action(a,"Start queued transfers",true){
+        if(queued>0)shortcuts.addView(ui.action(a,"Start queued transfers",true){
             if(!AppPower.enabled(a)){
                 Toast.makeText(a,"Resume transfers first",Toast.LENGTH_LONG).show()
             }else{
@@ -588,8 +588,8 @@ object UnifiedDownloadsUi {
             refresh()
         },LinearLayout.LayoutParams(0,-2,1f))
         shortcuts.addView(ui.action(a,"Refresh",false){refresh()},
-            LinearLayout.LayoutParams(0,-2,0.6f).apply{
-                leftMargin=ui.px(a,8)
+            LinearLayout.LayoutParams(0,-2,if(queued>0)0.6f else 1f).apply{
+                if(queued>0)leftMargin=ui.px(a,8)
             })
         parent.addView(shortcuts,ui.lp(a,12))
         // Clearing is explicit and affects only unfinished video tasks.
