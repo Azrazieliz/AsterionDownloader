@@ -40,9 +40,6 @@ internal object EpornerOriginalSource {
         // still used only if the owner has actually connected the site.
         return listOf(embed,url).distinct()
     }
-    /** Returns null rather than trusting unverified runtime if the provider's
-     * first-party identity and duration cannot be independently checked.
-     */
     /**
      * Eporner's own video player exposes a 32-character hash. Its publisher
      * xhr/video/<id> JSON supplies the actual MP4/HLS source variants.
@@ -57,7 +54,7 @@ internal object EpornerOriginalSource {
         }
     }
     internal fun publishedHash(html:String):String? =
-        Regex("""(?i)\\bhash\\s*[:=]\\s*['"]([0-9a-f]{32})['"]""")
+        Regex("""(?i)\bhash\s*[:=]\s*['"]([0-9a-f]{32})['"]""")
             .find(html)?.groupValues?.get(1)
 
     internal fun sourceUrls(rawJson:String):List<String> {
@@ -79,7 +76,7 @@ internal object EpornerOriginalSource {
                     FullLengthVideoPolicy.isExplicitPreview("",src))
                     continue
                 if(NativeMediaDownloader.isDirectMediaUrl(src) ||
-                    uri.path.orEmpty().matches(Regex("""(?i)^.*\\.(?:m3u8|mpd)$""")))
+                    uri.path.orEmpty().matches(Regex("""(?i)^.*\.(?:m3u8|mpd)$""")))
                     found+=src
             }
         }
@@ -114,6 +111,7 @@ internal object EpornerOriginalSource {
         return sourceUrls(response.body())
     }
 
+    /** Returns null if the publisher's API identity/duration cannot be verified. */
     fun officialDuration(url:String):Long? {
         val id=videoId(url)?:return null
         val api="https://www.eporner.com/api/v2/video/id/?id="+id
