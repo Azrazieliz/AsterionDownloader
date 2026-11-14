@@ -6,13 +6,13 @@ import org.junit.Test
 
 class CosplayGalleryVisibilityTest {
     @Test fun selectedAlbumsAppearInLibraryAsWellAsSiteGalleries(){
-        assertTrue(AsterionCosplayGallery.hasGalleryCards("site"))
-        assertTrue(AsterionCosplayGallery.hasGalleryCards("gallery_only"))
-        assertTrue(AsterionCosplayGallery.hasGalleryCards("selected_album"))
+        assertTrue(CosplayGalleryVisibility.hasGalleryCards("site"))
+        assertTrue(CosplayGalleryVisibility.hasGalleryCards("gallery_only"))
+        assertTrue(CosplayGalleryVisibility.hasGalleryCards("selected_album"))
     }
 
     @Test fun catalogSourcesAndTagsDoNotBecomeDownloadedAlbums(){
-        assertFalse(AsterionCosplayGallery.hasGalleryCards("tag"))
-        assertFalse(AsterionCosplayGallery.hasGalleryCards("category"))
+        assertFalse(CosplayGalleryVisibility.hasGalleryCards("tag"))
+        assertFalse(CosplayGalleryVisibility.hasGalleryCards("category"))
     }
 }
