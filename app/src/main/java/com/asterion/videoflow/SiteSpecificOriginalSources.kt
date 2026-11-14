@@ -189,11 +189,12 @@ internal object SiteSpecificOriginalSources {
         // at xiaoshenke.net/vid/<opaque-id> (no .mp4 extension). Read only
         // the exact selected player's <source type=video/mp4> elements.
         if(owner=="fullporner.com"){
-            val rendered=runCatching {
-                Jsoup.parse(BrowserPageFetch.html(context,playerPage),playerPage)
-            }.getOrNull()
-            val verified=rendered?.select("video#flvv source[src][type=video/mp4]"+
-                ",video source[src][type=video/mp4]")?.mapNotNull { node->
+            val rendered=html?.let{Jsoup.parse(it,playerPage)}
+            // BrowserPageFetch serializes only the selected HTML5
+            // currentSrc into <main><div class=video-player><video src>.
+            // The original <source> elements are not preserved there.
+            val verified=rendered?.select(
+                "main .video-player video[src]")?.mapNotNull { node->
                 val link=https(node.attr("src"),playerPage)
                 if(link!=null && FullPornerOriginalSource.verifiedMedia(
                         selected,playerPage,link))
