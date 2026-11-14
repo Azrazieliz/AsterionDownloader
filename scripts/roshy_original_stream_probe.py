@@ -32,14 +32,14 @@ with urllib.request.urlopen(req,timeout=17) as r:
 print("page_chars",len(raw))
 p=Elements();p.feed(raw)
 print("video+source_count",len(p.players))
-for tag,a in p.players[:14]:print(tag,attrs(a))
+for tag,a in p.players[:8]:print(tag,attrs(a))
 print("links_with_original_download")
 for a in p.links:
- if any("download" in str(v).lower() or "original" in str(v).lower() for v in a.values()):
-  print("link",attrs(a))
+ if any("roshy-mirror-switch" in str(v).lower() for v in a.values()):
+  print("mirror",attrs(a))
 print("near_original_stream")
-for q in ("Original Stream","DOWNLOAD (3)","uploadgig.com","video-player","streaming"):
- for m in list(re.finditer(re.escape(q),raw,re.I))[:2]:
+for q in ('id="roshy-video-mirror"','class="classic-pos-video-player','Original Stream','data-src=','videoUrl','jwplayer','streaming'):
+ for m in list(re.finditer(re.escape(q),raw,re.I))[:1]:
   snippet=raw[max(0,m.start()-120):min(len(raw),m.end()+250)]
   snippet=re.sub(r"https?://[^\s'\"<>]+",lambda z:"[HOST:"+str(urllib.parse.urlsplit(z.group()).hostname)+"]",snippet)
   snippet=re.sub(r"[A-Za-z0-9_-]{45,}","[ID]",snippet)
