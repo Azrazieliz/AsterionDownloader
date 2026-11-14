@@ -943,7 +943,7 @@ object SourceIndex {
                         // generic preview crawling made a second, misleading
                         // HTTP 403 appear in the adult gallery.
                         (it.adapter=="native" &&
-                            SiteControls.key(it.url)=="onejav.com")
+                            SiteControls.key(it.url) in setOf("onejav.com","xxxclub.to"))
                     }
                 }
                 val before=SourceIndexDb(context).use{db->
