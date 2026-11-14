@@ -259,7 +259,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             while (cursor.moveToNext()) result.add(GalleryCard(
                 SourceId.fromWire(cursor.getString(0)), cursor.getString(1),
                 cursor.getString(2), cursor.getInt(3), cursor.getString(4),
-                cursor.getString(5)
+                cursor.getString(5), cursor.getString(6)
             ))
         }
         return result
