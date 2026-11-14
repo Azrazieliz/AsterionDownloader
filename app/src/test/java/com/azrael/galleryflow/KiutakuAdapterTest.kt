@@ -28,6 +28,21 @@ class KiutakuAdapterTest {
             .advertisedGalleryPage(doc,"https://kiutaku.com/7440"))
     }
 
+    @Test fun imageCandidatesChooseLargestResponsiveOriginal(){
+        val doc=Jsoup.parse("""
+            <article><div class="article-fulltext">
+                <img src="https://cdn.example/thumb/001.jpg"
+                     srcset="https://cdn.example/001-320.jpg 320w,
+                             https://cdn.example/001-2048.jpg 2048w"
+                     alt="High resolution photo"/>
+            </div><div class="related">
+                <img src="https://cdn.example/other/advert.jpg"/>
+            </div></article>
+        """.trimIndent(),"https://kiutaku.com/7440")
+        assertEquals(listOf("https://cdn.example/001-2048.jpg"),
+            KiutakuAdapter(HttpClient()).imageCandidates(doc))
+    }
+
     @Test
     fun imageCandidatesPreferGalleryImagesAndIgnoreIcons() {
         val html = """
