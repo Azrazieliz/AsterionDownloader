@@ -3,6 +3,7 @@ package com.azrael.pixivdumpsync
 import android.app.Activity
 import android.content.Intent
 import com.azrael.galleryflow.GalleryDb
+import com.azrael.galleryflow.GalleryRequestLedger
 import com.azrael.galleryflow.SourceEntity
 import com.azrael.galleryflow.SourceId
 import com.azrael.galleryflow.SyncForegroundService
@@ -76,6 +77,8 @@ internal object ApprovedCosplayActions {
             db.setLiveEnabled(entity.source,entity.stableId,
                 SiteControls.sync(a,sourceAddress,false))
         }
+        GalleryRequestLedger.remember(a,GalleryRequestLedger.Request(
+            mode,entity.stableId))
         a.startForegroundService(Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
             .putExtra(SyncForegroundService.EXTRA_MODE,mode.name)
@@ -170,6 +173,8 @@ internal object ApprovedCosplayActions {
             db.setSelected(entity.source,entity.stableId,true)
             db.setLiveEnabled(entity.source,entity.stableId,false)
         }
+        GalleryRequestLedger.remember(a,GalleryRequestLedger.Request(
+            SyncMode.BACKFILL,entity.stableId))
         a.startForegroundService(Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
             .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
