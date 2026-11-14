@@ -20,6 +20,8 @@ class SyncForegroundService : Service() {
         const val EXTRA_MODE = "sync_mode"
         const val EXTRA_SITE_ID = "target_site_id"
         const val EXTRA_SITE_HOST = "target_site_host"
+        const val EXTRA_ALBUM_URL = "target_album_url"
+        const val EXTRA_ALBUM_TITLE = "target_album_title"
         private const val CHANNEL_ID = "galleryflow_sync"
         private const val NOTIFICATION_ID = 91
     }
@@ -74,7 +76,9 @@ class SyncForegroundService : Service() {
         val requested=if(intent?.action==ACTION_RECOVER)null
             else GalleryRequestLedger.Request(
                 mode,intent?.getStringExtra(EXTRA_SITE_ID),
-                intent?.getStringExtra(EXTRA_SITE_HOST))
+                intent?.getStringExtra(EXTRA_SITE_HOST),
+                intent?.getStringExtra(EXTRA_ALBUM_URL),
+                intent?.getStringExtra(EXTRA_ALBUM_TITLE))
         if(requested?.targeted==true)GalleryRequestLedger.remember(this,requested)
         // Recover unfinished album taps first. An untargeted automatic Live
         // run is not persisted and cannot turn an opted-out Sync back on.
@@ -105,7 +109,9 @@ class SyncForegroundService : Service() {
                         if(job!=null){
                             SyncEngine(applicationContext).run(job.mode,
                                 targetEntityId=job.entityId,
-                                targetSiteHost=job.siteHost){notifyNow()}
+                                targetSiteHost=job.siteHost,
+                                targetGalleryUrl=job.albumUrl,
+                                targetGalleryTitle=job.albumTitle){notifyNow()}
                             // Only remove after the engine has returned.
                             // Failed originals remain in GalleryDb retry rows.
                             GalleryRequestLedger.completed(applicationContext,job)
