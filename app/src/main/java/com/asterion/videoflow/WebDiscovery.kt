@@ -146,9 +146,28 @@ object WebDiscovery {
                     return browser
                 }
                 val title=document.title().lowercase()
-                require(!title.contains("just a moment") &&
-                    !title.contains("access denied") &&
-                    !title.contains("verify you are human")){
+                val challenge=title.contains("just a moment") ||
+                    title.contains("access denied") ||
+                    title.contains("verify you are human")
+                if(challenge && context!=null && (
+                    SiteSession.bound(context,current) ||
+                    com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current))){
+                    // A JS-rendered publisher may return HTTP 200 with just a
+                    // browser gate. Use only an already-authorized in-app
+                    // session or its explicitly public browser reader; never
+                    // treat the gateway HTML as a playable video.
+                    val html=com.azrael.pixivdumpsync.BrowserPageFetch
+                        .html(context,current)
+                    val browser=Jsoup.parse(html,current)
+                    val renderedTitle=browser.title().lowercase()
+                    require(!renderedTitle.contains("just a moment") &&
+                        !renderedTitle.contains("verify you are human") &&
+                        !renderedTitle.contains("access denied")){
+                        "Publisher browser session still requires ordinary site verification"
+                    }
+                    return browser
+                }
+                require(!challenge){
                     "Provider browser verification required; connect an authorized account"
                 }
                 return document
