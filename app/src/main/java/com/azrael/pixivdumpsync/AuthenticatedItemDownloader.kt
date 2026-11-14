@@ -6,7 +6,6 @@ import android.content.Intent
 import android.widget.Toast
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
-import com.asterion.videoflow.VideoSiteProfiles
 import com.azrael.galleryflow.SiteLoginActivity
 import com.azrael.galleryflow.SiteSession
 import org.json.JSONObject
@@ -23,10 +22,7 @@ object AuthenticatedItemDownloader {
      * source-specific download engine; cards/listings remain excluded.
      */
     internal fun usesVideoEngine(item:IndexedItem):Boolean =
-        item.kind.equals("video",true) &&
-        item.area.uppercase() in setOf("ADULT","HENTAI","VIDEOS") &&
-        SourceIndexParser.safe(item.url) &&
-        VideoSiteProfiles.isVideoPage(item.url)
+        SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)
 
     fun download(a:Activity,item:IndexedItem){
         if(usesVideoEngine(item)){
