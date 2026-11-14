@@ -15,6 +15,7 @@ import subprocess
 import time
 
 import urllib.request
+import urllib.error
 
 
 def sha256(path: Path) -> str:
@@ -67,8 +68,16 @@ def main() -> None:
         args.control + "/api/v1/phone/transfers",
         data=payload, method="POST",
         headers={**auth, "Content-Type": "application/json"})
-    with opener.open(request, timeout=20) as res:
-        started = json.load(res)
+    try:
+        with opener.open(request, timeout=20) as res:
+            started = json.load(res)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(2_048).decode("utf-8","replace")
+        # Control's structured status response is useful for distinguishing
+        # an invalid path/permission from an ordinary expired owner token.
+        print("CONTROL_TRANSFER_HTTP_STATUS="+str(exc.code))
+        print("CONTROL_TRANSFER_DENIAL="+detail[:800])
+        raise
     transfer_id = started.get("id")
     if not transfer_id:
         raise RuntimeError("Control transfer request gave no transfer ID")
