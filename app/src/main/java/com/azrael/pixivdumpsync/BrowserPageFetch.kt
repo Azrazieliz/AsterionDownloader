@@ -183,7 +183,7 @@ object BrowserPageFetch {
                                 }
                             }
                             const players=[...document.querySelectorAll(
-                                'main video,article video,.video-player video,'+
+                                'main video,article video,.video-player video,video#flvv,'+
                                 '#player video,.video-js video,video source[src]')]
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
