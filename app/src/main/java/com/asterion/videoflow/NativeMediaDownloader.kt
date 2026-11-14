@@ -29,7 +29,9 @@ internal object NativeMediaDownloader {
         !SiteSpecificOriginalSources.isHosterPage(mediaUrl) &&
         (if(verifiedMp4)
             FreePornVideosOriginalSource.firstPartyFormat(sourceUrl,mediaUrl) ||
-                Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl)
+                Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl) ||
+                (FullPornerOriginalSource.selectedPage(sourceUrl) &&
+                    FullPornerOriginalSource.verifiedMediaHost(mediaUrl))
          else isDirectMediaUrl(mediaUrl)) && runCatching{
             val uri=URI(sourceUrl)
             uri.scheme in setOf("http","https") && uri.host!=null
