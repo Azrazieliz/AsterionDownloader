@@ -359,6 +359,25 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         writableDatabase.execSQL("UPDATE videos SET retry_after=0 WHERE id=?",
             arrayOf(id))
     }
+    /** A playable file can belong to the wrong selected video. A user
+     * rejection invalidates the database receipt without erasing the media
+     * file, allowing later inspection/recovery. It must never show Saved=100%.
+     */
+    fun flagWrongOriginal(id:Long):Boolean {
+        val row=ContentValues().apply{
+            put("state","error")
+            put("progress",0)
+            putNull("saved_uri")
+            put("error","Wrong video saved; selected publisher player identity unverified")
+            put("retry_after",0L)
+            put("updated",System.currentTimeMillis())
+            put("attempts",0)
+            put("request_origin","user")
+        }
+        return writableDatabase.update("videos",row,
+            "id=? AND state='done'",arrayOf(id.toString()))==1
+    }
+
     fun retry(id: Long) {
         val target=readableDatabase.rawQuery(
             "SELECT url FROM videos WHERE id=?",arrayOf(id.toString())).use{
