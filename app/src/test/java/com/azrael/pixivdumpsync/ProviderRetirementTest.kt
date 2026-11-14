@@ -14,7 +14,8 @@ class ProviderRetirementTest {
         assertTrue(ProviderRetirement.isRetired("https://www.peekvids.com/video/a"))
         assertTrue(ProviderRetirement.isRetired("https://www.tnaflix.com/video/a"))
         assertTrue(ProviderRetirement.isRetired("https://camstreams.tv/"))
-        assertTrue(ProviderRetirement.isRetired("https://archivebate.com/"))
+        assertFalse(ProviderRetirement.isRetired("https://archivebate.com/"))
+        assertFalse(ProviderRetirement.isRetired("https://www.archivebate.com/watch/16458050"))
     }
     @Test fun lookalikeAndUnrelatedHostsRemainIndependent(){
         assertFalse(ProviderRetirement.isRetired("https://pornhits.com.evil.example/"))
