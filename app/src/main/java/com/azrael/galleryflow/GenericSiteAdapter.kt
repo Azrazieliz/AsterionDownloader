@@ -109,7 +109,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             // Dedicated gallery publishers expose originals on the selected
             // page itself. Do not crawl unrelated recommendation/photo cards
             // when a parser reports no images on that page.
-            val photos = if(GallerySiteOriginalExtractors.isStrictAlbum(url))
+            val photos = if(GallerySiteOriginalExtractors.isStrictAlbum(url) ||
+                SelectedAlbumScope.owns(url))
                 emptyList() else AlbumImageExtractor.photoPages(doc,url)
             photoLinks.addAll(photos)
             if (photoLinks.size > MAX_PHOTO_PAGES)
@@ -117,8 +118,12 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                     "a source-specific adapter is needed for complete backfill.")
             // Selected galleries on these approved sites use their own
             // full-image selectors, never the generic site-thumbnail list.
-            val originals=GallerySiteOriginalExtractors.originals(doc,url)
-                ?:AlbumImageExtractor.directImages(doc)
+            val originals=when {
+                SelectedAlbumScope.owns(url)->
+                    SelectedAlbumScope.originals(doc,url)
+                else->GallerySiteOriginalExtractors.originals(doc,url)
+                    ?:AlbumImageExtractor.directImages(doc)
+            }
             for (image in originals) {
                 inlineImages.putIfAbsent(image.url, image)
             }
@@ -129,7 +134,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 "images were not marked complete.")
 
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
-        if (GallerySiteOriginalExtractors.isStrictAlbum(url)) {
+        if (GallerySiteOriginalExtractors.isStrictAlbum(url) ||
+            SelectedAlbumScope.owns(url)) {
             // An empty PornPics original parse is a failure, not permission
             // to import recommendations or thumbnails from another album.
             images.putAll(inlineImages)
@@ -157,6 +163,10 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             throw AdapterException("No original image files discovered in this album; " +
                 "the site may need login, JavaScript or a dedicated adapter.")
         }
+        if(SelectedAlbumScope.owns(url))
+            SelectedAlbumScope.verifyAdvertisedCount(
+                SelectedAlbumScope.advertisedCount(gallery.title,title.orEmpty(),
+                    gallery.canonicalUrl),images.size)
         val meta = GalleryMeta(source, gallery.stableId, gallery.entityStableId, url,
             title ?: gallery.title, tags, publishedAt, visitedAlbumPages.toList() +
                 photoLinks.toList(),creator)
