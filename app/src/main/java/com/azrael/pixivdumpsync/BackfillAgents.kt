@@ -22,9 +22,11 @@ object BackfillAgents {
         var active:CompletableFuture<Unit>?=null // guarded by synchronized(this)
     }
     private val agents=ConcurrentHashMap<String,Agent>()
-    private val pool=Executors.newFixedThreadPool(
-        (Runtime.getRuntime().availableProcessors()-1).coerceIn(2,8)
-    ){r->Thread(r,"asterion-source-agent").apply{isDaemon=true}}
+    // Two bounded readers protect Android memory while keeping providers
+    // independent. Eight concurrent WebView/HTML scans caused LMK pressure.
+    private val pool=Executors.newFixedThreadPool(2){
+        r->Thread(r,"asterion-source-agent").apply{isDaemon=true}
+    }
     private const val PREF="asterion_agent_diagnostics"
 
     fun submit(context:Context,key:String,work:()->Unit):Future<*> {
@@ -33,8 +35,10 @@ object BackfillAgents {
         require(id.isNotBlank())
         val agent=agents.computeIfAbsent(id){Agent()}
         synchronized(agent){
-            agent.requested.incrementAndGet()
+            // Repeated scheduler ticks must not turn a single source scan
+            // into an endless sequence of identical queued reruns.
             agent.active?.takeUnless{it.isDone}?.let{return it}
+            agent.requested.set(1)
             val completion=CompletableFuture<Unit>()
             agent.active=completion
             try{
