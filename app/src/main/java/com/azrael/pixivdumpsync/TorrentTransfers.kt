@@ -175,8 +175,10 @@ class TorrentTransferService : Service() {
         val worker=thread(start=false,name="asterion-torrent-$id"){
             try {
                 transfer(id,folder,indices)
+                // A completed transfer is QUARANTINED until an actual scanner
+                // clears it. Keep its selected file indices and target
+                // category for the later authorized scan/release workflow.
                 getSharedPreferences("torrent_transfers",MODE_PRIVATE).edit()
-                    .remove("job_folder_$id").remove("job_indices_$id")
                     .remove("job_paused_$id").apply()
             }catch(e:Throwable){
                 if(e is InterruptedException || stopRequests.contains(id))
@@ -337,6 +339,13 @@ class TorrentTransferService : Service() {
             handle = session.find(info.infoHash())
         }
         require(handle != null && handle.isValid()) { "Torrent engine did not accept descriptor" }
+        // libtorrent4j SessionManager.download() returns early for an existing
+        // info hash and changes priorities but DOES NOT resume a paused handle.
+        // Previously our RESUME/ADD path could reconnect peers indefinitely
+        // without requesting another piece. Explicitly reactivate the real
+        // handle after restoring the user's file selection.
+        if(session.isPaused)session.resume()
+        handle.resume()
         var lastProgress=0f
         var lastAdvance=android.os.SystemClock.elapsedRealtime()
         var reannouncedSinceAdvance=false
