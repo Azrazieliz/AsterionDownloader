@@ -336,7 +336,7 @@ object AsterionAdultHub {
                             // tapping a confirmed video page must enqueue THAT
                             // exact original, not start an unrelated site-wide
                             // backfill and misleadingly claim download progress.
-                            if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(tile.url)){
+                            if(SelectedVideoRouter.isSelectedVideo(area,tile.url,"video")){
                                 val created=VideoDb(a).use{
                                     it.addVideo(tile.url,tile.title)
                                 }
