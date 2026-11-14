@@ -52,6 +52,10 @@ open class HttpClient(private val context:android.content.Context?=null) {
         webCookies(url)?.let { connection.header("Cookie", it) }
 
         val response = connection.execute()
+        // These calls never ask for a Range. A successful 206 contains only
+        // part of an original, even when its shorter Content-Length matches.
+        if (response.statusCode() == 206)
+            throw java.io.IOException("Unsolicited HTTP 206 partial page: " + url)
         if (response.statusCode() !in 200..299) {
             throw HttpStatusException(response.statusCode(), "HTTP " + response.statusCode() + " for " + url)
         }
@@ -293,6 +297,12 @@ open class HttpClient(private val context:android.content.Context?=null) {
             if (!sessionCookie.isNullOrBlank()) conn.setRequestProperty("Cookie", sessionCookie)
 
             val code = conn.responseCode
+            if (code == 206) {
+                conn.disconnect()
+                NetworkRequestRegistry.unregister(conn)
+                throw java.io.IOException(
+                    "Unsolicited HTTP 206 partial original; no Range was requested: " + url)
+            }
             if (code !in 200..299) {
                 conn.disconnect()
                 NetworkRequestRegistry.unregister(conn)
