@@ -111,8 +111,17 @@ object AsterionCosplayGallery {
             val galleries=GalleryDb(a).use{db->
                 galleryEntities.flatMap{db.galleryCards(it.entityId,5)}
             }.distinctBy{it.galleryId}.take(12)
-            val indexedItems=bySite[host].orEmpty()
-            val public=snapshots[host]?.entries.orEmpty()
+            // 4KHD has navigation/category covers alongside actual
+            // /content/<id>/<slug>.html albums. Only those specific album
+            // pages may be offered as downloadable gallery cards.
+            val indexedItems=bySite[host].orEmpty().filter{item->
+                host!="4khd.com" ||
+                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
+            }
+            val public=snapshots[host]?.entries.orEmpty().filter{item->
+                host!="4khd.com" ||
+                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
+            }
 
             val nativeTiles=galleries.mapNotNull{item->
                 val cover=item.firstUri?:item.firstUrl
