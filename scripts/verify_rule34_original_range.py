@@ -31,8 +31,8 @@ for a in doc.anchors:
     p=urllib.parse.urlsplit(src)
     if p.scheme!="https" or p.hostname not in ("rule34video.com","www.rule34video.com") or not p.path.startswith("/get_file/"):continue
     if "download=true" not in p.query:continue
-    if not re.search(r"(?i)\bmp4\s+[0-9]{3,4}p\b",a["text"]):continue
-    files.append((a["text"].strip()[:24],src))
+    label=a["text"].strip().replace("\\n"," ").replace("\\r"," ")[:70]
+    files.append((label or "Unlabeled publisher download",src))
 print("page",status,"original_formats",len(files),flush=True)
 for label,url in files[:3]:
     try:
