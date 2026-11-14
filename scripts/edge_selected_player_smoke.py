@@ -49,6 +49,11 @@ def inspect(item):
     if host and host not in hosts:hosts.append(host)
    return (name,{"exit":result.returncode,"dom_chars":len(page),
       "videos":len(p.videos),"sources":len(p.sources),
+      "source_media":[{"host":urllib.parse.urlsplit(
+          urllib.parse.urljoin(url,n.get("src",""))).hostname,
+          "type":n.get("type","")[:28],
+          "extension":urllib.parse.urlsplit(n.get("src","")).path.split(".")[-1][:8]}
+          for n in p.sources[:4]],
       "valid_https_videos":raw,"video_info":videos,
       "iframe_hosts":hosts[:4],
       "site_gate":bool(re.search(r"(?i)just a moment|verify you are human|not available in your country",page[:200000]))})
