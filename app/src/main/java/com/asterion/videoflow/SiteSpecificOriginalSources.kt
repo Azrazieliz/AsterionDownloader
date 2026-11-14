@@ -122,10 +122,28 @@ internal object SiteSpecificOriginalSources {
                            owner:String):List<Source>{
         val link=playerLink(doc,owner)?:return emptyList()
         val player=selectedPlayer(context,link,selected,owner)
-        return (mediaElements(player,link,
+        val selectedMedia=(mediaElements(player,link,
             "video[src],video source[src],source[type^=video][src],"+
                 "meta[itemprop=contentUrl][content]")+
             jsSources(player,link)).distinctBy{it.url}
+        if(selectedMedia.isNotEmpty())return selectedMedia
+        // This exact site's own iframe may create the HTML5 player only
+        // after JavaScript initialization. Inspect that known iframe, not
+        // every frame on the publisher page or unrelated browser traffic.
+        val html=if(BrowserPageFetch.publicEligible(link) ||
+            SiteSession.bound(context,link))
+            runCatching{BrowserPageFetch.html(context,link)}.getOrNull()
+        else null
+        if(!html.isNullOrBlank()){
+            val rendered=Jsoup.parse(html,link)
+            val media=(mediaElements(rendered,link,
+                "main .video-player video[src],video[src][data-duration]")+
+                jsSources(rendered,link)).distinctBy{it.url}
+            if(media.isNotEmpty())return media
+        }
+        // yt-dlp may have a dedicated extractor for the publisher-attested
+        // player host, so give it the EXACT iframe rather than a made-up MP4.
+        return listOf(Source(link,selected))
     }
     /** Roshy's selected video posts publish original file-host links,
      * NOT a stream. These URLs remain hoster landing pages to be resolved by
@@ -191,8 +209,13 @@ internal object SiteSpecificOriginalSources {
             "helloporn.com","javideo.net","hentaibros.net",
             "3dhentaix.com","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
-                    selectedStatic(Jsoup.parse(BrowserPageFetch.html(context,selected),
-                        selected),selected,owner)
+                    runCatching {
+                        if(!BrowserPageFetch.publicEligible(selected) &&
+                            !SiteSession.bound(context,selected))emptyList()
+                        else selectedStatic(
+                            Jsoup.parse(BrowserPageFetch.html(context,selected),
+                                selected),selected,owner)
+                    }.getOrDefault(emptyList())
             }
             else->emptyList()
         }
