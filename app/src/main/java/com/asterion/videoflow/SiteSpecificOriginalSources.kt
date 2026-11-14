@@ -3,6 +3,7 @@ package com.asterion.videoflow
 import android.content.Context
 import com.azrael.galleryflow.SiteSession
 import com.azrael.pixivdumpsync.BrowserPageFetch
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -35,11 +36,12 @@ internal object SiteSpecificOriginalSources {
         if(raw.isBlank() || listOf("blob:","javascript:","data:").any{
             raw.startsWith(it,true)})return null
         val u=runCatching{URI(base).resolve(raw.trim().replace("&amp;","&")
-            .replace("\\/","/").replace("\\u0026","&"))}.getOrNull()?:return null
+            .replace("\\/","/").replace("\\u0026","&").replace(" ","%20"))}
+            .getOrNull()?:return null
         if(u.scheme!="https" || u.host.isNullOrBlank() ||
             u.userInfo!=null || u.port!=-1 ||
             !WebDiscovery.isUrl(u.toString()))return null
-        return u.toString().substringBefore('#')
+        return u.toASCIIString().substringBefore('#')
     }
     private fun isMedia(url:String)=runCatching{
         val path=URI(url).path.orEmpty()
@@ -124,7 +126,7 @@ internal object SiteSpecificOriginalSources {
         }
         require(valid){"Untrusted publisher iframe"}
         val response=Jsoup.connect(link)
-            .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+            .userAgent(NativeMediaDownloader.USER_AGENT)
             .header("Referer",referer)
             .header("Accept","text/html,application/xhtml+xml")
             .ignoreHttpErrors(true).followRedirects(false)
@@ -159,7 +161,7 @@ internal object SiteSpecificOriginalSources {
             }
             if(child!=null){
                 val response=Jsoup.connect(child)
-                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+                    .userAgent(NativeMediaDownloader.USER_AGENT)
                     .header("Referer",link).ignoreHttpErrors(true)
                     .followRedirects(false).timeout(14_000)
                     .maxBodySize(1_800_000)
@@ -293,8 +295,7 @@ internal object SiteSpecificOriginalSources {
         for(frame in frames){
             val player=runCatching{
                 Jsoup.connect(frame.url)
-                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) "+
-                        "AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+                    .userAgent(NativeMediaDownloader.USER_AGENT)
                     .header("Referer",selected)
                     .header("Accept","text/html,application/xhtml+xml")
                     .ignoreHttpErrors(true).followRedirects(false)
@@ -344,7 +345,21 @@ internal object SiteSpecificOriginalSources {
         }
         val gated=owner=="hentaibros.net" || owner=="3dhentaix.com"
         val direct=mediaElements(doc,selected,css,gated)
-        return (direct+(if(gated)emptyList() else jsSources(doc,selected)))
+        val published=if(owner=="hentaibros.net"){
+            val player=doc.select(".video-player .flowplayer[data-item]")
+                .firstOrNull {
+                    it.closest("aside,.related,.recommendations,.ads,.sidebar")==null
+                }
+            val sources=player?.attr("data-item")?.let {
+                runCatching { JSONObject(it).optJSONArray("sources") }.getOrNull()
+            }
+            (0 until minOf(sources?.length()?:0,10)).mapNotNull { index ->
+                val raw=sources?.optJSONObject(index)?.optString("src").orEmpty()
+                val link=https(raw,doc.location())?.takeIf(::isMedia)
+                link?.let { Source(it,selected) }
+            }
+        } else if(gated)emptyList() else jsSources(doc,selected)
+        return (published+direct)
             .distinctBy{it.url}
     }
     fun resolve(context:Context,selected:String,doc:Document):

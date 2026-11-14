@@ -195,6 +195,14 @@ object BrowserPageFetch {
                             // the selected element's normal HTML5 source,
                             // never intercept unrelated browser requests.
                             const selectedPlayerHost=location.hostname.replace(/^www\./,'');
+                            if(selectedPlayerHost==='hentaibros.net'){
+                                const play=document.querySelector(
+                                    '.video-player .flowplayer.is-splash .fp-play');
+                                if(play && !play.dataset.asterionActivated){
+                                    play.dataset.asterionActivated='true';
+                                    play.click();
+                                }
+                            }
                             if((selectedPlayerHost==='fullporner.com' &&
                                 /^\/player\/\d{1,12}\/\d{1,4}\/?$/.test(
                                     location.pathname)) ||
@@ -221,7 +229,9 @@ object BrowserPageFetch {
                                     el:el.closest('video')).filter((el,i,list)=>
                                     !!el && list.indexOf(el)===i &&
                                     !el.closest('.related,.recommendations,'+
-                                        '.happy-under-player,.ads,.advertisement'))
+                                        '.happy-under-player,.ads,.advertisement') &&
+                                    (selectedPlayerHost!=='hentaibros.net' ||
+                                        !!el.closest('.video-player .flowplayer')))
                                 .slice(0,40).map(video=>{
                                     const src=video.currentSrc||video.getAttribute('src')||
                                         video.querySelector('source[src]')?.src||'';

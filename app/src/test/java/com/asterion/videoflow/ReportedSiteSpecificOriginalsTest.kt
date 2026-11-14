@@ -141,6 +141,21 @@ class ReportedSiteSpecificOriginalsTest {
                     Jsoup.parse(unmeasured,page),page,host).map{it.url})
         }
     }
+    @Test fun hentaiBrosReadsTheSelectedFlowplayerSourceInsteadOfRelatedClips(){
+        val page="https://hentaibros.net/sample-episode-1/"
+        val playerUrl="https://cdn.example/Anime Episode 1.mp4"
+        val html="""<main><div class="video-player">
+          <div class="flowplayer" data-item='{"sources":[
+            {"src":"$playerUrl","type":"video/mp4"},
+            {"src":"https://cdn.example/preview.mp4","type":"video/mp4"}]}'></div>
+          <aside><div class="flowplayer" data-item='{"sources":[
+            {"src":"https://cdn.example/another-item.mp4","type":"video/mp4"}]}'></div></aside>
+          </div></main>"""
+        val selected=SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(html,page),page,"hentaibros.net")
+        assertEquals(listOf(playerUrl.replace(" ","%20")),selected.map{it.url})
+        assertEquals(page,selected.single().referer)
+    }
     @Test fun onlyHentaiWorkingPathRemainsOutsideNewResolver(){
         assertFalse(SiteSpecificOriginalSources.owns(
             "https://onlyhentaistuff.com/video/selected"))

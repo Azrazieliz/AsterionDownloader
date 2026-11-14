@@ -502,6 +502,7 @@ object VideoEngine {
         // source-version exception to the automatic full-scene policy.
         val userRequested=db.requestOrigin(item.id)=="user"
         val connectedCookies=AuthorizedVideoSession.temporaryCookies(context,item.url)
+        try {
         // The Eporner watch page can serve a verification interstitial even
         // though the official embed exposes the publisher's actual player.
         // Only use that alternate route after the user explicitly connects
@@ -661,7 +662,7 @@ object VideoEngine {
                         throw java.util.concurrent.TimeoutException(
                             "Selected video yielded no original bytes after "+
                             (VideoTransferLimits.NO_BYTES_RESOLVE_MS/1000)+"s; "+
-                            "last player attempt stopped for a retriable diagnosis")
+                            "check the selected player before retrying")
                     if(current>latestBytes){
                         latestBytes=current
                         lastByteTick=now
@@ -783,7 +784,6 @@ object VideoEngine {
         // scheduled site sync. The old resolver fetched the same HTML
         // repeatedly through generic discovery and WatchPorn on EVERY site
         // before reaching the relevant provider, stalling parallel slots.
-        try {
         val publisherOriginals=if(canInspectPublisherHtml &&
             PublisherOriginalExtractors.owns(item.url) &&
             VideoSiteProfiles.isVideoPage(item.url))

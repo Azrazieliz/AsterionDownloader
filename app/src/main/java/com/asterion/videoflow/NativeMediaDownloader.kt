@@ -16,6 +16,8 @@ import java.util.Locale
  */
 internal object NativeMediaDownloader {
     private val supported=Regex("""(?i)\.(?:mp4|m4v|mkv|webm|mov|ts)/?$""")
+    internal const val USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
     fun isDirectMediaUrl(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         return uri.scheme in setOf("https","http") && uri.host!=null &&
@@ -104,8 +106,7 @@ internal object NativeMediaDownloader {
             conn.readTimeout=30_000
             conn.setRequestProperty("Accept","video/*,application/octet-stream;q=0.9")
             conn.setRequestProperty("Accept-Encoding","identity")
-            conn.setRequestProperty("User-Agent",
-                "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36")
+            conn.setRequestProperty("User-Agent",USER_AGENT)
             if(!referer.isNullOrBlank() && URI(referer).scheme in setOf("http","https"))
                 conn.setRequestProperty("Referer",referer)
             if(sameHost && !cookieHeader.isNullOrBlank())
