@@ -9,7 +9,7 @@ SITES={
  "eporner.com":"https://www.eporner.com/",
  "xxxi.porn":"https://xxxi.porn/",
  "helloporn.com":"https://helloporn.com/",
- "xxxclub.to":"https://xxxclub.to/torrents/browse/all/",
+ "xxxclub.to":"https://xxxclub.to/torrents/details/480815",
  "cums.net":"https://cums.net/",
  "mp4hentai.com":"https://mp4hentai.com/",
  "onlyhentaistuff.com":"https://www.onlyhentaistuff.com/",
@@ -51,7 +51,7 @@ for host,url in SITES.items():
             shape=re.sub(r"/[a-z0-9_-]{22,}(?=/|$)","/{slug}",shape)
             frequencies[shape.split("/")[1] if "/" in shape else shape]+=1
         examples=( [p for p in paths if p.startswith("/torrents/") and
-                        not p.startswith("/torrents/browse/")][:8]
+                        not p.startswith("/torrents/browse/")][:16]
                     if host=="xxxclub.to" else paths[:4])
         print(host,"HTTP",status,"TITLE"," ".join(dom.titlebuf)[:60],
               "LINKS",len(paths),"TOP",frequencies.most_common(10),
