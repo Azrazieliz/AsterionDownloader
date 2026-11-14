@@ -52,6 +52,10 @@ internal object SiteBackfillProfiles {
             "article .post-thumbnail a[href],"+
             ".post article a[href],main article a[href]",
             Regex("^/20[0-9]{2}/(?:0[1-9]|1[0-2])/.{3,240}/?$"),"video"),
+        Profile("4khd.com","COSPLAY",
+            cosplay+",main article a[href],.post-list a[href]",
+            Regex("^/content/[0-9]{1,8}/[a-z0-9][a-z0-9_-]{2,180}\\.html/?$"),
+            "cosplay"),
         Profile("kiutaku.com","COSPLAY",
             cosplay+",main a[href],.gallery-grid a[href]",
             Regex("^/[0-9]{1,9}/?$"),"cosplay"),
