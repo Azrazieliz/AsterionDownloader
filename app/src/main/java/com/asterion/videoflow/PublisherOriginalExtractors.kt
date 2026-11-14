@@ -169,6 +169,10 @@ internal object PublisherOriginalExtractors {
             val resolved=SiteSpecificOriginalSources.resolve(context,selected,page)
             // Retain publisher-attested fallbacks only; never substitute
             // generic page thumbnails, ads, or another selected item.
+            // 3DHentaiX can expose unrelated playable recommendations.
+            // Only its unique, selected main player may supply media; do not
+            // reintroduce broad CSS or metadata candidates on this provider.
+            if(host=="3dhentaix.com")return resolved.distinctBy{it.url}
             return (resolved+fromHtml(selected,page.outerHtml()))
                 .distinctBy{it.url}
         }
