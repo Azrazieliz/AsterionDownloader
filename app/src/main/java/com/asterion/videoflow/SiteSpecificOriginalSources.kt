@@ -189,9 +189,9 @@ internal object SiteSpecificOriginalSources {
         // player host, so give it the EXACT iframe rather than a made-up MP4.
         return listOf(Source(playerPage,if(playerPage==link)selected else link))
     }
-    /** Roshy's selected video posts publish original file-host links,
-     * NOT a stream. These URLs remain hoster landing pages to be resolved by
-     * their own hoster transfer; a .mp4 path alone is NOT a media receipt.
+    /** Roshy uses its site-owned Beeteam368 "Original Stream" player as
+     * well as file-host download links. Prefer the actual selected player
+     * media; do NOT confuse preview tiles or a hoster HTML page with media.
      */
     internal fun roshy(doc:Document,selected:String):List<Source>{
         val out=LinkedHashMap<String,Source>()
@@ -210,7 +210,14 @@ internal object SiteSpecificOriginalSources {
             }
             if(valid)out.putIfAbsent(link,Source(link,selected))
         }
-        return out.values.toList()
+        val stream=mediaElements(doc,selected,
+            "#main-content .beeteam368-player-wrapper video[src],"+
+            "#main-content .beeteam368-player-wrapper source[src],"+
+            "#main-content .beeteam368-player-control video[src],"+
+            "main .beeteam368-player video[src],main .video-player video[src]")
+        // This method is intentionally confined to the selected site's
+        // own player. Hoster entries remain fallback transfer candidates.
+        return (stream+out.values).distinctBy{it.url}
     }
     /**
      * MP4Hentai is a VIDEO publisher. Its /YYYY/MM/<title> URL is only the
@@ -255,7 +262,20 @@ internal object SiteSpecificOriginalSources {
         val originals=when(owner){
             "fullporner.com","hqpornerxxx.com","uncensoredhentai.xxx" ->
                 fromPlayer(context,doc,selected,owner)
-            "roshy.tv"->roshy(doc,selected)
+            "roshy.tv"->{
+                val initial=roshy(doc,selected)
+                // Beeteam368 may create the original player after JS loads.
+                // Inspect only that selected player; no new browser module.
+                val rendered=runCatching {
+                    if(!BrowserPageFetch.publicEligible(selected) &&
+                        !SiteSession.bound(context,selected))emptyList()
+                    else mediaElements(Jsoup.parse(
+                        BrowserPageFetch.html(context,selected),selected),
+                        selected,"main .video-player video[src]"+
+                            ",main .video-player source[src]")
+                }.getOrDefault(emptyList())
+                (rendered+initial).distinctBy{it.url}
+            }
             "mp4hentai.com"->{
                 val first=mp4hentai(doc,selected)
                 if(first.isNotEmpty())first
