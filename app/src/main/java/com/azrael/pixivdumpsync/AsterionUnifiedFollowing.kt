@@ -204,7 +204,8 @@ object AsterionUnifiedFollowing {
     fun kyora(a:Activity,p:LinearLayout,refresh:()->Unit,
               creatorsOnly:Boolean=false){
         val followed=GalleryDb(a).use{it.listEntities()}
-            .filter{!creatorsOnly || it.kind!="site"}
+            .filter{!creatorsOnly || it.kind !in setOf(
+                "site","selected_album","gallery_only")}
         if(creatorsOnly && followed.isEmpty())return
         put(a,p,ui.text(a,"Cosplay · Following",22f,ui.white,true),8)
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
