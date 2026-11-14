@@ -239,7 +239,16 @@ internal object SiteSpecificOriginalSources {
             "fullporner.com","hqpornerxxx.com","uncensoredhentai.xxx" ->
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->roshy(doc,selected)
-            "mp4hentai.com"->mp4hentai(doc,selected)
+            "mp4hentai.com"->{
+                val first=mp4hentai(doc,selected)
+                if(first.isNotEmpty())first
+                else runCatching {
+                    if(!BrowserPageFetch.publicEligible(selected) &&
+                        !SiteSession.bound(context,selected))emptyList()
+                    else mp4hentai(Jsoup.parse(
+                        BrowserPageFetch.html(context,selected),selected),selected)
+                }.getOrDefault(emptyList())
+            }
             "helloporn.com","javideo.net","hentaibros.net",
             "3dhentaix.com","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
