@@ -170,6 +170,31 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(listOf(playerUrl.replace(" ","%20")),selected.map{it.url})
         assertEquals(page,selected.single().referer)
     }
+    @Test fun threeDHentaiRefusesPlayableUnrelatedAndAmbiguousVideos(){
+        val selected="https://3dhentaix.com/actual-scene-episode/"
+        val original="https://cdn.example/actual-scene.mp4"
+        val wrong="https://cdn.example/other-scene.mp4"
+        val sourceHtml="""<main>
+            <div class="video-player"><video src="$original" data-duration="1234"></video></div>
+            <aside class="recommended-videos">
+              <div class="video-player"><video src="$wrong" data-duration="1300"></video></div>
+            </aside>
+            </main>"""
+        assertEquals(listOf(original),SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(sourceHtml,selected),selected,"3dhentaix.com").map{it.url})
+        val wrongOnly="""<main><section class="related">
+           <div class="video-player"><video src="$wrong" data-duration="2000"></video></div>
+           </section></main>"""
+        assertTrue(SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(wrongOnly,selected),selected,"3dhentaix.com").isEmpty())
+        val ambiguous="""<main>
+           <div class="video-player"><video src="$original" data-duration="1234"></video></div>
+           <div class="video-player"><video src="$wrong" data-duration="1300"></video></div>
+           </main>"""
+        assertTrue(SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(ambiguous,selected),selected,"3dhentaix.com").isEmpty())
+    }
+
     @Test fun onlyHentaiWorkingPathRemainsOutsideNewResolver(){
         assertFalse(SiteSpecificOriginalSources.owns(
             "https://onlyhentaistuff.com/video/selected"))
