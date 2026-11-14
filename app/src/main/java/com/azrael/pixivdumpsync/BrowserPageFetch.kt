@@ -169,9 +169,9 @@ object BrowserPageFetch {
                             // initializes fluidPlayer around #flvv. Request
                             // the selected element's normal HTML5 source,
                             // never intercept unrelated browser requests.
-                            const selectedPlayerHost=location.hostname.replace(/^www\\./,'');
+                            const selectedPlayerHost=location.hostname.replace(/^www\./,'');
                             if(selectedPlayerHost==='fullporner.com' &&
-                                /^\\/player\\/\\d{1,12}\\/\\d{1,4}\\/?$/.test(
+                                /^\/player\/\d{1,12}\/\d{1,4}\/?$/.test(
                                     location.pathname)){
                                 const v=document.querySelector('video#flvv');
                                 if(v){
@@ -202,7 +202,7 @@ object BrowserPageFetch {
                             // Keep only the exact selected publisher's
                             // documented player iframe. Never serialize ad,
                             // social/comment or recommendation iframe URLs.
-                            const publisher=location.hostname.replace(/^www\\./,'');
+                            const publisher=location.hostname.replace(/^www\./,'');
                             const currentPath=location.pathname||'';
                             const embeds=[...document.querySelectorAll(
                                 'iframe[src]')].filter(el=>{
@@ -210,24 +210,24 @@ object BrowserPageFetch {
                                 try{u=new URL(el.getAttribute('src'),location.href);}
                                 catch(_){return false;}
                                 if(u.protocol!=='https:')return false;
-                                const host=u.hostname.replace(/^www\\./,'');
+                                const host=u.hostname.replace(/^www\./,'');
                                 if(publisher==='archivebate.com')
-                                    return /^\\/watch\\/\\d{1,16}\\/?$/.test(currentPath) &&
+                                    return /^\/watch\/\d{1,16}\/?$/.test(currentPath) &&
                                         host==='mixdrop.ag' &&
-                                        /^\\/e\\/[A-Za-z0-9_-]{5,64}\\/?$/.test(u.pathname);
+                                        /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
                                 if(publisher==='uncensoredhentai.xxx')
-                                    return /^\\/(?:watch|video)\\//.test(currentPath) &&
+                                    return /^\/(?:watch|video)\//.test(currentPath) &&
                                         host==='nhplayer.com' &&
-                                        /^\\/v\\/[A-Za-z0-9]{8,40}\\/?$/.test(u.pathname);
+                                        /^\/v\/[A-Za-z0-9]{8,40}\/?$/.test(u.pathname);
                                 if(publisher==='fullporner.com')
-                                    return /^\\/watch\\/[a-f0-9]{24}\\/?$/i.test(currentPath) &&
+                                    return /^\/watch\/[a-f0-9]{24}\/?$/i.test(currentPath) &&
                                         host==='fullporner.com' &&
-                                        /^\\/player\\/\\d{1,12}\\/\\d{1,4}\\/?$/.test(u.pathname);
+                                        /^\/player\/\d{1,12}\/\d{1,4}\/?$/.test(u.pathname);
                                 if(['jav.guru','javideo.net','mp4hentai.com',
                                     'onlyhentaistuff.com','hentaihaven.xxx']
                                     .includes(publisher))
                                     return host===publisher &&
-                                        /^\\/(?:embed|player|watch|video)\\//.test(u.pathname);
+                                        /^\/(?:embed|player|watch|video)\//.test(u.pathname);
                                 return false;
                             }).slice(0,5).map(el=>
                                 '<iframe src="'+esc(new URL(
