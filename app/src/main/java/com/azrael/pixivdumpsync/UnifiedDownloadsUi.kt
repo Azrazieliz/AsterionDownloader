@@ -230,7 +230,13 @@ object UnifiedDownloadsUi {
                         State.HELD->"RETRY"
                         else->null
                     },
-                    onRemove=if(state==State.DONE)null else ({
+                    onRemove=if(state==State.DONE) ({
+                        VideoDb(a).use{db->
+                            if(db.flagWrongOriginal(item.id))
+                                VideoTransferJournal.record(a,item.id,"wrong_media",
+                                    "Owner reported incorrect selected video")
+                        }
+                    }) else ({
                         VideoEngine.cancelVideo(a.applicationContext,item.id)
                     }),hasPrimaryAction=!retired || state==State.DONE)
             }
@@ -766,7 +772,11 @@ object UnifiedDownloadsUi {
             // Each video has independent cancellation even when its primary
             // control is PAUSE, RETRY or HOLD. Do not rely on a global stop.
             item.onRemove?.let{remove->
-                val label=if(item.state==State.ACTIVE)"CANCEL" else "CLEAR"
+                val label=when{
+                    item.state==State.DONE && item.source=="Video"->"WRONG FILE"
+                    item.state==State.ACTIVE->"CANCEL"
+                    else->"CLEAR"
+                }
                 val removeButton=ui.action(a,label,false){
                     remove()
                     refresh()
