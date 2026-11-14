@@ -13,15 +13,17 @@ class AlohaSourcesTest {
         assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
             it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK})
         assertEquals(6,AlohaSources.by(AlohaArea.COSPLAY).size)
-        assertEquals(14,AlohaSources.by(AlohaArea.ADULT).size)
-        assertEquals(1,AlohaSources.by(AlohaArea.VIDEOS).size)
-        assertEquals("onejav.com",AlohaSources.by(AlohaArea.VIDEOS).single().host)
+        assertEquals(13,AlohaSources.by(AlohaArea.ADULT).size)
+        assertTrue(AlohaSources.by(AlohaArea.VIDEOS).isEmpty())
+        assertEquals(3,AlohaSources.by(AlohaArea.TORRENTS).size)
+        assertEquals(setOf("onejav.com","sukebei.nyaa.si","xxxclub.to"),
+            AlohaSources.by(AlohaArea.TORRENTS).map{it.host}.toSet())
         assertTrue(sites.none{it.host in setOf("cums.net","camstreams.tv")})
         assertEquals(7,AlohaSources.by(AlohaArea.HENTAI).size)
         assertFalse(sites.any{it.host in setOf("xvideos.com","peekvids.com","tnaflix.com")})
         assertEquals(3,AlohaSources.by(AlohaArea.COMICS).size)
         assertEquals(4,AlohaSources.by(AlohaArea.BOOKS).size)
-        assertEquals(1,AlohaSources.by(AlohaArea.GAMES).size)
+        assertTrue(AlohaSources.by(AlohaArea.GAMES).isEmpty())
         assertEquals(1,AlohaSources.by(AlohaArea.ASSETS).size)
     }
     @Test fun onlyMissingSourcesAreShownInAlohaAdditions() {
