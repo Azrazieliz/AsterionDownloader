@@ -57,9 +57,11 @@ internal object ArchivebateSelectedMedia {
         require(isSelectedEmbed(watch,embed)){
             "Archivebate selected watch page did not publish a valid player"
         }
-        require(com.azrael.galleryflow.SiteSession.bound(context,watch)){
-            "Connect Archivebate in the app before retrieving a selected recording"
-        }
+        // A first-party /watch/ page can publish this exact Mixdrop player
+        // publicly after the site's ordinary Continue action. The previous
+        // unconditional SiteSession.bound gate prevented every public
+        // selected recording from reaching its real published player.
+        // WebView will still enforce actual publisher/network restrictions.
         val main=if(Build.VERSION.SDK_INT>=28)
             android.app.Application.getProcessName()==context.packageName else true
         if(!main){
@@ -86,9 +88,9 @@ internal object ArchivebateSelectedMedia {
         check(Looper.myLooper()!=Looper.getMainLooper()){
             "Player inspection must start off Android's UI thread"
         }
-        require(com.azrael.galleryflow.SiteSession.bound(context,watch)){
-            "Archivebate connection not verified"
-        }
+        // No artificial account requirement for genuinely public players.
+        // Authenticated pages still require their valid browser session
+        // upstream before the exact selected embed can be discovered.
         val main=Handler(Looper.getMainLooper())
         val done=CountDownLatch(1)
         val result=AtomicReference<String?>()
