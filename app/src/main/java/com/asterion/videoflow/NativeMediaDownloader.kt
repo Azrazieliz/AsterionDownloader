@@ -62,7 +62,8 @@ internal object NativeMediaDownloader {
                 uri.userInfo==null && uri.port==-1 &&
                 (uri.host.orEmpty().lowercase().removePrefix("www.")==
                     "freepornvideos.xxx" ||
-                    Rule34VideoOriginalSource.isPublisherMediaUrl(address))
+                    Rule34VideoOriginalSource.isPublisherMediaUrl(address) ||
+                    FullPornerOriginalSource.verifiedMediaHost(address))
             }.getOrDefault(false)
             else isDirectMediaUrl(address) &&
                 !SiteSpecificOriginalSources.isHosterPage(address)){
