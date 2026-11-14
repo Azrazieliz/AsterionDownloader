@@ -151,8 +151,7 @@ object AsterionAdultHub {
         // Provider HTML often advertises genuine video covers before an
         // authenticated native index has discovered the originals.
         val publicBySite=sources.associate{site->
-            site.host to if(site.host=="onejav.com")emptyList() else
-                KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
+            site.host to KyoraCreatorPreviews.cached(a,site.url)?.entries.orEmpty()
                     .filter{SourceIndexParser.sameSite(site.url,it.url) &&
                         publicMedia(it.url,it.title,it.cover)}
         }
@@ -172,7 +171,6 @@ object AsterionAdultHub {
                 }
             }
             for(site in sources){
-                if(site.host=="onejav.com")continue
                 val saved=KyoraCreatorPreviews.cached(a,site.url)
                 val stale=saved==null || now-saved.updated>
                     (if(saved.error.isNullOrBlank())4L*60*60*1000 else 10L*60*1000)
@@ -192,11 +190,9 @@ object AsterionAdultHub {
                 // Explicit refresh checks every provider; nothing is hidden
                 // behind a management dialog or an arbitrary four-site cycle.
                 for(site in sources){
-                    if(site.host=="onejav.com")continue
-                    if(site.host!="onejav.com")
-                        KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
-                            if(!a.isFinishing&&!a.isDestroyed)refresh()
-                        }
+                    KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
+                        if(!a.isFinishing&&!a.isDestroyed)refresh()
+                    }
                 }
                 SourceIndex.refreshPreviews(a.applicationContext,area){checked->
                     a.runOnUiThread{
