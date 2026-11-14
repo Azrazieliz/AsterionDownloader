@@ -194,10 +194,15 @@ object BrowserPageFetch {
                             // the selected element's normal HTML5 source,
                             // never intercept unrelated browser requests.
                             const selectedPlayerHost=location.hostname.replace(/^www\./,'');
-                            if(selectedPlayerHost==='fullporner.com' &&
+                            if((selectedPlayerHost==='fullporner.com' &&
                                 /^\/player\/\d{1,12}\/\d{1,4}\/?$/.test(
-                                    location.pathname)){
-                                const v=document.querySelector('video#flvv');
+                                    location.pathname)) ||
+                               (selectedPlayerHost==='mydaddy.cc' &&
+                                /^\/video\/[A-Za-z0-9_-]{8,160}\/?$/.test(
+                                    location.pathname))){
+                                const v=selectedPlayerHost==='fullporner.com'?
+                                    document.querySelector('video#flvv'):
+                                    document.querySelector('video');
                                 if(v){
                                     try{v.load();}catch(_){}
                                     if(v.paused)try{
