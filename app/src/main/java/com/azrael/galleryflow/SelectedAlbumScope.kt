@@ -34,6 +34,47 @@ internal object SelectedAlbumScope {
     private val countPattern=Regex(
         """(?i)(?<![0-9])([0-9]{1,5})\s*(?:photos?|images?|pictures?|pics?)\b""")
 
+    fun is4khdAlbum(url:String):Boolean=runCatching {
+        val uri=URI(url)
+        uri.scheme=="https" && uri.userInfo==null &&
+            uri.host.orEmpty().lowercase(Locale.ROOT)
+                .removePrefix("www.")=="4khd.com" &&
+            uri.path.orEmpty().matches(
+                Regex("""(?i)^/content/[0-9]{1,8}/[a-z0-9][a-z0-9_-]{2,180}\.html/?$"""))
+    }.getOrDefault(false)
+
+    /** The publisher calls these its full-HD originals; its paginated
+     * website JPEGs are previews. Accept only first-party 4KHD bridge URLs
+     * from the selected article, never ad links, related sets or broad pages.
+     */
+    fun officialOriginalArchives(doc:Document,selectedUrl:String):List<String>{
+        require(is4khdAlbum(selectedUrl)){
+            "Official full-quality 4KHD bridge needs an exact album URL"
+        }
+        val links=LinkedHashSet<String>()
+        for(anchor in doc.select("main a[href],article a[href],"+
+            ".entry-content a[href],.post-content a[href]").take(400)){
+            if(anchor.closest("nav,header,footer,aside,.related,.recommended,"+
+                    ".advertisement,.ads,.sidebar,.pagination")!=null)
+                continue
+            val uri=runCatching {
+                URI(doc.baseUri()).resolve(anchor.attr("href"))
+            }.getOrNull()?:continue
+            val host=uri.host.orEmpty().lowercase(Locale.ROOT)
+            if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
+                host!="m.4khd.com" ||
+                !uri.path.orEmpty().matches(Regex("""^/[A-Za-z0-9_-]{4,60}/?$""")))
+                continue
+            val text=(anchor.text()+" "+anchor.parent()?.text().orEmpty())
+                .lowercase(Locale.ROOT)
+            if("terabox" !in text && "full hd" !in text &&
+                "without watermark" !in text)
+                continue
+            links+=uri.toString().substringBefore('#')
+        }
+        return links.toList()
+    }
+
     fun owns(url:String):Boolean=runCatching{
         val host=URI(url).host.orEmpty().lowercase(Locale.ROOT)
             .removePrefix("www.")
