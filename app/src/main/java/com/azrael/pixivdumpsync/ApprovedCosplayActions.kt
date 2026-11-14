@@ -59,6 +59,31 @@ internal object ApprovedCosplayActions {
     fun backfill(a:Activity,address:String):String {
         if(!AppPower.enabled(a))return "Resume downloads first"
         val enrolled=source(a.applicationContext,address)
+        val host=SiteControls.key(enrolled.url)
+        if(host in setOf("kiutaku.com","pornpics.com")){
+            // Indexing a site's catalog is NOT downloading its albums.
+            // Keep the established GalleryFlow files, retries and cursors,
+            // but enroll one durable root-site entity for full backfill.
+            val native=host=="kiutaku.com"
+            val entity=SourceEntity(
+                if(native)SourceId.KIUTAKU else SourceId.GENERIC,
+                "site:"+host,enrolled.name,
+                if(native)"https://kiutaku.com/" else "https://www.pornpics.com/",
+                "site"
+            )
+            GalleryDb(a).use{db->
+                db.addEntity(entity)
+                db.setSelected(entity.source,entity.stableId,true)
+                db.setLiveEnabled(entity.source,entity.stableId,
+                    SiteControls.sync(a,enrolled.url,false))
+            }
+            a.startForegroundService(Intent(a,SyncForegroundService::class.java)
+                .setAction(SyncForegroundService.ACTION_START)
+                .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
+                .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId))
+            return "Original album backfill queued · "+enrolled.name+
+                " · verified files appear in Downloads"
+        }
         return if(enrolled.adapter=="native")
             ProviderBackfillActions.request(a,enrolled)
         else if(SiteRunControl.start(a.applicationContext,enrolled.url,"COSPLAY"))
@@ -97,6 +122,13 @@ internal object ApprovedCosplayActions {
             path !in setOf("tag","tags","category","categories","search")){
             "Select a specific gallery rather than a website landing page"
         }
+        // A PornPics category/channel link or Kiutaku profile/tag is not
+        // an album. Do not persist phantom galleries when tapped.
+        require(when(site.host){
+            "pornpics.com"->path.matches(Regex("""(?i)galleries/[^/]+"""))
+            "kiutaku.com"->path.matches(Regex("""[0-9]{1,9}"""))
+            else->true
+        }){"Select an individual "+site.name+" album, not a category or source"}
         val origin=source(a.applicationContext,site.url)
         // Use the dedicated Kiutaku adapter for numeric gallery detail
         // pages; all other currently approved hosts use their generic
