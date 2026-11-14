@@ -185,6 +185,23 @@ internal object SiteSpecificOriginalSources {
                 jsSources(rendered,playerPage)).distinctBy{it.url}
             if(media.isNotEmpty())return media
         }
+        // The FullPorner player advertises THREE real quality variants
+        // at xiaoshenke.net/vid/<opaque-id> (no .mp4 extension). Read only
+        // the exact selected player's <source type=video/mp4> elements.
+        if(owner=="fullporner.com"){
+            val rendered=runCatching {
+                Jsoup.parse(BrowserPageFetch.html(context,playerPage),playerPage)
+            }.getOrNull()
+            val verified=rendered?.select("video#flvv source[src][type=video/mp4]"+
+                ",video source[src][type=video/mp4]")?.mapNotNull { node->
+                val link=https(node.attr("src"),playerPage)
+                if(link!=null && FullPornerOriginalSource.verifiedMedia(
+                        selected,playerPage,link))
+                    Source(link,playerPage)
+                else null
+            }.orEmpty().distinctBy{it.url}
+            if(verified.isNotEmpty())return verified
+        }
         // yt-dlp may have a dedicated extractor for the publisher-attested
         // player host, so give it the EXACT iframe rather than a made-up MP4.
         return listOf(Source(playerPage,if(playerPage==link)selected else link))
