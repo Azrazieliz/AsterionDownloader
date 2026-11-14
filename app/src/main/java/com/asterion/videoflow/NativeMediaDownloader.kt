@@ -32,6 +32,22 @@ internal object NativeMediaDownloader {
             uri.scheme in setOf("http","https") && uri.host!=null
         }.getOrDefault(false)
 
+    /** RFC 9110 partial response must cover the entire remaining resource.
+     * A publisher can respond 206 to a request without Range, or supply a
+     * partial preview. Neither response is a complete saved original.
+     */
+    internal data class FullRange(val start:Long,val end:Long,val total:Long)
+    internal fun completeRange(value:String,offset:Long):FullRange? {
+        val match=Regex("""bytes\\s+([0-9]+)-([0-9]+)/([0-9]+)""",
+            RegexOption.IGNORE_CASE).matchEntire(value.trim())?:return null
+        val start=match.groupValues[1].toLongOrNull()?:return null
+        val end=match.groupValues[2].toLongOrNull()?:return null
+        val total=match.groupValues[3].toLongOrNull()?:return null
+        if(offset<0L || total<=0L || start!=offset || end<start ||
+            end!=total-1L)return null
+        return FullRange(start,end,total)
+    }
+
     fun download(address:String,referer:String?,directory:File,
                  cookieHeader:String?=null,filenameStem:String="video",
                  proxy:java.net.Proxy?=null,progress:(Int)->Unit={},
@@ -116,21 +132,15 @@ internal object NativeMediaDownloader {
                     throw IOException("Media URL returned $mime instead of a video file")
                 }
                 val contentRange=conn.getHeaderField("Content-Range").orEmpty()
-                if(verifiedMp4 && status==206 && offset==0L){
-                    // A 206 is not automatically a complete original. The
-                    // source must supply the ENTIRE byte range, otherwise a
-                    // server-side excerpt could be published as a full video.
-                    val range=Regex("""bytes 0-([0-9]+)/([0-9]+)""")
-                        .matchEntire(contentRange)
-                    val end=range?.groupValues?.get(1)?.toLongOrNull()
-                    val total=range?.groupValues?.get(2)?.toLongOrNull()
-                    if(end==null || total==null || end+1L!=total)
-                        throw IOException("Publisher returned only a partial MP4 range")
-                }
-                val matchingRange=status==206 && offset>0L &&
-                    contentRange.startsWith("bytes $offset-")
-                if(status==206 && offset>0L && !matchingRange)
-                    throw IOException("Media provider returned a mismatched byte range")
+                // Validate every 206, not just verified FreePornVideos MP4s.
+                // An unsolicited 206 can contain a teaser, and an accepted
+                // resume range may still stop before the final resource byte.
+                val fullRange=if(status==206)
+                    completeRange(contentRange,offset)
+                        ?:throw IOException(
+                            "Media provider returned an incomplete or mismatched byte range")
+                    else null
+                val matchingRange=status==206 && offset>0L
                 val append=matchingRange
                 if(!append){partial.delete();validator.delete()}
                 val etag=conn.getHeaderField("ETag")?.trim().orEmpty()
@@ -160,6 +170,9 @@ internal object NativeMediaDownloader {
                 }
                 if(expected!=null && written!=expected)
                     throw IOException("Incomplete native transfer: $written of $expected bytes")
+                if(fullRange!=null && partial.length()!=fullRange.total)
+                    throw IOException("Incomplete resumed original: "+
+                        partial.length()+" of "+fullRange.total+" bytes")
                 if(partial.length()<=0L)
                     throw IOException("Native provider supplied zero original bytes")
                 if(verifiedMp4){
