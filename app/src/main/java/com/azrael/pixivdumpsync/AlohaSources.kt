@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
  * Previously supported sources remain in their original native engines. Rejected
  * personal, utilities, reference and unrelated bookmarks are not registered.
  */
-enum class AlohaArea { ARTWORK, COSPLAY, VIDEOS, ADULT, HENTAI, COMICS, BOOKS, GAMES, ASSETS, REFERENCE, STUDY }
+enum class AlohaArea { ARTWORK, COSPLAY, VIDEOS, ADULT, HENTAI, COMICS, BOOKS, GAMES, TORRENTS, ASSETS, REFERENCE, STUDY }
 data class AlohaSite(val name:String,val url:String,val area:AlohaArea){
     val host:String get()=runCatching{java.net.URI(url).host.orEmpty().removePrefix("www.")}.getOrDefault("")
 }
@@ -43,8 +43,8 @@ HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
-XXXClub|https://xxxclub.to/|ADULT
-OneJAV|https://onejav.com/|VIDEOS
+XXXClub|https://xxxclub.to/|TORRENTS
+OneJAV|https://onejav.com/|TORRENTS
 MP4Hentai|https://mp4hentai.com/|HENTAI
 Hentai Bros|https://hentaibros.net/|HENTAI
 OnlyHentai|https://www.onlyhentaistuff.com/|HENTAI
@@ -57,7 +57,7 @@ Freeweb Novel|https://freewebnovel.com/home|BOOKS
 NovelBuddy|https://novelbuddy.me/home|BOOKS
 ReadNovelFull|https://readnovelfull.com/|BOOKS
 NHentai mirror|https://nhentai.xxx/language/english/|COMICS
-Sukebei Nyaa|https://sukebei.nyaa.si/|GAMES
+Sukebei Nyaa|https://sukebei.nyaa.si/|TORRENTS
 MP4Directs light novels|https://mp4directs.com/|BOOKS
 NHentai|https://nhentai.net/language/english/|COMICS
 BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
@@ -97,6 +97,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             AlohaArea.COMICS->"Comics"
             AlohaArea.BOOKS->"Books"
             AlohaArea.GAMES->"Games"
+            AlohaArea.TORRENTS->"Torrents"
             AlohaArea.ASSETS->"Assets"
             AlohaArea.REFERENCE,AlohaArea.STUDY->"References"
         }
@@ -128,24 +129,13 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
                     }
                 }
             }
-            AlohaArea.ADULT->if(site.host=="xxxclub.to"){
-                val started=TorrentSourceBackfill.startSite(a.applicationContext,"XXXCLUB")
-                status.text=if(started)"XXXClub original torrent feed scanning"
-                    else "XXXClub torrent check already running or paused"
-            }else if(site.host=="onejav.com"){
-                browse(a,site)
-                status.text="OneJAV is a torrent source: select original torrent/magnet files. The torrent handler does not treat listings as MP4."
-            }else{
+            AlohaArea.ADULT->{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
                 status.text=if(added)site.name+" added to Downloader source watches; scan queued"
                     else site.name+" already watched; scan requested"
             }
-            AlohaArea.VIDEOS,AlohaArea.HENTAI->if(site.host=="onejav.com"){
-                val started=TorrentSourceBackfill.startSite(a.applicationContext,"ONEJAV")
-                status.text=if(started)"OneJAV video torrent index scanning"
-                    else "OneJAV torrent check already running or paused"
-            }else{
+            AlohaArea.VIDEOS,AlohaArea.HENTAI->{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
                 status.text=if(added)site.name+" added to Downloader source watches; scan queued"
@@ -160,6 +150,20 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             AlohaArea.COMICS->{
                 browse(a,site)
                 status.text="Chapter ZIP download for this site requires a verified adapter; existing Toonily/MangaRead downloads are preserved."
+            }
+            AlohaArea.TORRENTS->{
+                val feed=when(site.host){
+                    "xxxclub.to"->"XXXCLUB"
+                    "onejav.com"->"ONEJAV"
+                    "sukebei.nyaa.si"->"SUKEBEI"
+                    else->null
+                }
+                if(feed==null)status.text="Unsupported torrent source"
+                else {
+                    val started=TorrentSourceBackfill.startSite(a.applicationContext,feed)
+                    status.text=if(started)"Torrent catalog check started · "+site.name
+                        else "Torrent catalog already running or paused · "+site.name
+                }
             }
             AlohaArea.BOOKS,AlohaArea.GAMES->{
                 browse(a,site)
