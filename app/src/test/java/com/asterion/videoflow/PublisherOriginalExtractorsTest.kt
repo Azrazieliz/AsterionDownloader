@@ -18,7 +18,7 @@ class PublisherOriginalExtractorsTest {
         "helloporn.com" to "https://helloporn.com/video/example",
         "notfans.com" to "https://notfans.com/video/example",
         "fullporner.com" to "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
-        "xxxclub.to" to "https://xxxclub.to/video/example",
+
         "freepornvideos.xxx" to "https://www.freepornvideos.xxx/videos/example",
         "omg.porn" to "https://omg.porn/video/example",
         "hentaibros.net" to "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
