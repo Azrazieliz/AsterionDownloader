@@ -121,29 +121,56 @@ internal object SiteSpecificOriginalSources {
     private fun fromPlayer(context:Context,doc:Document,selected:String,
                            owner:String):List<Source>{
         val link=playerLink(doc,owner)?:return emptyList()
-        val player=selectedPlayer(context,link,selected,owner)
-        val selectedMedia=(mediaElements(player,link,
+        var player=selectedPlayer(context,link,selected,owner)
+        var playerPage=link
+        // HQPorner publishes myxstudio.top/embed/<id>. That exact embedded
+        // player publishes ONE mydaddy.cc/video/<id> player. Following only
+        // this known chain is materially different from arbitrary iframe
+        // interception or guessing a video URL.
+        if(owner=="hqpornerxxx.com"){
+            val child=player.select("iframe[src]").asSequence().mapNotNull{
+                https(it.attr("src"),link)
+            }.firstOrNull {
+                host(it)=="mydaddy.cc" &&
+                    Regex("""^/video/[A-Za-z0-9_-]{8,160}/?$""")
+                        .matches(URI(it).path.orEmpty())
+            }
+            if(child!=null){
+                val response=Jsoup.connect(child)
+                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36")
+                    .header("Referer",link).ignoreHttpErrors(true)
+                    .followRedirects(false).timeout(14_000)
+                    .maxBodySize(1_800_000)
+                    .apply {NetworkRoute.javaProxy(context,selected)
+                        ?.let{proxy(it)}}.execute()
+                if(response.statusCode() in 200..299){
+                    player=Jsoup.parse(response.body(),child)
+                    playerPage=child
+                }
+            }
+        }
+        val selectedMedia=(mediaElements(player,playerPage,
             "video[src],video source[src],source[type^=video][src],"+
                 "meta[itemprop=contentUrl][content]")+
-            jsSources(player,link)).distinctBy{it.url}
+            jsSources(player,playerPage)).distinctBy{it.url}
         if(selectedMedia.isNotEmpty())return selectedMedia
         // This exact site's own iframe may create the HTML5 player only
         // after JavaScript initialization. Inspect that known iframe, not
         // every frame on the publisher page or unrelated browser traffic.
-        val html=if(BrowserPageFetch.publicEligible(link) ||
-            SiteSession.bound(context,link))
-            runCatching{BrowserPageFetch.html(context,link)}.getOrNull()
+        val html=if(BrowserPageFetch.publicEligible(playerPage) ||
+            SiteSession.bound(context,playerPage))
+            runCatching{BrowserPageFetch.html(context,playerPage)}.getOrNull()
         else null
         if(!html.isNullOrBlank()){
-            val rendered=Jsoup.parse(html,link)
-            val media=(mediaElements(rendered,link,
+            val rendered=Jsoup.parse(html,playerPage)
+            val media=(mediaElements(rendered,playerPage,
                 "main .video-player video[src],video[src][data-duration]")+
-                jsSources(rendered,link)).distinctBy{it.url}
+                jsSources(rendered,playerPage)).distinctBy{it.url}
             if(media.isNotEmpty())return media
         }
         // yt-dlp may have a dedicated extractor for the publisher-attested
         // player host, so give it the EXACT iframe rather than a made-up MP4.
-        return listOf(Source(link,selected))
+        return listOf(Source(playerPage,if(playerPage==link)selected else link))
     }
     /** Roshy's selected video posts publish original file-host links,
      * NOT a stream. These URLs remain hoster landing pages to be resolved by
