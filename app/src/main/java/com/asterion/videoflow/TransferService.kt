@@ -830,7 +830,9 @@ object VideoEngine {
                 if(FullLengthVideoPolicy.isExplicitPreview(item.title,source.url))
                     continue
                 if(Rule34VideoOriginalSource.firstPartyDownload(
-                    item.url,source.url)){
+                    item.url,source.url) ||
+                    FullPornerOriginalSource.verifiedMedia(
+                        item.url,source.referer,source.url)){
                     try {
                         execute(source.url,source.referer,
                             verifiedFirstPartyMp4=true)
