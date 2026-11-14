@@ -15,6 +15,9 @@ internal object GallerySiteOriginalExtractors {
     }.getOrDefault("")
 
     fun isSpecial(url:String)=host(url) in setOf("pornpics.com","celeb.st")
+    /** PornPics has direct gallery originals; missing originals must fail
+     * closed rather than following links to unrelated galleries. */
+    fun isStrictAlbum(url:String)=host(url)=="pornpics.com"
 
     fun originals(doc:Document,selectedUrl:String):List<AlbumImageExtractor.Item>?{
         val source=host(selectedUrl)
