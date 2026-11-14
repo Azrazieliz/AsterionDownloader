@@ -2,7 +2,7 @@
 """Discover exact HelloPorn selected video URL in first-party card markup.
 Only HTML. Redact tokens; no media bytes.
 """
-import re,urllib.parse,urllib.request
+import re,sys,urllib.parse,urllib.request
 URL="https://helloporn.com/"
 with urllib.request.urlopen(urllib.request.Request(URL,headers={
  "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36",
@@ -28,6 +28,7 @@ for raw in links:
  if url.path not in paths:paths.append(url.path)
 print("long_single_slug", [p for p in paths if p.count("/")==1 and len(p)>16][:18],flush=True)
 print("multi_segment_routes",[p for p in paths if p.count("/")>=2][:14],flush=True)
+sys.exit(0)
 for label,pat in [
  ("video_tag",r"<video\b"),("html_data_video",r"data-video-(?:id|url|src)"),
  ("player",r"id=[\"'](?:player|video-player)"),("watch_slug",r"href=[\"'][^\"']{2,180}(?:watch|videos|video)[^\"']*[\"']"),
