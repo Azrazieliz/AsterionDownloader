@@ -218,9 +218,11 @@ object VideoEngine {
                             java.net.URI(next.url).host.orEmpty()
                         }.getOrDefault("Video provider")
                         val reason=host+": "+VideoErrorDetail.summary(t)
+                        val failedAt=VideoTransferJournal.current(context,next.id)?.stage
+                            ?:"unknown"
                         db.scheduleRetry(next.id,reason)
-                        VideoTransferJournal.record(context,next.id,"retry",
-                            VideoFailurePolicy.classify(reason).name)
+                        VideoTransferJournal.record(context,next.id,"failed",
+                            failedAt+"/"+VideoFailurePolicy.classify(reason).name+": "+reason)
                         onStatus("Failed ${next.title}")
                     }
                 }
