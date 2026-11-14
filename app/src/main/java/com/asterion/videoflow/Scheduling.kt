@@ -129,9 +129,11 @@ class PollJobService: JobService() {
                 runCatching{VideoEngine.work(applicationContext,scan,targetHost=target)}
                 Unit
             }finally{
-                if(tokens.remove(job.jobId,token) &&
-                    !Thread.currentThread().isInterrupted)
-                    jobFinished(job,false)
+                if(tokens.remove(job.jobId,token)) {
+                    tasks.remove(job.jobId)
+                    if(!Thread.currentThread().isInterrupted)
+                        jobFinished(job,false)
+                }
             }
         }
         tokens[job.jobId]=token
@@ -167,9 +169,11 @@ class SecondaryPollJobService:JobService(){
                 runCatching{VideoEngine.work(applicationContext,false)}
                 Unit
             }finally{
-                if(tokens.remove(job.jobId,token) &&
-                    !Thread.currentThread().isInterrupted)
-                    jobFinished(job,false)
+                if(tokens.remove(job.jobId,token)) {
+                    tasks.remove(job.jobId)
+                    if(!Thread.currentThread().isInterrupted)
+                        jobFinished(job,false)
+                }
             }
         }
         tokens[job.jobId]=token
