@@ -46,6 +46,22 @@ class ReportedSiteSpecificOriginalsTest {
         }
     }
 
+    @Test fun fullPornerVerifiedOriginalHasNoMp4ExtensionButActualMediaBytes() {
+        val selected="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
+        val player="https://fullporner.com/player/9509933/14"
+        val media="https://xiaoshenke.net/vid/339123456789000"
+        assertTrue(FullPornerOriginalSource.selectedPage(selected))
+        assertTrue(FullPornerOriginalSource.selectedPlayer(player))
+        assertTrue(FullPornerOriginalSource.verifiedMedia(selected,player,media))
+        assertTrue(NativeMediaDownloader.isNativeEligible(selected,media,true))
+        assertFalse(NativeMediaDownloader.isNativeEligible(selected,media,false))
+        assertFalse(FullPornerOriginalSource.verifiedMedia(
+            "https://fullporner.com/","https://fullporner.com/player/9509933/14",media))
+        assertFalse(FullPornerOriginalSource.verifiedMedia(selected,player,
+            "https://xiaoshenke.net.evil.example/vid/339123456789000"))
+        assertFalse(FullPornerOriginalSource.verifiedMedia(selected,player,
+            "https://xiaoshenke.net/other/339123456789000"))
+    }
     @Test fun exactFullPornerPlayerRejectsOtherIframes(){
         val page="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
         val selected="https://fullporner.com/player/9509933/14"
