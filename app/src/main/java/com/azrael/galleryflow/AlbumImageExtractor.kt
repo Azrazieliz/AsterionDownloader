@@ -57,6 +57,11 @@ object AlbumImageExtractor {
             if (imageExtensions.containsMatchIn(link)) continue
             val classes = (a.className() + " " + a.parent()?.className().orEmpty())
                 .lowercase(Locale.ROOT)
+            // Recommendation/related/sidebar cards on an album page belong to
+            // OTHER albums. Do not silently expand a single selected album into
+            // arbitrary photo-detail pages from those widgets.
+            if(a.closest("aside,.related,.recommended,.recommendations,"+
+                    ".you-may-like,.sidebar,nav,header,footer")!=null)continue
             val hasPreview = a.selectFirst("img,picture,video[poster]") != null
             val detail = photoPattern.containsMatchIn(uri.path) ||
                 classes.contains("photo") || classes.contains("thumb")
@@ -87,6 +92,8 @@ object AlbumImageExtractor {
                     a.text().contains("full", true))) add(href)
         }
         for (img in doc.select("img,picture source")) {
+            if(img.closest("aside,.related,.recommended,.recommendations,"+
+                    ".you-may-like,.sidebar,nav,header,footer")!=null)continue
             val isSource = img.tagName() == "source"
             if (isSource) {
                 bestSrcset(img.attr("srcset"))?.let(::add)

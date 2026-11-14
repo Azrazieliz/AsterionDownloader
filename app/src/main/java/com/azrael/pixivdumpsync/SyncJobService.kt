@@ -10,6 +10,7 @@ class SyncJobService : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
         if (
             params == null ||
+            !AppPower.enabled(this) ||
             !SessionStore.isLoggedIn(this) ||
             !SessionStore.autoSync(this) ||
             !SessionStore.followingFeedEnabled(this)

@@ -64,6 +64,34 @@ class SyncEngine(private val context: Context) {
             return stats
         }
 
+        // Import owner-authorized Kuroha/PixiFlow originals BEFORE any Pixiv
+        // requests are planned. Never re-download blindly while a linked
+        // legacy folder is unavailable or its first scan is still running.
+        val legacy=runCatching {
+            LegacyPixivInventory.refreshIfDue(context)
+            LegacyPixivInventory.status(context)
+        }
+        val status=legacy.getOrNull()
+        val unavailable=legacy.exceptionOrNull()?.message ?:
+            if(status!=null){
+                when{
+                    status.linkedFolders==0 &&
+                        LegacyPixivInventory.legacyKurohaInstalled(context)->
+                        "Kuroha is installed; link its saved Pixiv folder in Settings first"
+                    status.linkedFolders>0 && status.scanning->
+                        "The Kuroha inventory is still scanning"
+                    status.linkedFolders>0 && status.lastError!=null->
+                        status.lastError
+                    else->null
+                }
+            }else null
+        if(unavailable!=null){
+            stats.errors++
+            progress("Pixiv sync held to avoid duplicate downloads: "+
+                unavailable.take(160))
+            SyncControl.forceFinish("Kuroha inventory needs attention")
+            return stats
+        }
         NetworkCookies.install(context)
         val db = AppDb(context)
         db.clearTransientNetworkErrors()
@@ -794,7 +822,11 @@ class SyncEngine(private val context: Context) {
 
             val ext = FileStore.extensionFromUrl(imageUrl)
             val filename = "${id}_p${pageIndex}.$ext"
-            val onDisk = FileStore.exists(context, filename)
+            val savedHere = runCatching{FileStore.exists(context, filename)}
+                .getOrDefault(false)
+            val savedInKuroha = if(savedHere)false else
+                LegacyPixivInventory.hasPage(context,id,pageIndex)
+            val onDisk = savedHere || savedInKuroha
 
             if (db.isPageSaved(id, pageIndex) && onDisk) {
                 continue
@@ -816,7 +848,9 @@ class SyncEngine(private val context: Context) {
                 pageIndex,
                 filename
             )
-            if (TeraboxSettings.enabled(context)) {
+            // Do not queue an upload for a borrowed Kuroha file: the new
+            // package's own FileStore cannot resolve that filename.
+            if (TeraboxSettings.enabled(context) && !savedInKuroha) {
                 CloudUploadQueue(context).use { it.enqueue(filename) }
             }
         }
@@ -867,8 +901,11 @@ class SyncEngine(private val context: Context) {
             return false
         }
 
-        return files.all {
-            FileStore.exists(context, it)
+        return files.all { filename ->
+            val page=LegacyPixivFilename.parse(filename)
+            runCatching{FileStore.exists(context,filename)}.getOrDefault(false) ||
+                (page!=null && page.illustId==illustId &&
+                    LegacyPixivInventory.hasPage(context,illustId,page.index))
         }
     }
 
@@ -890,9 +927,11 @@ class SyncEngine(private val context: Context) {
                 SyncControl.updateMessage(message)
                 progress(message)
                 try {
-                    val remotePath = client.uploadArtwork(item.filename)
-                    queue.uploaded(item.filename, remotePath)
-                    stats.cloudUploaded++
+                    val proof=if(item.state=="VERIFY_PENDING")
+                        client.verifyHistoricalArtwork(item.filename,item.remotePath)
+                    else client.uploadArtwork(item.filename)
+                    queue.uploaded(item.filename,proof)
+                    if(item.state!="VERIFY_PENDING")stats.cloudUploaded++
                 } catch (t: Throwable) {
                     if (SyncControl.isStopping() ||
                         t is SyncCancelledException || t is InterruptedException

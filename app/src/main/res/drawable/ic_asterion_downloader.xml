@@ -2,26 +2,17 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Asterion Downloader: luminous A crossed by a download arrow. -->
-    <path android:fillColor="#0A0E18"
-        android:pathData="M22,5 H86 C96,5 103,12 103,22 V86 C103,96 96,103 86,103 H22 C12,103 5,96 5,86 V22 C5,12 12,5 22,5 Z"/>
-    <path android:fillColor="#162338"
-        android:pathData="M22,12 H86 C92,12 96,16 96,22 V86 C96,92 92,96 86,96 H22 C16,96 12,92 12,86 V22 C12,16 16,12 22,12 Z"/>
-    <path android:strokeColor="#2B435D" android:strokeWidth="1.5"
-        android:fillColor="#00000000"
-        android:pathData="M22,17 H86 C89,17 91,19 91,22 V86 C91,89 89,91 86,91 H22 C19,91 17,89 17,86 V22 C17,19 19,17 22,17 Z"/>
-    <path android:strokeColor="#7BEBD9" android:strokeWidth="8"
-        android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:fillColor="#00000000"
-        android:pathData="M29,79 L51,27 Q54,19 57,27 L79,79"/>
-    <path android:strokeColor="#B5A4FF" android:strokeWidth="6.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M41,61 L67,61"/>
-    <path android:strokeColor="#D3C9FF" android:strokeWidth="5"
-        android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:fillColor="#00000000"
-        android:pathData="M54,50 L54,83 M45,74 L54,83 L63,74"/>
-    <path android:fillColor="#A5FFF0"
-        android:pathData="M82,19 L84,25 L90,27 L84,29 L82,35 L80,29 L74,27 L80,25 Z"/>
+    <!-- Asterion: orbital horizon and four-point constellation, no lettering or arrows. -->
+    <path android:fillColor="#0B1020" android:pathData="M22,4H86C97,4 104,11 104,22V86C104,97 97,104 86,104H22C11,104 4,97 4,86V22C4,11 11,4 22,4Z"/>
+    <path android:fillColor="#182339" android:pathData="M21,13H87C92,13 95,16 95,21V87C95,92 92,95 87,95H21C16,95 13,92 13,87V21C13,16 16,13 21,13Z"/>
+    <path android:strokeColor="#8465D5" android:strokeWidth="6" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M23,62 C39,31 76,27 89,55"/>
+    <path android:strokeColor="#74F0DE" android:strokeWidth="6" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M18,76 C48,88 76,76 91,57"/>
+    <path android:strokeColor="#BDB1FF" android:strokeWidth="2" android:fillColor="#00000000"
+        android:pathData="M20,54 C38,77 71,80 87,37"/>
+    <path android:fillColor="#E6F9FC" android:pathData="M54,27 L60,47 L78,53 L60,59 L54,80 L48,59 L30,53 L48,47 Z"/>
+    <path android:fillColor="#77F3DD" android:pathData="M54,39 L58,49 L68,53 L58,57 L54,67 L50,57 L40,53 L50,49 Z"/>
+    <path android:fillColor="#D6ADFF" android:pathData="M80,20 L82,26 L88,28 L82,30 L80,36 L78,30 L72,28 L78,26 Z"/>
+    <path android:fillColor="#83DDF3" android:pathData="M22,27 L23.5,31 L27,32.5 L23.5,34 L22,38 L20.5,34 L17,32.5 L20.5,31 Z"/>
 </vector>

@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Deterministic Android game port builder, extending the existing HTML5 APK packager.
+
+Examples:
+ python tools/package_game_android.py --input game.zip --out D:/ports/mygame --package com.example.mygame --label "My Game"
+ python tools/package_game_android.py --input renpy.zip --renpy-sdk D:/RenPy/renpy-8.5.0-sdk --out D:/ports/renpy
+3DS/Windows binaries are classified for a runtime, not silently relabeled as Android APKs.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import shutil
+import stat
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+from package_html5_android import build as build_html5
+from engine_android_ports import identify as identify_native, prepare as prepare_native, run_plan as run_native
+from game_runtime_compat import ROUTES as COMPAT_ROUTES, prepare as prepare_compat
+
+def safe_members(z:ZipFile):
+    members=[e for e in z.infolist() if not e.is_dir() and not e.filename.startswith("__MACOSX/")]
+    if not 1<=len(members)<=25000:raise ValueError("Archive file count out of range")
+    if sum(e.file_size for e in members)>2_000_000_000:
+        raise ValueError("Portable game exceeds 2 GB")
+    seen=set()
+    for e in members:
+        path=PurePosixPath(e.filename)
+        if path.is_absolute() or '\\' in e.filename or ':' in e.filename or \
+           any(p in ('..','.') for p in path.parts) or stat.S_ISLNK(e.external_attr>>16):
+            raise ValueError("Unsafe ZIP member: "+e.filename)
+        key=path.as_posix().lower()
+        if key in seen:raise ValueError("Duplicate ZIP file: "+e.filename)
+        seen.add(key)
+    return members
+
+def detect(paths:list[str])->str:
+    lower=[p.lower().replace('\\','/') for p in paths]
+    names=set(lower)
+    native=identify_native(lower)
+    if native:return native
+    if any(p.endswith((".3ds",".cia",".cci")) for p in lower):return "NINTENDO_3DS"
+    if any(p.endswith(".nds") for p in lower):return "NINTENDO_DS"
+    if any(p.endswith((".rpy", ".rpa", ".rpyc")) for p in lower):return "RENPY"
+    if any(p.endswith((".rgssad", ".rgss2a", ".rgss3a",
+                       ".rvdata", ".rvdata2", ".rxdata")) for p in lower):
+        return "RPG_MAKER_LEGACY"
+    if any(p.endswith(".xp3") for p in lower):return "KIRIKIRI"
+    if any(p.endswith((".nsa",".ns2")) for p in lower):return "NSCRIPTER"
+    if any("www/index.html" in p for p in lower) and any(
+        p.endswith("rpg_core.js") or p.endswith("rmmz_core.js") for p in lower):
+        return "RPG_MAKER_HTML"
+    if any(p.endswith("index.html") for p in lower):return "HTML5"
+    if any(p.endswith(".pck") for p in lower):return "GODOT_EXPORT"
+    # Packaged Windows games are runtime candidates, not editable Unity/Unreal
+    # projects. Cooked files cannot be re-exported into Android-native binaries.
+    if any(p.endswith((".exe", ".msi")) for p in lower):
+        if any(p.endswith("unityplayer.dll") or
+               ("_data/" in p and p.endswith("globalgamemanagers"))
+               for p in lower):return "UNITY_WINDOWS"
+        if any(p.endswith(".pak") for p in lower) and any(
+            "/engine/" in ("/"+p) or "/content/paks/" in ("/"+p)
+            for p in lower):return "UNREAL_WINDOWS"
+        return "WINDOWS"
+    if any(p.endswith((".apk",".aab")) for p in lower):return "ANDROID"
+    if any(p.endswith((".unity3d",".assets")) for p in lower):return "UNITY"
+    if any(p.endswith(".pak") for p in lower):return "UNREAL_OR_OTHER"
+    return "UNKNOWN"
+
+def sdk_command(sdk:Path)->list[str]:
+    if sys.platform=="win32":
+        python=sdk/"lib/py3-windows-x86_64/python.exe"
+        if not python.exists():raise FileNotFoundError("Ren'Py SDK bundled Python was not found")
+        return [str(python),str(sdk/"renpy.py")]
+    command=sdk/"renpy.sh"
+    if not command.is_file():raise FileNotFoundError("renpy.sh was not found")
+    return [str(command)]
+
+def export_selected(z:ZipFile,members:list[ZipInfo],dest:Path):
+    dest.mkdir(parents=True,exist_ok=True)
+    for member in members:
+        p=PurePosixPath(member.filename)
+        target=dest.joinpath(*p.parts)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        with z.open(member) as stream,target.open("wb") as out:
+            shutil.copyfileobj(stream,out,1024*128)
+
+def package(source:Path,out:Path,package_id:str,label:str,renpy_sdk:Path|None=None,
+            gradle:str="gradle",build:bool=True,godot_editor:Path|None=None,
+            unity_editor:Path|None=None,unreal_engine:Path|None=None)->dict:
+    if not source.exists():raise FileNotFoundError(source)
+    if source.is_dir() and source.resolve() in out.resolve().parents:
+        raise ValueError("Output must not be placed inside the source project")
+    if out.exists() and any(out.iterdir()):
+        raise ValueError("Output directory must be empty; existing project is preserved")
+    paths=[]
+    if source.suffix.lower()==".zip":
+        with ZipFile(source) as z:
+            members=safe_members(z);paths=[m.filename for m in members]
+    elif source.is_dir():
+        paths=[str(p.relative_to(source)) for p in source.rglob("*")]
+        if len(paths)>100000:raise ValueError("Project contains too many files")
+    else:paths=[source.name]
+    engine=detect(paths)
+    out.mkdir(parents=True,exist_ok=True)
+    result={"engine":engine,"input":str(source.resolve()),"output":str(out.resolve()),
+        "standalone_apk":False,"runtime":None,"project":None,"files":len(paths)}
+    if engine in ("HTML5","RPG_MAKER_HTML"):
+        if source.suffix.lower()!=".zip":raise ValueError("HTML5 requires a complete ZIP")
+        zip_path=source
+        if engine=="RPG_MAKER_HTML":
+            with ZipFile(source) as z:
+                members=safe_members(z)
+                selected=[m for m in members if "/www/" in "/"+m.filename.lower()]
+                if not selected:raise ValueError("RPG Maker www assets are missing")
+                # Exclude the Windows .exe outside www; it is not part of the Android port.
+                temp=out/"game-web-only.zip"
+                with ZipFile(temp,'w',ZIP_DEFLATED) as target:
+                    for m in selected:target.writestr(m.filename,z.read(m))
+            zip_path=temp
+        project=out/"android-project"
+        build_html5(zip_path,project,package_id,label)
+        result["project"]=str(project)
+        if build:
+            subprocess.run([gradle,"-p",str(project),"assembleDebug","--no-daemon"],check=True)
+            apk=project/"app/build/outputs/apk/debug/app-debug.apk"
+            if not apk.is_file():raise RuntimeError("Gradle returned no standalone APK")
+            dest=out/(package_id.rsplit('.',1)[-1]+"-standalone.apk")
+            shutil.copy2(apk,dest)
+            result["standalone_apk"]=True
+            result["apk"]=str(dest)
+            result["sha256"]=hashlib.sha256(dest.read_bytes()).hexdigest()
+        else:result["build_command"]=f'{gradle} -p "{project}" assembleDebug'
+    elif engine in ("GODOT_PROJECT","UNITY_PROJECT","UNREAL_PROJECT"):
+        project=source
+        if source.is_file():
+            if source.suffix.lower()!=".zip":
+                raise ValueError("Editable source project must be a directory or ZIP")
+            project=out/"native-source"
+            with ZipFile(source) as z:
+                export_selected(z,safe_members(z),project)
+        plan=prepare_native(project,out,engine,package_id,label,
+            godot_editor,unity_editor,unreal_engine)
+        result["project"]=plan["project"]
+        result["build_command"]=plan["build_command"]
+        result["build_env"]=plan["build_env"]
+        if build and plan["ready"]:
+            result.update(run_native(plan))
+        elif build:
+            result["runtime"]=("Install the matching engine editor and Android export SDK; "
+                "the build command is prepared but no native APK was fabricated")
+        else:
+            result["runtime"]="Source project prepared; run with the installed engine editor"
+    elif engine=="RENPY":
+        if not renpy_sdk:
+            result.update(prepare_compat(source,out,engine,paths,
+                members if source.suffix.lower()==".zip" else None,
+                export_selected))
+        elif source.suffix.lower()!=".zip":
+            raise ValueError("Ren'Py must be supplied as a complete project ZIP")
+        else:
+            project=out/"renpy-project"
+            with ZipFile(source) as z:
+                selected=safe_members(z)
+                export_selected(z,selected,project)
+            # Collapse one archive wrapper folder when it contains the actual game directory.
+            if not (project/"game").is_dir():
+                children=[d for d in project.iterdir() if d.is_dir()]
+                if len(children)==1 and (children[0]/"game").is_dir():
+                    project=children[0]
+            if not (project/"game").is_dir():raise ValueError("Ren'Py game/ directory missing")
+            # RAPT requires an android.json and project keys. Configure the
+            # STAGED copy only: never rewrite the original Ren'Py game ZIP.
+            conf=project/"android.json"
+            old=project/".android.json"
+            settings={}
+            if conf.is_file() or old.is_file():
+                settings=json.loads((conf if conf.is_file() else old).read_text(
+                    encoding="utf-8-sig"))
+            if not isinstance(settings,dict):
+                raise ValueError("Ren'Py android.json must contain a JSON object")
+            settings.update({"package":package_id,"name":label,
+                "icon_name":label[:40]})
+            settings.setdefault("version","1.0")
+            settings.setdefault("numeric_version",1)
+            settings.setdefault("orientation","sensorLandscape")
+            settings.setdefault("store","none")
+            settings.setdefault("permissions",["INTERNET","VIBRATE"])
+            conf.write_text(json.dumps(settings,indent=2,ensure_ascii=False),
+                encoding="utf-8")
+            result["project"]=str(project)
+            if build:
+                key=project/"android.keystore"
+                bundle=project/"bundle.keystore"
+                if not key.is_file():
+                    # One-run, preview-only signing. Users who want update-stable
+                    # game APKs must supply their own original project key.
+                    subprocess.run(["keytool","-genkeypair","-noprompt",
+                        "-keystore",str(key),"-alias","android",
+                        "-keyalg","RSA","-keysize","2048","-validity","3650",
+                        "-storepass","android","-keypass","android",
+                        "-dname","CN=Asterion Android Game Test"],
+                        check=True)
+                    result["signing"]="ephemeral_preview_key_not_update_compatible"
+                if not bundle.is_file():shutil.copy2(key,bundle)
+            command=sdk_command(renpy_sdk)+[
+                "launcher","android_build",str(project),"--destination",str(out/"apk"),"--package","android"]
+            result["build_command"]=command
+            if build:
+                subprocess.run(command,cwd=str(renpy_sdk),check=True)
+                apks=list((out/"apk").rglob("*.apk"))
+                if not apks:raise RuntimeError("Ren'Py built no APK; configure SDK, RAPT and signing")
+                result["standalone_apk"]=True
+                result["apk"]=str(apks[0])
+                result["sha256"]=hashlib.sha256(apks[0].read_bytes()).hexdigest()
+    elif engine in COMPAT_ROUTES:
+        # One-click imports are honest runtime payloads, not relabeled APKs.
+        # Full source/game assets are kept, including Windows dependencies.
+        result.update(prepare_compat(source,out,engine,paths,
+            members if source.suffix.lower()==".zip" else None,
+            export_selected))
+    else:
+        result["runtime"]="No safe Android runtime or native converter identified"
+    (out/"port-report.json").write_text(json.dumps(result,indent=2,ensure_ascii=False),encoding="utf-8")
+    return result
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--input",type=Path,required=True)
+    p.add_argument("--out",type=Path,required=True)
+    p.add_argument("--package",default="com.asterion.portable.visualnovel")
+    p.add_argument("--label",default="Portable Visual Novel")
+    p.add_argument("--renpy-sdk",type=Path)
+    p.add_argument("--godot-editor",type=Path)
+    p.add_argument("--unity-editor",type=Path)
+    p.add_argument("--unreal-engine",type=Path)
+    p.add_argument("--gradle",default="gradle")
+    p.add_argument("--prepare-only",action="store_true")
+    a=p.parse_args()
+    result=package(a.input,a.out,a.package,a.label,a.renpy_sdk,a.gradle,
+        not a.prepare_only,a.godot_editor,a.unity_editor,a.unreal_engine)
+    print(json.dumps(result,indent=2,ensure_ascii=False))
+if __name__=="__main__":main()

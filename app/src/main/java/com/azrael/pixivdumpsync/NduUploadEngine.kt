@@ -12,7 +12,9 @@ object NduUploadEngine {
                       val connectionError:String?=null)
 
     fun drain(context:Context, maximum:Int, durationMs:Long,
-              stop:()->Boolean={false}, report:(String)->Unit={}):Result {
+              stop:()->Boolean={false}, report:(String)->Unit={},
+              manual:Boolean=false):Result {
+        if(!manual && !AppPower.enabled(context)) return Result(0,0,0,"Downloader paused")
         if(!NduSettings.configured(context)) return Result(0,0,0,"NDUS not configured")
         if(!inProgress.compareAndSet(false,true))
             return Result(0,0,0,"Another direct upload is active")
@@ -22,6 +24,7 @@ object NduUploadEngine {
                 ?: return Result(0,0,0,"NDUS unavailable")
             NduCloudQueue(context).use { queue ->
                 var uploaded=0
+                var reverified=0
                 var attempted=0
                 val client=NduTeraboxClient(cookie,NduSettings.domain(context))
                 try {
@@ -40,14 +43,27 @@ object NduUploadEngine {
                         attempted++
                         try {
                             report("Uploading "+job.category+" / "+job.name)
-                            client.upload(context,Uri.parse(job.uri),job.name,
-                                NduSettings.destination(context,job.category),
-                                cancelled=stop) { done,total ->
-                                val percent=if(total>0) done*100/total else 0
-                                report("TeraBox "+percent+"% / "+job.name)
+                            val uri=Uri.parse(job.uri)
+                            val path=NduSettings.destination(context,job.category)
+                            val proof=if(job.state=="VERIFY_PENDING"){
+                                report("Checking existing TeraBox copy / "+job.name)
+                                client.verifyExisting(context,uri,job.name,path,stop)
+                            }else{
+                                client.upload(context,uri,job.name,path,cancelled=stop){
+                                    done,total ->
+                                    val percent=if(total>0)done*100/total else 0
+                                    report("TeraBox "+percent+"% / "+job.name)
+                                }
                             }
-                            queue.completed(job)
-                            uploaded++
+                            if(proof==null){
+                                queue.missingRemote(job)
+                                report("Remote file missing; queued a fresh transfer")
+                                continue
+                            }
+                            // Persist the exact remote identity BEFORE Rounder reconciliation.
+                            queue.completed(job,proof)
+                            RounderOutbox(context).use{it.ack(uri,proof)}
+                            if(job.state=="VERIFY_PENDING")reverified++ else uploaded++
                         } catch(t:Throwable) {
                             if(stop() || t is InterruptedException) break
                             queue.failed(job,t.message ?: t.javaClass.simpleName)
@@ -55,7 +71,8 @@ object NduUploadEngine {
                     }
                 }
                 val pending=queue.status().pending
-                report("Uploaded "+uploaded+" / "+attempted+"; "+pending+" queued")
+                report(uploaded.toString()+" uploaded · "+reverified+
+                    " historical copies reverified · "+pending+" awaiting proof")
                 return Result(uploaded,attempted,pending)
             }
         } finally { inProgress.set(false) }

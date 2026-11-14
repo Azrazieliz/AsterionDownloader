@@ -29,6 +29,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
 
     override fun enumerateGalleries(entity: SourceEntity): Sequence<GalleryRef> = sequence {
         val url = canonical(validUri(entity.canonicalUrl))
+        if (entity.kind == "selected_album") {
+            // A directly tapped album is the ONLY requested gallery. The
+            // page's other gallery links are recommendations, not the user's
+            // selected original. Leave collection-style gallery_only intact.
+            yield(toGallery(entity, url, entity.displayName))
+            return@sequence
+        }
         if (entity.kind == "gallery_only") {
             val doc = documentWithRetry(url)
             val host = URI(url).host.lowercase(Locale.ROOT)
@@ -70,9 +77,12 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         val visitedAlbumPages = linkedSetOf<String>()
         val photoLinks = linkedSetOf<String>()
         val inlineImages = linkedMapOf<String, AlbumImageExtractor.Item>()
+        val officialArchives=linkedSetOf<String>()
         var next: String? = url
         var title: String? = null
         var tags: List<String> = emptyList()
+        var creator: String? = null
+        var publishedAt: String? = gallery.publishedAt
         while (next != null && visitedAlbumPages.size < MAX_GALLERY_PAGES) {
             if (!SyncControl.checkpoint()) throw SyncCancelledException()
             val current = next
@@ -82,13 +92,49 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 title = doc.selectFirst("h1")?.text()?.takeIf(String::isNotBlank)
                     ?: doc.title().ifBlank { gallery.title }
                 tags = extractTags(doc)
+                creator=doc.selectFirst(
+                    "meta[name=author],meta[property=article:author]")?.attr("content")
+                    ?.takeIf(String::isNotBlank)
+                    ?:doc.selectFirst(
+                        "[itemprop=author],.cosplayer-name,.model-name,a[rel=author]")?.text()
+                        ?.trim()?.takeIf(String::isNotBlank)
+                creator=creator?.take(85)
+                publishedAt=publishedAt
+                    ?:doc.selectFirst(
+                        "meta[property=article:published_time],"+
+                        "meta[itemprop=datePublished]")?.attr("content")
+                        ?.takeIf(String::isNotBlank)
+                    ?:doc.selectFirst("time[datetime]")?.attr("datetime")
+                        ?.takeIf(String::isNotBlank)
             }
-            val photos = AlbumImageExtractor.photoPages(doc, url)
+            if(SelectedAlbumScope.is4khdAlbum(url)){
+                // The actual full-resolution files are supplied through
+                // 4KHD's own TeraBox download bridge, not its paginated
+                // article preview images.
+                officialArchives.addAll(
+                    SelectedAlbumScope.officialOriginalArchives(doc,url))
+                next=null
+                continue
+            }
+            // Dedicated gallery publishers expose originals on the selected
+            // page itself. Do not crawl unrelated recommendation/photo cards
+            // when a parser reports no images on that page.
+            val photos = if(GallerySiteOriginalExtractors.isStrictAlbum(url) ||
+                SelectedAlbumScope.owns(url))
+                emptyList() else AlbumImageExtractor.photoPages(doc,url)
             photoLinks.addAll(photos)
             if (photoLinks.size > MAX_PHOTO_PAGES)
                 throw AdapterException("Album has more than $MAX_PHOTO_PAGES photo pages; " +
                     "a source-specific adapter is needed for complete backfill.")
-            for (image in AlbumImageExtractor.directImages(doc)) {
+            // Selected galleries on these approved sites use their own
+            // full-image selectors, never the generic site-thumbnail list.
+            val originals=when {
+                SelectedAlbumScope.owns(url)->
+                    SelectedAlbumScope.originals(doc,url)
+                else->GallerySiteOriginalExtractors.originals(doc,url)
+                    ?:AlbumImageExtractor.directImages(doc)
+            }
+            for (image in originals) {
                 inlineImages.putIfAbsent(image.url, image)
             }
             next = nextListingPage(doc, current, visitedAlbumPages)
@@ -97,8 +143,34 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             throw AdapterException("Album pagination exceeds $MAX_GALLERY_PAGES pages; " +
                 "images were not marked complete.")
 
+        if(SelectedAlbumScope.is4khdAlbum(url)){
+            if(officialArchives.isEmpty())throw AdapterException(
+                "4KHD album has no publisher-confirmed full-HD TeraBox "+
+                    "download link. Webpage previews are not originals.")
+            val meta=GalleryMeta(source,gallery.stableId,
+                gallery.entityStableId,url,title?:gallery.title,tags,
+                publishedAt,visitedAlbumPages.toList(),creator)
+            val archives=officialArchives.mapIndexed{index,bridge->
+                val normalized=URI(bridge).let{
+                    URI(it.scheme,it.authority,it.path,null,null).toString()
+                }
+                MediaRef(source,digest(url+"|original-archive|"+normalized).take(32),
+                    gallery.stableId,index,bridge,normalized,url,
+                    "application/zip",MediaKind.ARCHIVE,"4KHD","4KHD")
+            }
+            return meta to archives
+        }
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
-        if (photoLinks.isNotEmpty()) {
+        if (GallerySiteOriginalExtractors.isStrictAlbum(url) ||
+            SelectedAlbumScope.owns(url)) {
+            // An empty PornPics original parse is a failure, not permission
+            // to import recommendations or thumbnails from another album.
+            images.putAll(inlineImages)
+        } else if (GallerySiteOriginalExtractors.isSpecial(url) &&
+            inlineImages.isNotEmpty()) {
+            // Preserve previously supported Celeb.st direct originals.
+            images.putAll(inlineImages)
+        } else if (photoLinks.isNotEmpty()) {
             // Photo detail pages frequently expose the original that the album
             // listing deliberately hides behind a small preview.
             for ((n, link) in photoLinks.withIndex()) {
@@ -118,9 +190,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             throw AdapterException("No original image files discovered in this album; " +
                 "the site may need login, JavaScript or a dedicated adapter.")
         }
+        if(SelectedAlbumScope.owns(url))
+            SelectedAlbumScope.verifyAdvertisedCount(
+                SelectedAlbumScope.advertisedCount(gallery.title,title.orEmpty(),
+                    gallery.canonicalUrl),images.size)
         val meta = GalleryMeta(source, gallery.stableId, gallery.entityStableId, url,
-            title ?: gallery.title, tags, null, visitedAlbumPages.toList() +
-                photoLinks.toList())
+            title ?: gallery.title, tags, publishedAt, visitedAlbumPages.toList() +
+                photoLinks.toList(),creator)
         val media = images.values.mapIndexed { index, item ->
             val uri = URI(item.url)
             val normalized = URI(uri.scheme, uri.authority, uri.path, null, null).toString()
@@ -220,6 +296,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         val currentUri = URI(current)
         val basePath = currentUri.path.trimEnd('/')
             .replace(Regex("/(?:page|p)/\\d+$", RegexOption.IGNORE_CASE), "")
+            .let { path ->
+                // 4KHD pages originals as <album>.html/2 through /N.
+                // A /3 link must remain inside the same album as /2.
+                if(currentUri.host.orEmpty().removePrefix("www.")=="4khd.com")
+                    path.replace(Regex("""(?i)(?<=\.html)/[0-9]+$"""),"")
+                else path
+            }
         val currentIndex = pageNumber(currentUri)
         val links = doc.select("a[href],link[rel=next][href]").mapNotNull { anchor ->
             val href = anchor.absUrl("href").ifBlank {

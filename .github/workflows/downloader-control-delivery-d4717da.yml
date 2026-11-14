@@ -1,0 +1,41 @@
+name: Asterion Downloader v1.3.60 verified Control delivery
+
+on:
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths:
+      - '.github/workflows/downloader-control-delivery-d4717da.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-exact-verified-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download immutable signed APK already passed by CI
+        uses: actions/download-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.60-ProviderTest-APK
+          run-id: 43509250250
+          github-token: ${{ github.token }}
+          path: delivery
+      - name: Verify exact source, APK hash and package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < delivery/Source-commit.txt)" = 'd4717da0271ca10aadc5996047251f3370a68650'
+          echo 'cef08195925e3737408520b5cba95730fd58374f4fa145feeefcb74c236bdaa5  delivery/Asterion-Downloader-v1.3.60-ProviderTest.apk' | sha256sum -c -
+          grep -F "package: name='com.azrael.pixivdumpsync.testphone1115'" delivery/apk-badging.txt
+          test -s delivery/APK-signer.txt
+          cp delivery/Asterion-Downloader-v1.3.60-ProviderTest.apk Asterion-Downloader-v1.3.60-d4717da-TestPhone1115.apk
+          sha256sum Asterion-Downloader-v1.3.60-d4717da-TestPhone1115.apk > Asterion-Downloader-v1.3.60-d4717da.sha256
+      - name: Publish transfer-ready test package for existing Asterion Control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create asterion-downloader-v1.3.60-d4717da-control             Asterion-Downloader-v1.3.60-d4717da-TestPhone1115.apk             Asterion-Downloader-v1.3.60-d4717da.sha256             --repo "$GITHUB_REPOSITORY"             --target 'd4717da0271ca10aadc5996047251f3370a68650'             --title 'Asterion Downloader v1.3.60 d4717da — native Control transfer'             --notes 'Signed isolated TestPhone1115 package. Verified build, native and Python localhost transfer engines, publisher preview byte probes. Actual external provider transfers and on-device installation are separately verified; this tag alone does not certify all providers.'             --prerelease

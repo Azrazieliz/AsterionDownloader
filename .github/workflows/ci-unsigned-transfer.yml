@@ -1,0 +1,51 @@
+name: Transfer tested APK for original-key signing
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["feature/asterion-unified-downloads-20261030"]
+    paths: [".github/workflows/ci-unsigned-transfer.yml"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve successful CI APK for the exact source commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN=""
+          REQUIRED=""
+          for attempt in $(seq 1 100); do
+            REQUIRED=$(git ls-remote origin refs/heads/feature/asterion-unified-downloads-20261030 | cut -f1)
+            test -n "$REQUIRED"
+            RESULTS=$(gh run list --workflow android.yml --branch feature/asterion-unified-downloads-20261030 --limit 40 --json databaseId,headSha,conclusion,status)
+            RUN=$(echo "$RESULTS" | jq -r --arg SHA "$REQUIRED" '[.[]|select(.headSha==$SHA and .conclusion=="success")][0].databaseId // empty')
+            if [ -n "$RUN" ]; then break; fi
+            sleep 15
+          done
+          test -n "$RUN" || { echo "No successful CI for current branch head"; exit 1; }
+          test "$REQUIRED" = "$(git ls-remote origin refs/heads/feature/asterion-unified-downloads-20261030 | cut -f1)" || { echo "Branch changed during artifact selection"; exit 1; }
+          gh run download "$RUN" -n Asterion-Downloader-v1.3.24-Preview-APK -D "$RUNNER_TEMP/apk"
+          test -s "$RUNNER_TEMP/apk/app-preview.apk"
+          cp "$RUNNER_TEMP/apk/app-preview.apk" "$RUNNER_TEMP/Asterion-Downloader-v1.3.24-CI-UNSIGNED.apk"
+      - name: Stage unsigned CI artifact on dedicated transfer branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-unsigned-transfer
+          git rm -rf . || true
+          cp "$RUNNER_TEMP/Asterion-Downloader-v1.3.24-CI-UNSIGNED.apk" .
+          printf "%s\n" "$REQUIRED" > SOURCE_COMMIT.txt
+          printf "%s\n" "$RUN" > CI_RUN.txt
+          sha256sum Asterion-Downloader-v1.3.24-CI-UNSIGNED.apk > APK_SHA256.txt
+          git add Asterion-Downloader-v1.3.24-CI-UNSIGNED.apk SOURCE_COMMIT.txt CI_RUN.txt APK_SHA256.txt
+          git commit -m "Stage verified CI v1.3.24 APK for local certificate signing"
+          git push -f origin HEAD:refs/heads/artifacts/asterion-ci-unsigned-v1324-current

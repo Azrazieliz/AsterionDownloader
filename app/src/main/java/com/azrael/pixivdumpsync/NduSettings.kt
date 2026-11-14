@@ -34,16 +34,32 @@ object NduSettings {
     private val allowedDomains = setOf("www.terabox.com","nephobox.com")
 
     fun destination(ctx: Context, category: String): String {
-        require(category in setOf("kuroha","kyora"))
-        val key = if (category=="kuroha") KUROHA_DIR else KYORA_DIR
-        val fallback = if (category=="kuroha") "/Nocturne/Kuroha" else "/Nocturne/Kyora"
+        require(category in setOf("kuroha","kyora","x","comics","videos",
+            "books","games","assets","koikatsu","images","torrents","creators","originals"))
+        val key = when(category) {
+            "kuroha"->KUROHA_DIR;"kyora"->KYORA_DIR
+            else->category+"_dir"
+        }
+        val folder = when(category) {
+            "kuroha"->"Kuroha";"kyora"->"Kyora"
+            "x"->"X";"comics"->"Comics"
+            "videos"->"Videos";"books"->"Books";"games"->"Games"
+            "assets"->"Assets";"koikatsu"->"Koikatsu"
+            "images"->"Images";"torrents"->"Torrents"
+            "creators"->"Creators"
+            else->"Originals"
+        }
+        val fallback="/Nocturne/$folder"
         return ctx.getSharedPreferences(PREF,0).getString(key,fallback) ?: fallback
     }
     fun setDestination(ctx: Context, category: String, directory: String) {
         require(category in setOf("kuroha","kyora"))
         val path = validateDirectory(directory)
         ctx.getSharedPreferences(PREF,0).edit()
-            .putString(if (category=="kuroha") KUROHA_DIR else KYORA_DIR,path).apply()
+            .putString(when(category){
+                "kuroha"->KUROHA_DIR;"kyora"->KYORA_DIR
+                else->category+"_dir"
+            },path).apply()
     }
     fun validateDirectory(input: String): String {
         val path = input.trim().trimEnd('/')

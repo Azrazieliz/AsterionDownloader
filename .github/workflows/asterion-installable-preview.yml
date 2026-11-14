@@ -1,0 +1,109 @@
+name: Asterion Downloader v1.3.46 Installable Preview
+
+on:
+  push:
+    branches:
+      - feature/asterion-unified-downloads-20261030
+    paths:
+      - '.github/workflows/asterion-installable-preview.yml'
+      - 'app/src/main/**'
+      - 'app/src/test/**'
+      - 'app/build.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Require one persistent preview signing certificate
+        shell: bash
+        env:
+          ASTERION_PREVIEW_KEYSTORE_BASE64: ${{ secrets.ASTERION_PREVIEW_KEYSTORE_BASE64 }}
+          ASTERION_PREVIEW_STORE_PASSWORD: ${{ secrets.ASTERION_PREVIEW_STORE_PASSWORD }}
+          ASTERION_PREVIEW_KEY_ALIAS: ${{ secrets.ASTERION_PREVIEW_KEY_ALIAS }}
+          ASTERION_PREVIEW_KEY_PASSWORD: ${{ secrets.ASTERION_PREVIEW_KEY_PASSWORD }}
+          ASTERION_PREVIEW_CERT_SHA256: ${{ secrets.ASTERION_PREVIEW_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ASTERION_PREVIEW_KEYSTORE_BASE64" || -z "$ASTERION_PREVIEW_STORE_PASSWORD" ||
+                -z "$ASTERION_PREVIEW_KEY_ALIAS" || -z "$ASTERION_PREVIEW_KEY_PASSWORD" ||
+                -z "$ASTERION_PREVIEW_CERT_SHA256" ]]; then
+            echo '::error::Permanent preview signing identity not installed. Refusing to publish another incompatible debug APK.'
+            exit 1
+          fi
+          KEY="$RUNNER_TEMP/asterion-stable-preview.jks"
+          umask 077
+          printf '%s' "$ASTERION_PREVIEW_KEYSTORE_BASE64" | base64 --decode > "$KEY"
+          keytool -exportcert -keystore "$KEY" -storepass "$ASTERION_PREVIEW_STORE_PASSWORD" \
+            -alias "$ASTERION_PREVIEW_KEY_ALIAS" > "$RUNNER_TEMP/asterion-preview-cert.der"
+          CERT_SHA="$(sha256sum "$RUNNER_TEMP/asterion-preview-cert.der" | cut -d ' ' -f1)"
+          test "$CERT_SHA" = "${ASTERION_PREVIEW_CERT_SHA256,,}" || {
+            echo '::error::Preview certificate differs from the authorized persistent signing SHA-256.'
+            exit 1
+          }
+          echo "ASTERION_PREVIEW_KEYSTORE=$KEY" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_STORE_PASSWORD=$ASTERION_PREVIEW_STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_KEY_ALIAS=$ASTERION_PREVIEW_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_KEY_PASSWORD=$ASTERION_PREVIEW_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Test Downloader sources and build installable Android preview
+        run: gradle testDebugUnitTest testPreviewUnitTest assemblePreview --stacktrace
+      - name: Validate package, ZIP and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/preview/app-preview.apk"
+          test -s "$APK"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.azrael.pixivdumpsync.nocturne'"
+          "$AAPT" dump badging "$APK" | grep -F "versionName='1.3.46-preview'"
+          unzip -t "$APK" >/dev/null
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$BUILD_TOOLS/apksigner" verify "$APK"
+          ACTUAL="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          test "${ACTUAL,,}" = "${ASTERION_PREVIEW_CERT_SHA256,,}" || {
+            echo '::error::Compiled APK signing SHA does not match the permanent preview signer.'
+            exit 1
+          }
+          cp "$APK" Asterion-Downloader-v1.3.46-Preview.apk
+          sha256sum Asterion-Downloader-v1.3.46-Preview.apk > Asterion-Downloader-v1.3.46-Preview.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.46-Preview-Installable
+          path: |
+            Asterion-Downloader-v1.3.46-Preview.apk
+            Asterion-Downloader-v1.3.46-Preview.sha256
+          if-no-files-found: error
+      - name: Publish direct-link GitHub prerelease for Android
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="asterion-downloader-v1.3.46-preview-$(git rev-parse --short=10 "$GITHUB_SHA")"
+          if ! gh release create "$TAG" \
+            Asterion-Downloader-v1.3.46-Preview.apk \
+            Asterion-Downloader-v1.3.46-Preview.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Asterion Downloader v1.3.46 - Android preview" \
+            --notes "Permanent preview signing certificate verified before release. Exact source commit and APK checksum are included. This preview restores real website-owned cached Search thumbnails alongside indexed media in visual-first Kuroha/Pixiv galleries for Porn, Hentai, models, Cosplay, Books, Comics and indexed websites; artworks are visible immediately and website management is secondary. It retains explicit chapter/page, EPUB, numbered-volume and identifiable-episode download order while leaving ordinary photo albums unordered. It verifies complete EPUB and comic ZIP contents before marking ordered work saved; numbered MP4Directs volumes transfer sequentially and failed volumes can be retried independently. The previously approved artist/website/model grouping and original-file download behavior are preserved. Previous sync, backfill, provider, video, X, comic and torrent repairs are preserved. APK and unit tests passed on the Windows workspace. Live site compatibility, cloud upload and Android device execution still require real-account/device testing. Separate com.azrael.pixivdumpsync.nocturne preview; existing production data remain untouched." \
+            --prerelease; then
+            echo "::warning::Release publication denied by GitHub token. Verified APK and sha256 remain available in the successfully uploaded Actions artifact."
+          fi
+
+      - name: Remove temporary preview signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asterion-stable-preview.jks" "$RUNNER_TEMP/asterion-preview-cert.der"

@@ -10,6 +10,7 @@ object Scheduler {
     private const val FIFTEEN_MINUTES = 15L * 60L * 1000L
 
     fun ensure(context: Context) {
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(context)){cancel(context);return}
         val scheduler = context.getSystemService(JobScheduler::class.java)
         if (!Prefs.autoSync(context)) {
             scheduler.cancel(PERIODIC_JOB_ID)

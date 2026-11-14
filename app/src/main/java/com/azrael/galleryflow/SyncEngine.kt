@@ -14,9 +14,14 @@ class SyncEngine(private val context: Context) {
         var incompleteGalleries: Int = 0
     )
 
-    private val http = HttpClient()
+    private val http = HttpClient(context)
 
-    fun run(mode: SyncMode, targetEntityId: String? = null, progress: (String) -> Unit = {}): Stats {
+    fun run(mode: SyncMode, targetEntityId: String? = null,
+            targetSiteHost: String? = null,
+            targetGalleryUrl: String? = null,
+            targetGalleryTitle: String? = null,
+            progress: (String) -> Unit = {}): Stats {
+        com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
         if (!SyncControl.tryStart(mode, queueLiveIfBusy = true)) return stats
         val db = GalleryDb(context)
@@ -24,9 +29,13 @@ class SyncEngine(private val context: Context) {
         val flow = FlowLinkEmitter(context, db)
         try {
             SyncControl.setMode(mode)
-            when (mode) {
-                SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId)
-                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId)
+            if(targetGalleryUrl!=null){
+                require(targetEntityId!=null){"Selected gallery must belong to a registered site"}
+                runExactAlbum(db,files,flow,stats,progress,targetEntityId,
+                    targetGalleryUrl,targetGalleryTitle)
+            }else when (mode) {
+                SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
+                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
             }
             while (!SyncControl.isStopping() && SyncControl.takePendingLive()) {
                 SyncControl.setMode(SyncMode.LIVE)
@@ -56,21 +65,76 @@ class SyncEngine(private val context: Context) {
         return stats
     }
 
+    /** Single tapped album, owned by its existing publisher site record.
+     * No gallery URL ever becomes a new followed source/subscription.
+     */
+    private fun runExactAlbum(db:GalleryDb, files:MediaStoreFiles,
+                              flow:FlowLinkEmitter,stats:Stats,
+                              progress:(String)->Unit,entityId:String,
+                              rawUrl:String,title:String?){
+        val entity=db.listEntities().firstOrNull{it.entityId==entityId &&
+            it.kind=="site"} ?:throw AdapterException(
+                "Selected album's parent site is not registered")
+        val origin=java.net.URI(entity.canonicalUrl)
+        val selected=java.net.URI(rawUrl)
+        fun hostname(uri:java.net.URI)=uri.host.orEmpty().lowercase(
+            java.util.Locale.ROOT).removePrefix("www.")
+        require(selected.scheme=="https" && selected.userInfo==null &&
+            hostname(origin)==hostname(selected)){
+            "The album URL must belong to its own registered provider"
+        }
+        val path=selected.path.orEmpty().trimEnd('/')
+        val id=if(entity.source==SourceId.KIUTAKU){
+            require(path.matches(Regex("/[0-9]{1,9}"))){
+                "Kiutaku selected album must be a numeric detail page"
+            }
+            path.removePrefix("/")
+        }else{
+            // GenericSiteAdapter uses SHA-256 of the canonical selected URL
+            // as the stable gallery ID; preserve prior gallery receipts.
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(rawUrl.toByteArray(Charsets.UTF_8))
+                .joinToString(""){"%02x".format(it)}.take(32)
+        }
+        val ref=GalleryRef(entity.source,id,entity.entityId,rawUrl,
+            title?.take(160)?.ifBlank{rawUrl}.orEmpty().ifBlank{rawUrl})
+        val adapter=AdapterRegistry.forSource(entity.source,context)
+        progress("Downloading only selected gallery: "+ref.title)
+        if(processGallery(entity,ref,adapter,db,files,flow,stats,progress)){
+            db.clearRetry(ref)
+        }else{
+            db.queueRetry(ref,"Exact selected album incomplete")
+            stats.incompleteGalleries++
+        }
+    }
+
     private fun runLive(
         db: GalleryDb,
         files: MediaStoreFiles,
         flow: FlowLinkEmitter,
         stats: Stats,
         progress: (String) -> Unit,
-        targetEntityId: String? = null
+        targetEntityId: String? = null,
+        targetSiteHost: String? = null
     ) {
+        val targeted=targetEntityId!=null || targetSiteHost!=null
         val entities = db.listEntities().filter {
-            it.selected && it.liveEnabled && (targetEntityId == null || it.entityId == targetEntityId)
+            it.selected &&
+                (targeted || (it.liveEnabled &&
+                    com.azrael.pixivdumpsync.SiteControls.sync(context,
+                        it.canonicalUrl,it.liveEnabled))) &&
+                (targetEntityId == null || it.entityId == targetEntityId) &&
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
             if (!SyncControl.checkpoint()) return
-            val adapter = AdapterRegistry.forSource(entity.source)
+            // Manual Check New must work independently from the automatic
+            // Sync toggle; scheduled Live runs still require opt-in.
+            if(!targeted &&
+                !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
+                continue
+            val adapter = AdapterRegistry.forSource(entity.source,context)
             if (!adapter.enabled) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
@@ -79,16 +143,41 @@ class SyncEngine(private val context: Context) {
             SyncControl.updateMessage(message)
             progress(message)
             try {
-                val galleries = adapter.enumerateGalleries(entity.toSourceEntity()).toList()
+                // A first manual check gets the newest ONE album rather than
+                // silently creating a cursor and downloading nothing. Backfill
+                // remains the separate action for the complete site history.
+                val galleries = if(entity.liveCursor.isNullOrBlank())
+                    // Never crawl a thousand historical pages merely to
+                    // establish the baseline, whether automatic or manual.
+                    adapter.enumerateGalleries(entity.toSourceEntity()).take(1).toList()
+                else adapter.enumerateGalleries(entity.toSourceEntity())
+                    .takeWhile{it.stableId!=entity.liveCursor}
+                    .take(101).toList()
+                if(galleries.size>100)throw AdapterException(
+                    "More than 100 new galleries or an expired cursor; use BACKFILL "+
+                    "to reconcile history without an unbounded CHECK NEW scan.")
                 val newest = galleries.firstOrNull()?.stableId
                 if (entity.liveCursor.isNullOrBlank()) {
-                    db.setLiveCursor(entity.source, entity.entityId, newest)
-                    progress(entity.displayName + ": Live baseline established")
+                    if(targeted && galleries.isNotEmpty()){
+                        val latest=galleries.first()
+                        if(processGallery(entity,latest,adapter,db,files,flow,stats,progress)){
+                            db.setLiveCursor(entity.source,entity.entityId,newest)
+                        }else{
+                            db.queueRetry(latest,"Initial new-album check incomplete")
+                            stats.incompleteGalleries++
+                        }
+                    }else{
+                        db.setLiveCursor(entity.source, entity.entityId, newest)
+                        progress(entity.displayName + ": Live baseline established")
+                    }
                     continue
                 }
                 val newOnes = galleries.takeWhile { it.stableId != entity.liveCursor }
                 for (gallery in newOnes.asReversed()) {
                     if (!SyncControl.checkpoint()) return
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
+                        break
                     if (processGallery(entity, gallery, adapter, db, files, flow, stats, progress)) {
                         db.setLiveCursor(entity.source, entity.entityId, gallery.stableId)
                     } else {
@@ -110,28 +199,49 @@ class SyncEngine(private val context: Context) {
         flow: FlowLinkEmitter,
         stats: Stats,
         progress: (String) -> Unit,
-        targetEntityId: String? = null
+        targetEntityId: String? = null,
+        targetSiteHost: String? = null
     ) {
+        // A user-initiated exact gallery or site BACKFILL is an explicit
+        // command, independent of the provider's automatic-history switch.
+        // The switch still controls untargeted scheduled background passes.
+        val targeted = targetEntityId != null || targetSiteHost != null
         val entities = db.listEntities().filter {
-            it.selected && (targetEntityId == null || it.entityId == targetEntityId)
+            it.selected &&
+                (targeted || com.azrael.pixivdumpsync.SiteControls.backfill(
+                    context,it.canonicalUrl,it.selected)) &&
+                (targetEntityId == null || it.entityId == targetEntityId) &&
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
             if (!SyncControl.checkpoint()) return
-            val adapter = AdapterRegistry.forSource(entity.source)
+            if(!targeted &&
+                !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+                continue
+            val adapter = AdapterRegistry.forSource(entity.source,context)
             if (!adapter.enabled) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
             }
-            val prefix = "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
+            val selectedAlbum=entity.kind=="selected_album" ||
+                (targetEntityId!=null && entity.kind=="gallery_only")
+            val prefix=if(selectedAlbum)
+                "Selected album • "+entity.displayName
+                else "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
             SyncControl.updateMessage(prefix)
             progress(prefix)
             try {
                 val pages = adapter.enumerateGalleries(entity.toSourceEntity())
                 var failedCount = 0
+                val attemptedGalleries=hashSetOf<String>()
                 // Retry a bounded batch of historical failures, then continue onward.
                 for (retry in db.pendingRetries(entity)) {
+                    if(!attemptedGalleries.add(retry.stableId))continue
                     if (!SyncControl.checkpoint()) return
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+                        break
                     progress("Retrying failed gallery: " + retry.title)
                     if (processGallery(entity, retry, adapter, db, files, flow, stats, progress)) {
                         db.clearRetry(retry)
@@ -142,9 +252,16 @@ class SyncEngine(private val context: Context) {
                     }
                 }
                 for (gallery in pages) {
+                    if(!attemptedGalleries.add(gallery.stableId))continue
                     if (!SyncControl.checkpoint()) return
-                    val message = entity.displayName + " / " +
-                        stats.mediaDownloaded + " new images"
+                    if(!targeted &&
+                        !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
+                        break
+                    val message=if(selectedAlbum)
+                        "Selected album • "+gallery.title+
+                        " • "+stats.mediaDownloaded+" original files received"
+                        else entity.displayName + " / " +
+                            stats.mediaDownloaded + " new images"
                     SyncControl.updateMessage(message)
                     progress(message)
                     val completed = processGallery(entity, gallery, adapter, db, files,
@@ -157,7 +274,9 @@ class SyncEngine(private val context: Context) {
                         stats.incompleteGalleries++
                         progress("Queued failed album for retry: " + gallery.title)
                     }
-                    if (serviceQueuedLive(db, files, flow, stats, progress)) {
+                    // Do not interrupt an explicitly tapped album with
+                    // unrelated Live Sync before its own originals complete.
+                    if (!targeted && serviceQueuedLive(db, files, flow, stats, progress)) {
                         SyncControl.setMode(SyncMode.BACKFILL)
                         SyncControl.updateMessage(prefix)
                         progress("Resuming " + prefix)
@@ -210,6 +329,22 @@ class SyncEngine(private val context: Context) {
         db.upsertGallery(ref, TransferState.PENDING)
         return try {
             val (meta, mediaItems) = adapter.fetchGallery(ref)
+            // The original 37-photo Cosplay selection had 54 media rows
+            // because recommendation thumbnails were assigned to the album.
+            // Reconcile only if the publisher's explicit image count agrees
+            // with the exact, scoped original list. Existing files are kept.
+            if(SelectedAlbumScope.owns(meta.canonicalUrl)){
+                val declared=SelectedAlbumScope.advertisedCount(
+                    ref.title,meta.title)
+                if(declared!=null && declared==mediaItems.size){
+                    val moved=db.detachUnverifiedSelectedAlbumMedia(
+                        meta.source,meta.stableId,
+                        mediaItems.map{it.stableId}.toSet())
+                    if(moved>0)progress(
+                        "Separated $moved unrelated saved files from "+
+                            meta.title+" without deleting originals")
+                }
+            }
             db.updateGalleryMeta(meta, mediaItems.size)
             // Metadata is read before downloading any gallery image.
             val excluded = TagExclusions.firstBlocked(meta.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
@@ -220,71 +355,144 @@ class SyncEngine(private val context: Context) {
                 return true // Advance Live cursor without downloading any files.
             }
             var allComplete = true
-            for ((position, media) in mediaItems.withIndex()) {
-                if (!SyncControl.checkpoint()) return false
-                db.upsertMedia(entity.entityId, media)
-                val blockedPost = TagExclusions.firstBlocked(
-                    media.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
-                if (blockedPost != null) {
-                    val saved = db.media(media.source, media.stableId)
-                    if (saved?.state != TransferState.COMPLETE || !files.exists(saved.contentUri)) {
-                        db.setMediaState(media.source, media.stableId, TransferState.SKIPPED)
-                    }
-                    continue
-                }
-                val existing = db.media(media.source, media.stableId)
-                if (existing != null && existing.state == TransferState.COMPLETE && files.exists(existing.contentUri)) continue
-                if (existing != null && !files.exists(existing.contentUri)) {
-                    db.setMediaState(media.source, media.stableId, TransferState.PENDING)
-                }
-
-                SyncControl.updateMessage(meta.title + " • " + (position + 1) + "/" + mediaItems.size)
-                db.markMediaDownloading(media)
-                try {
-                    val fresh = downloadWithRetry(files, entity, meta, media)
-                    val duplicate = db.findCompleteByHash(fresh.sha256)
-                    if (duplicate != null && files.exists(duplicate.contentUri)) {
-                        files.delete(fresh.contentUri)
-                        db.markMediaComplete(
-                            media,
-                            fresh.copy(
-                                contentUri = requireNotNull(duplicate.contentUri),
-                                filename = duplicate.filename ?: fresh.filename
-                            ),
-                            duplicateOf = duplicate.source.wireName + ":" + duplicate.mediaId
-                        )
-                        stats.mediaDeduped++
-                    } else {
-                        db.markMediaComplete(media, fresh)
-                        stats.mediaDownloaded++
-                        if (com.azrael.pixivdumpsync.NduSettings.configured(context)) {
-                            runCatching {
-                                com.azrael.pixivdumpsync.NduCloudQueue(context).use {
-                                    it.enqueue("kyora",fresh.filename,
-                                        android.net.Uri.parse(fresh.contentUri))
-                                }
+            // Network transfers are independent; persistence and dedup commits
+            // are not. Transfer three originals concurrently in bounded
+            // batches, then write receipts on this one owner thread.
+            // This avoids racing the shared GalleryDb/MediaStore dedup ledger
+            // and prevents queues containing thousands of scheduled futures.
+            fun commitSaved(item: MediaRef, fresh: DownloadResult) {
+                val duplicate = db.findCompleteByHash(fresh.sha256)
+                if (duplicate != null && files.exists(duplicate.contentUri)) {
+                    files.delete(fresh.contentUri)
+                    db.markMediaComplete(
+                        item,
+                        fresh.copy(
+                            contentUri = requireNotNull(duplicate.contentUri),
+                            filename = duplicate.filename ?: fresh.filename
+                        ),
+                        duplicateOf = duplicate.source.wireName + ":" + duplicate.mediaId
+                    )
+                    stats.mediaDeduped++
+                } else {
+                    db.markMediaComplete(item, fresh)
+                    stats.mediaDownloaded++
+                    if (com.azrael.pixivdumpsync.NduSettings.configured(context)) {
+                        runCatching {
+                            com.azrael.pixivdumpsync.NduCloudQueue(context).use {
+                                it.enqueue("kyora", fresh.filename,
+                                    android.net.Uri.parse(fresh.contentUri))
                             }
                         }
-                        flow.mediaDownloaded(entity, meta, media, fresh)
                     }
-                } catch (e: HttpStatusException) {
-                    allComplete = false
-                    val state = when (e.code) {
-                        401, 403, 404, 410 -> TransferState.INACCESSIBLE
-                        429, 500, 502, 503, 504 -> TransferState.RETRYING
-                        else -> TransferState.PARTIAL
-                    }
-                    db.setMediaState(media.source, media.stableId, state)
-                    if (e.code == 429) break
-                } catch (t: Throwable) {
-                    if (SyncControl.isStopping() || t is SyncCancelledException) return false
-                    allComplete = false
-                    db.setMediaState(media.source, media.stableId, TransferState.RETRYING)
+                    flow.mediaDownloaded(entity, meta, item, fresh)
                 }
             }
+            val workers = java.util.concurrent.Executors.newFixedThreadPool(3)
+            try {
+                for (batch in mediaItems.withIndex().chunked(3)) {
+                    if (!SyncControl.checkpoint()) return false
+                    val scheduled = mutableListOf<Pair<MediaRef,
+                        java.util.concurrent.Future<DownloadOutcome>>>()
+                    for ((position, media) in batch) {
+                        if (!SyncControl.checkpoint()) return false
+                        db.upsertMedia(entity.entityId, media)
+                        val blockedPost = TagExclusions.firstBlocked(
+                            media.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
+                        if (blockedPost != null) {
+                            val saved = db.media(media.source, media.stableId)
+                            if (saved?.state != TransferState.COMPLETE ||
+                                !files.exists(saved.contentUri)) {
+                                db.setMediaState(media.source, media.stableId,
+                                    TransferState.SKIPPED)
+                            }
+                            continue
+                        }
+                        val existing = db.media(media.source, media.stableId)
+                        if (existing != null && existing.state == TransferState.COMPLETE &&
+                            files.exists(existing.contentUri)) continue
+                        if (existing != null && !files.exists(existing.contentUri)) {
+                            db.setMediaState(media.source, media.stableId,
+                                TransferState.PENDING)
+                        }
+                        SyncControl.updateMessage(meta.title + " • " +
+                            (position + 1) + "/" + mediaItems.size)
+                        db.markMediaDownloading(media)
+                        scheduled += media to workers.submit<DownloadOutcome> {
+                            downloadWithRetry(files, entity, meta, media)
+                        }
+                    }
+                    var rateLimited = false
+                    for ((media, future) in scheduled) {
+                        try {
+                            val outcome = future.get()
+                            // The source archive can yield additional genuine
+                            // images and videos. Preserve all of its receipts.
+                            commitSaved(media, outcome.primary)
+                            for (extracted in outcome.extracted) {
+                                db.upsertMedia(entity.entityId, extracted.media)
+                                commitSaved(extracted.media, extracted.result)
+                            }
+                        } catch (failure: Throwable) {
+                            val cause = if (failure is java.util.concurrent.ExecutionException)
+                                failure.cause ?: failure else failure
+                            if (cause is VirtualMachineError || cause is ThreadDeath)
+                                throw cause
+                            if (SyncControl.isStopping() ||
+                                cause is SyncCancelledException ||
+                                cause is InterruptedException) return false
+                            allComplete = false
+                            if (cause is HttpStatusException) {
+                                val state = when (cause.code) {
+                                    401, 403, 404, 410 -> TransferState.INACCESSIBLE
+                                    429, 500, 502, 503, 504 -> TransferState.RETRYING
+                                    else -> TransferState.PARTIAL
+                                }
+                                db.setMediaState(media.source, media.stableId, state)
+                                if (cause.code == 429) rateLimited = true
+                            } else {
+                                db.setMediaState(media.source, media.stableId,
+                                    TransferState.RETRYING)
+                            }
+                        }
+                    }
+                    // Stop scheduling new batches when a publisher rate-limits.
+                    // Already-started files retain their individual receipts.
+                    if (rateLimited) break
+                }
+            } finally {
+                workers.shutdownNow()
+            }
 
+            var officialArchiveComplete=true
+            if(SelectedAlbumScope.is4khdAlbum(meta.canonicalUrl)){
+                val expected=SelectedAlbumScope.advertisedCount(
+                    ref.title,meta.title)
+                val extracted=db.galleryMedia(meta.source,meta.stableId)
+                    .filter{record->
+                        record.url.startsWith("archive:") &&
+                        record.filename.orEmpty().matches(
+                            Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$""")) &&
+                        record.state==TransferState.COMPLETE &&
+                        files.exists(record.contentUri)
+                    }
+                if(expected==null || extracted.size!=expected){
+                    officialArchiveComplete=false
+                    progress("4KHD full-HD archive incomplete: "+
+                        extracted.size+" extracted photos, expected "+
+                        (expected?.toString()?:"publisher count unavailable"))
+                }else{
+                    // Only a verified original archive of exactly the
+                    // advertised size can displace old webpage previews.
+                    db.detachUnverifiedSelectedAlbumMedia(
+                        meta.source,meta.stableId,
+                        mediaItems.map{it.stableId}.toSet()+
+                            extracted.map{it.mediaId}.toSet())
+                    db.updateGalleryMeta(meta,expected)
+                }
+            }
             val records = db.galleryMedia(meta.source, meta.stableId)
-            val diskComplete = records.isNotEmpty() &&
+            val diskComplete = officialArchiveComplete &&
+                records.isNotEmpty() &&
                 records.size >= mediaItems.size &&
                 records.all {
                     it.state == TransferState.SKIPPED ||
@@ -315,7 +523,7 @@ class SyncEngine(private val context: Context) {
     }
 
     private fun downloadWithRetry(files: MediaStoreFiles, entity: EntityRecord,
-                                  meta: GalleryMeta, media: MediaRef): DownloadResult {
+                                  meta: GalleryMeta, media: MediaRef): DownloadOutcome {
         var last: Throwable? = null
         for (attempt in 0..3) {
             if (!SyncControl.checkpoint()) throw SyncCancelledException()

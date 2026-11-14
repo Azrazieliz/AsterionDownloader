@@ -11,16 +11,18 @@ import android.widget.Button
 import android.widget.TextView
 
 object UiKit {
-    val bg = Color.rgb(10, 8, 10)
-    val surface = Color.rgb(24, 18, 22)
-    val surfaceAlt = Color.rgb(34, 24, 30)
-    val accent = Color.rgb(243, 190, 211)
-    val accentPressed = Color.rgb(228, 154, 185)
-    val text = Color.rgb(255, 247, 250)
-    val muted = Color.rgb(188, 157, 170)
-    val line = Color.rgb(61, 43, 52)
-    val success = Color.rgb(196, 230, 201)
-    val danger = Color.rgb(255, 126, 160)
+    // Original Kuroha layout and behavior are preserved; only the global colors
+    // are unified with the premium monochrome Asterion theme.
+    val bg = NocturneDesign.background
+    val surface = NocturneDesign.surface
+    val surfaceAlt = NocturneDesign.raised
+    val accent = NocturneDesign.primary
+    val accentPressed = Color.rgb(187, 190, 196)
+    val text = NocturneDesign.white
+    val muted = NocturneDesign.secondary
+    val line = NocturneDesign.border
+    val success = Color.rgb(171, 207, 180)
+    val danger = NocturneDesign.danger
 
     fun dp(context: Context, value: Int): Int =
         (value * context.resources.displayMetrics.density).toInt()
@@ -56,7 +58,7 @@ object UiKit {
         button.isAllCaps = false
         button.textSize = 16f
         button.typeface = Typeface.DEFAULT_BOLD
-        button.setTextColor(Color.rgb(28, 18, 23))
+        button.setTextColor(bg)
         button.minHeight = dp(context, 54)
         button.background = ripple(
             context,
@@ -76,7 +78,7 @@ object UiKit {
         button.background = ripple(
             context,
             surfaceAlt,
-            Color.rgb(55, 38, 47),
+            Color.rgb(62, 64, 70),
             radius = 14,
             stroke = line
         )
@@ -92,7 +94,7 @@ object UiKit {
         button.background = ripple(
             context,
             surfaceAlt,
-            Color.rgb(70, 43, 54),
+            Color.rgb(64, 66, 71),
             radius = 12,
             stroke = line
         )

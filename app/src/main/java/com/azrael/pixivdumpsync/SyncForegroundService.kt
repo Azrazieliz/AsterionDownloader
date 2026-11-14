@@ -43,6 +43,17 @@ class SyncForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Foreground-service promotion may be denied when a job resumes
+        // after the user backgrounds the app. Never propagate that runtime
+        // exception from onStartCommand and kill the whole application.
+        try {
+            startForeground(NOTIFICATION_ID, notification())
+        }catch(t:RuntimeException){
+            android.util.Log.e("AsterionKurohaSync",
+                "Foreground promotion denied; saved jobs retained",t)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_PAUSE -> {
                 SyncControl.pause()
@@ -66,6 +77,11 @@ class SyncForegroundService : Service() {
             }
         }
 
+        if(!AppPower.enabled(this)){
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         val mode = runCatching {
             SyncMode.valueOf(intent?.getStringExtra(EXTRA_MODE) ?: SyncMode.LIVE.name)
         }.getOrDefault(SyncMode.LIVE)
@@ -78,8 +94,6 @@ class SyncForegroundService : Service() {
         if (currentRun?.isDone == false) {
             return START_NOT_STICKY
         }
-
-        startForeground(NOTIFICATION_ID, notification())
 
         currentRun = executor.submit {
             try {
@@ -177,12 +191,7 @@ class SyncForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopIntent = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, SyncForegroundService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopIntent = EmergencyBackfillStopReceiver.action(this)
 
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)

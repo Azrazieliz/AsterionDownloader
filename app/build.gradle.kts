@@ -12,22 +12,44 @@ val originalKeyPassword = System.getenv("KUROHA_KEY_PASSWORD")
 val hasOriginalSigningKey = listOf(
     originalKeyStorePath, originalStorePassword, originalKeyAlias, originalKeyPassword
 ).all { !it.isNullOrBlank() }
+ 
+// A single preview signature is required across upgrades. CI's automatically
+// generated per-run debug key must never be published as an update APK.
+val previewKeyStorePath = System.getenv("ASTERION_PREVIEW_KEYSTORE")
+val previewStorePassword = System.getenv("ASTERION_PREVIEW_STORE_PASSWORD")
+val previewKeyAlias = System.getenv("ASTERION_PREVIEW_KEY_ALIAS")
+val previewKeyPassword = System.getenv("ASTERION_PREVIEW_KEY_PASSWORD")
+val hasStablePreviewKey = listOf(
+    previewKeyStorePath, previewStorePassword, previewKeyAlias, previewKeyPassword
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.azrael.pixivdumpsync"
     compileSdk = 35
+    // Android Gradle Plugin instruments only debug by default.
+    // Run transfer simulation against the isolated PhoneTest target instead.
+    testBuildType = "phonepilot"
 
     defaultConfig {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.2.1"
+        versionCode = 89
+        versionName = "1.3.60"
 
-        testInstrumentationRunner = "android.app.Instrumentation"
+        testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
 
     signingConfigs {
+        if (hasStablePreviewKey) {
+            create("stablePreviewKey") {
+                storeFile = file(requireNotNull(previewKeyStorePath))
+                storePassword = requireNotNull(previewStorePassword)
+                keyAlias = requireNotNull(previewKeyAlias)
+                keyPassword = requireNotNull(previewKeyPassword)
+                enableV2Signing = true
+            }
+        }
         if (hasOriginalSigningKey) {
             create("originalUpgradeKey") {
                 storeFile = file(requireNotNull(originalKeyStorePath))
@@ -45,6 +67,65 @@ android {
             applicationIdSuffix = ".nocturne"
             versionNameSuffix = "-preview"
             isDebuggable = true
+            if (hasStablePreviewKey)
+                signingConfig = signingConfigs.getByName("stablePreviewKey")
+            // Local Windows PC debug signing is persistent when no configured
+            // preview signer exists. CI must fail closed on missing key.
+            matchingFallbacks += listOf("debug")
+        }
+        // One-time functional acceptance app before the Downloader–Rounder merge.
+        // Separate package identity avoids uninstalling or replacing the owner's
+        // differently signed Downloader. Never claim this is an in-place update.
+        create("pilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".pilotagents"
+            versionNameSuffix = "-pilot"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // One-off, isolated tester: a different package than the already
+        // installed Agents and Acceptance apps. No uninstall/data loss.
+        // Its debug signer is CI ephemeral; never offer it as an upgrade.
+        create("phonepilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1111"
+            versionNameSuffix = "-phone-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // One isolated post-repair test installation. Existing Acceptance
+        // and earlier PhoneTest packages are left untouched because CI's
+        // debug certificate cannot update their independently signed APKs.
+        create("fieldpilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1113"
+            versionNameSuffix = "-field-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // Final provider-repair trial uses a fresh, isolated package because
+        // the owner's .testphone1114 is already installed with a DIFFERENT
+        // CI-ephemeral signing certificate. Never erase that app or its data.
+        // Production acceptance updates must instead use one retained signer.
+        create("providerpilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testphone1115"
+            versionNameSuffix = "-provider-test"
+            isDebuggable = true
+            matchingFallbacks += listOf("debug")
+        }
+        // Install once alongside previous differently-signed pilots; all
+        // future acceptance updates use this exact package and the retained
+        // Windows signer. GitHub CI never publishes self-signed updates.
+        create("acceptance") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".acceptance"
+            versionNameSuffix = "-acceptance"
+            isDebuggable = true
+            // Stable Windows-owned signer allows REAL in-place updates.
+            // CI's per-run debug key must never be published for this package.
+            signingConfig = if (hasStablePreviewKey)
+                signingConfigs.getByName("stablePreviewKey") else null
             matchingFallbacks += listOf("debug")
         }
         release {
@@ -64,11 +145,18 @@ android {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {
     implementation("org.jsoup:jsoup:1.18.1")
+    implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39")
+    runtimeOnly("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
+    implementation("com.github.junrar:junrar:8.1.1")
     implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

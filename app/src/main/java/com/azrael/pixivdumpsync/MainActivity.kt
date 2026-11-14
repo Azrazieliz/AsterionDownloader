@@ -140,7 +140,7 @@ class MainActivity : Activity() {
             UiKit.body(this, 10f)
         })
         titles.addView(TextView(this).apply {
-            text = "Kuroha"
+            text = "Pixiv archive"
             UiKit.title(this, 27f)
         })
         titles.addView(TextView(this).apply {

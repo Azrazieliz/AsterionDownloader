@@ -1,0 +1,104 @@
+name: Downloader actual Android transfer simulation
+
+on:
+  push:
+    branches:
+      - work/downloader-single-build-staging-20261112
+    paths:
+      - 'app/src/main/java/com/asterion/videoflow/**'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/**'
+      - '.github/workflows/downloader-android-transfer-simulation.yml'
+      - 'app/src/androidTest/**'
+      - 'app/src/phonepilot/AndroidManifest.xml'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/BootReceiver.kt'
+      - 'app/src/main/AndroidManifest.xml'
+      - 'app/src/main/java/com/asterion/videoflow/**'
+      - 'app/src/main/java/com/azrael/pixivdumpsync/TorrentTransfers.kt'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/downloader-android-transfer-simulation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-actual-emulator-transfers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Bundle verified current yt-dlp inside offline Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: yt-dlp==2026.10.26 -d app/src/main/assets
+          echo 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae  app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl' | sha256sum -c -
+          python3 -c "import zipfile; z=zipfile.ZipFile('app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl'); assert 'yt_dlp/version.py' in z.namelist()"
+      - name: Compile target Android app and device test APK
+        run: gradle --no-daemon assemblePhonepilot assemblePhonepilotAndroidTest --stacktrace --console=plain
+      - name: Enable KVM emulator support
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0660", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot Android and download actual media with native and Python engines
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # The overloaded API35 emulator repeatedly lost adb/system services
+          # before instrumentation began (Broken pipe / com.android.phone ANR).
+          # API30 still supports the app's minSdk29 and both packaged x86_64
+          # media engines, with substantially lighter boot workload.
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -memory 2048 -cores 2 -accel on
+          script: |
+            set -eu
+            # Avoid racing first-boot system work and the app's BOOT_COMPLETED
+            # receiver; this run tests media transfer, not initial phone setup.
+            adb wait-for-device
+            until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 2; done
+            sleep 12
+            adb install -r app/build/outputs/apk/phonepilot/app-phonepilot.apk
+            adb install -r app/build/outputs/apk/androidTest/phonepilot/app-phonepilot-androidTest.apk
+            adb logcat -c
+            # Capture logs regardless of instrumentation exit status. Android
+            # reports INSTRUMENTATION_CODE: 0 even when the process crashes.
+            set +e
+            # Android-emulator-runner executes each script line as a separate
+            # sh -c command. Multi-line shell groups and cross-line variables
+            # therefore break before instrumentation even starts.
+            (sleep 75; adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true; sleep 90; adb shell "kill -3 \$(pidof com.azrael.pixivdumpsync.testphone1111 2>/dev/null)" || true) > android-transfer-watchdog.txt 2>&1 &
+            timeout --signal=TERM --kill-after=10s 290s adb shell am instrument -w -r com.azrael.pixivdumpsync.testphone1111.test/com.azrael.pixivdumpsync.DeviceTransferSimulation > android-transfer-simulation.txt 2>&1; printf '%s\n' "$?" > android-transfer-exit.txt
+            adb logcat -b crash -d -v threadtime > android-transfer-crash-logcat.txt
+            adb logcat -d -v threadtime > android-transfer-full-logcat.txt
+            adb shell dumpsys activity processes > android-transfer-processes.txt
+            set -e
+            grep -Fx '0' android-transfer-exit.txt
+            if grep -q 'Process crashed' android-transfer-simulation.txt; then cat android-transfer-crash-logcat.txt; exit 1; fi
+            grep -F 'AST_SIM: NATIVE_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: PYTHON_RUNTIME_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: EMBEDDED_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: PASS' android-transfer-simulation.txt
+            if grep -q 'FATAL EXCEPTION' android-transfer-crash-logcat.txt; then cat android-transfer-crash-logcat.txt; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-real-download-simulation-logs
+          if-no-files-found: ignore
+          path: |
+            android-transfer-simulation.txt
+            android-transfer-crash-logcat.txt
+            android-transfer-full-logcat.txt
+            android-transfer-processes.txt
+            android-transfer-watchdog.txt
+            android-transfer-exit.txt

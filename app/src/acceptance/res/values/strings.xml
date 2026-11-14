@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Separate app identities must not write into Kuroha's legacy folders. -->
+    <string name="pixiv_download_folder">AsterionDownloader/Pixiv</string>
+    <string name="gallery_download_folder">AsterionDownloader/Gallery</string>
+</resources>
