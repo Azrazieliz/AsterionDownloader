@@ -28,7 +28,7 @@ object BrowserPageFetch {
         // Aloha-style media detectors, just the publishers' JS video players.
         "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
         "hqpornerxxx.com","helloporn.com","javideo.net",
-        "hentaihaven.xxx","mp4hentai.com")
+        "hentaihaven.xxx","mp4hentai.com","roshy.tv")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -78,7 +78,8 @@ object BrowserPageFetch {
         val selectedPlayerHost=host in setOf(
             "fullporner.com","mydaddy.cc","nhplayer.com",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
-            "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com")
+            "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
+            "roshy.tv")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {
@@ -293,11 +294,17 @@ object BrowserPageFetch {
                                 },1_500L)
                             }else if(selectedPlayerPage &&
                                 selectedPlayerWaits++<6 &&
-                                !Regex("""<video\s+src="https://[^"]+""")
-                                    .containsMatchIn(page)){
-                                // The original video isn't published until the
-                                // selected player's JS initialization. An HTTP
-                                // 200 response with no source is not success.
+                                (!Regex("""<video\s+src="https://[^"]+""")
+                                    .containsMatchIn(page) ||
+                                    (host in setOf("hentaibros.net","3dhentaix.com") &&
+                                     Regex("""data-duration="([0-9]{1,9})""")
+                                         .findAll(page).none{
+                                             (it.groupValues[1].toLongOrNull()?:0L)>=90L
+                                         }))){
+                                // HentaiBros and 3DHentai often expose an
+                                // initially empty or 0-second JS player.
+                                // Wait for the actual original's duration,
+                                // never save a short card preview as a full file.
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_400L)
