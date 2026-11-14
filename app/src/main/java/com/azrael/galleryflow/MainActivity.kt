@@ -617,6 +617,10 @@ class MainActivity : Activity() {
             go(Page.DISCOVER)
             return
         }
+        siteFilter?.let{selected->
+            GalleryRequestLedger.remember(this,
+                GalleryRequestLedger.Request(mode,selected))
+        }
         startForegroundService(
             Intent(this, SyncForegroundService::class.java)
                 .setAction(SyncForegroundService.ACTION_START)
