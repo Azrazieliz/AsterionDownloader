@@ -39,7 +39,7 @@ internal object GallerySiteOriginalExtractors {
                 val link=runCatching{URI(media.url)}.getOrNull()?:continue
                 if(link.scheme!="https" || link.host.isNullOrBlank() ||
                     link.userInfo!=null)continue
-                if(!Regex("""(?i)\\.(?:jpe?g|png|webp|avif|gif)$""")
+                if(!Regex("""(?i)\.(?:jpe?g|png|webp|avif|gif)$""")
                         .containsMatchIn(link.path.orEmpty()))continue
                 val path=link.path.lowercase(Locale.ROOT)
                 if(listOf("/thumb/","/thumbs/","thumbnail","-thumb",
