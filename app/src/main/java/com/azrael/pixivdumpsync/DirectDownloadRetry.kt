@@ -81,6 +81,7 @@ internal object DirectRetryVault {
 }
 object DirectDownloadRetry {
     private const val JOB=48764
+    private const val STALL_JOB=48765
     // Prevent repeated taps and scheduled recovery from racing to replace
     // the same DownloadManager ID and leaving misleading ghost queue rows.
     private val inFlight=java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
@@ -92,10 +93,26 @@ object DirectDownloadRetry {
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true).setPeriodic(15*60_000L).build())
     }
+    /** The periodic 15-minute retry check is too slow for a zero-byte
+     * request. One OS-scheduled check makes a stalled row retryable without
+     * waiting for the next periodic poll or pinning a foreground service.
+     */
+    private fun scheduleStallCheck(ctx:Context){
+        if(!AppPower.enabled(ctx))return
+        val scheduler=ctx.getSystemService(JobScheduler::class.java)
+        if(scheduler.allPendingJobs.any{it.id==STALL_JOB})return
+        val delay=DirectTransferStallPolicy.ZERO_BYTE_TIMEOUT_MS
+        scheduler.schedule(JobInfo.Builder(STALL_JOB,
+            ComponentName(ctx,DirectRetryJob::class.java))
+            .setMinimumLatency(delay)
+            .setOverrideDeadline(delay+60_000L)
+            .build())
+    }
     fun remember(ctx:Context,id:Long,url:String,folder:String,
                  name:String,referer:String?){
         if(id<=0||!SearchRanking.validUrl(url))return
         DirectRetryVault.remember(ctx,DirectRetryVault.Request(id,url,folder,name,referer,0,0))
+        scheduleStallCheck(ctx)
     }
     fun retryNow(ctx:Context,id:Long):Boolean{
         if(!AppPower.enabled(ctx))return false
@@ -152,6 +169,7 @@ object DirectDownloadRetry {
         val manager=ctx.getSystemService(DownloadManager::class.java)
         var stalled=0
         for(state in DirectDownloadTracker.states(ctx,250)){
+            if(Thread.currentThread().isInterrupted)break
             if(state.job.id !in pending)continue
             if(!DirectTransferStallPolicy.stalled(
                     state.status==DownloadManager.STATUS_PENDING ||
@@ -200,6 +218,7 @@ object DirectDownloadRetry {
         val now=System.currentTimeMillis()
         var count=0
         for(record in DirectRetryVault.all(ctx)){
+            if(Thread.currentThread().isInterrupted)break
             if(forceId!=null && record.id!=forceId)continue
             val state=status[record.id]?:continue
             if(!inFlight.add(record.id))continue
@@ -287,12 +306,20 @@ object DirectDownloadRetry {
     }
 }
 class DirectRetryJob:JobService(){
+    private val executor=java.util.concurrent.Executors.newSingleThreadExecutor()
+    @Volatile private var active:java.util.concurrent.Future<*>?=null
     override fun onStartJob(params:JobParameters):Boolean{
-        thread(name="asterion-direct-download-retry"){
+        active=executor.submit{
             try{DirectDownloadRetry.retry(applicationContext)}
-            finally{jobFinished(params,false)}
+            finally{
+                if(!Thread.currentThread().isInterrupted)jobFinished(params,false)
+            }
         }
         return true
     }
-    override fun onStopJob(params:JobParameters):Boolean=true
+    override fun onStopJob(params:JobParameters):Boolean{
+        active?.cancel(true)
+        active=null
+        return true
+    }
 }
