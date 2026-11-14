@@ -26,7 +26,7 @@ object BrowserPageFetch {
         "hentaibros.net","3dhentaix.com",
         // Exact first-party player/article pages. These are not generalized
         // Aloha-style media detectors, just the publishers' JS video players.
-        "fullporner.com","myxstudio.top","nhplayer.com",
+        "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
         "hqpornerxxx.com","helloporn.com","javideo.net",
         "hentaihaven.xxx","mp4hentai.com")
     fun publicEligible(url:String):Boolean {
