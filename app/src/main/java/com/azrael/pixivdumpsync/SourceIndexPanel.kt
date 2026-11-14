@@ -262,6 +262,11 @@ object SourceIndexPanel {
             }
             return
         }
+        if(XXXClubTorrentSource.isDetail(item.url)){
+            // The site's originals are torrents, not standalone MP4 streams.
+            ResourceDownloads.openTorrentSource(a,item.url,"Videos")
+            return
+        }
         if(SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)){
             // Index queued flags are not the authoritative video transfer
             // state. An old index flag must not block an explicit retry.
