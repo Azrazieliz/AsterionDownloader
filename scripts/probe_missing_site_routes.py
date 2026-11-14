@@ -2,7 +2,7 @@
 """Inspect public publisher catalog route structure without downloading media.
 Only public same-site anchor routes and counts are printed. No user session.
 """
-import re,urllib.request,urllib.parse,urllib.error
+import re,urllib.request,urllib.parse,urllib.error,sys
 from html.parser import HTMLParser
 from collections import Counter
 SITES={
@@ -30,6 +30,7 @@ class Links(HTMLParser):
     def handle_data(self,text):
         if self.title and len(self.titlebuf)<20:self.titlebuf.append(text[:70])
 for host,url in SITES.items():
+    if len(sys.argv)>1 and host not in sys.argv[1:]:continue
     try:
         req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36","Accept":"text/html","Accept-Encoding":"identity"})
         with urllib.request.urlopen(req,timeout=15) as r:
