@@ -29,7 +29,7 @@ internal object ArchivebateDiagnostics {
         this.toList().takeLast(max)
     fun report(context:Context):String=buildString {
         appendLine("[ARCHIVEBATE SELECTED-PLAYER DIAGNOSTICS]")
-        appendLine("Previously retired source; saved historical rows are listed above.")
+        appendLine("Active provider; selected-player events from this installed build follow.")
         val saved=context.applicationContext.getSharedPreferences(STORE,Context.MODE_PRIVATE)
             .getString("events","").orEmpty().lineSequence().filter{it.isNotBlank()}.toList()
         if(saved.isEmpty())appendLine("No selected-player diagnostic event recorded by this build")
