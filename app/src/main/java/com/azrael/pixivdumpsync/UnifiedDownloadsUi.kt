@@ -108,6 +108,7 @@ object UnifiedDownloadsUi {
                 }
             }
         }
+        appendLine(ArchivebateDiagnostics.report(a))
     }
 
     private fun collect(a:Activity):List<Row>{
