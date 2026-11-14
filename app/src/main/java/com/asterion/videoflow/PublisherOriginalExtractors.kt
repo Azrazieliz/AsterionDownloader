@@ -56,7 +56,7 @@ internal object PublisherOriginalExtractors {
 
     private fun direct(raw:String):Boolean {
         val u=runCatching{URI(raw)}.getOrNull()?:return false
-        val selectedManifest=Regex("""(?i)\\.(?:m3u8|mpd)$""")
+        val selectedManifest=Regex("""(?i)\.(?:m3u8|mpd)$""")
             .containsMatchIn(u.path.orEmpty())
         return u.scheme=="https" && u.host!=null && u.userInfo==null &&
             u.host!="localhost" &&
