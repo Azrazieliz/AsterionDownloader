@@ -485,21 +485,15 @@ object VideoEngine {
         AsterionCwd.enter(parent)
         try {
         val prefs=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
-        // A stale Tor toggle must not disable normal video player/HTML discovery.
-        val viaProxy=prefs.getBoolean("tor_proxy",false) &&
-            Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
-        val hidden=Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)
-        // The old "tor_proxy" toggle suppressed ALL real HTML5 discovery and
-        // publisher iframe inspection. Every source then fell straight back
-        // to the same failing generic Python parser. When an actual verified
-        // HTTP/SOCKS/Tor exit is configured, Jsoup inspection can safely use
-        // that same route. Hidden .onion handling remains separate.
-        val configuredExit=NetworkRoute.configured(context,item.url)?.mode in
-            setOf("http","socks5","vpn")
+        // The user explicitly removed Tor from Asterion Downloader.
+        // Never infer a working relay from the obsolete tor_proxy setting or
+        // silently fall back to 127.0.0.1:9050.
+        require(!Uri.parse(item.url).host.orEmpty().endsWith(".onion",true)){
+            "This unified downloader accepts public publisher HTTPS URLs only"
+        }
         NetworkRoute.requireVpn(context,item.url)
-        val canInspectPublisherHtml=VideoCandidatePlan.mayInspectPublisher(
-            viaProxy,hidden,configuredExit)
-        require(!hidden||viaProxy){"Configure a SOCKS proxy before connecting to this source"}
+        NetworkRoute.requirePublisherExit(context,item.url)
+        val canInspectPublisherHtml=true
         val cookie=File(context.filesDir,"videoflow/cookies.txt")
         require(WebDiscovery.isUrl(item.url)){"Only public HTTP(S) video URLs are supported"}
         val connected=SiteSession.bound(context,item.url)
@@ -528,9 +522,6 @@ object VideoEngine {
             val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
             val proxy=NetworkRoute.extractorProxy(context,item.url)
-                ?:if(viaProxy && hidden)
-                    "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
-                else null
             val quality=prefs.getString("quality","best[ext=mp4]/best")
                 ?: "best[ext=mp4]/best"
             // Direct, browser-accessible media uses the Kotlin/Android HTTP
@@ -672,9 +663,6 @@ object VideoEngine {
             val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
             val proxy=NetworkRoute.extractorProxy(context,item.url)
-                ?:if(viaProxy && hidden)
-                    "socks5h://127.0.0.1:${prefs.getInt("tor_port",9050)}"
-                else null
             val started=android.os.SystemClock.elapsedRealtime()
             val future=metadataExecutor.submit<JSONObject>{
                 ensureExtractor(context)
