@@ -26,7 +26,9 @@ internal object VideoSiteProfiles {
         // homepage without content is not proof of available originals.
         Route("archivebate.com",Regex("""(?i)^/(?:videos?|watch|recordings?|v)/[^/?#]+""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
-        Route("helloporn.com",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
+        // Real HelloPorn selected videos are /video-<id>-<slug>, NOT
+        // /video/<slug>. The former route dropped every live catalog card.
+        Route("helloporn.com",Regex("""(?i)^/(?:video-[0-9]{1,10}-[a-z0-9][a-z0-9-]{2,240}/?|(?:videos?|watch|v)/[^/?#]+)/?$""")),
         Route("notfans.com",Regex("""(?i)^/(?:videos?|watch|posts?|v)/[^/?#]+""")),
         Route("fullporner.com",Regex("""(?i)^/watch/[a-f0-9]{24}/?$""")),
 
