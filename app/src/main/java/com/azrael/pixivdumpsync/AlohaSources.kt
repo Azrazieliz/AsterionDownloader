@@ -71,7 +71,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
-    // Native Pixiv/Kyora/VideoFlow/Koikatsu/torrent sources are not duplicated as
+    // Native Pixiv, gallery, video, Koikatsu and torrent sources are not duplicated as
     // supplemental bookmark rows. Their original engines and saved data stay intact.
     internal val alreadyIntegratedHosts=setOf("4khd.com","buondua.com","cosplaytele.com",
         "kiutaku.com","watchporn.to","pornhub.com","eporner.com",
@@ -130,11 +130,11 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             }
             AlohaArea.ADULT->if(site.host=="onejav.com"){
                 browse(a,site)
-                status.text="OneJAV is a torrent source: select original torrent/magnet files. VideoFlow cannot treat its listing as MP4."
+                status.text="OneJAV is a torrent source: select original torrent/magnet files. The torrent handler does not treat listings as MP4."
             }else{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
-                status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
+                status.text=if(added)site.name+" added to Downloader source watches; scan queued"
                     else site.name+" already watched; scan requested"
             }
             AlohaArea.VIDEOS,AlohaArea.HENTAI->if(site.host=="onejav.com"){
@@ -144,7 +144,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             }else{
                 val added=VideoDb(a).use{it.addWatch(site.url,site.name)}
                 VideoEngine.launch(a,true)
-                status.text=if(added)site.name+" added to VideoFlow source watches; scan queued"
+                status.text=if(added)site.name+" added to Downloader source watches; scan queued"
                     else site.name+" already watched; scan requested"
             }
             AlohaArea.ASSETS->{
@@ -171,7 +171,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
     /** All approved provider entries feed one preview-first native surface.
      * No site spinner, provider-by-provider list UI, or browser redirection.
      * Source/login maintenance remains available through its dedicated dialog.
-     * Original native Kuroha/Kyora/VideoFlow paths stay unchanged.
+     * Original integrated downloader components stay intact.
      */
     fun render(a:Activity,parent:LinearLayout,areas:List<AlohaArea>,heading:String){
         val scope=areas.filter{it !in setOf(AlohaArea.REFERENCE,AlohaArea.STUDY)}
