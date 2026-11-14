@@ -269,6 +269,13 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         val currentUri = URI(current)
         val basePath = currentUri.path.trimEnd('/')
             .replace(Regex("/(?:page|p)/\\d+$", RegexOption.IGNORE_CASE), "")
+            .let { path ->
+                // 4KHD pages originals as <album>.html/2 through /N.
+                // A /3 link must remain inside the same album as /2.
+                if(currentUri.host.orEmpty().removePrefix("www.")=="4khd.com")
+                    path.replace(Regex("""(?i)(?<=\.html)/[0-9]+$"""),"")
+                else path
+            }
         val currentIndex = pageNumber(currentUri)
         val links = doc.select("a[href],link[rel=next][href]").mapNotNull { anchor ->
             val href = anchor.absUrl("href").ifBlank {
