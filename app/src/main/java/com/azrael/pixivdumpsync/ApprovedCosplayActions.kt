@@ -56,31 +56,47 @@ internal object ApprovedCosplayActions {
             .containsMatchIn(address)
     }
 
+    /** One stable provider entity. Never create extra site records for
+     * every tapped photo/cover; individual albums remain separate galleries. */
+    internal fun albumRoot(host:String,name:String):SourceEntity?=when(host){
+        "kiutaku.com"->SourceEntity(SourceId.KIUTAKU,
+            "site:kiutaku.com",name,"https://kiutaku.com/","site")
+        "pornpics.com"->SourceEntity(SourceId.GENERIC,
+            "site:pornpics.com",name,"https://www.pornpics.com/","site")
+        else->null
+    }
+
+    private fun enqueueAlbumRun(a:Activity,entity:SourceEntity,
+                                sourceAddress:String,mode:SyncMode){
+        GalleryDb(a).use{db->
+            db.addEntity(entity)
+            db.setSelected(entity.source,entity.stableId,true)
+            // Manual commands work even when automatic Sync is OFF, but
+            // must never silently turn scheduled Live checks ON.
+            db.setLiveEnabled(entity.source,entity.stableId,
+                SiteControls.sync(a,sourceAddress,false))
+        }
+        a.startForegroundService(Intent(a,SyncForegroundService::class.java)
+            .setAction(SyncForegroundService.ACTION_START)
+            .putExtra(SyncForegroundService.EXTRA_MODE,mode.name)
+            .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId))
+    }
+
+    fun checkNew(a:Activity,address:String):String{
+        if(!AppPower.enabled(a))return "Resume downloads first"
+        val enrolled=source(a.applicationContext,address)
+        val entity=albumRoot(SiteControls.key(enrolled.url),enrolled.name)
+            ?:return "Use this provider's existing Check New scanner"
+        enqueueAlbumRun(a,entity,enrolled.url,SyncMode.LIVE)
+        return "New original albums check queued · "+enrolled.name
+    }
+
     fun backfill(a:Activity,address:String):String {
         if(!AppPower.enabled(a))return "Resume downloads first"
         val enrolled=source(a.applicationContext,address)
-        val host=SiteControls.key(enrolled.url)
-        if(host in setOf("kiutaku.com","pornpics.com")){
-            // Indexing a site's catalog is NOT downloading its albums.
-            // Keep the established GalleryFlow files, retries and cursors,
-            // but enroll one durable root-site entity for full backfill.
-            val native=host=="kiutaku.com"
-            val entity=SourceEntity(
-                if(native)SourceId.KIUTAKU else SourceId.GENERIC,
-                "site:"+host,enrolled.name,
-                if(native)"https://kiutaku.com/" else "https://www.pornpics.com/",
-                "site"
-            )
-            GalleryDb(a).use{db->
-                db.addEntity(entity)
-                db.setSelected(entity.source,entity.stableId,true)
-                db.setLiveEnabled(entity.source,entity.stableId,
-                    SiteControls.sync(a,enrolled.url,false))
-            }
-            a.startForegroundService(Intent(a,SyncForegroundService::class.java)
-                .setAction(SyncForegroundService.ACTION_START)
-                .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
-                .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId))
+        val entity=albumRoot(SiteControls.key(enrolled.url),enrolled.name)
+        if(entity!=null){
+            enqueueAlbumRun(a,entity,enrolled.url,SyncMode.BACKFILL)
             return "Original album backfill queued · "+enrolled.name+
                 " · verified files appear in Downloads"
         }
