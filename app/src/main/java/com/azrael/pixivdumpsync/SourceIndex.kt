@@ -820,7 +820,7 @@ object SourceIndex {
             db.migrateOfficialSource(
                 "https://novelbuddy.com/home","https://novelbuddy.me/home")
             for(site in AlohaSources.all){
-                val ownsFeed=site.host in setOf("onejav.com","sukebei.nyaa.si")
+                val ownsFeed=site.host in setOf("onejav.com","sukebei.nyaa.si","xxxclub.to")
                 db.add(site.url,site.name,site.area.name,
                     if(ownsFeed ||
                         site.host in AlohaSources.alreadyIntegratedHosts)
@@ -988,8 +988,10 @@ object SourceIndex {
                 }
             }
             if(source?.adapter=="native" &&
-                SiteControls.key(source.url)=="onejav.com"){
-                finished(TorrentSourceBackfill.startSite(context,"ONEJAV"))
+                SiteControls.key(source.url) in setOf("onejav.com","xxxclub.to")){
+                val feed=if(SiteControls.key(source.url)=="xxxclub.to")
+                    "XXXCLUB" else "ONEJAV"
+                finished(TorrentSourceBackfill.startSite(context,feed))
                 return@thread
             }
             if(source?.area=="COSPLAY" && source.adapter=="native"){
