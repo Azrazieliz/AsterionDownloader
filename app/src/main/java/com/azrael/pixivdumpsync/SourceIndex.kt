@@ -138,6 +138,29 @@ class SourceIndexDb(context:Context):
         }finally{db.endTransaction()}
     }
 
+    /** Move only verified first-party torrent identities out of Adult/Video
+     * presentation. Preserve every original row, retry, status and date.
+     * The native TorrentFeedDb remains the actual torrent catalog owner. */
+    fun migrateNativeTorrentPlacement(){
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            db.execSQL(
+                "UPDATE entries SET area='TORRENTS' " +
+                "WHERE kind='torrent' AND area<>'TORRENTS' AND (" +
+                "url LIKE 'https://xxxclub.to/torrents/%' OR " +
+                "url LIKE 'https://www.xxxclub.to/torrents/%' OR " +
+                "url LIKE 'https://onejav.com/torrent/%' OR " +
+                "url LIKE 'https://www.onejav.com/torrent/%')")
+            db.execSQL(
+                "UPDATE sources SET area='TORRENTS',adapter='native' " +
+                "WHERE url IN ('https://xxxclub.to/'," +
+                "'https://xxxclub.to/torrents/browse/all/'," +
+                "'https://onejav.com/','https://www.onejav.com/')")
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
+
     fun setAdapter(url:String,adapter:String){
         require(adapter in setOf("native","generic"))
         writableDatabase.update("sources",ContentValues().apply{
