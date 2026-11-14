@@ -55,6 +55,22 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(selected,SiteSpecificOriginalSources.playerLink(
             Jsoup.parse(html,page),"fullporner.com"))
     }
+    @Test fun liveHelloPornSelectedVideoUsesOnlyVoeEmbedOriginal(){
+        val selected="https://helloporn.com/video-28699-fakedrivingschool-naughty-student-late-for-her-exam-j"
+        val player="https://voe.sx/e/wx8walm5hqkj"
+        val html="""<main>
+            <iframe src="https://ads.example/e/wx8walm5hqkj"></iframe>
+            <iframe src="$player" allowfullscreen></iframe>
+            <iframe src="https://voe.sx.evil.example/e/wx8walm5hqkj"></iframe>
+            </main>"""
+        val sources=SiteSpecificOriginalSources.helloPorn(
+            Jsoup.parse(html,selected),selected)
+        assertEquals(listOf(player),sources.map{it.url})
+        assertEquals(selected,sources.single().referer)
+        assertTrue(SiteSpecificOriginalSources.helloPorn(
+            Jsoup.parse(html,"https://helloporn.com/videos"),
+            "https://helloporn.com/videos").isEmpty())
+    }
     @Test fun hqPornerAcceptsOnlyItsActualPublisherPlayer(){
         val page="https://hqpornerxxx.com/videos/sample-title-39904.html"
         val player="https://myxstudio.top/embed/5d8297e451a0e650ca"
