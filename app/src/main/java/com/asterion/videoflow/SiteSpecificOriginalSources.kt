@@ -421,8 +421,34 @@ internal object SiteSpecificOriginalSources {
         return sources.takeIf{it.size==1}.orEmpty()
     }
 
+    /**
+     * JAVIDEO loads its user-selected iframe only after its own Play control.
+     * An unrelated muted autoplay advert also appears in the DOM; it must
+     * never become the downloaded original. Accept only recognized embed
+     * routes under the specific selected player container.
+     */
+    internal fun javideoSelected(doc:Document,selected:String):List<Source>{
+        if(host(selected)!="javideo.net" ||
+            !VideoSiteProfiles.isVideoPage(selected))return emptyList()
+        val out=LinkedHashMap<String,Source>()
+        for(frame in doc.select("main .video-player iframe[src],"+
+            ".embed-responsive.player:not(.d-none) iframe[src]").take(10)){
+            val link=https(frame.attr("src"),selected)?:continue
+            val h=host(link)
+            if(h !in setOf("streamtape.com","streamtape.to","streamtape.net",
+                    "streamtape.site","sbtape.com"))continue
+            if(!Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
+                    .matches(URI(link).path.orEmpty()))continue
+            out.putIfAbsent(link,Source(link,selected))
+        }
+        // Never substitute a related card, an advert, or a different server
+        // if more than one distinct player claims to be the selected one.
+        return out.values.toList().takeIf{it.size==1}.orEmpty()
+    }
+
     internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
         if(owner=="3dhentaix.com")return threeDHentaiSelected(doc,selected)
+        if(owner=="javideo.net")return javideoSelected(doc,selected)
         val css=when(owner){
             "helloporn.com"->"#player video[src],#player source[src],"+
                 ".video-player video[src],.video-player source[src],"+
