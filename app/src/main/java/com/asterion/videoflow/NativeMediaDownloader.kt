@@ -55,6 +55,19 @@ internal object NativeMediaDownloader {
         return FullRange(start,end,total)
     }
 
+    /** Accept a contiguous response chunk, including a server-limited 206.
+     * Publication still requires every byte through total-1. */
+    internal fun contiguousRange(value:String,offset:Long):FullRange? {
+        val match=Regex("""bytes\\s+([0-9]+)-([0-9]+)/([0-9]+)""",
+            RegexOption.IGNORE_CASE).matchEntire(value.trim())?:return null
+        val start=match.groupValues[1].toLongOrNull()?:return null
+        val end=match.groupValues[2].toLongOrNull()?:return null
+        val total=match.groupValues[3].toLongOrNull()?:return null
+        if(offset<0L || total<=0L || start!=offset || end<start ||
+            end>=total)return null
+        return FullRange(start,end,total)
+    }
+
     fun download(address:String,referer:String?,directory:File,
                  cookieHeader:String?=null,filenameStem:String="video",
                  proxy:java.net.Proxy?=null,progress:(Int)->Unit={},
@@ -86,6 +99,7 @@ internal object NativeMediaDownloader {
         if(destination.isFile && destination.length()>0L)return destination
         var current=address
         var redirects=0
+        var continuationTotal:Long?=null
         while(true){
             if(cancelled())throw java.util.concurrent.CancellationException(
                 "Native transfer paused")
@@ -96,8 +110,9 @@ internal object NativeMediaDownloader {
             }
             val originalHost=URI(address).host
             val sameHost=originalHost.equals(uri.host,ignoreCase=true)
-            val resumed=partial.length()>0L && validator.isFile &&
-                validator.readText().isNotBlank()
+            val resumed=partial.length()>0L && (
+                continuationTotal!=null ||
+                (validator.isFile && validator.readText().isNotBlank()))
             val offset=if(resumed)partial.length() else 0L
             val conn=(if(proxy==null)URL(current).openConnection()
                 else URL(current).openConnection(proxy)) as HttpURLConnection
@@ -113,7 +128,8 @@ internal object NativeMediaDownloader {
                 conn.setRequestProperty("Cookie",cookieHeader)
             if(offset>0L){
                 conn.setRequestProperty("Range","bytes=$offset-")
-                conn.setRequestProperty("If-Range",validator.readText().trim())
+                val ifRange=if(validator.isFile)validator.readText().trim() else ""
+                if(ifRange.isNotBlank())conn.setRequestProperty("If-Range",ifRange)
             }
             try{
                 val status=conn.responseCode
@@ -141,22 +157,25 @@ internal object NativeMediaDownloader {
                     throw IOException("Media URL returned $mime instead of a video file")
                 }
                 val contentRange=conn.getHeaderField("Content-Range").orEmpty()
-                // Validate every 206, not just verified FreePornVideos MP4s.
-                // An unsolicited 206 can contain a teaser, and an accepted
-                // resume range may still stop before the final resource byte.
+                // Some CDNs cap a 206 response to one contiguous chunk.
+                // Demand the next exact offset until the TOTAL is received.
+                // A preview, repeated chunk or a 200 ignoring Range is not complete.
                 val fullRange=if(status==206)
-                    completeRange(contentRange,offset)
+                    contiguousRange(contentRange,offset)
                         ?:throw IOException(
                             "Media provider returned an incomplete or mismatched byte range")
                     else null
+                if(continuationTotal!=null &&
+                    (fullRange==null || fullRange.total!=continuationTotal))
+                    throw IOException("Media source changed or ignored continued byte range")
                 val matchingRange=status==206 && offset>0L
                 val append=matchingRange
                 if(!append){partial.delete();validator.delete()}
                 val etag=conn.getHeaderField("ETag")?.trim().orEmpty()
                 if(etag.isNotBlank())validator.writeText(etag)
                 else validator.delete()
-                val expected=conn.contentLengthLong
-                    .takeIf{it>=0L}
+                val expected=fullRange?.let{it.end-it.start+1L}
+                    ?:conn.contentLengthLong.takeIf{it>=0L}
                 var written=0L
                 conn.inputStream.use{input->
                     FileOutputStream(partial,append).buffered(131_072).use{output->
@@ -170,8 +189,9 @@ internal object NativeMediaDownloader {
                             if(n==0)continue
                             output.write(buffer,0,n)
                             written+=n
-                            if(expected!=null && expected>0L)
-                                progress((((offset+written)*95L)/(offset+expected))
+                            val whole=fullRange?.total?:expected?.plus(offset)
+                            if(whole!=null && whole>0L)
+                                progress((((offset+written)*95L)/whole)
                                     .toInt().coerceIn(1,95))
                         }
                         output.flush()
@@ -179,11 +199,18 @@ internal object NativeMediaDownloader {
                 }
                 if(expected!=null && written!=expected)
                     throw IOException("Incomplete native transfer: $written of $expected bytes")
-                if(fullRange!=null && partial.length()!=fullRange.total)
-                    throw IOException("Incomplete resumed original: "+
-                        partial.length()+" of "+fullRange.total+" bytes")
+                if(fullRange!=null && partial.length()!=fullRange.end+1L)
+                    throw IOException("Incomplete HTTP 206 chunk: "+
+                        partial.length()+" of "+(fullRange.end+1L)+" bytes")
                 if(partial.length()<=0L)
                     throw IOException("Native provider supplied zero original bytes")
+                if(fullRange!=null && fullRange.end<fullRange.total-1L){
+                    continuationTotal=fullRange.total
+                    continue
+                }
+                if(fullRange!=null && partial.length()!=fullRange.total)
+                    throw IOException("Incomplete original: "+
+                        partial.length()+" of "+fullRange.total+" bytes")
                 if(verifiedMp4){
                     val magic=ByteArray(12)
                     val read=partial.inputStream().use{it.read(magic)}
