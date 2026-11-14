@@ -463,8 +463,36 @@ class SyncEngine(private val context: Context) {
                 workers.shutdownNow()
             }
 
+            var officialArchiveComplete=true
+            if(SelectedAlbumScope.is4khdAlbum(meta.canonicalUrl)){
+                val expected=SelectedAlbumScope.advertisedCount(
+                    ref.title,meta.title)
+                val extracted=db.galleryMedia(meta.source,meta.stableId)
+                    .filter{record->
+                        record.url.startsWith("archive:") &&
+                        record.filename.orEmpty().matches(
+                            Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$""")) &&
+                        record.state==TransferState.COMPLETE &&
+                        files.exists(record.contentUri)
+                    }
+                if(expected==null || extracted.size!=expected){
+                    officialArchiveComplete=false
+                    progress("4KHD full-HD archive incomplete: "+
+                        extracted.size+" extracted photos, expected "+
+                        (expected?.toString()?:"publisher count unavailable"))
+                }else{
+                    // Only a verified original archive of exactly the
+                    // advertised size can displace old webpage previews.
+                    db.detachUnverifiedSelectedAlbumMedia(
+                        meta.source,meta.stableId,
+                        mediaItems.map{it.stableId}.toSet()+
+                            extracted.map{it.mediaId}.toSet())
+                    db.updateGalleryMeta(meta,expected)
+                }
+            }
             val records = db.galleryMedia(meta.source, meta.stableId)
-            val diskComplete = records.isNotEmpty() &&
+            val diskComplete = officialArchiveComplete &&
+                records.isNotEmpty() &&
                 records.size >= mediaItems.size &&
                 records.all {
                     it.state == TransferState.SKIPPED ||
