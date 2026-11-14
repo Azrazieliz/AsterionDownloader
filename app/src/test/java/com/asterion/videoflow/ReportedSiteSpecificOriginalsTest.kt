@@ -60,6 +60,19 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(html,page),page).map{it.url})
     }
 
+    @Test fun fullPornerSelectedPlayerFindsExtensionlessOriginalButNotRecommendation(){
+        val selected="https://fullporner.com/watch/6af84d762f7835591446cc91"
+        val player="https://fullporner.com/player/9509933/14"
+        val exact="https://xiaoshenke.net/vid/339123456789000"
+        val html="""<video id="flvv"><source type="video/mp4" src="$exact"></video>
+             <aside class="related"><video><source type="video/mp4"
+               src="https://xiaoshenke.net/vid/other567890"></video></aside>"""
+        assertEquals(listOf(exact),SiteSpecificOriginalSources.fullPornerSelectedPlayer(
+            Jsoup.parse(html,player),selected,player).map{it.url})
+        assertTrue(SiteSpecificOriginalSources.fullPornerSelectedPlayer(
+            Jsoup.parse(html,player),"https://fullporner.com/",player).isEmpty())
+    }
+
     @Test fun fullPornerVerifiedOriginalHasNoMp4ExtensionButActualMediaBytes() {
         val selected="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
         val player="https://fullporner.com/player/9509933/14"
