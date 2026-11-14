@@ -86,7 +86,7 @@ class SourceIndexDb(context:Context):
      * indexed entries, selection flags, progress or saved pagination cursors.
      */
     fun migrateArea(url:String,area:String){
-        require(area in setOf("ADULT","HENTAI","COSPLAY","VIDEOS"))
+        require(area in setOf("ADULT","HENTAI","COSPLAY","VIDEOS","GAMES","TORRENTS"))
         val db=writableDatabase
         db.beginTransactionNonExclusive()
         try{
@@ -826,15 +826,26 @@ object SourceIndex {
                         site.host in AlohaSources.alreadyIntegratedHosts)
                         "native" else "generic")
                 if(ownsFeed)db.setAdapter(site.url,"native")
-                // Existing installations saved OneJAV under ADULT, but it
-                // is a native video torrent source, never a streaming site.
-                if(site.host=="onejav.com")db.migrateArea(site.url,"VIDEOS")
+                // Preserve old selected torrent records, pagination and
+                // include/exclude flags when migrating all three torrent
+                // publishers out of Porn, Videos and Games into Torrents.
+                if(ownsFeed)db.migrateArea(site.url,"TORRENTS")
                 // The Kiutaku homepage is a website-level collection; it is
                 // not a /tag/<id> native entity. Keep existing tag entities in
                 // GalleryDb but migrate only this root record to generic.
                 if(site.host=="kiutaku.com")db.setAdapter(site.url,"generic")
                 if(site.host in setOf("archivebate.com","notfans.com"))
                     db.migrateArea(site.url,"ADULT")
+            }
+            // Historical custom records may use www, mobile or language
+            // variants. Keep their identities and progress while assigning
+            // every torrent publisher to the same native module.
+            for(record in db.sources()) {
+                if(SiteControls.key(record.url) in setOf(
+                        "xxxclub.to","onejav.com","sukebei.nyaa.si")) {
+                    db.migrateArea(record.url,"TORRENTS")
+                    db.setAdapter(record.url,"native")
+                }
             }
             for((name,url,area) in extra)db.add(url,name,area,
                 if(name in setOf("KoikatsuCards","Pawchive","Kemono","Coomer"))"native" else "generic")
@@ -857,12 +868,18 @@ object SourceIndex {
                     })"HENTAI" else "ADULT"
                     "BOOKS"->"BOOKS"
                     "COMICS"->"COMICS"
-                    "TORRENTS"->"GAMES"
+                    "TORRENTS"->"TORRENTS"
                     "ASSETS"->"ASSETS"
                     else->"CREATORS"
                 }
-                db.add(url,URI(url).host.orEmpty(),area,
-                    if(type in setOf("PIXIV","X","COSPLAY","VIDEO") ||
+                val publisherHost=SiteControls.key(url)
+                val actualArea=if(publisherHost in setOf(
+                        "xxxclub.to","onejav.com","sukebei.nyaa.si"))
+                    "TORRENTS" else area
+                db.add(url,URI(url).host.orEmpty(),actualArea,
+                    if(publisherHost in setOf("xxxclub.to","onejav.com",
+                            "sukebei.nyaa.si") ||
+                        type in setOf("PIXIV","X","COSPLAY","VIDEO") ||
                         (type=="BOOKS" && NovelEpubParser.supportedSeries(url)))
                         "native" else "generic")
             }
