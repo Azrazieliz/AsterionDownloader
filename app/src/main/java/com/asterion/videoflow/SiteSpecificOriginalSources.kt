@@ -143,6 +143,28 @@ internal object SiteSpecificOriginalSources {
         }
         return Jsoup.parse(response.body(),link)
     }
+    /** FullPorner serves original MP4 files at /vid/<id> without an .mp4
+     * suffix. Unlike general mediaElements(), this admits ONLY files linked
+     * from the verified selected /player/ HTML5 source element.
+     */
+    internal fun fullPornerSelectedPlayer(
+        doc:Document,selected:String,playerPage:String
+    ):List<Source>{
+        if(!FullPornerOriginalSource.selectedPage(selected) ||
+            !FullPornerOriginalSource.selectedPlayer(playerPage))return emptyList()
+        val out=LinkedHashMap<String,Source>()
+        for(node in doc.select("video#flvv source[src],video#flvv[src],"+
+            "#player video source[src],#player source[type^=video][src]").take(12)){
+            if(node.closest("aside,.related,.recommendations,.ads,.sidebar")!=null)
+                continue
+            val raw=node.attr("src")
+            val link=https(raw,playerPage)?:continue
+            if(FullPornerOriginalSource.verifiedMedia(selected,playerPage,link))
+                out.putIfAbsent(link,Source(link,playerPage))
+        }
+        return out.values.toList()
+    }
+
     private fun fromPlayer(context:Context,doc:Document,selected:String,
                            owner:String):List<Source>{
         // A publisher may insert its selected iframe only after the watch
@@ -184,6 +206,10 @@ internal object SiteSpecificOriginalSources {
                     playerPage=child
                 }
             }
+        }
+        if(owner=="fullporner.com"){
+            val originals=fullPornerSelectedPlayer(player,selected,playerPage)
+            if(originals.isNotEmpty())return originals
         }
         val selectedMedia=(mediaElements(player,playerPage,
             "video[src],video source[src],source[type^=video][src],"+
