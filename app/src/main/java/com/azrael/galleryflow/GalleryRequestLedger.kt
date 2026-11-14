@@ -28,7 +28,7 @@ internal object GalleryRequestLedger {
             .getString(KEY,null)?:return mutableListOf()
         return runCatching{
             val list=JSONArray(raw)
-            buildList{
+            buildList<Request>{
                 for(i in 0 until list.length()){
                     val value=list.optJSONObject(i)?:continue
                     val mode=runCatching{SyncMode.valueOf(value.optString("mode"))}
