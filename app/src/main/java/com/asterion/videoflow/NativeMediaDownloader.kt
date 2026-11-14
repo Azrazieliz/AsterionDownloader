@@ -58,7 +58,7 @@ internal object NativeMediaDownloader {
     /** Accept a contiguous response chunk, including a server-limited 206.
      * Publication still requires every byte through total-1. */
     internal fun contiguousRange(value:String,offset:Long):FullRange? {
-        val match=Regex("""bytes\\s+([0-9]+)-([0-9]+)/([0-9]+)""",
+        val match=Regex("""bytes\s+([0-9]+)-([0-9]+)/([0-9]+)""",
             RegexOption.IGNORE_CASE).matchEntire(value.trim())?:return null
         val start=match.groupValues[1].toLongOrNull()?:return null
         val end=match.groupValues[2].toLongOrNull()?:return null
