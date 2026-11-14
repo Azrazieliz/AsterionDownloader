@@ -132,6 +132,13 @@ class ReportedSiteSpecificOriginalsTest {
             assertEquals(listOf(video),
                 SiteSpecificOriginalSources.selectedStatic(
                     Jsoup.parse(full,page),page,host).map{it.url})
+            // Dynamic players can expose currentSrc before metadata supplies
+            // duration; do not discard a real source merely because it is 0.
+            val unmeasured=short.replace("data-duration=\"25\"",
+                "data-duration=\"0\"")
+            assertEquals(listOf(video),
+                SiteSpecificOriginalSources.selectedStatic(
+                    Jsoup.parse(unmeasured,page),page,host).map{it.url})
         }
     }
     @Test fun onlyHentaiWorkingPathRemainsOutsideNewResolver(){
