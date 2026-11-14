@@ -83,8 +83,8 @@ object UnifiedDownloadsUi {
         appendLine("Device: "+android.os.Build.MODEL+" / Android "+android.os.Build.VERSION.RELEASE)
         appendLine("Fields: local ID, source host, state, progress, transfer stage, verified bytes, sanitized failure")
         val credentials=Regex(
-            """(?i)(?:cookie|authorization|bearer|token|password|signature|apikey|api_key)\\s*[:=]\\s*[^\\s;,]+""")
-        val urls=Regex("""(?i)https?://[^\\s'"<>]+""")
+            """(?i)(?:cookie|authorization|bearer|token|password|signature|apikey|api_key)\s*[:=]\s*[^\s;,]+""")
+        val urls=Regex("""(?i)https?://[^\s'"<>]+""")
         VideoDb(a).use{db->
             for(tab in listOf("Active","Failed","Held","Queued","Paused","Saved")){
                 val entries=db.listVideosForTab(tab,80)
@@ -95,7 +95,7 @@ object UnifiedDownloadsUi {
                     val transfer=VideoTransferJournal.current(a,item.id)
                     val message=item.error.orEmpty().replace(urls,"[url]")
                         .replace(credentials,"[redacted]")
-                        .replace(Regex("""[\\r\\n\\t]+""")," ").take(250)
+                        .replace(Regex("""[\r\n\t]+""")," ").take(250)
                     append("id=").append(item.id).append(" host=").append(host)
                         .append(" state=").append(item.status)
                         .append(" progress=").append(item.progress)
