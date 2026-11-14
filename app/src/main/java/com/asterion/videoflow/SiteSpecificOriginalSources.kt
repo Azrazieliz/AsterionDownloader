@@ -195,15 +195,22 @@ internal object SiteSpecificOriginalSources {
         }
         return out.values.toList()
     }
-    /** Actual MP4Hentai posts: /YYYY/MM/slug/ selected article. */
+    /**
+     * MP4Hentai is a VIDEO publisher. Its /YYYY/MM/<title> URL is only the
+     * selected playback page. Extract the actual media from that selected
+     * video's player; never download page HTML or unrelated article anchors.
+     */
     private fun mp4hentai(doc:Document,selected:String):List<Source>{
-        if(!Regex("""^/20[0-9]{2}/(?:0[1-9]|1[0-2])/.+/?$""")
+        if(!Regex("""^/20[0-9]{2}/(?:0[1-9]|1[0-2])/[^?#]{3,300}/?$""")
                 .matches(URI(selected).path.orEmpty()))return emptyList()
-        return doc.select("article .entry-content a[href],.post-content a[href],"+
-            "article a[download]").take(200)
-            .mapNotNull{https(it.attr("href"),selected)}
-            .filter{isMedia(it)}
-            .distinct().map{Source(it,selected)}
+        val player=mediaElements(doc,selected,
+            "article video[src],article video source[src],"+
+            ".entry-content video[src],.entry-content video source[src],"+
+            "#player video[src],#player source[src],"+
+            "meta[itemprop=contentUrl][content]")
+        // A public first-party player may publish an exact media assignment.
+        // No file in an unrelated recommendation/sidebar is an original.
+        return (player+jsSources(doc,selected)).distinctBy{it.url}
     }
     private fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
         val css=when(owner){
