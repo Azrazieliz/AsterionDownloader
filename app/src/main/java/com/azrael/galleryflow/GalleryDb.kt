@@ -442,6 +442,40 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
         "source=? AND media_id=?", arrayOf(source.wireName, mediaId), "1"
     ).firstOrNull()
 
+    /**
+     * When a publisher's declared album count and scoped image list agree,
+     * older whole-page scraping can still leave other sets in this gallery.
+     * Detach those rows from the selected album; never delete owner files or
+     * invent successful originals. They remain in the DB for audit/recovery.
+     */
+    fun detachUnverifiedSelectedAlbumMedia(
+        source:SourceId,galleryId:String,verifiedMediaIds:Set<String>
+    ):Int {
+        require(verifiedMediaIds.isNotEmpty()){"No authoritative original list"}
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            val stale=ArrayList<String>()
+            db.rawQuery(
+                "SELECT media_id FROM media WHERE source=? AND gallery_id=?",
+                arrayOf(source.wireName,galleryId)
+            ).use{cursor->
+                while(cursor.moveToNext()){
+                    val id=cursor.getString(0)
+                    if(id !in verifiedMediaIds)stale+=id
+                }
+            }
+            val reviewId="unverified:"+galleryId
+            for(id in stale){
+                db.execSQL("UPDATE media SET gallery_id=?,state='skipped' "+
+                    "WHERE source=? AND gallery_id=? AND media_id=?",
+                    arrayOf(reviewId,source.wireName,galleryId,id))
+            }
+            db.setTransactionSuccessful()
+            return stale.size
+        }finally{db.endTransaction()}
+    }
+
     fun galleryMedia(source: SourceId, galleryId: String): List<MediaRecord> = queryMedia(
         "source=? AND gallery_id=?", arrayOf(source.wireName, galleryId), null, "media_index ASC"
     )
