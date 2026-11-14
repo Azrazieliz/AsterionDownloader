@@ -97,9 +97,16 @@ class SyncEngine(private val context: Context) {
                 // A first manual check gets the newest ONE album rather than
                 // silently creating a cursor and downloading nothing. Backfill
                 // remains the separate action for the complete site history.
-                val galleries = if(targeted && entity.liveCursor.isNullOrBlank())
+                val galleries = if(entity.liveCursor.isNullOrBlank())
+                    // Never crawl a thousand historical pages merely to
+                    // establish the baseline, whether automatic or manual.
                     adapter.enumerateGalleries(entity.toSourceEntity()).take(1).toList()
-                else adapter.enumerateGalleries(entity.toSourceEntity()).toList()
+                else adapter.enumerateGalleries(entity.toSourceEntity())
+                    .takeWhile{it.stableId!=entity.liveCursor}
+                    .take(101).toList()
+                if(galleries.size>100)throw AdapterException(
+                    "More than 100 new galleries or an expired cursor; use BACKFILL "+
+                    "to reconcile history without an unbounded CHECK NEW scan.")
                 val newest = galleries.firstOrNull()?.stableId
                 if (entity.liveCursor.isNullOrBlank()) {
                     if(targeted && galleries.isNotEmpty()){
@@ -178,8 +185,10 @@ class SyncEngine(private val context: Context) {
             try {
                 val pages = adapter.enumerateGalleries(entity.toSourceEntity())
                 var failedCount = 0
+                val attemptedGalleries=hashSetOf<String>()
                 // Retry a bounded batch of historical failures, then continue onward.
                 for (retry in db.pendingRetries(entity)) {
+                    if(!attemptedGalleries.add(retry.stableId))continue
                     if (!SyncControl.checkpoint()) return
                     if(!targeted &&
                         !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
@@ -194,6 +203,7 @@ class SyncEngine(private val context: Context) {
                     }
                 }
                 for (gallery in pages) {
+                    if(!attemptedGalleries.add(gallery.stableId))continue
                     if (!SyncControl.checkpoint()) return
                     if(!targeted &&
                         !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
