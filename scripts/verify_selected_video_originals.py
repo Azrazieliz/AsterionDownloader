@@ -18,6 +18,7 @@ CASES={
     "roshy":("https://roshy.tv/category/decensored-6/","k2s.cc"),
     "mp4hentai":("https://mp4hentai.com/","video"),
     "helloporn":("https://helloporn.com/","video"),
+    "helloporn_selected":("https://helloporn.com/video-28699-fakedrivingschool-naughty-student-late-for-her-exam-j","player"),
 }
 class Page(HTMLParser):
     def __init__(self):
