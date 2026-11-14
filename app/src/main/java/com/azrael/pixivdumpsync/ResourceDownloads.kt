@@ -245,12 +245,15 @@ object ResourceDownloads {
             note(a,"This exact original is already queued or recorded · Downloads")
             return
         }
+        var acceptedId=0L
+        var downloadManager:DownloadManager?=null
         try{
             val uri=URI(url)
             val file=(filename?:uri.path.orEmpty().substringAfterLast('/').ifBlank{"download"})
                 .replace(Regex("[^A-Za-z0-9._-]"),"_").take(100)
             require(folder!="Books" || file.endsWith(".epub",true)){"Books only accepts EPUB files"}
             val d=a.getSystemService(DownloadManager::class.java)
+            downloadManager=d
             val request=DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(file)
                 setDescription("Asterion $folder")
@@ -263,11 +266,22 @@ object ResourceDownloads {
                     privacyReferer(url,referer)?.let{addRequestHeader("Referer",it)}
             }
             val id=d.enqueue(request)
+            acceptedId=id
             CrossSourceDedup(a).use{it.attach(url,id)}
             DirectDownloadTracker.record(a,id,file,folder,url)
             DirectDownloadRetry.remember(a,id,url,folder,file,referer)
             note(a,"Download queued: Downloads/AsterionDownloader/$folder")
         }catch(t:Exception){
+            // A DownloadManager ID is not committed until its encrypted retry
+            // metadata, visible row, and dedup claim are all retained. Never
+            // strand an untracked OS download if any of those writes fail.
+            if(acceptedId>0L){
+                runCatching{downloadManager?.remove(acceptedId)}
+                runCatching{DirectDownloadTracker.forget(a,acceptedId)}
+                runCatching{DirectRetryVault.remove(a,acceptedId)}
+                runCatching{OriginalReceiptState.clear(a,acceptedId)}
+                runCatching{CrossSourceDedup(a).use{it.releaseById(acceptedId)}}
+            }
             runCatching{CrossSourceDedup(a).use{it.release(url)}}
             note(a,"Download rejected: "+t.message)
         }
