@@ -128,7 +128,11 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
                     }
                 }
             }
-            AlohaArea.ADULT->if(site.host=="onejav.com"){
+            AlohaArea.ADULT->if(site.host=="xxxclub.to"){
+                val started=TorrentSourceBackfill.startSite(a.applicationContext,"XXXCLUB")
+                status.text=if(started)"XXXClub original torrent feed scanning"
+                    else "XXXClub torrent check already running or paused"
+            }else if(site.host=="onejav.com"){
                 browse(a,site)
                 status.text="OneJAV is a torrent source: select original torrent/magnet files. The torrent handler does not treat listings as MP4."
             }else{
