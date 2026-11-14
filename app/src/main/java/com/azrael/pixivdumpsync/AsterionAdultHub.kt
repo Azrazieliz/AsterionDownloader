@@ -35,24 +35,13 @@ object AsterionAdultHub {
         for(site in existing){
             val host=SiteControls.key(site.url)
             if(host.isNotBlank() && host !in results &&
+                host !in setOf("xxxclub.to","onejav.com","sukebei.nyaa.si") &&
                 !ProviderRetirement.isRetired(site.url))
                 results[host]=Site(site.name,site.url,site)
         }
         return results.values.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER){it.name})
     }
     private fun sourceState(a:Activity,site:Site):String{
-        if(site.host=="onejav.com"){
-            val status=TorrentFeedDb(a).use{
-                it.status().firstOrNull{entry->entry.source=="ONEJAV"}
-            }
-            return when{
-                TorrentSourceBackfill.isRunning("ONEJAV")->"Checking torrent catalog"
-                status?.error?.isNotBlank()==true->"Torrent source unavailable"
-                (status?.count?:0)>0->"Indexed ${status!!.count} torrent entries"
-                (status?.lastCheck?:0L)>0L->"Checked · no accessible torrents"
-                else->"Torrent source not checked"
-            }
-        }
         val running=SiteRunControl.status(a,site.url)
         if(running.state=="RUNNING")return "Backfilling"
         if(running.state=="STOPPING")return "Stopping"
@@ -68,9 +57,6 @@ object AsterionAdultHub {
         return if(s.discovered>0)"Indexed "+s.discovered else "Checked · no items"
     }
     private fun error(site:Site,a:Activity):String?{
-        if(site.host=="onejav.com")return TorrentFeedDb(a).use{
-            it.status().firstOrNull{row->row.source=="ONEJAV"}?.error
-        }
         val r=SiteRunControl.status(a,site.url)
         if(r.state=="ERROR")return r.message
         return site.source?.error ?:
@@ -251,8 +237,7 @@ object AsterionAdultHub {
             val known=media.map{SearchRanking.canonicalKey(it.url)}.toSet()
             val searches=searchBySite[site.host].orEmpty()
                 .filterNot{SearchRanking.canonicalKey(it.url) in known}
-            val public=if(site.host=="onejav.com")emptyList()
-                else publicBySite[site.host].orEmpty()
+            val public=publicBySite[site.host].orEmpty()
                 .filterNot{entry->
                     media.any{it.url==entry.url} ||
                         searches.any{it.url==entry.url}
@@ -384,15 +369,12 @@ object AsterionAdultHub {
                 12f,ui.secondary),ui.lp(a,5))
             if(media.isEmpty() && searches.isEmpty() && public.isEmpty()){
                 card.addView(ui.text(a,
-                    if(site.host=="onejav.com")
-                        "OneJAV is a torrent feed, not a video gallery. CHECK NEW "+
-                        "fetches its native torrent listing."
-                    else "No accessible previews for this site yet. CHECK NEW retries"+
+                    "No accessible previews for this site yet. CHECK NEW retries"+
                         " this source only; login may be required.",
                     12f,ui.secondary),ui.lp(a,5))
             }
             val sync=Switch(a).apply{
-                text=if(site.host=="onejav.com")"Sync new torrents" else "Sync new videos"
+                text="Sync new videos"
                 textSize=14f;setTextColor(ui.white)
                 isChecked=SiteControls.sync(a,site.url,site.source?.enabled?:false)
                 contentDescription="Sync new videos from "+site.name
@@ -406,15 +388,10 @@ object AsterionAdultHub {
                                 it.add(address,site.name,area,site.source?.adapter?:"native")
                                 it.enable(address,true)
                             }
-                            if(site.host!="onejav.com")
-                                VideoDb(app).use{it.addWatch(address,site.name)}
+                            VideoDb(app).use{it.addWatch(address,site.name)}
                         }
                         SiteControls.applyToEngines(app,site.url)
-                        if(enabled){
-                            if(site.host=="onejav.com")
-                                TorrentSourceBackfill.startSite(app,"ONEJAV")
-                            else VideoEngine.launch(app,true)
-                        }
+                        if(enabled)VideoEngine.launch(app,true)
                     }
                 }
             }
@@ -443,7 +420,7 @@ object AsterionAdultHub {
                             // A site shown in the approved catalog must have
                             // a real source record before Backfill is offered.
                             db.add(site.url,site.name,area,
-                                if(site.host=="onejav.com")"native" else "generic")
+                                "generic")
                             db.sources().firstOrNull{it.url==site.url}
                         }
                         if(src?.adapter=="native")
