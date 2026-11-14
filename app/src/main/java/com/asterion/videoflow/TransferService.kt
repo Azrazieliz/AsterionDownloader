@@ -527,9 +527,10 @@ object VideoEngine {
             // Direct, browser-accessible media uses the Kotlin/Android HTTP
             // streaming lane. No Python startup, extractor wrapper or shell.
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
+            // Android's system VPN is honored by the native HTTPS client.
+            // Never depend on the removed legacy Tor/hidden-mode flag.
             val native=NativeMediaDownloader.isNativeEligible(
-                item.url,link,verifiedFirstPartyMp4) &&
-                (!hidden || proxy!=null)
+                item.url,link,verifiedFirstPartyMp4)
             val future=(if(native)nativeExecutor else transferExecutor).submit<Int>{
                 if(native) {
                     val sameHost=runCatching{
