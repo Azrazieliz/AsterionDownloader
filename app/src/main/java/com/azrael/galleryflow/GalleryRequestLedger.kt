@@ -56,7 +56,7 @@ internal object GalleryRequestLedger {
         }
     }
 
-    fun pending(context:Context):List<Request>=synchronized(lock){
+    fun pending(context:Context):List<Request> = synchronized(lock){
         read(context).toList()
     }
 
