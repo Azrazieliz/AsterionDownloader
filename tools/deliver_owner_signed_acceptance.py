@@ -43,17 +43,7 @@ def main() -> None:
     if len(commit) != 40:
         raise RuntimeError("Source commit does not match a full Git SHA")
     filename = f"Asterion-Downloader-v1.3.60-{commit[:8]}-Owner-Signed-Acceptance.apk"
-    destination = Path(r"D:\AsterionControlRelease\builds") / filename
-    destination.parent.mkdir(parents=True, exist_ok=True)
     source_digest = sha256(original)
-    if destination.is_file():
-        if sha256(destination) != source_digest:
-            raise RuntimeError("Distinct APK already exists under final name")
-    else:
-        shutil.copy2(original, destination)
-    if sha256(destination) != source_digest:
-        raise RuntimeError("Staged APK digest differs from the built APK")
-
     token_path = (Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) /
                   "AsterionControl" / "control-token.txt")
     token = token_path.read_text("utf-8").strip()
@@ -63,6 +53,34 @@ def main() -> None:
     # Disable ambient HTTP proxies; this is the paired private Control host.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     auth = {"Authorization": "Bearer " + token}
+    # The Control server enforces configured file roots. The old hardcoded
+    # D:/AsterionControlRelease/builds staging path returned HTTP 403:
+    # "Path outside configured roots". Use the currently advertised owner
+    # root and remove our temporary copy after a verified Samsung receipt.
+    health_req = urllib.request.Request(
+        args.control + "/api/v1/health", method="GET", headers=auth)
+    with opener.open(health_req,timeout=12) as res:
+        health = json.load(res)
+    if not health.get("ok"):
+        raise RuntimeError("Authenticated Control health is unavailable")
+    control_root = Path(str(health.get("root","")))
+    if not control_root.is_dir():
+        raise RuntimeError("Control did not advertise a usable configured root")
+    destination = control_root / "Downloads" / "Asterion Control" / filename
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    headroom = shutil.disk_usage(destination.parent).free
+    if (not destination.exists() and
+            headroom < original.stat().st_size + 60 * 1024 * 1024):
+        raise RuntimeError("PC system drive too full for temporary native transfer")
+    created = False
+    if destination.is_file():
+        if sha256(destination) != source_digest:
+            raise RuntimeError("Allowed-root destination already holds different APK")
+    else:
+        shutil.copy2(original,destination)
+        created = True
+    if sha256(destination) != source_digest:
+        raise RuntimeError("Allowed-root staged APK digest mismatch")
     payload = json.dumps({"pc_path": str(destination), "name": filename}).encode("utf-8")
     request = urllib.request.Request(
         args.control + "/api/v1/phone/transfers",
@@ -112,6 +130,11 @@ def main() -> None:
         "target": "paired_owner_phone",
         "user_install_approval_required": True
     }, indent=2))
+    if created:
+        # Only the exact temp APK created by THIS run may be removed.
+        # The signed source and GitHub release asset remain untouched.
+        if sha256(destination) == source_digest:
+            destination.unlink()
 
 
 if __name__ == "__main__":
