@@ -111,7 +111,11 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             if (photoLinks.size > MAX_PHOTO_PAGES)
                 throw AdapterException("Album has more than $MAX_PHOTO_PAGES photo pages; " +
                     "a source-specific adapter is needed for complete backfill.")
-            for (image in AlbumImageExtractor.directImages(doc)) {
+            // Selected galleries on these approved sites use their own
+            // full-image selectors, never the generic site-thumbnail list.
+            val originals=GallerySiteOriginalExtractors.originals(doc,url)
+                ?:AlbumImageExtractor.directImages(doc)
+            for (image in originals) {
                 inlineImages.putIfAbsent(image.url, image)
             }
             next = nextListingPage(doc, current, visitedAlbumPages)
@@ -121,7 +125,10 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 "images were not marked complete.")
 
         val images = linkedMapOf<String, AlbumImageExtractor.Item>()
-        if (photoLinks.isNotEmpty()) {
+        if (GallerySiteOriginalExtractors.isSpecial(url) &&
+            inlineImages.isNotEmpty()) {
+            images.putAll(inlineImages)
+        } else if (photoLinks.isNotEmpty()) {
             // Photo detail pages frequently expose the original that the album
             // listing deliberately hides behind a small preview.
             for ((n, link) in photoLinks.withIndex()) {
