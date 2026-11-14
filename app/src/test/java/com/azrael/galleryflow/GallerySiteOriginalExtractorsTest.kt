@@ -42,6 +42,19 @@ class GallerySiteOriginalExtractorsTest {
             GallerySiteOriginalExtractors.originals(doc,page)?.map{it.url})
     }
 
+    @Test fun exactPornpicsAlbumScopeBeatsGenericMainContent() {
+        val page="https://www.pornpics.com/galleries/album-7/"
+        val doc=Jsoup.parse("""
+            <main><div id="gallery">
+              <a href="https://cdn.example/album/001.jpg">Original</a>
+            </div>
+            <div class="more"><a href="https://cdn.example/other/999.jpg">
+              Other album advertised here</a></div></main>
+        """.trimIndent(),page)
+        assertEquals(listOf("https://cdn.example/album/001.jpg"),
+            GallerySiteOriginalExtractors.originals(doc,page)?.map{it.url})
+    }
+
     @Test fun pornpicsCategoryCannotBeMistakenForSelectedGallery() {
         val doc=Jsoup.parse("""
             <main><a href="https://cdn.example/photos/001.jpg">Advertised image</a></main>
