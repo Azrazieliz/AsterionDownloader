@@ -35,14 +35,16 @@ def inspect(k,url):
   print(k,type(e).__name__,str(e)[:60],flush=True);return
  parsed=T();parsed.feed(body)
  print(k,"HTTP",status,"LEN",len(body),flush=True)
- for tag,a in parsed.tags[:20]:
+ for tag,a in parsed.tags[:40]:
+  if tag not in ("iframe","video","source"):continue
   attrs={key:(urlshape(url,val) if key in ("src","href","data-src","data-file") else val[:45])
          for key,val in a.items()
          if key in ("src","href","data-src","data-file","id","class","type","allow")}
   print("  TAG",tag,attrs,flush=True)
- for script in parsed.inline[:8]:
+ for script in parsed.inline[:12]:
+  if not re.search(r"(?i)fluidPlayer|flvv|videoSrc|sources\\s*[:=]|file\\s*[:=]",script):continue
   # Only inspect player-related code shape. Print no actual URL/tokens.
-  for match in list(re.finditer(r"(?i)fluidPlayer|document\.getElementById|flvv|atob\(|btq\(|(?:file|src|source|url|video)\s*[:=]|\.mp4|\.m3u8|iframe",script))[:9]:
+  for match in list(re.finditer(r"(?i)fluidPlayer|document\.getElementById|flvv|atob\(|btq\(|(?:file|src|source|url|video)\s*[:=]|\.mp4|\.m3u8|iframe",script))[:5]:
    snippet=script[max(0,match.start()-55):min(len(script),match.end()+90)]
    snippet=re.sub(r"https?://[^\s'\"<>]+","[URL]",snippet)
    snippet=re.sub(r"[A-Za-z0-9+/_=-]{30,}","[TOKEN]",snippet)
