@@ -792,6 +792,14 @@ object VideoEngine {
             publisherResult{PublisherOriginalExtractors.resolve(context,item.url)}
         else Result.success(emptyList())
         val publishedOriginals=publisherOriginals.getOrDefault(emptyList())
+        // A previous 3DHentaiX job saved a real but UNRELATED playable video.
+        // No generic fallback is permitted for this provider. If the selected
+        // player does not identify one unambiguous source, fail instead.
+        val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
+        if(strictThreeD && publishedOriginals.size!=1)
+            throw IllegalStateException(
+                "3DHentaiX original identity unverified: selected player "+
+                "must expose exactly one attributable media source")
         val publishedPlayerInspection=if(!canInspectPublisherHtml ||
             publishedOriginals.isNotEmpty())
             Result.success(emptyList<String>()) else publisherResult {
@@ -920,6 +928,10 @@ object VideoEngine {
                     }else heldReason=checked.getOrThrow().second.reason
                 }
             }
+            if(strictThreeD && !downloaded)
+                throw (last?:IllegalStateException(
+                    "3DHentaiX selected original failed; unrelated media "+
+                    "and generic extractor fallback are prohibited"))
             val publisherReferers=publishedOriginals.associate{it.url to it.referer}
             if(!downloaded) for(candidate in (publisherReferers.keys+variants)){
                 if(VideoTransferLimits.resolvingStalled(
