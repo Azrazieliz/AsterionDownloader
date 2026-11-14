@@ -9,7 +9,7 @@ SITES={
  "eporner.com":"https://www.eporner.com/",
  "xxxi.porn":"https://xxxi.porn/",
  "helloporn.com":"https://helloporn.com/",
- "xxxclub.to":"https://xxxclub.to/",
+ "xxxclub.to":"https://xxxclub.to/torrents/browse/all/",
  "cums.net":"https://cums.net/",
  "mp4hentai.com":"https://mp4hentai.com/",
  "onlyhentaistuff.com":"https://www.onlyhentaistuff.com/",
