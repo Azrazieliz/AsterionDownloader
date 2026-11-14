@@ -9,8 +9,10 @@ class SelectedVideoRouterTest {
             "ADULT","https://javideo.net/en/fc2ppv-4994603"))
         assertTrue(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://helloporn.com/video/example"))
-        assertTrue(SelectedVideoRouter.isSelectedVideo(
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://xxxclub.to/videos/example"))
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
+            "TORRENTS","https://xxxclub.to/torrents/details/480815","video"))
         assertTrue(SelectedVideoRouter.isSelectedVideo(
             "HENTAI","https://mp4hentai.com/2026/11/example-episode/"))
     }
