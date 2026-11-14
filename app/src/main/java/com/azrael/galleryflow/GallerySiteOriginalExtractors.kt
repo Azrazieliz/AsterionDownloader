@@ -66,7 +66,7 @@ internal object GallerySiteOriginalExtractors {
                     val uri=runCatching{URI(href)}.getOrNull()?:continue
                     if(uri.scheme!="https" || uri.host.isNullOrBlank() ||
                         uri.userInfo!=null ||
-                        !Regex("""(?i)\\.(?:jpe?g|png|webp|avif)$""")
+                        !Regex("""(?i)\.(?:jpe?g|png|webp|avif)$""")
                             .containsMatchIn(uri.path.orEmpty()))continue
                     val p=uri.path.lowercase(Locale.ROOT)
                     if(listOf("/thumb/","/thumbs/","thumbnail","-thumb",
