@@ -264,6 +264,7 @@ internal object SiteSpecificOriginalSources {
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->{
                 val initial=roshy(doc,selected)
+                if(initial.any{!isHosterPage(it.url)})return initial.distinctBy{it.url}
                 // Beeteam368 may create the original player after JS loads.
                 // Inspect only that selected player; no new browser module.
                 val rendered=runCatching {
