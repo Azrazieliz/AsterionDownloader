@@ -79,4 +79,12 @@ def run(data):
 if __name__=="__main__":
     with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
         output=dict(pool.map(run,SITES.items()))
-    for k,v in output.items():print(json.dumps({k:v},ensure_ascii=True),flush=True)
+    for k,items in output.items():
+        for x in items:
+            hints=x.get("hint_counts",{})
+            print(k,"HTTP",x["status"],
+                  "routes",x["sample_routes"][:5],
+                  "videos",x["videos"],
+                  "iframes",x["iframe_host"][:3],
+                  "hints",",".join(key+":"+str(n) for key,n in hints.items() if n),
+                  flush=True)
