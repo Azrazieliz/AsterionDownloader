@@ -841,7 +841,15 @@ object VideoEngine {
                     throw java.util.concurrent.CancellationException("Video paused")
                 if(FullLengthVideoPolicy.isExplicitPreview(item.title,source.url))
                     continue
-                if(NativeMediaDownloader.isDirectMediaUrl(source.url)){
+                if(Rule34VideoOriginalSource.firstPartyDownload(
+                    item.url,source.url)){
+                    try {
+                        execute(source.url,source.referer,
+                            verifiedFirstPartyMp4=true)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                }else if(NativeMediaDownloader.isDirectMediaUrl(source.url)){
                     try {
                         execute(source.url,source.referer)
                         downloaded=true
