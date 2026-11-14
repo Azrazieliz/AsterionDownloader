@@ -22,8 +22,15 @@ internal object SiteSpecificOriginalSources {
     /** File-hosting landing pages are not MP4 media even if their title
      * ends in .mp4. Their provider must resolve them separately.
      */
-    internal fun isHosterPage(link:String):Boolean =
-        host(link) in setOf("k2s.cc","nitroflare.com","uploadgig.com")
+    internal fun isHosterPage(link:String):Boolean {
+        val path=runCatching{URI(link).path.orEmpty()}.getOrDefault("")
+        return when(host(link)){
+            "k2s.cc"->path.startsWith("/file/")
+            "nitroflare.com"->path.startsWith("/view/")
+            "uploadgig.com"->path.startsWith("/file/download/")
+            else->false
+        }
+    }
     private fun https(raw:String,base:String):String? {
         if(raw.isBlank() || listOf("blob:","javascript:","data:").any{
             raw.startsWith(it,true)})return null
