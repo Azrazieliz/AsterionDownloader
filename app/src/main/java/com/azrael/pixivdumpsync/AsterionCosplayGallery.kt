@@ -246,6 +246,17 @@ object AsterionCosplayGallery {
                 if(!AppPower.enabled(a)){
                     toast(a,"Resume the application first")
                 }else{
+                    // Catalog preview refresh alone downloaded no albums.
+                    // These two publishers now run a manual, targeted
+                    // original-album check in addition to cover discovery.
+                    if(site.host in setOf("kiutaku.com","pornpics.com")){
+                        thread(name="asterion-cosplay-new-originals"){
+                            val message=runCatching{
+                                ApprovedCosplayActions.checkNew(a,site.url)
+                            }.getOrElse{it.message?:"Original album check failed"}
+                            toast(a,message)
+                        }
+                    }
                     SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
                         a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
                     }
