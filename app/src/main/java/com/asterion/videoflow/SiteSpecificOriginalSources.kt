@@ -47,6 +47,11 @@ internal object SiteSpecificOriginalSources {
                               minimumRuntime:Boolean=false):List<Source> {
         val found=LinkedHashMap<String,Source>()
         for(element in doc.select(css).take(30)) {
+            // A publisher player may contain a sidebar/advertisement video.
+            // Those are never the selected original, even inside the same
+            // .video-player wrapper.
+            if(element.closest("aside,.related,.recommendations,.ads,"+
+                    ".advertisement,.banner,.sidebar,[data-ad]")!=null)continue
             val raw=element.attr("src").ifBlank{element.attr("data-src")}
                 .ifBlank{element.attr("content")}
             val link=https(raw,doc.location())?:continue
