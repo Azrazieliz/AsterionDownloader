@@ -162,7 +162,9 @@ internal object SiteSpecificOriginalSources {
             if(FullPornerOriginalSource.verifiedMedia(selected,playerPage,link))
                 out.putIfAbsent(link,Source(link,playerPage))
         }
-        return out.values.toList()
+        val scriptQualities=FullPornerOriginalSource.publishedQualities(
+            selected,playerPage,doc.outerHtml()).map{Source(it,playerPage)}
+        return (scriptQualities+out.values).distinctBy{it.url}
     }
 
     private fun fromPlayer(context:Context,doc:Document,selected:String,
