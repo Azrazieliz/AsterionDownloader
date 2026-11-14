@@ -849,7 +849,7 @@ object VideoEngine {
                     }catch(t:Exception){last=t}
                 }else if(runCatching{
                     java.net.URI(source.url).path.orEmpty().matches(
-                        Regex("""(?i)^.*\\.(?:m3u8|mpd)$"""))
+                        Regex("""(?i)^.*\.(?:m3u8|mpd)$"""))
                 }.getOrDefault(false)){
                     // A published HLS/DASH manifest is itself an exact
                     // selected stream. The retained transfer engine handles
