@@ -3,7 +3,7 @@
 Only published selected-page/player routes. Media checks request 256 bytes
 with HTTP Range and reject HTML/gateways; no cookie or DRM bypass.
 """
-import concurrent.futures, importlib.util, re, urllib.error, urllib.parse, urllib.request
+import concurrent.futures, importlib.util, re, sys, urllib.error, urllib.parse, urllib.request
 from html.parser import HTMLParser
 
 CASES={
@@ -98,6 +98,7 @@ def probe_case(item):
 if __name__=="__main__":
     print("python_yt_dlp_installed",bool(importlib.util.find_spec("yt_dlp")),flush=True)
     print("python_requests_installed",bool(importlib.util.find_spec("requests")),flush=True)
+    chosen=[item for item in CASES.items() if len(sys.argv)==1 or item[0] in sys.argv[1:]]
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-        for result in executor.map(probe_case,CASES.items()):
+        for result in executor.map(probe_case,chosen):
             print(result,flush=True)
