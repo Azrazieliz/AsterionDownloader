@@ -13,7 +13,8 @@ param(
     [Parameter(Mandatory=$true)][string]$ReleaseRoot,
     [Parameter(Mandatory=$true)][string]$RelativeFile,
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
-    [string]$ReceiptDirectory = ''
+    [string]$ReceiptDirectory = '',
+    [switch]$KeepQuarantine
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -120,5 +121,18 @@ if (-not [string]::IsNullOrWhiteSpace($ReceiptDirectory)) {
     $file=[IO.Path]::Combine($outputRoot,$before+'.scan.json')
     [IO.File]::WriteAllText($file,($receipt|ConvertTo-Json -Depth 5),
         [Text.Encoding]::UTF8)
+}
+# Explicit successful scanner verdict and byte-identical published copy:
+# clean-up is now safe. No indefinitely accumulating duplicate quarantine
+# file. A scan error leaves ALL originals where they were.
+if (-not $KeepQuarantine) {
+    $confirmed=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($confirmed -ne $before) { throw 'Release hash changed before quarantine cleanup' }
+    Remove-Item -LiteralPath $source -Force
+    $receipt['quarantine_removed']=(-not (Test-Path -LiteralPath $source))
+    if (-not [string]::IsNullOrWhiteSpace($ReceiptDirectory)) {
+        [IO.File]::WriteAllText($file,($receipt|ConvertTo-Json -Depth 5),
+            [Text.Encoding]::UTF8)
+    }
 }
 Write-Output ($receipt|ConvertTo-Json -Depth 5 -Compress)
