@@ -42,7 +42,17 @@ try {
             throw 'Working tree does not point to a known GitHub commit'
         }
         Write-Output ('SOURCE_COMMIT=' + $head)
-        & (Join-Path $Project 'gradlew.bat') --no-daemon :app:assembleAcceptance
+        $gradleCmd = Join-Path $Project 'gradlew.bat'
+        if (!(Test-Path $gradleCmd)) {
+            # The canonical Windows checkout intentionally has no Gradle
+            # wrapper batch file. Reuse the already-installed local Gradle
+            # 8.13 distribution from the owner's existing Android builds.
+            $homeDist = Join-Path $env:USERPROFILE '.gradle\wrapper\dists\gradle-8.13-bin'
+            $gradleCmd = (Get-ChildItem $homeDist -Filter 'gradle.bat' -File
+                -Recurse -ErrorAction Stop | Select-Object -First 1).FullName
+        }
+        if (!(Test-Path $gradleCmd)) { throw 'Retained Gradle 8.13 executable missing' }
+        & $gradleCmd --no-daemon :app:assembleAcceptance
         if ($LASTEXITCODE -ne 0) { throw ('Gradle acceptance build failed with exit ' + $LASTEXITCODE) }
         $apk = Join-Path $Project 'app\build\outputs\apk\acceptance\app-acceptance.apk'
         if (!(Test-Path $apk)) { throw 'Acceptance APK output missing' }
