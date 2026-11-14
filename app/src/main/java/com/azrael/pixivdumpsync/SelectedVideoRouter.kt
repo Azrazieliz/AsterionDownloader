@@ -12,13 +12,12 @@ internal object SelectedVideoRouter {
     fun isSelectedVideo(area:String,url:String,kind:String?=null):Boolean {
         val validArea=area.uppercase() in setOf(
             "ADULT","HENTAI","VIDEOS","VIDEO","PORN")
-        if(!SourceIndexParser.safe(url))return false
+        if(!SourceIndexParser.safe(url) || !validArea)return false
         // Legacy indexed rows may be labeled adult/hentai rather than video.
         // First-party selected-page recognition is stronger than the old
-        // SourceIndex area/kind and must route to the video module.
-        if(VideoSiteProfiles.isVideoPage(url) &&
-            (validArea || kind.equals("video",true)))return true
-        if(!validArea || kind?.lowercase() !in setOf(
+        // SourceIndex kind, but NEVER overrides a different content module.
+        if(VideoSiteProfiles.isVideoPage(url))return true
+        if(kind?.lowercase() !in setOf(
                 "video","adult","hentai"))return false
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         val path=uri.path.orEmpty().trim('/')
