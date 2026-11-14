@@ -135,6 +135,8 @@ object VideoEngine {
              targetHost:String?=null) {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
         if(!busy.compareAndSet(false,true)) return
+        val nativeOnly=android.app.Application.getProcessName()
+            .orEmpty().endsWith(":videoflow_secondary")
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         try {
             val db=VideoDb(context)
@@ -154,7 +156,7 @@ object VideoEngine {
                 while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                       !Thread.currentThread().isInterrupted && transferred<maxItems &&
                       android.os.SystemClock.elapsedRealtime()<deadline) {
-                val next=db.claimNext() ?: break
+                val next=db.claimNext(nativeOnly=nativeOnly) ?: break
                 transferred++
                 onStatus("Downloading ${next.title}")
                 // Atomic claim was already persisted by VideoDb; repeating a
@@ -204,11 +206,17 @@ object VideoEngine {
                         onStatus("Transfer claim released: "+next.title)
                         continue
                     }
-                    if(stopRequests.remove(next.id) ||
-                        t is java.util.concurrent.CancellationException){
+                    if(stopRequests.remove(next.id)){
                         db.pause(next.id)
                         VideoTransferJournal.record(context,next.id,"paused")
                         onStatus("Paused video: "+next.title)
+                    }else if(t is java.util.concurrent.CancellationException ||
+                        Thread.currentThread().isInterrupted){
+                        db.workerInterrupted(next.id,next.lease)
+                        VideoTransferJournal.record(context,next.id,"worker_interrupted")
+                        onStatus("Download worker interrupted; saved work retained")
+                        Thread.currentThread().interrupt()
+                        break
                     }else if(t is FullVersionUnavailable) {
                         db.update(next.id,"full_only_hold",error=t.message)
                         VideoTransferJournal.record(context,next.id,"held")
@@ -368,7 +376,9 @@ object VideoEngine {
         } finally {
             busy.set(false)
             if(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
-                val pending=runCatching { VideoDb(context).use{it.next()!=null} }
+                val pending=runCatching { VideoDb(context).use{
+                    it.next(nativeOnly=nativeOnly)!=null
+                } }
                     .getOrDefault(false)
                 if(pending)Scheduling.requestImmediate(context,false)
                 val due=runCatching{
