@@ -10,10 +10,16 @@ import java.net.URI
  */
 internal object SelectedVideoRouter {
     fun isSelectedVideo(area:String,url:String,kind:String?=null):Boolean {
-        if(area.uppercase() !in setOf("ADULT","HENTAI","VIDEOS") ||
-            !SourceIndexParser.safe(url))return false
-        if(VideoSiteProfiles.isVideoPage(url))return true
-        if(!kind.equals("video",true))return false
+        val validArea=area.uppercase() in setOf(
+            "ADULT","HENTAI","VIDEOS","VIDEO","PORN")
+        if(!SourceIndexParser.safe(url))return false
+        // Legacy indexed rows may be labeled adult/hentai rather than video.
+        // First-party selected-page recognition is stronger than the old
+        // SourceIndex area/kind and must route to the video module.
+        if(VideoSiteProfiles.isVideoPage(url) &&
+            (validArea || kind.equals("video",true)))return true
+        if(!validArea || kind?.lowercase() !in setOf(
+                "video","adult","hentai"))return false
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         val path=uri.path.orEmpty().trim('/')
         if(path.isBlank())return false
@@ -21,7 +27,10 @@ internal object SelectedVideoRouter {
         if(parts.any{it in setOf("category","categories","tag","tags",
                 "models","model","actors","actor","search","page","pages",
                 "home","latest","popular","trending","privacy","login",
-                "register","terms","about","contact","explore")})return false
+                "register","terms","about","contact","explore",
+                "channels","channel","genres","genre","coming-soon",
+                "uncensored","engsub","pornstar","pornstars",
+                "torrents","downloads","trending-videos")})return false
         return VideoSiteProfiles.coveredHosts.any{known->
             VideoSiteProfiles.sameProvider("https://$known/",url)
         }
