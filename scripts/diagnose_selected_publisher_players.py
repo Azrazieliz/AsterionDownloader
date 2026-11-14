@@ -63,7 +63,9 @@ def probe(entry):
             "js_player":r"(?i)videojs\\(|jwplayer\\(|plyr\\(|videojs|fluidPlayer",
             "clip_notice":r"(?i)preview|sample|teaser",
             "access_gate":r"(?i)just a moment|verify you are human|access denied|age verification"
-        }.items():result["source_counts"][name]=len(re.findall(expr,source))
+        }.items():
+            try: result["source_counts"][name]=len(re.findall(expr,source))
+            except re.error: result["source_counts"][name]=-1
         result["download_anchors"]=sum(1 for tag,a in d.element if tag=="a" and ("download" in a or "download" in a.get("href","")))
         result["iframe_count"]=sum(1 for tag,_ in d.element if tag=="iframe")
         result["video_count"]=sum(1 for tag,_ in d.element if tag=="video")
@@ -73,4 +75,9 @@ def probe(entry):
 if __name__=="__main__":
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         rows=list(pool.map(probe,SAMPLES.items()))
-    for row in rows:print(json.dumps(row),flush=True)
+    for row in rows:
+        print(row["host"],"HTTP",row.get("status"),
+              "elements",[(v["tag"],v["host"],v["path_type"],v["extension"])
+                          for v in row.get("elements",[])][:8],
+              "hints",[(k,n) for k,n in row.get("source_counts",{}).items() if n>0],
+              "error",row.get("error"),flush=True)
