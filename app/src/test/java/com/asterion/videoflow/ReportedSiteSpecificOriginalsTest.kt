@@ -208,6 +208,22 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(ambiguous,selected),selected,"3dhentaix.com").isEmpty())
     }
 
+    @Test fun javideoRealMidaRouteAcceptsOnlySelectedStreamTapeIframe(){
+        val selected="https://javideo.net/en/mida-863-mosaic"
+        val player="https://streamtape.com/e/AaBbCcDdEe12345"
+        assertTrue(VideoSiteProfiles.isVideoPage(selected))
+        val page="""<main>
+          <div class="video-player"><iframe src="$player"></iframe></div>
+          <div class="related"><video src="https://n2j9y0x0.bxcdn.net/ad.mp4"></video></div>
+          </main>"""
+        assertEquals(listOf(player),SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(page,selected),selected,"javideo.net").map{it.url})
+        assertTrue(SiteSpecificOriginalSources.javideoSelected(
+            Jsoup.parse("""<main><div class="video-player">
+              <video src="https://n2j9y0x0.bxcdn.net/ad.mp4"></video>
+            </div></main>""",selected),selected).isEmpty())
+    }
+
     @Test fun onlyHentaiWorkingPathRemainsOutsideNewResolver(){
         assertFalse(SiteSpecificOriginalSources.owns(
             "https://onlyhentaistuff.com/video/selected"))
