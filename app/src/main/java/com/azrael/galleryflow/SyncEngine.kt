@@ -18,6 +18,8 @@ class SyncEngine(private val context: Context) {
 
     fun run(mode: SyncMode, targetEntityId: String? = null,
             targetSiteHost: String? = null,
+            targetGalleryUrl: String? = null,
+            targetGalleryTitle: String? = null,
             progress: (String) -> Unit = {}): Stats {
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
@@ -27,7 +29,11 @@ class SyncEngine(private val context: Context) {
         val flow = FlowLinkEmitter(context, db)
         try {
             SyncControl.setMode(mode)
-            when (mode) {
+            if(targetGalleryUrl!=null){
+                require(targetEntityId!=null){"Selected gallery must belong to a registered site"}
+                runExactAlbum(db,files,flow,stats,progress,targetEntityId,
+                    targetGalleryUrl,targetGalleryTitle)
+            }else when (mode) {
                 SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
                 SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
             }
@@ -57,6 +63,49 @@ class SyncEngine(private val context: Context) {
             db.close()
         }
         return stats
+    }
+
+    /** Single tapped album, owned by its existing publisher site record.
+     * No gallery URL ever becomes a new followed source/subscription.
+     */
+    private fun runExactAlbum(db:GalleryDb, files:MediaStoreFiles,
+                              flow:FlowLinkEmitter,stats:Stats,
+                              progress:(String)->Unit,entityId:String,
+                              rawUrl:String,title:String?){
+        val entity=db.listEntities().firstOrNull{it.entityId==entityId &&
+            it.kind=="site"} ?:throw AdapterException(
+                "Selected album's parent site is not registered")
+        val origin=java.net.URI(entity.canonicalUrl)
+        val selected=java.net.URI(rawUrl)
+        fun hostname(uri:java.net.URI)=uri.host.orEmpty().lowercase(
+            java.util.Locale.ROOT).removePrefix("www.")
+        require(selected.scheme=="https" && selected.userInfo==null &&
+            hostname(origin)==hostname(selected)){
+            "The album URL must belong to its own registered provider"
+        }
+        val path=selected.path.orEmpty().trimEnd('/')
+        val id=if(entity.source==SourceId.KIUTAKU){
+            require(path.matches(Regex("/[0-9]{1,9}"))){
+                "Kiutaku selected album must be a numeric detail page"
+            }
+            path.removePrefix("/")
+        }else{
+            // GenericSiteAdapter uses SHA-256 of the canonical selected URL
+            // as the stable gallery ID; preserve prior gallery receipts.
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(rawUrl.toByteArray(Charsets.UTF_8))
+                .joinToString(""){"%02x".format(it)}.take(32)
+        }
+        val ref=GalleryRef(entity.source,id,entity.entityId,rawUrl,
+            title?.take(160)?.ifBlank{rawUrl}.orEmpty().ifBlank{rawUrl})
+        val adapter=AdapterRegistry.forSource(entity.source,context)
+        progress("Downloading only selected gallery: "+ref.title)
+        if(processGallery(entity,ref,adapter,db,files,flow,stats,progress)){
+            db.clearRetry(ref)
+        }else{
+            db.queueRetry(ref,"Exact selected album incomplete")
+            stats.incompleteGalleries++
+        }
     }
 
     private fun runLive(
