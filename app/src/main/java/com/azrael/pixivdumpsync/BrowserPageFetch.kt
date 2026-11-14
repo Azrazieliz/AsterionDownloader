@@ -79,6 +79,17 @@ object BrowserPageFetch {
             "fullporner.com","mydaddy.cc","nhplayer.com",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com")
+        val selectedPlayerPage=selectedPlayerHost && (
+            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
+            when(host) {
+                "fullporner.com" -> Regex("""^/player/[0-9]{1,12}/[0-9]{1,4}/?$""")
+                    .matches(Uri.parse(url).path.orEmpty())
+                "mydaddy.cc" -> Regex("""^/video/[A-Za-z0-9_-]{8,160}/?$""")
+                    .matches(Uri.parse(url).path.orEmpty())
+                "nhplayer.com" -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                    .matches(Uri.parse(url).path.orEmpty())
+                else -> false
+            })
         main.post {
             try{
             val web=WebView(context)
@@ -280,10 +291,9 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
-                            }else if(selectedPlayerHost &&
-                                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) &&
+                            }else if(selectedPlayerPage &&
                                 selectedPlayerWaits++<6 &&
-                                !Regex("""<video\\s+src="https://[^"]+"""")
+                                !Regex("""<video\s+src="https://[^"]+""")
                                     .containsMatchIn(page)){
                                 // The original video isn't published until the
                                 // selected player's JS initialization. An HTTP
