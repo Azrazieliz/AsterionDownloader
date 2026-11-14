@@ -236,6 +236,26 @@ internal object SiteSpecificOriginalSources {
         // No file in an unrelated recommendation/sidebar is an original.
         return (player+jsSources(doc,selected)).distinctBy{it.url}
     }
+    /** HelloPorn /video-<id>-<slug> embeds its selected original in a
+     * specific VOE /e/<id> player. The selected page has no HTML5 MP4.
+     * Resolve only that published iframe, never unrelated ad/video cards.
+     */
+    internal fun helloPorn(doc:Document,selected:String):List<Source>{
+        if(!Regex("""^/video-[0-9]{1,10}-[a-z0-9][a-z0-9-]{2,240}/?$""",
+                RegexOption.IGNORE_CASE).matches(URI(selected).path.orEmpty()))
+            return emptyList()
+        val out=LinkedHashMap<String,Source>()
+        for(frame in doc.select("iframe[src]").take(30)){
+            val link=https(frame.attr("src"),selected)?:continue
+            val url=URI(link)
+            if(host(link)!="voe.sx" ||
+                !Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                    .matches(url.path.orEmpty()) ||
+                !url.rawQuery.isNullOrBlank())continue
+            out.putIfAbsent(link,Source(link,selected))
+        }
+        return out.values.toList()
+    }
     internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
         val css=when(owner){
             "helloporn.com"->"#player video[src],#player source[src],"+
@@ -264,7 +284,7 @@ internal object SiteSpecificOriginalSources {
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->{
                 val initial=roshy(doc,selected)
-                if(initial.any{!isHosterPage(it.url)})return initial.distinctBy{it.url}
+                if(initial.any{!isHosterPage(it.url)})initial.distinctBy{it.url} else {
                 // Beeteam368 may create the original player after JS loads.
                 // Inspect only that selected player; no new browser module.
                 val rendered=runCatching {
@@ -276,6 +296,7 @@ internal object SiteSpecificOriginalSources {
                             ",main .video-player source[src]")
                 }.getOrDefault(emptyList())
                 (rendered+initial).distinctBy{it.url}
+                }
             }
             "mp4hentai.com"->{
                 val first=mp4hentai(doc,selected)
@@ -287,7 +308,19 @@ internal object SiteSpecificOriginalSources {
                         BrowserPageFetch.html(context,selected),selected),selected)
                 }.getOrDefault(emptyList())
             }
-            "helloporn.com","javideo.net","hentaibros.net",
+            "helloporn.com"->{
+                val exact=helloPorn(doc,selected)
+                if(exact.isNotEmpty())exact
+                else selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
+                    runCatching {
+                        if(!BrowserPageFetch.publicEligible(selected) &&
+                            !SiteSession.bound(context,selected))emptyList()
+                        else selectedStatic(
+                            Jsoup.parse(BrowserPageFetch.html(context,selected),
+                                selected),selected,owner)
+                    }.getOrDefault(emptyList())
+            }
+            "javideo.net","hentaibros.net",
             "3dhentaix.com","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
                     runCatching {
