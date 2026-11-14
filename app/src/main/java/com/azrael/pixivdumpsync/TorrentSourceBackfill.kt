@@ -29,10 +29,12 @@ internal object TorrentFeedParser {
     val onejav="https://onejav.com/"
     val sukebei="https://sukebei.nyaa.si/"
     val nyaaMirror="https://nyaa.v300.eu.org/"
+    val xxxClub="https://xxxclub.to/torrents/browse/all/"
     fun home(source:String):String=when(source){
         "ONEJAV"->onejav
         "SUKEBEI"->sukebei
         "NYAA_MIRROR"->nyaaMirror
+        "XXXCLUB"->xxxClub
         else->error("Unknown torrent feed source")
     }
     fun host(source:String):String=URI(home(source)).host
@@ -41,6 +43,7 @@ internal object TorrentFeedParser {
             "onejav.com"->"ONEJAV"
             "sukebei.nyaa.si"->"SUKEBEI"
             "nyaa.v300.eu.org"->"NYAA_MIRROR"
+            "xxxclub.to"->"XXXCLUB"
             else->null
         }
     }.getOrNull()
@@ -48,21 +51,25 @@ internal object TorrentFeedParser {
         val host=host(source)
         val now=System.currentTimeMillis()
         val found=LinkedHashMap<String,TorrentFeedEntry>()
-        val selector=if(source=="ONEJAV")
-            "a[href*='/torrent/'],article a[href],.torrent-list a[href]"
-        else "table a[href*='/view/'],.torrent-list a[href*='/view/']"
+        val selector=when(source) {
+            "ONEJAV"->"a[href*='/torrent/'],article a[href],.torrent-list a[href]"
+            "XXXCLUB"->"a[href*='/torrents/details/']"
+            else->"table a[href*='/view/'],.torrent-list a[href*='/view/']"
+        }
         for(a in doc.select(selector).take(4500)){
             val uri=runCatching{URI(doc.location()).resolve(a.attr("href"))}
                 .getOrNull()?:continue
             if(uri.scheme!="https" || uri.userInfo!=null ||
                 uri.host?.lowercase()?.removePrefix("www.")!=host)continue
-            val valid=if(source=="ONEJAV")
-                Regex("^/torrent/[A-Za-z0-9_-]{2,100}/?$").matches(uri.path.orEmpty())
-            else Regex("^/view/[0-9]{1,20}/?$").matches(uri.path.orEmpty())
+            val valid=when(source) {
+                "ONEJAV"->Regex("^/torrent/[A-Za-z0-9_-]{2,100}/?$").matches(uri.path.orEmpty())
+                "XXXCLUB"->XXXClubTorrentSource.isDetail(uri.toString())
+                else->Regex("^/view/[0-9]{1,20}/?$").matches(uri.path.orEmpty())
+            }
             if(!valid)continue
             val title=a.attr("title").ifBlank{a.text()}
                 .ifBlank{a.selectFirst("img")?.attr("alt").orEmpty()}
-                .ifBlank{a.closest("article,tr")?.selectFirst("h2,h3")?.text().orEmpty()}
+                .ifBlank{a.closest("article,tr,.torrent-item,.torrent-row")?.selectFirst("h2,h3,.title")?.text().orEmpty()}
                 .trim().take(160)
             if(title.length<3)continue
             val row=a.closest("tr,article")
@@ -83,11 +90,12 @@ internal object TorrentFeedParser {
         val uri=runCatching{URI(raw)}.getOrNull()?:return null
         if(uri.scheme!="https" || uri.userInfo!=null)return null
         val host=uri.host?.lowercase()?.removePrefix("www.")?:return null
-        if(host !in setOf("onejav.com","sukebei.nyaa.si","nyaa.v300.eu.org"))
+        if(host !in setOf("onejav.com","sukebei.nyaa.si","nyaa.v300.eu.org","xxxclub.to"))
             return null
         return raw.takeIf{uri.path.orEmpty().endsWith(".torrent",true) ||
             Regex("""^/download/[0-9]{1,20}(?:\.torrent)?$""")
-                .matches(uri.path.orEmpty())}
+                .matches(uri.path.orEmpty()) ||
+            (host=="xxxclub.to" && XXXClubTorrentSource.isDescriptor(raw))}
     }
     fun detail(doc:Document,source:String):String? {
         for(a in doc.select("a[href^=magnet:],a[href$=.torrent],"+
@@ -153,14 +161,14 @@ class TorrentFeedDb(ctx:Context):
     }
     override fun onUpgrade(db:SQLiteDatabase,old:Int,next:Int){}
     fun enroll(source:String){
-        require(source in setOf("ONEJAV","SUKEBEI","NYAA_MIRROR"))
+        require(source in setOf("ONEJAV","SUKEBEI","NYAA_MIRROR","XXXCLUB"))
         writableDatabase.insertWithOnConflict("feeds",null,
             ContentValues().apply{put("source",source)},
             SQLiteDatabase.CONFLICT_IGNORE)
     }
     fun status():List<TorrentFeedStatus> {
         val out=ArrayList<TorrentFeedStatus>()
-        for(source in listOf("ONEJAV","SUKEBEI","NYAA_MIRROR")){
+        for(source in listOf("ONEJAV","SUKEBEI","NYAA_MIRROR","XXXCLUB")){
             val record=readableDatabase.rawQuery(
                 "SELECT cursor,last_check,error FROM feeds WHERE source=?",
                 arrayOf(source)).use{c->
@@ -315,7 +323,7 @@ object TorrentSourceBackfill {
     }
     fun scan(ctx:Context,stop:()->Boolean={false},onlySource:String?=null) {
         if(!AppPower.enabled(ctx))return
-        val sources=listOf("ONEJAV","SUKEBEI","NYAA_MIRROR")
+        val sources=listOf("ONEJAV","SUKEBEI","NYAA_MIRROR","XXXCLUB")
             .filter{onlySource==null||it==onlySource}
         try{TorrentFeedDb(ctx).use{db->
             for(site in sources){
@@ -348,6 +356,17 @@ object TorrentSourceBackfill {
                             error("OneJAV returned no public torrent cards; "+
                                 "connect the website account or provider adapter needs repair")
                         entries.forEach(db::record)
+                        if(site=="XXXCLUB"){
+                            // Preserve selected torrent cards in the existing
+                            // unified ADULT results, not a detached Torrent UI.
+                            SourceIndexDb(ctx).use{index->
+                                for(entry in entries){
+                                    index.upsert(IndexedItem(entry.page,
+                                        entry.title,null,home,"ADULT",
+                                        "torrent",entry.discovered,false))
+                                }
+                            }
+                        }
                         val next=TorrentFeedParser.next(doc,site,current)
                         db.checked(site,next)
                         if(next!=null && next !in seen)queue.addLast(next)
