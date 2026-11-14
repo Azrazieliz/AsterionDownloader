@@ -70,8 +70,9 @@ class NativeMediaDownloaderTest {
                 val result=runCatching{NativeMediaDownloader.download(
                     "http://127.0.0.1:$port/scene.mp4",null,dir)}
                 assertTrue(result.isFailure)
-                assertTrue(result.exceptionOrNull()?.message.orEmpty()
-                    .contains("incomplete or mismatched byte range"))
+                // The first 206 chunk may be valid. The complete file cannot
+                // be published if the server disappears before the next chunk.
+                assertEquals(1024L,File(dir,"native_original.mp4.part").length())
                 assertFalse(File(dir,"video.mp4").exists())
             }finally{dir.deleteRecursively()}
         }
