@@ -22,9 +22,6 @@ import kotlin.concurrent.thread
 object AsterionCosplayGallery {
     private val ui=NocturneDesign
 
-    /** Selected albums are first-class library entries, not just site roots. */
-    internal fun hasGalleryCards(kind:String):Boolean=
-        kind in setOf("site","gallery_only","selected_album")
 
     private fun toast(a:Activity,message:String)=a.runOnUiThread{
         if(!a.isFinishing && !a.isDestroyed)
@@ -55,7 +52,7 @@ object AsterionCosplayGallery {
         val entities=GalleryDb(a).use{it.listEntities()}
         val snapshots=approved.associate{it.host to KyoraCreatorPreviews.cached(a,it.url)}
         val nativeBySite=entities.filter{
-            it.canonicalUrl.isNotBlank() && hasGalleryCards(it.kind)
+            it.canonicalUrl.isNotBlank() && CosplayGalleryVisibility.hasGalleryCards(it.kind)
         }.groupBy{SiteControls.key(it.canonicalUrl)}
 
         // Real public media previews can be discovered with Sync switched off.
