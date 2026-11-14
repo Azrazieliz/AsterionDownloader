@@ -33,6 +33,14 @@ class VideoSiteProfilesTest {
             Jsoup.parse("""<a href="https://evil.example/home/2">2</a>""",home),
             home,home))
     }
+    @Test fun helloPornActualFirstPartyVideoCardRoutesAreSelected() {
+        val selected="https://helloporn.com/video-28699-fakedrivingschool-naughty-student-late-for-her-exam-j"
+        assertTrue(VideoSiteProfiles.isVideoPage(selected))
+        assertTrue(PublisherOriginalExtractors.owns(selected))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/videos"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/channels/213-fake-driving-school"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/video-latest"))
+    }
     @Test fun retainedPornhubAndEpornerExactPagePaths(){
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.pornhub.com/view_video.php?viewkey=ph5abcd12"))
