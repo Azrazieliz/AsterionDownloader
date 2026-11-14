@@ -11,6 +11,7 @@ import sys
 import urllib.parse
 import urllib.request
 import urllib.error
+from yt_dlp.version import __version__ as YT_DLP_VERSION
 from datetime import datetime,timezone
 
 SITES = {
@@ -52,7 +53,7 @@ def examine(name,url):
       "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36",
       url]
     result={"url_host":url.split("/")[2],"metadata_only":True,
-            "media_bytes_saved":0,"yt_dlp_version":"2026.10.26"}
+            "media_bytes_saved":0,"yt_dlp_version":YT_DLP_VERSION}
     try:
         child=subprocess.run(args,capture_output=True,text=True,
                              timeout=35,check=False)
