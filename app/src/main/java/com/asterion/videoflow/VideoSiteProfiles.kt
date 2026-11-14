@@ -29,7 +29,7 @@ internal object VideoSiteProfiles {
         Route("helloporn.com",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         Route("notfans.com",Regex("""(?i)^/(?:videos?|watch|posts?|v)/[^/?#]+""")),
         Route("fullporner.com",Regex("""(?i)^/watch/[a-f0-9]{24}/?$""")),
-        Route("xxxclub.to",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
+
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
         // Keep native title slugs and /watch/ routes in one provider profile.
