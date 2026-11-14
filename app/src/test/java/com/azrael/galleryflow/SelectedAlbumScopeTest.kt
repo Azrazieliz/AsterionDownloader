@@ -48,6 +48,32 @@ class SelectedAlbumScopeTest {
         }
     }
 
+    @Test fun fourKhdOnlyAcceptsPublisherFullHdBridgeNotRelatedPage(){
+        val selected="https://www.4khd.com/content/14/yeha-yeha-pure2.html"
+        val doc=Jsoup.parse("""
+            <main><article class="entry-content">
+              <p>Full HD without watermark download:
+              <a href="https://m.4khd.com/45ycnl">TeraBox</a></p>
+              <div class="related">
+                <p><a href="https://m.4khd.com/other123">
+                    TeraBox other album</a></p>
+              </div>
+              <nav><a href="/content/14/yeha-yeha-pure2.html/2">2</a></nav>
+            </article></main>
+        """,selected)
+        assertEquals(listOf("https://m.4khd.com/45ycnl"),
+            SelectedAlbumScope.officialOriginalArchives(doc,selected))
+    }
+
+    @Test fun fourKhdCannotMarkArticlePreviewAsOfficialArchive(){
+        val selected="https://www.4khd.com/content/14/yeha-yeha-pure2.html"
+        val doc=Jsoup.parse(
+            "<main><article><img src='https://cdn.4khd.com/thumb.jpg'>"+
+                "</article></main>",selected)
+        assertTrue(SelectedAlbumScope.officialOriginalArchives(
+            doc,selected).isEmpty())
+    }
+
     @Test fun onlyKnownPublisherSitesGetStrictAlbumRules(){
         assertTrue(SelectedAlbumScope.owns("https://cosplaytele.com/post/one"))
         assertTrue(SelectedAlbumScope.owns("https://4khd.com/gallery/123"))
