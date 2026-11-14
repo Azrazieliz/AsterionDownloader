@@ -167,6 +167,14 @@ internal object PublisherOriginalExtractors {
             return fromHtml(selected,rendered)
         }
         val page=WebDiscovery.selectedDocument(selected,context)
+        if(host=="eporner.com") {
+            // The first-party Eporner xhr/video JSON is authoritative for
+            // selected quality variants; og:video and page thumbnails are not.
+            val formats=EpornerOriginalSource.publishedSources(
+                selected,page,context).map {Candidate(it,selected,host)}
+            return (formats+fromHtml(selected,page.outerHtml()))
+                .distinctBy{it.url}
+        }
         return fromHtml(selected,page.outerHtml())
     }
 }
