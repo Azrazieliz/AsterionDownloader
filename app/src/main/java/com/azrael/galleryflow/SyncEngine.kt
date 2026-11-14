@@ -280,76 +280,112 @@ class SyncEngine(private val context: Context) {
                 return true // Advance Live cursor without downloading any files.
             }
             var allComplete = true
-            for ((position, media) in mediaItems.withIndex()) {
-                if (!SyncControl.checkpoint()) return false
-                db.upsertMedia(entity.entityId, media)
-                val blockedPost = TagExclusions.firstBlocked(
-                    media.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
-                if (blockedPost != null) {
-                    val saved = db.media(media.source, media.stableId)
-                    if (saved?.state != TransferState.COMPLETE || !files.exists(saved.contentUri)) {
-                        db.setMediaState(media.source, media.stableId, TransferState.SKIPPED)
-                    }
-                    continue
-                }
-                val existing = db.media(media.source, media.stableId)
-                if (existing != null && existing.state == TransferState.COMPLETE && files.exists(existing.contentUri)) continue
-                if (existing != null && !files.exists(existing.contentUri)) {
-                    db.setMediaState(media.source, media.stableId, TransferState.PENDING)
-                }
-
-                SyncControl.updateMessage(meta.title + " • " + (position + 1) + "/" + mediaItems.size)
-                db.markMediaDownloading(media)
-                try {
-                    val outcome = downloadWithRetry(files, entity, meta, media)
-                    // Commit both the original asset and all genuine archive entries.
-                    // Never treat a provider archive as an image or silently discard videos.
-                    fun commitSaved(item: MediaRef, fresh: DownloadResult) {
-                        val duplicate = db.findCompleteByHash(fresh.sha256)
-                        if (duplicate != null && files.exists(duplicate.contentUri)) {
-                            files.delete(fresh.contentUri)
-                            db.markMediaComplete(
-                                item,
-                                fresh.copy(
-                                    contentUri = requireNotNull(duplicate.contentUri),
-                                    filename = duplicate.filename ?: fresh.filename
-                                ),
-                                duplicateOf = duplicate.source.wireName + ":" + duplicate.mediaId
-                            )
-                            stats.mediaDeduped++
-                        } else {
-                            db.markMediaComplete(item, fresh)
-                            stats.mediaDownloaded++
-                            if (com.azrael.pixivdumpsync.NduSettings.configured(context)) {
-                                runCatching {
-                                    com.azrael.pixivdumpsync.NduCloudQueue(context).use {
-                                        it.enqueue("kyora", fresh.filename,
-                                            android.net.Uri.parse(fresh.contentUri))
-                                    }
-                                }
+            // Network transfers are independent; persistence and dedup commits
+            // are not. Transfer three originals concurrently in bounded
+            // batches, then write receipts on this one owner thread.
+            // This avoids racing the shared GalleryDb/MediaStore dedup ledger
+            // and prevents queues containing thousands of scheduled futures.
+            fun commitSaved(item: MediaRef, fresh: DownloadResult) {
+                val duplicate = db.findCompleteByHash(fresh.sha256)
+                if (duplicate != null && files.exists(duplicate.contentUri)) {
+                    files.delete(fresh.contentUri)
+                    db.markMediaComplete(
+                        item,
+                        fresh.copy(
+                            contentUri = requireNotNull(duplicate.contentUri),
+                            filename = duplicate.filename ?: fresh.filename
+                        ),
+                        duplicateOf = duplicate.source.wireName + ":" + duplicate.mediaId
+                    )
+                    stats.mediaDeduped++
+                } else {
+                    db.markMediaComplete(item, fresh)
+                    stats.mediaDownloaded++
+                    if (com.azrael.pixivdumpsync.NduSettings.configured(context)) {
+                        runCatching {
+                            com.azrael.pixivdumpsync.NduCloudQueue(context).use {
+                                it.enqueue("kyora", fresh.filename,
+                                    android.net.Uri.parse(fresh.contentUri))
                             }
-                            flow.mediaDownloaded(entity, meta, item, fresh)
                         }
                     }
-                    commitSaved(media, outcome.primary)
-                    for (extracted in outcome.extracted) {
-                        db.upsertMedia(entity.entityId, extracted.media)
-                        commitSaved(extracted.media, extracted.result)
-                    }
-                } catch (e: HttpStatusException) {
-                    allComplete = false
-                    val state = when (e.code) {
-                        401, 403, 404, 410 -> TransferState.INACCESSIBLE
-                        429, 500, 502, 503, 504 -> TransferState.RETRYING
-                        else -> TransferState.PARTIAL
-                    }
-                    db.setMediaState(media.source, media.stableId, state)
-                    if (e.code == 429) break
-                } catch (t: Throwable) {
-                    if (SyncControl.isStopping() || t is SyncCancelledException) return false
-                    allComplete = false
-                    db.setMediaState(media.source, media.stableId, TransferState.RETRYING)
+                    flow.mediaDownloaded(entity, meta, item, fresh)
                 }
+            }
+            val workers = java.util.concurrent.Executors.newFixedThreadPool(3)
+            try {
+                for (batch in mediaItems.withIndex().chunked(3)) {
+                    if (!SyncControl.checkpoint()) return false
+                    val scheduled = mutableListOf<Pair<MediaRef,
+                        java.util.concurrent.Future<DownloadOutcome>>>()
+                    for ((position, media) in batch) {
+                        if (!SyncControl.checkpoint()) return false
+                        db.upsertMedia(entity.entityId, media)
+                        val blockedPost = TagExclusions.firstBlocked(
+                            media.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
+                        if (blockedPost != null) {
+                            val saved = db.media(media.source, media.stableId)
+                            if (saved?.state != TransferState.COMPLETE ||
+                                !files.exists(saved.contentUri)) {
+                                db.setMediaState(media.source, media.stableId,
+                                    TransferState.SKIPPED)
+                            }
+                            continue
+                        }
+                        val existing = db.media(media.source, media.stableId)
+                        if (existing != null && existing.state == TransferState.COMPLETE &&
+                            files.exists(existing.contentUri)) continue
+                        if (existing != null && !files.exists(existing.contentUri)) {
+                            db.setMediaState(media.source, media.stableId,
+                                TransferState.PENDING)
+                        }
+                        SyncControl.updateMessage(meta.title + " • " +
+                            (position + 1) + "/" + mediaItems.size)
+                        db.markMediaDownloading(media)
+                        scheduled += media to workers.submit<DownloadOutcome> {
+                            downloadWithRetry(files, entity, meta, media)
+                        }
+                    }
+                    var rateLimited = false
+                    for ((media, future) in scheduled) {
+                        try {
+                            val outcome = future.get()
+                            // The source archive can yield additional genuine
+                            // images and videos. Preserve all of its receipts.
+                            commitSaved(media, outcome.primary)
+                            for (extracted in outcome.extracted) {
+                                db.upsertMedia(entity.entityId, extracted.media)
+                                commitSaved(extracted.media, extracted.result)
+                            }
+                        } catch (failure: Throwable) {
+                            val cause = if (failure is java.util.concurrent.ExecutionException)
+                                failure.cause ?: failure else failure
+                            if (cause is VirtualMachineError || cause is ThreadDeath)
+                                throw cause
+                            if (SyncControl.isStopping() ||
+                                cause is SyncCancelledException ||
+                                cause is InterruptedException) return false
+                            allComplete = false
+                            if (cause is HttpStatusException) {
+                                val state = when (cause.code) {
+                                    401, 403, 404, 410 -> TransferState.INACCESSIBLE
+                                    429, 500, 502, 503, 504 -> TransferState.RETRYING
+                                    else -> TransferState.PARTIAL
+                                }
+                                db.setMediaState(media.source, media.stableId, state)
+                                if (cause.code == 429) rateLimited = true
+                            } else {
+                                db.setMediaState(media.source, media.stableId,
+                                    TransferState.RETRYING)
+                            }
+                        }
+                    }
+                    // Stop scheduling new batches when a publisher rate-limits.
+                    // Already-started files retain their individual receipts.
+                    if (rateLimited) break
+                }
+            } finally {
+                workers.shutdownNow()
             }
 
             val records = db.galleryMedia(meta.source, meta.stableId)
