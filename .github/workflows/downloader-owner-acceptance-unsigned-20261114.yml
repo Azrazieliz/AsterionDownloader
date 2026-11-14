@@ -24,6 +24,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Include exact tested embedded video extractor in acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: yt-dlp==2026.10.26 -d app/src/main/assets
+          echo 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae  app/src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl' | sha256sum --check -
       - name: Compile exact current source and create UNSIGNED owner acceptance
         run: gradle --no-daemon testPilotUnitTest testAcceptanceUnitTest assembleAcceptance --console=plain
       - name: Assert no signature is present and record source/hash
