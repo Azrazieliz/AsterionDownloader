@@ -33,14 +33,22 @@ internal object GallerySiteOriginalExtractors {
         val selectors=when(source){
             "pornpics.com" ->
                 "#gallery,.gallery-images,.gallery-content,.gallery-photos,"+
-                ".photos-gallery,.gallery-pics,.gallery-wrapper,main,article"
+                ".photos-gallery,.gallery-pics,.gallery-wrapper"
             "celeb.st" ->
                 "main .creator-gallery,main .post-gallery,main .image-viewer,"+
                 "main .media-gallery,article .post-images,main .gallery-grid"
             else->return emptyList()
         }
-        val containers=doc.select(selectors)
+        val exact=doc.select(selectors)
             .filter{it.closest("aside,.related,.recommended,.sidebar,nav,footer")==null}
+        // When an exact gallery container exists, never ALSO inspect the
+        // entire main/article document where unrelated recommendations live.
+        // Only a publisher page without those selectors uses the conservative
+        // main/article fallback.
+        val containers=if(exact.isNotEmpty())exact else if(source=="pornpics.com")
+            doc.select("main,article")
+                .filter{it.closest("aside,.related,.recommended,.sidebar,nav,footer")==null}
+        else emptyList()
         val seen=LinkedHashMap<String,AlbumImageExtractor.Item>()
         for(container in containers.take(12)){
             val isolated=Jsoup.parse(container.outerHtml(),selectedUrl)
