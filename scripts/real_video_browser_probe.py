@@ -307,6 +307,34 @@ try:
                                         """)
                                     except Exception as ex:
                                         selected["click_error"]=type(ex).__name__
+                                # Inspect the exact selected iframe's visible play
+                                # overlay. Preserve only element classes/tags;
+                                # never record the media URL or advertising links.
+                                selected["player_overlay"]=driver.execute_script("""
+                                    const v=document.querySelector('video');
+                                    if(!v)return {has_video:false};
+                                    const box=v.getBoundingClientRect();
+                                    const x=box.left+box.width/2;
+                                    const y=box.top+box.height/2;
+                                    const top=document.elementFromPoint(x,y);
+                                    const snapshot=e=>e?{
+                                        tag:e.tagName||'',id:(e.id||'').slice(0,64),
+                                        class:(e.className||'').toString().slice(0,100),
+                                        role:e.getAttribute('role')||'',
+                                        cursor:getComputedStyle(e).cursor,
+                                        text:(e.textContent||'').trim().slice(0,60)}:null;
+                                    const buttons=[...document.querySelectorAll(
+                                        'button,[role="button"],.play,.playbutton,'+
+                                        '.play-btn,.vjs-big-play-button')]
+                                        .filter(e=>{
+                                            const r=e.getBoundingClientRect();
+                                            return r.width>12&&r.height>12;
+                                        }).slice(0,16).map(snapshot);
+                                    return {top:snapshot(top),
+                                        video:snapshot(v),
+                                        parent:snapshot(v.parentElement),
+                                        buttons};
+                                """)
                                 # Probe ONLY the selected Mixdrop iframe's
                                 # actual HTML5 media, never the parent page's
                                 # unrelated recommendation <video> elements.
