@@ -62,8 +62,13 @@ internal object SiteSpecificOriginalSources {
             val raw=element.attr("src").ifBlank{element.attr("data-src")}
                 .ifBlank{element.attr("content")}
             val link=https(raw,doc.location())?:continue
+            // Browser currentSrc can be available before duration metadata.
+            // A missing duration is not evidence that this is a short teaser.
+            // Known sub-90-second previews remain excluded.
+            val seconds=runtime(element)
             if(!isMedia(link) ||
-                (minimumRuntime && (runtime(element)?:0L)<90L))continue
+                (minimumRuntime && seconds!=null && seconds in 1L..89L))
+                continue
             found.putIfAbsent(link,Source(link,referer))
         }
         return found.values.toList()
