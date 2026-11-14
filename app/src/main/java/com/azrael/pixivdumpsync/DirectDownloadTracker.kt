@@ -152,6 +152,22 @@ object DirectDownloadTracker {
                         Toast.LENGTH_LONG).show()
                 },ui.lp(a,7))
             }
+            if(item.status==DownloadManager.STATUS_PENDING ||
+                item.status==DownloadManager.STATUS_RUNNING ||
+                item.status==DownloadManager.STATUS_PAUSED) {
+                card.addView(ui.action(a,"CANCEL DOWNLOAD",false){
+                    val stopped=DirectDownloadRetry.cancel(a,item.job.id)
+                    Toast.makeText(a,if(stopped)
+                        "Transfer cancelled · you can add this source again"
+                    else "Transfer already changed · refresh Downloads",
+                        Toast.LENGTH_LONG).show()
+                    if(stopped){
+                        // Invalidate the visible row immediately; the next
+                        // Downloads render will query Android DownloadManager.
+                        card.visibility=android.view.View.GONE
+                    }
+                },ui.lp(a,7))
+            }
             if(item.status==DownloadManager.STATUS_SUCCESSFUL){
                 card.addView(ui.action(a,"OPEN FILE",false){
                     val manager=a.getSystemService(DownloadManager::class.java)
