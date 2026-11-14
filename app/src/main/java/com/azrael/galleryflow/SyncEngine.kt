@@ -329,6 +329,22 @@ class SyncEngine(private val context: Context) {
         db.upsertGallery(ref, TransferState.PENDING)
         return try {
             val (meta, mediaItems) = adapter.fetchGallery(ref)
+            // The original 37-photo Cosplay selection had 54 media rows
+            // because recommendation thumbnails were assigned to the album.
+            // Reconcile only if the publisher's explicit image count agrees
+            // with the exact, scoped original list. Existing files are kept.
+            if(SelectedAlbumScope.owns(meta.canonicalUrl)){
+                val declared=SelectedAlbumScope.advertisedCount(
+                    ref.title,meta.title)
+                if(declared!=null && declared==mediaItems.size){
+                    val moved=db.detachUnverifiedSelectedAlbumMedia(
+                        meta.source,meta.stableId,
+                        mediaItems.map{it.stableId}.toSet())
+                    if(moved>0)progress(
+                        "Separated $moved unrelated saved files from "+
+                            meta.title+" without deleting originals")
+                }
+            }
             db.updateGalleryMeta(meta, mediaItems.size)
             // Metadata is read before downloading any gallery image.
             val excluded = TagExclusions.firstBlocked(meta.tags, Prefs.effectiveExcludedTags(context, entity.entityId))
