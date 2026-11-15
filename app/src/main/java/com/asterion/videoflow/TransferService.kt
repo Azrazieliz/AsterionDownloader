@@ -596,10 +596,16 @@ object VideoEngine {
                             SiteSession.cookie(context,link) else null,
                         filenameStem=item.title+" ["+item.id+"]",
                         proxy=NetworkRoute.javaProxy(context,item.url),
-                        progress={percent->db.progress(item.id,percent);status(percent)},
+                        progress={percent->
+                            if(!db.progressClaim(item.id,item.lease,percent))
+                                throw java.util.concurrent.CancellationException(
+                                    "Native video transfer lease superseded")
+                            status(percent)
+                        },
                         cancelled={
                             stopRequests.contains(item.id) ||
-                            Thread.currentThread().isInterrupted
+                            Thread.currentThread().isInterrupted ||
+                            !db.ownsClaim(item.id,item.lease)
                         },
                         verifiedMp4=verifiedFirstPartyMp4)
                     0
@@ -617,7 +623,9 @@ object VideoEngine {
                                 !db.ownsClaim(item.id,item.lease))
                                 throw java.util.concurrent.CancellationException(
                                     "Transfer cancelled by user")
-                            db.progress(item.id,percent)
+                            if(!db.progressClaim(item.id,item.lease,percent))
+                                throw java.util.concurrent.CancellationException(
+                                    "Python transfer lease superseded")
                             status(percent)
                         }
                         VideoTransferJournal.record(context,item.id,"original_complete")

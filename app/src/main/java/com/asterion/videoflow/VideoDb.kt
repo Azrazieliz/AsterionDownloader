@@ -357,8 +357,27 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         writableDatabase.update("videos", row, "id=?", arrayOf("$id"))
     }
+    /**
+     * Only the current cross-process lease may publish transfer progress.
+     * A stale native/Python callback previously overwrote a paused, retried,
+     * or replaced video row even after that worker lost ownership.
+     */
+    fun progressClaim(id:Long,lease:Long,percent:Int):Boolean =
+        writableDatabase.update("videos",
+            ContentValues().apply {
+                put("progress",percent.coerceIn(0,99))
+                put("heartbeat_at",System.currentTimeMillis())
+            },
+            "id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+
+    /** Older callers may use raw progress while migrating to lease-aware
+     * updates. Never mark a completed file from this non-verified callback.
+     */
     fun progress(id: Long, percent: Int) {
-        writableDatabase.update("videos", ContentValues().apply { put("progress", percent.coerceIn(0,100)) }, "id=?", arrayOf("$id"))
+        writableDatabase.update("videos",
+            ContentValues().apply { put("progress", percent.coerceIn(0,99)) },
+            "id=? AND state='running'", arrayOf(id.toString()))
     }
     fun pause(id:Long){
         update(id,"paused",error="Paused by user; resume to continue")
