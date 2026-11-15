@@ -23,6 +23,43 @@ import java.util.concurrent.Executors
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
     private val thumbnails=Executors.newFixedThreadPool(2)
+    private val lastQueueRecovery=java.util.concurrent.atomic.AtomicLong(0L)
+    private const val RECOVERY_INTERVAL_MS=180_000L
+    private const val VISIBLE_REFRESH_MS=3_000L
+    private fun rowId(row:Row):String =
+        row.key ?: (row.source+"|"+(row.saved ?: row.filename))
+    private fun hiddenPrefs(a:Activity)=a.getSharedPreferences(
+        "asterion_downloads_hidden_v1",0)
+    private fun hideRow(a:Activity,row:Row) {
+        val prefs=hiddenPrefs(a)
+        val old=prefs.getStringSet("keys",emptySet()).orEmpty()
+        prefs.edit().putStringSet("keys",(old+rowId(row)).toSet()).apply()
+    }
+    /** Auto-rearm ONLY due, persisted queues. Reading the Downloads screen
+     * cannot rescan the internet, reset a retry cooldown or restart downloads
+     * on every 3-second UI refresh. Work is already persisted in each DB.
+     */
+    private fun recoverIdleQueues(a:Activity,rows:List<Row>) {
+        if(!AppPower.enabled(a) || rows.any{it.state==State.ACTIVE})return
+        val queued=rows.filter{it.state==State.QUEUED}.map{it.source}.toSet()
+        if(queued.isEmpty())return
+        val now=android.os.SystemClock.elapsedRealtime()
+        val previous=lastQueueRecovery.get()
+        if(previous>0 && now-previous<RECOVERY_INTERVAL_MS)return
+        if(!lastQueueRecovery.compareAndSet(previous,now))return
+        kotlin.concurrent.thread(name="asterion-queued-worker-rearm"){
+            val app=a.applicationContext
+            if("Video" in queued){
+                runCatching{VideoEngine.launch(app,false)}
+            }
+            if("X" in queued)runCatching{XPhotoEngine.start(app)}
+            if("Comic ZIP" in queued)runCatching{ChapterArchives.start(app)}
+            if("EPUB" in queued || "Novel ZIP" in queued)
+                runCatching{NovelEpubService.schedule(app)}
+            if(queued.any{it !in setOf("Video","X","Comic ZIP","EPUB","Novel ZIP")})
+                runCatching{DirectDownloadRetry.ensure(app)}
+        }
+    }
     private enum class State { ACTIVE, QUEUED, PAUSED, HELD, FAILED, DONE }
     private enum class Filter(val label:String) {
         ALL("All"),ACTIVE("Transferring"),QUEUED("Queued"),PAUSED("Paused"),
@@ -35,7 +72,8 @@ object UnifiedDownloadsUi {
         val actionText:String?=null,
         val receivedBytes:Long=0L,
         val onRemove:(()->Unit)?=null,
-        val hasPrimaryAction:Boolean=true
+        val hasPrimaryAction:Boolean=true,
+        val key:String?=null
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -409,7 +447,9 @@ object UnifiedDownloadsUi {
                     actionText=if(state==State.HELD)"RETRY" else null,
                     receivedBytes=item.bytes)
         }
-        return rows.sortedWith(compareBy<Row>{
+        val hidden=hiddenPrefs(a).getStringSet("keys",emptySet()).orEmpty()
+        return rows.filterNot{it.state in setOf(State.DONE,State.PAUSED) &&
+            rowId(it) in hidden}.sortedWith(compareBy<Row>{
             when(it.state){
                 State.ACTIVE->0;State.FAILED->1;State.HELD->2
                 State.QUEUED->3;State.PAUSED->4;State.DONE->5
@@ -441,6 +481,7 @@ object UnifiedDownloadsUi {
                     if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
                         return@runOnUiThread
                     result.onSuccess{rows->
+                        recoverIdleQueues(a,rows)
                         val next=LinearLayout(a).apply{
                             orientation=LinearLayout.VERTICAL
                         }
@@ -460,6 +501,20 @@ object UnifiedDownloadsUi {
             }
         }
         reload()
+        // In-place polling tracks actual SQLite/MediaStore state; no user
+        // "Refresh" press is required, and leaving Downloads stops it.
+        fun poll(){
+            if(a.isFinishing||a.isDestroyed||surface.parent!==parent ||
+                !surface.isAttachedToWindow)return
+            reload()
+            surface.postDelayed({poll()},VISIBLE_REFRESH_MS)
+        }
+        surface.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener{
+            override fun onViewAttachedToWindow(v:View){
+                surface.postDelayed({poll()},VISIBLE_REFRESH_MS)
+            }
+            override fun onViewDetachedFromWindow(v:View){}
+        })
     }
     private fun thumbnail(a:Activity,view:ImageView,row:Row){
         val uri=row.saved
@@ -493,16 +548,7 @@ object UnifiedDownloadsUi {
         val saved=rows.count{it.state==State.DONE}
         val heading=ui.text(a,"Downloads",24f,ui.white,true)
         parent.addView(heading,ui.lp(a,15))
-        // Visible, real queue updates without a fake progress animation.
-        // This redraws only while jobs genuinely have work to report, and
-        // stops automatically when the user leaves this screen.
-        if(rows.any{it.state==State.ACTIVE || it.state==State.QUEUED}){
-            parent.postDelayed({
-                if(!a.isFinishing && !a.isDestroyed &&
-                    heading.parent===parent && heading.isAttachedToWindow)
-                    refresh()
-            },8_000L)
-        }
+        // The visible module now refreshes itself every 3 seconds in place.
         if(!AppPower.enabled(a)){
             val notice=ui.card(a,12)
             notice.addView(ui.text(a,"Transfers paused",15f,ui.danger,true))
@@ -530,32 +576,12 @@ object UnifiedDownloadsUi {
             "$transferring progressing · $preparing connecting · $queued queued · $paused paused · "+
                 "$attention need action · $failed failed · $saved saved (recent)",
             12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
-        val shortcuts=ui.row(a)
-        if(queued>0)shortcuts.addView(ui.action(a,"Start queued transfers",true){
-            if(!AppPower.enabled(a)){
-                Toast.makeText(a,"Resume transfers first",Toast.LENGTH_LONG).show()
-            }else{
-                val started=VideoEngine.launch(a,false)
-                if(!started)VideoEngine.submit(a,false)
-                XPhotoEngine.start(a)
-                ChapterArchives.start(a)
-                NovelEpubService.schedule(a)
-                // Discovery's SQLite scan is not safe to run in a touch
-                // callback. Launch both durable queues off the main thread.
-                kotlin.concurrent.thread(name="asterion-start-original-queues"){
-                    ModuleOriginalAgents.startAll(a.applicationContext)
-                    DirectDownloadRetry.retry(a.applicationContext)
-                }
-                Toast.makeText(a,"Transfer workers requested; progress appears here",
-                    Toast.LENGTH_LONG).show()
-            }
-            refresh()
-        },LinearLayout.LayoutParams(0,-2,1f))
-        shortcuts.addView(ui.action(a,"Refresh",false){refresh()},
-            LinearLayout.LayoutParams(0,-2,if(queued>0)0.6f else 1f).apply{
-                if(queued>0)leftMargin=ui.px(a,8)
-            })
-        parent.addView(shortcuts,ui.lp(a,12))
+        // Queued jobs are rearmed by their own persisted workers on opening
+        // this screen. A manual Start button was hiding scheduler failures.
+        val refreshButton=ui.row(a)
+        refreshButton.addView(ui.action(a,"Refresh now",false){refresh()},
+            LinearLayout.LayoutParams(-1,-2))
+        parent.addView(refreshButton,ui.lp(a,11))
         // Clearing is explicit and affects only unfinished video tasks.
         // Saved MediaStore files and non-video queues are never touched.
         if(rows.any{it.source=="Video" && it.state!=State.DONE}){
@@ -699,9 +725,12 @@ object UnifiedDownloadsUi {
             }
             // Each video has independent cancellation even when its primary
             // control is PAUSE, RETRY or HOLD. Do not rely on a global stop.
-            item.onRemove?.let{remove->
+            val removal=item.onRemove ?: if(item.state in setOf(
+                    State.DONE,State.PAUSED))({
+                    hideRow(a,item)
+                }) else null
+            removal?.let{remove->
                 val label=when{
-                    item.state==State.DONE && item.source=="Video"->"WRONG FILE"
                     item.state==State.ACTIVE->"CANCEL"
                     else->"CLEAR"
                 }
