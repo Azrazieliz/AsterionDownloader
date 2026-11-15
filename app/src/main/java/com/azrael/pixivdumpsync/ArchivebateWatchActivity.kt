@@ -130,12 +130,6 @@ class ArchivebateWatchActivity:Activity() {
             }
         },LinearLayout.LayoutParams(0,-2,2f))
         root.addView(actions)
-        root.addView(ui.action(this,"COPY PLAYER DIAGNOSTIC"){
-            getSystemService(android.content.ClipboardManager::class.java)
-                .setPrimaryClip(android.content.ClipData.newPlainText(
-                    "Archivebate player diagnostics",ArchivebateDiagnostics.report(this)))
-            Toast.makeText(this,"Archivebate diagnostic copied",Toast.LENGTH_SHORT).show()
-        })
         setContentView(root)
 
         info.text="Locating this exact recording's published player…"
