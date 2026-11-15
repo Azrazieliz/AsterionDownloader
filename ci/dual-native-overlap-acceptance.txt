@@ -1,0 +1,3 @@
+Asterion Download native concurrent-byte acceptance marker
+Source baseline 23a2859ba265860cd4aaba2b668f8690960dea2c
+One explicit emulator instrumentation run; does not install or publish a signed acceptance APK.
