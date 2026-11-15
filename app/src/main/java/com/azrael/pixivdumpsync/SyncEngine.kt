@@ -64,20 +64,15 @@ class SyncEngine(private val context: Context) {
             return stats
         }
 
-        // Import owner-authorized Kuroha/PixiFlow originals BEFORE any Pixiv
-        // requests are planned. Never re-download blindly while a linked
-        // legacy folder is unavailable or its first scan is still running.
+        // A separate Kuroha installation is NOT a prerequisite for Pixiv.
+        // The former synchronous SAF scan held the Pixiv sync lease and the
+        // missing-folder gate rejected every historical run. Keep verified
+        // per-page deduplication, but refresh old inventory asynchronously.
         val legacy=if(mode==SyncMode.BACKFILL)runCatching {
-            LegacyPixivInventory.refreshIfDue(context)
             LegacyPixivInventory.status(context)
         }else null
         val status=legacy?.getOrNull()
-        // Unavailable legacy storage is a duplicate-risk gate for BULK
-        // historical backfill only. Previous code stopped LIVE checks, direct
-        // one-off downloads and even CLOUD upload before any Pixiv request.
-        // Live respects existing cursors; backfill still needs complete
-        // read-only access to Kuroha files before replaying old artwork.
-        val unavailable=PixivLegacySyncGate.reason(
+        val inventory=PixivLegacySyncGate.evaluate(
             mode=mode,
             kurohaInstalled=if(mode==SyncMode.BACKFILL)
                 LegacyPixivInventory.legacyKurohaInstalled(context) else false,
@@ -85,12 +80,17 @@ class SyncEngine(private val context: Context) {
             scanning=status?.scanning?:false,
             lastError=status?.lastError,
             refreshError=legacy?.exceptionOrNull()?.message)
-        if(unavailable!=null){
-            stats.errors++
-            progress("Pixiv sync held to avoid duplicate downloads: "+
-                unavailable.take(160))
-            SyncControl.forceFinish("Kuroha inventory needs attention")
-            return stats
+        if(inventory.warning!=null){
+            val note="Pixiv backfill continues; optional legacy duplicate index: "+
+                inventory.warning.take(150)
+            SyncControl.updateMessage(note)
+            progress(note)
+        }
+        if(mode==SyncMode.BACKFILL){
+            // Do not wait for a historical folder scan before contacting Pixiv.
+            // Failed/missing SAF access must not be counted as a Pixiv error.
+            runCatching{LegacyPixivInventory.refreshAsyncIfDue(context)}
+                .onFailure{progress("Optional Kuroha inventory refresh unavailable")}
         }
         // The sync lease is already acquired above. Any failure while opening
         // the database or restoring Pixiv authentication MUST release that lease;
