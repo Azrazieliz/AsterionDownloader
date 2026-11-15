@@ -233,10 +233,34 @@ internal object UnifiedKyoraFeatures {
                             refresh()
                         }.show()
                 })
-            val total=GalleryDb(a).use{it.galleryCards(entity.entityId,3)}
-            if(total.isNotEmpty())card.addView(ui.text(a,
-                total.joinToString(" · "){it.title.take(35)+" ("+it.count+")"},
-                11f,ui.secondary),ui.lp(a,6))
+            // The legacy library's individual gallery-open action remains
+            // available for every saved custom source, not just the main
+            // screen's approved-site previews.
+            val galleryKey="albums:"+entity.entityId
+            val shownAlbums=prefs.getInt(galleryKey,3).coerceIn(3,100)
+            val albums=GalleryDb(a).use{
+                it.galleryCards(entity.entityId,shownAlbums+1)}
+            for(album in albums.take(shownAlbums)){
+                action(a,card,"OPEN · "+album.title.take(65)+
+                    " ("+album.count+" images)"){
+                    a.startActivity(Intent(a,
+                        com.azrael.galleryflow.GalleryDetailActivity::class.java)
+                        .putExtra(
+                            com.azrael.galleryflow.GalleryDetailActivity.EXTRA_GALLERY_ID,
+                            album.galleryId)
+                        .putExtra(
+                            com.azrael.galleryflow.GalleryDetailActivity.EXTRA_SOURCE,
+                            album.source.wireName)
+                        .putExtra(
+                            com.azrael.galleryflow.GalleryDetailActivity.EXTRA_TITLE,
+                            album.title))
+                }
+            }
+            if(albums.size>shownAlbums)action(a,card,"SHOW MORE SAVED GALLERIES"){
+                prefs.edit().putInt(galleryKey,
+                    (shownAlbums+10).coerceAtMost(100)).apply()
+                refresh()
+            }
             p.addView(card,ui.lp(a,9))
         }
         if(watched.size>limit)add(a,p,
