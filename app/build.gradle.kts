@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -175,7 +177,7 @@ val verifyBundledYtDlp by tasks.registering {
             "Required yt-dlp 2026.10.26 wheel is missing. Do not build " +
                 "another acceptance APK without the actual pinned binary asset."
         }
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
         wheel.inputStream().buffered().use { stream ->
             val buffer = ByteArray(131_072)
             while (true) {
