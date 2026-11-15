@@ -397,9 +397,17 @@ object AsterionAdultHub {
                 12f,ui.secondary),ui.lp(a,5))
             if(media.isEmpty() && searches.isEmpty() && public.isEmpty()){
                 card.addView(ui.text(a,
-                    "No accessible previews for this site yet. CHECK NEW retries"+
+                    if(site.host=="archivebate.com")
+                        "Archivebate requires its real video listing. Use CONNECT SITE if Continue is shown, then CHECK NEW; a blank landing page is not a catalog."
+                    else "No accessible previews for this site yet. CHECK NEW retries"+
                         " this source only; login may be required.",
                     12f,ui.secondary),ui.lp(a,5))
+                if(site.host=="archivebate.com"){
+                    card.addView(ui.action(a,"CONNECT SITE",false){
+                        a.startActivity(Intent(a,SiteLoginActivity::class.java)
+                            .putExtra(SiteLoginActivity.EXTRA_URL,site.url))
+                    },ui.lp(a,5))
+                }
             }
             val sync=Switch(a).apply{
                 text="Sync new videos"
