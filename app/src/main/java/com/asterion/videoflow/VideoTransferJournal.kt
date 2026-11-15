@@ -62,6 +62,9 @@ internal object VideoTransferJournal {
         try{
             out.write(encode(Snapshot(phase,System.currentTimeMillis(),note,bytes)))
             atomic.finishWrite(out)
+            // Persist a small cross-process timeline after the existing
+            // atomic stage receipt is durable, never before the disk write.
+            DownloaderEventJournal.record(context,id,phase,"stage_update",bytes)
         }catch(t:Throwable){
             atomic.failWrite(out)
             throw t
