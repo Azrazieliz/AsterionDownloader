@@ -158,6 +158,7 @@ internal object PublisherOriginalExtractors {
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
+        val page=WebDiscovery.selectedDocument(selected,context)
         // The real Rule34Video download-quality links can be created only
         // after the selected page's Download control opens. Static HTML alone
         // must not be interpreted as "no original" before inspecting the
@@ -178,7 +179,6 @@ internal object PublisherOriginalExtractors {
         // Do not short-circuit HentaiBros or 3DHentai ahead of their
         // publisher-specific resolver: the old early return silently skipped
         // the real player and only inspected static teaser tags.
-        val page=WebDiscovery.selectedDocument(selected,context)
         // The broken providers do not share one CSS media contract. Their
         // own selected-player resolver handles site-owned iframe, WordPress
         // post, authorized rendered player or file hoster metadata.
