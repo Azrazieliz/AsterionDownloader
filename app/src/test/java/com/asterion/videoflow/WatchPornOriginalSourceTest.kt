@@ -23,6 +23,21 @@ class WatchPornOriginalSourceTest {
         assertEquals(1557L,result!!.durationSeconds)
         assertEquals(media,result.mediaUrl)
     }
+    @Test fun acceptsCanonicalWwwSelectedPageAndFirstPartyMedia(){
+        val wwwPage="https://www.watchporn.to/video/169519/example-original/"
+        val wwwMedia=media.replace("https://watchporn.to/",
+            "https://www.watchporn.to/")
+        val result=WatchPornOriginalSource.parse(
+            html().replace(media,wwwMedia),wwwPage)
+        assertNotNull(result)
+        assertEquals(wwwMedia,result!!.mediaUrl)
+    }
+    @Test fun wwwDoesNotAllowUnrelatedSimilarLookingDomains(){
+        assertFalse(WatchPornOriginalSource.isExactPage(
+            "https://watchporn.to.attacker.example/video/169519/example-original/"))
+        assertFalse(WatchPornOriginalSource.isExactPage(
+            "https://www.watchporn.to.attacker.example/video/169519/example-original/"))
+    }
     @Test fun rejectsDisagreeingDurationEvidence(){
         assertNull(WatchPornOriginalSource.parse(html("1557","PT0H21M10S"),page))
         assertNull(WatchPornOriginalSource.parse(html("0"),page))
