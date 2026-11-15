@@ -126,6 +126,38 @@ internal object Mp4HentaiPublishedHost {
                 check(candidates.isEmpty()){
                     "MP4Hentai host exposed multiple unverified MP4 downloads"
                 }
+                // Some published hosting links are inserted only after the
+                // hoster's own public JavaScript finishes. Read that exact
+                // page in the existing browser facility, without scraping
+                // unrelated video pages or forwarding publisher cookies.
+                if(nextLanding==null &&
+                    com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current)){
+                    val rendered=runCatching{
+                        com.azrael.pixivdumpsync.BrowserPageFetch
+                            .html(context,current,playerReferer=referer)
+                    }.getOrNull()
+                    if(!rendered.isNullOrBlank()){
+                        val browser=Jsoup.parse(rendered,current)
+                        val browserDirect=LinkedHashSet<String>()
+                        for(anchor in browser.select("a[href]").take(1000)){
+                            val label=(anchor.text()+" "+anchor.attr("title"))
+                                .trim().lowercase(Locale.ROOT)
+                            if(!anchor.hasAttr("download") &&
+                                !Regex("""(?i)(?:download|direct link|get file)""")
+                                    .containsMatchIn(label))continue
+                            val link=runCatching{
+                                URI(current).resolve(anchor.attr("href")).toString()
+                            }.getOrNull()?:continue
+                            if(direct(link))browserDirect+=link
+                            else if(nextLanding==null && isHosterPage(link) &&
+                                link!=current)nextLanding=link
+                        }
+                        if(browserDirect.size==1)return browserDirect.single()
+                        check(browserDirect.isEmpty()){
+                            "MP4Hentai browser exposed ambiguous media files"
+                        }
+                    }
+                }
                 if(nextLanding==null)error(
                     "MP4Hentai published host requires a real direct file link "+
                     "or an authorized browser session")

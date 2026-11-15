@@ -30,7 +30,8 @@ object BrowserPageFetch {
         "archivebate.com",
         "voe.sx","kamehaus.net",
         "hqpornerxxx.com","helloporn.com","javideo.net",
-        "hentaihaven.xxx","mp4hentai.com","roshy.tv")
+        "hentaihaven.xxx","mp4hentai.com","roshy.tv",
+        "mirrored.to","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -220,6 +221,42 @@ object BrowserPageFetch {
                                 if(play && !play.dataset.asterionActivated){
                                     play.dataset.asterionActivated='true';
                                     play.click();
+                                }
+                            }
+                            // Activate only the selected in-article player.
+                            // 3DHentaiX and VOE may show an inert poster until
+                            // the user-selected player's own Play control runs.
+                            // Preserve the source identity/duration guards in
+                            // SiteSpecificOriginalSources; never inspect ads.
+                            if(selectedPlayerHost==='3dhentaix.com' ||
+                                (selectedPlayerHost==='voe.sx' &&
+                                 /^\/e\/[A-Za-z0-9_-]{6,80}\/?$/.test(location.pathname))){
+                                const roots=selectedPlayerHost==='3dhentaix.com'?
+                                    [...document.querySelectorAll(
+                                        'main .video-player,article .video-player,'+
+                                        'main #player,article #player')]:
+                                    [...document.querySelectorAll('#player,.video-player')];
+                                const selected=roots.filter(el=>
+                                    !el.closest('aside,.related,.recommendations,'+
+                                        '.ads,.advertisement,.sidebar'));
+                                if(selected.length===1){
+                                    const root=selected[0];
+                                    const play=root.querySelector(
+                                        'button[aria-label="Play"],'+
+                                        'button[title="Play"],.vjs-big-play-button,'+
+                                        '.plyr__control[data-plyr="play"],'+
+                                        '.fp-play,button.play-button');
+                                    if(play && !play.dataset.asterionActivated){
+                                        play.dataset.asterionActivated='true';
+                                        play.click();
+                                    }
+                                    const v=root.querySelector('video');
+                                    if(v && v.paused){
+                                        try{
+                                            const p=v.play();
+                                            if(p&&p.catch)p.catch(()=>{});
+                                        }catch(_){}
+                                    }
                                 }
                             }
                             if(selectedPlayerHost==='hentaibros.net'){
