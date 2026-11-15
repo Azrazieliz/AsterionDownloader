@@ -138,7 +138,12 @@ object VideoEngine {
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
              targetHost:String?=null) {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
-        if(!busy.compareAndSet(false,true)) return
+        if(!busy.compareAndSet(false,true)){
+            DownloaderEventJournal.record(context,0L,"worker_busy","existing_worker_active")
+            return
+        }
+        DownloaderEventJournal.record(context,0L,"worker_started",
+            if(scan)"scan_requested" else "manual_or_retry")
         // The isolated second process can execute a different webpage or
         // Python original concurrently: process-global yt-dlp CWD, Python
         // modules and native library state are NOT shared with agent one.
@@ -163,7 +168,14 @@ object VideoEngine {
                 while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                       !Thread.currentThread().isInterrupted && transferred<maxItems &&
                       android.os.SystemClock.elapsedRealtime()<deadline) {
-                val next=db.claimNext(nativeOnly=nativeOnly) ?: break
+                val next=db.claimNext(nativeOnly=nativeOnly) ?: run{
+                    // A visible queued row and zero eligible claims is a
+                    // scheduler/authorization distinction, not a download.
+                    if(db.count("queued")>0)
+                        DownloaderEventJournal.record(context,0L,"queue_blocked",
+                            if(nativeOnly)"native_only_ineligible" else "no_eligible_claim")
+                    break
+                }
                 transferred++
                 onStatus("Downloading ${next.title}")
                 // Atomic claim was already persisted by VideoDb; repeating a
@@ -236,6 +248,8 @@ object VideoEngine {
                         val failedAt=VideoTransferJournal.current(context,next.id)?.stage
                             ?:"unknown"
                         db.scheduleRetry(next.id,reason)
+                        DownloaderEventJournal.record(context,next.id,"failure_classified",
+                            VideoFailurePolicy.classify(reason).name)
                         VideoTransferJournal.record(context,next.id,"failed",
                             failedAt+"/"+VideoFailurePolicy.classify(reason).name+": "+reason)
                         onStatus("Failed ${next.title}")
