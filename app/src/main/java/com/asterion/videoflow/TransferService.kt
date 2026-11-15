@@ -807,6 +807,13 @@ object VideoEngine {
         // player does not identify one unambiguous source, fail instead.
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
+        val strictIframe=NetworkRoute.siteKey(item.url) in
+            setOf("javideo.net","helloporn.com")
+        if(strictIframe && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Selected publisher iframe exposed no attributable direct media; "+
+                    "a player webpage is not a downloadable original"))
         val strictJavGuru=NetworkRoute.siteKey(item.url)=="jav.guru"
         if(strictRule34 && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
@@ -974,6 +981,9 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictIframe && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Selected external player did not transfer the original media"))
             if(strictRule34 && !downloaded)
                 throw (last?:IllegalStateException(
                     "Rule34Video published original failed the verified first-party transfer"))

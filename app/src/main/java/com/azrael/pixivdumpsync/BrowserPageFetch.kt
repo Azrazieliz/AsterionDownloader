@@ -29,6 +29,8 @@ object BrowserPageFetch {
         "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
         "archivebate.com",
         "voe.sx","kamehaus.net",
+        "streamtape.com","streamtape.to","streamtape.net",
+        "streamtape.site","sbtape.com",
         "hqpornerxxx.com","helloporn.com","javideo.net",
         "hentaihaven.xxx","mp4hentai.com","roshy.tv",
         "mirrored.to","upfilesgo.com")
@@ -82,7 +84,9 @@ object BrowserPageFetch {
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
-            "roshy.tv","rule34video.com")
+            "roshy.tv","rule34video.com",
+            "streamtape.com","streamtape.to","streamtape.net",
+            "streamtape.site","sbtape.com")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {
@@ -92,7 +96,9 @@ object BrowserPageFetch {
                     .matches(Uri.parse(url).path.orEmpty())
                 "nhplayer.com" -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
-                "voe.sx","kamehaus.net" -> Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                "voe.sx","kamehaus.net",
+                "streamtape.com","streamtape.to","streamtape.net",
+                "streamtape.site","sbtape.com" -> Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
@@ -239,7 +245,10 @@ object BrowserPageFetch {
                             // Preserve the source identity/duration guards in
                             // SiteSpecificOriginalSources; never inspect ads.
                             if(selectedPlayerHost==='3dhentaix.com' ||
-                                (['voe.sx','kamehaus.net'].includes(selectedPlayerHost) &&
+                                (['voe.sx','kamehaus.net',
+                                    'streamtape.com','streamtape.to',
+                                    'streamtape.net','streamtape.site','sbtape.com']
+                                    .includes(selectedPlayerHost) &&
                                  /^\/e\/[A-Za-z0-9_-]{6,80}\/?$/.test(location.pathname))){
                                 const roots=selectedPlayerHost==='3dhentaix.com'?
                                     [...document.querySelectorAll(
@@ -297,7 +306,9 @@ object BrowserPageFetch {
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,video#flvv,'+
                                 '#player video,.video-js video,video source[src],'+
-                                (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net','hentaihaven.xxx']
+                                (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net',
+                                    'hentaihaven.xxx','streamtape.com','streamtape.to',
+                                    'streamtape.net','streamtape.site','sbtape.com']
                                     .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
                                 .filter(el=>selectedPlayerHost!=='javideo.net')
                                 .map(el=>el.tagName.toLowerCase()==='video'?
@@ -342,6 +353,13 @@ object BrowserPageFetch {
                                         /^\/(?:e|v|embed)\/[A-Za-z0-9_-]{5,100}\/?$/
                                             .test(u.pathname);
                                 }
+                                if(publisher==='helloporn.com')
+                                    return /^\/video-\d{1,10}-[a-z0-9-]+\/?$/i
+                                        .test(currentPath) &&
+                                        !!el.closest('#player,.video-player,.player,main,article') &&
+                                        !el.closest('aside,.related,.recommendations,.ads,.sidebar') &&
+                                        host==='voe.sx' &&
+                                        /^\/e\/[A-Za-z0-9_-]{6,80}\/?$/.test(u.pathname);
                                 if(publisher==='uncensoredhentai.xxx')
                                     return /^\/(?:watch|video)\//.test(currentPath) &&
                                         host==='nhplayer.com' &&

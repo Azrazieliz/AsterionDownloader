@@ -221,6 +221,21 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(ambiguous,selected),selected,"3dhentaix.com").isEmpty())
     }
 
+    @Test fun helloPornOnlyAdmitsOneSelectedVoeIframe(){
+        val page="https://helloporn.com/video-12345-selected-episode"
+        val selected="https://voe.sx/e/aBbCcDd123"
+        val html="""<main><div id="player"><iframe src="$selected"></iframe></div>
+            <aside><iframe src="https://voe.sx/e/unrelated999"></iframe></aside>
+            </main>"""
+        assertEquals(listOf(selected),SiteSpecificOriginalSources.helloPorn(
+            Jsoup.parse(html,page),page).map{it.url})
+        val ambiguous="""<main><div id="player">
+            <iframe src="$selected"></iframe>
+            <iframe src="https://voe.sx/e/Another999"></iframe>
+            </div></main>"""
+        assertTrue(SiteSpecificOriginalSources.helloPorn(
+            Jsoup.parse(ambiguous,page),page).isEmpty())
+    }
     @Test fun javideoRealMidaRouteAcceptsOnlySelectedStreamTapeIframe(){
         val selected="https://javideo.net/en/mida-863-mosaic"
         val player="https://streamtape.com/e/AaBbCcDdEe12345"

@@ -402,6 +402,9 @@ internal object SiteSpecificOriginalSources {
             return emptyList()
         val out=LinkedHashMap<String,Source>()
         for(frame in doc.select("iframe[src]").take(30)){
+            if(frame.closest("#player,.video-player,.player,main,article")==null ||
+                frame.closest("aside,.related,.recommendations,.ads,.advertisement,.sidebar")!=null)
+                continue
             val link=https(frame.attr("src"),selected)?:continue
             val url=URI(link)
             if(host(link)!="voe.sx" ||
@@ -410,54 +413,97 @@ internal object SiteSpecificOriginalSources {
                 !url.rawQuery.isNullOrBlank())continue
             out.putIfAbsent(link,Source(link,selected))
         }
-        return out.values.toList()
+        return out.values.toList().takeIf{it.size==1}.orEmpty()
     }
     /** Resolve a HelloPorn-selected VOE iframe to the media it actually
      * exposes. Passing the iframe page to the generic extractor first returns
      * Unsupported URL and leaves the original queue stuck at zero bytes.
      */
+    /**
+     * Accept one attributable selected player media URL, not a hosting
+     * landing page, recommendation, advertising clip or ambiguous source.
+     * Static and browser results must refer to the same exact selected iframe.
+     */
+    private fun selectedIframeMedia(
+        context:Context,selected:String,frame:Source
+    ):List<Source> {
+        val originals=LinkedHashMap<String,Source>()
+        val raw=runCatching {
+            Jsoup.connect(frame.url)
+                .userAgent(NativeMediaDownloader.USER_AGENT)
+                .header("Referer",selected)
+                .ignoreHttpErrors(true).followRedirects(false)
+                .timeout(12_000).maxBodySize(1_800_000)
+                .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
+                .execute()
+        }.getOrNull()
+        if(raw!=null && raw.statusCode() in 200..299 &&
+            raw.contentType().contains("html",ignoreCase=true)) {
+            val player=Jsoup.parse(raw.body(),frame.url)
+            val direct=mediaElements(player,frame.url,
+                "#player video[src],#player video source[src],"+
+                ".video-player video[src],.video-player video source[src],"+
+                "video#mainvideo[src],video#mainvideo source[src],"+
+                "video#player[src],video#player source[src]")
+            for(media in direct)originals.putIfAbsent(media.url,media)
+        }
+        if(originals.size!=1) {
+            val rendered=runCatching {
+                BrowserPageFetch.html(context,frame.url,playerReferer=selected)
+            }.getOrNull()
+            if(!rendered.isNullOrBlank()) {
+                val page=Jsoup.parse(rendered,frame.url)
+                for(media in mediaElements(page,frame.url,
+                    "main .video-player video[src],"+
+                    "main .video-player video source[src]"))
+                    originals.putIfAbsent(media.url,media)
+            }
+        }
+        return originals.values.toList().takeIf{it.size==1}.orEmpty()
+    }
+
     internal fun helloPornOriginals(
         context:Context,doc:Document,selected:String
     ):List<Source>{
-        val frames=helloPorn(doc,selected)
-        if(frames.isEmpty())return emptyList()
-        val exact=LinkedHashMap<String,Source>()
-        for(frame in frames){
-            val player=runCatching{
-                Jsoup.connect(frame.url)
-                    .userAgent(NativeMediaDownloader.USER_AGENT)
-                    .header("Referer",selected)
-                    .header("Accept","text/html,application/xhtml+xml")
-                    .ignoreHttpErrors(true).followRedirects(false)
-                    .timeout(12_000).maxBodySize(1_800_000)
-                    .apply{NetworkRoute.javaProxy(context,selected)
-                        ?.let{proxy(it)}}
-                    .execute()
+        val frames=helloPorn(doc,selected).ifEmpty {
+            val rendered=runCatching {
+                BrowserPageFetch.html(context,selected)
             }.getOrNull()
-            if(player!=null && player.statusCode() in 200..299){
-                val page=Jsoup.parse(player.body(),frame.url)
-                for(src in (mediaElements(page,frame.url,
-                    "video[src],video source[src],source[type^=video][src],"+
-                    "meta[itemprop=contentUrl][content]")+
-                    jsSources(page,frame.url)).distinctBy{it.url})
-                    exact.putIfAbsent(src.url,src)
-            }
-            if(exact.isEmpty()){
-                // The player can set currentSrc only after its JS runs.
-                // Capture that selected HTML5 source, not network ads.
-                val browser=runCatching{
-                    BrowserPageFetch.html(context,frame.url,playerReferer=selected)
-                }.getOrNull()
-                if(!browser.isNullOrBlank()){
-                    val rendered=Jsoup.parse(browser,frame.url)
-                    for(src in (mediaElements(rendered,frame.url,
-                        "main .video-player video[src],video[src]")+
-                        jsSources(rendered,frame.url)).distinctBy{it.url})
-                        exact.putIfAbsent(src.url,src)
-                }
-            }
+            rendered?.let{helloPorn(Jsoup.parse(it,selected),selected)}.orEmpty()
         }
-        return exact.values.toList().ifEmpty{frames}
+        if(frames.size!=1)return emptyList()
+        return selectedIframeMedia(context,selected,frames.single())
+    }
+
+    /**
+     * JAVIDEO displays an unrelated muted advert in initial HTML and puts
+     * the selected Streamtape iframe inside the active Play container. Use
+     * only that selected iframe and its own video.currentSrc, never the
+     * parent's other HTML5 video or a generic yt-dlp hoster-page download.
+     */
+    internal fun javideoOriginals(
+        context:Context,doc:Document,selected:String
+    ):List<Source>{
+        val specific=".embed-responsive.player:not(.d-none) "
+        fun selectedDirect(document:Document):List<Source> =
+            mediaElements(document,selected,
+                specific+"video[src],"+specific+"video source[src],"+
+                specific+"source[type^=video][src]")
+                .takeIf{it.size==1}.orEmpty()
+        val initial=selectedDirect(doc)
+        if(initial.isNotEmpty())return initial
+        val initialFrames=javideoSelected(doc,selected)
+        val rendered=if(initialFrames.isEmpty())runCatching {
+            BrowserPageFetch.html(context,selected)
+        }.getOrNull()?.let{Jsoup.parse(it,selected)} else null
+        if(rendered!=null){
+            val direct=selectedDirect(rendered)
+            if(direct.isNotEmpty())return direct
+        }
+        val frames=if(initialFrames.isNotEmpty())initialFrames
+            else rendered?.let{javideoSelected(it,selected)}.orEmpty()
+        if(frames.size!=1)return emptyList()
+        return selectedIframeMedia(context,selected,frames.single())
     }
 
     /**
@@ -605,8 +651,8 @@ internal object SiteSpecificOriginalSources {
                                 selected),selected,owner)
                     }.getOrDefault(emptyList())
             }
-            "javideo.net","hentaibros.net",
-            "3dhentaix.com","hentaihaven.xxx"->{
+            "javideo.net"->javideoOriginals(context,doc,selected)
+            "hentaibros.net","3dhentaix.com","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
                     runCatching {
                         if(!BrowserPageFetch.publicEligible(selected) &&
