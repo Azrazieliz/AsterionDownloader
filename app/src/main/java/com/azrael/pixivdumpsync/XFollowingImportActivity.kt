@@ -173,8 +173,6 @@ class XFollowingImportActivity:Activity(){
             }.getOrNull()?:return
             runOnUiThread {
                 if(!scanning||completed)return@runOnUiThread
-                // A JS callback arriving after navigation or from X's
-                // recommendations feed must never modify the following list.
                 val own=getPreferences(MODE_PRIVATE).getString("own_x_handle","")
                     .orEmpty().trim().removePrefix("@")
                 val page=Uri.parse(browser.url.orEmpty()).path.orEmpty()
@@ -229,9 +227,8 @@ class XFollowingImportActivity:Activity(){
                     browser.evaluateJavascript("""
                         (function(){
                           const found=new Set();
-                          // X may inject "Who to follow" recommendations
-                          // into the same virtualized list. A visible UserCell
-                          // is not evidence of an actual account relationship.
+                          // Recommendations and ads may also be UserCell elements.
+                          // Only the platform's followed-account control is proof.
                           const cells=[...document.querySelectorAll(
                             '[data-testid="UserCell"]')];
                           cells.forEach(cell=>{
@@ -251,48 +248,7 @@ class XFollowingImportActivity:Activity(){
                               '[data-testid="User-Name"] a[href]')
                               .forEach(a=>{
                                 const match=(a.getAttribute('href')||'')
-                                  .match(new RegExp('^/([A-Za-z0-9_]{1,15})/?
-                          const scrollables=[document.scrollingElement,
-                              ...document.querySelectorAll('main,section,[data-testid="primaryColumn"],div')]
-                            .filter(Boolean).filter(el=>el.scrollHeight>el.clientHeight+120);
-                          scrollables.sort((a,b)=>
-                            (b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight));
-                          const target=scrollables[0]||document.scrollingElement;
-                          const move=Math.max(380,Math.floor(window.innerHeight*0.78));
-                          const before=target.scrollTop;
-                          if(target===document.scrollingElement){
-                              window.scrollBy(0,move);
-                          }else{
-                              target.scrollTop+=move;
-                          }
-                          if(target.scrollTop<=before && cells.length){
-                            cells[cells.length-1].scrollIntoView({block:'end'});
-                          }
-                          AsterionFollowing.found(JSON.stringify({
-                            users:[...found].map(handle=>({handle,following:true})),
-                            position:Math.round(target.scrollTop),
-                            extent:Math.round(target.scrollHeight-target.clientHeight)
-                          }));
-                          return found.size;
-                        })()
-                    """.trimIndent(),null)
-                }else if(allowed(url) && path.trimEnd('/')=="/home"){
-                    label.text="Open your own profile /following list. Then this app automatically imports the entire list."
-                }
-            }
-            handler.postDelayed(this,2000L)
-        }
-    }
-    override fun onResume(){super.onResume();scanning=true;handler.post(scanner)}
-    override fun onPause(){scanning=false;handler.removeCallbacks(scanner);super.onPause()}
-    override fun onDestroy(){
-        handler.removeCallbacks(scanner)
-        importWorker.shutdown()
-        browser.removeJavascriptInterface("AsterionFollowing")
-        browser.destroy()
-        super.onDestroy()
-    }
-}));
+                                  .match(new RegExp('^/([A-Za-z0-9_]{1,15})/?$'));
                                 if(match && (cell.innerText||'').toLowerCase()
                                      .includes('@'+match[1].toLowerCase()))
                                   found.add(match[1]);
@@ -315,7 +271,7 @@ class XFollowingImportActivity:Activity(){
                             cells[cells.length-1].scrollIntoView({block:'end'});
                           }
                           AsterionFollowing.found(JSON.stringify({
-                            users:[...found],
+                            users:[...found].map(handle=>({handle,following:true})),
                             position:Math.round(target.scrollTop),
                             extent:Math.round(target.scrollHeight-target.clientHeight)
                           }));
