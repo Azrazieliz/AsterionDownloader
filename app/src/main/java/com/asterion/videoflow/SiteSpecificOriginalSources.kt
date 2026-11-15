@@ -294,8 +294,11 @@ internal object SiteSpecificOriginalSources {
             // the hoster as an extractor fallback.
             val hls=JavGuruOriginalSource.selectedHls(embed,response.body())
             if(hls!=null){
-                found.putIfAbsent(hls,Source(hls,embed))
-                continue
+                // This authenticated-by-the-selected-post manifest has a
+                // short-lived signature. Returning it immediately prevents
+                // probing unrelated fallback hosters for up to 32 seconds
+                // BEFORE the first original fragment is requested.
+                return listOf(Source(hls,embed))
             }
             val player=Jsoup.parse(response.body(),embed)
             // Do not promote generic embeds, ad players or script URL
