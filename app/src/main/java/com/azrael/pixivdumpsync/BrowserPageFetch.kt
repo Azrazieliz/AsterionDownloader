@@ -27,6 +27,7 @@ object BrowserPageFetch {
         // Exact first-party player/article pages. These are not generalized
         // Aloha-style media detectors, just the publishers' JS video players.
         "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
+        "archivebate.com",
         "voe.sx","kamehaus.net",
         "hqpornerxxx.com","helloporn.com","javideo.net",
         "hentaihaven.xxx","mp4hentai.com","roshy.tv")
