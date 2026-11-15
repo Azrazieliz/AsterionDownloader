@@ -65,8 +65,11 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
          * Never expose this method through ContentResolver.call or a receiver.
          */
         fun authorizeLocally(activity:Activity,enable:Boolean):Boolean{
+            // The explicit confirmation dialog owns focus while its positive
+            // button callback runs, so the Activity decor view is not focused.
+            // Require a still-attached real on-device Activity, not window focus.
             if(activity.isFinishing || activity.isDestroyed ||
-                !activity.window.decorView.hasWindowFocus())
+                !activity.window.decorView.isAttachedToWindow)
                 throw SecurityException("Visible owner activity required")
             val fingerprint=if(enable)signer(activity) else ""
             return activity.getSharedPreferences(PREF,Context.MODE_PRIVATE)
