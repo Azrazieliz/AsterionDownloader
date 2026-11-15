@@ -64,6 +64,29 @@ object AsterionAccountPanels {
         add(a,p,row)
     }
     private fun pixivSync(a:Activity,mode:SyncMode,id:String?=null){
+        if(!AppPower.enabled(a)){
+            say(a,"Asterion is globally paused. Tap RESUME before Pixiv sync or backfill.")
+            return
+        }
+        if(mode!=SyncMode.CLOUD && !SessionStore.isLoggedIn(a)){
+            say(a,"Connect your Pixiv account before downloading.")
+            return
+        }
+        if(mode==SyncMode.BACKFILL &&
+            LegacyPixivInventory.legacyKurohaInstalled(a) &&
+            LegacyPixivInventory.status(a).linkedFolders==0){
+            // Owner permission is needed ONCE; do not silently duplicate all
+            // historical Kuroha pages or claim a backfill started.
+            a.getSharedPreferences("asterion_pending_pixiv_legacy",0).edit()
+                .putString("mode",mode.name).putString("artist",id).apply()
+            @Suppress("DEPRECATION")
+            a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            },5222)
+            say(a,"Choose Kuroha's saved Pixiv image folder once; backfill will resume automatically.")
+            return
+        }
         val current=SyncControl.snapshot()
         if(current.running){
             say(a,"Pixiv is already syncing: "+current.message)
