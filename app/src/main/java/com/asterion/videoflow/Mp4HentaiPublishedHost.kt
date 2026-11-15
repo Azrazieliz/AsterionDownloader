@@ -51,14 +51,22 @@ internal object Mp4HentaiPublishedHost {
                 .trim().lowercase(Locale.ROOT)
             if(!Regex("""(?i)^(?:mirror|upfiles)(?:\s+download)?\s*$""")
                     .matches(label))continue
-            val candidate=runCatching{
-                URI(selected).resolve(anchor.attr("href")).toString()
-                    .substringBefore('#')
-            }.getOrNull()?:continue
+            val candidate=publishedHref(selected,anchor.attr("href"))?:continue
             if(isPublishedHost(selected,candidate))found+=candidate
         }
         return found.toList()
     }
+
+    /** The publisher uses literal [scene] prefixes in real mirrored.to
+     * hrefs. java.net.URI rejects raw square brackets and previously dropped
+     * that official Mirror download link without reporting any error.
+     * Percent-encode only illegal path characters; never relax host checks.
+     */
+    internal fun publishedHref(base:String,raw:String):String?=runCatching{
+        URI(base).resolve(raw.trim().replace("&amp;","&")
+            .replace(" ","%20").replace("[","%5B").replace("]","%5D"))
+            .toString().substringBefore('#')
+    }.getOrNull()
 
     private fun direct(url:String):Boolean =
         safe(url) && NativeMediaDownloader.isDirectMediaUrl(url) &&
@@ -87,7 +95,7 @@ internal object Mp4HentaiPublishedHost {
             val status=response.statusCode()
             if(status in 300..399){
                 val next=response.header("Location")?.takeIf{it.isNotBlank()}
-                    ?.let{URI(current).resolve(it).toString()}
+                    ?.let{publishedHref(current,it)}
                     ?:error("MP4Hentai host redirect missing destination")
                 if(direct(next))return next
                 check(isHosterPage(next)){
@@ -115,9 +123,8 @@ internal object Mp4HentaiPublishedHost {
                         Regex("""(?i)(?:download|direct link|get file)""")
                             .containsMatchIn(label)
                     if(!download)continue
-                    val link=runCatching{
-                        URI(current).resolve(anchor.attr("href")).toString()
-                    }.getOrNull()?:continue
+                    val link=publishedHref(current,anchor.attr("href"))
+                        ?:continue
                     if(direct(link))candidates+=link
                     else if(nextLanding==null && isHosterPage(link) &&
                         link!=current)nextLanding=link
@@ -145,9 +152,8 @@ internal object Mp4HentaiPublishedHost {
                             if(!anchor.hasAttr("download") &&
                                 !Regex("""(?i)(?:download|direct link|get file)""")
                                     .containsMatchIn(label))continue
-                            val link=runCatching{
-                                URI(current).resolve(anchor.attr("href")).toString()
-                            }.getOrNull()?:continue
+                            val link=publishedHref(current,anchor.attr("href"))
+                                ?:continue
                             if(direct(link))browserDirect+=link
                             else if(nextLanding==null && isHosterPage(link) &&
                                 link!=current)nextLanding=link
