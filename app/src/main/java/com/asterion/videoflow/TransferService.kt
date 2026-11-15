@@ -168,9 +168,10 @@ object VideoEngine {
                 while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                       !Thread.currentThread().isInterrupted && transferred<maxItems &&
                       android.os.SystemClock.elapsedRealtime()<deadline) {
-                val next=db.claimNext(nativeOnly=nativeOnly) ?: run{
-                    // A visible queued row and zero eligible claims is a
-                    // scheduler/authorization distinction, not a download.
+                val next=db.claimNext(nativeOnly=nativeOnly)
+                if(next==null){
+                    // Queued rows with no eligible claim are blocked or held,
+                    // not actively downloading. Persist a scheduler signal.
                     if(db.count("queued")>0)
                         DownloaderEventJournal.record(context,0L,"queue_blocked",
                             if(nativeOnly)"native_only_ineligible" else "no_eligible_claim")
