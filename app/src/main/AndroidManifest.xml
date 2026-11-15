@@ -16,6 +16,7 @@
          on Android 11+. Unknown apps still fail the UID/approval check. -->
     <queries>
         <package android:name="com.azrael.pixivdumpsync"/>
+        <package android:name="com.asterion.control"/>
         <package android:name="com.asterion.art"/>
         <package android:name="com.ailm.android"/>
         <package android:name="com.gamepilot"/>
@@ -29,6 +30,11 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- Opt-in signed/UID-checked Control diagnostics. No arbitrary
+             ContentProvider reads, writable files, or implicit authorization. -->
+        <provider android:name=".AsterionControlDiagnosticsProvider"
+            android:authorities="${applicationId}.asterion.bridge"
+            android:exported="true"/>
         <!-- Receiver authenticates OS caller UID and installed signing certificate,
              then requires per-peer user approval for independent Asterion keys. -->
         <!-- Dedicated, non-exported process keeps STOP responsive during a
