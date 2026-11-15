@@ -92,10 +92,23 @@ class SyncEngine(private val context: Context) {
             SyncControl.forceFinish("Kuroha inventory needs attention")
             return stats
         }
-        NetworkCookies.install(context)
-        val db = AppDb(context)
-        db.clearTransientNetworkErrors()
-        val api = if (mode == SyncMode.CLOUD) null else PixivApi(context)
+        // The sync lease is already acquired above. Any failure while opening
+        // the database or restoring Pixiv authentication MUST release that lease;
+        // otherwise every subsequent Sync now / backfill reports "already running".
+        val (db, api) = try {
+            NetworkCookies.install(context)
+            val opened = AppDb(context)
+            try {
+                opened.clearTransientNetworkErrors()
+                opened to (if (mode == SyncMode.CLOUD) null else PixivApi(context))
+            } catch (failure: Throwable) {
+                opened.close()
+                throw failure
+            }
+        } catch (failure: Throwable) {
+            SyncControl.forceFinish("Pixiv initialization failed")
+            throw failure
+        }
         var finalMessage = "Idle"
         var released = false
 
