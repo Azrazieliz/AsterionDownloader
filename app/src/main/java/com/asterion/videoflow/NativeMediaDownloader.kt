@@ -96,7 +96,11 @@ internal object NativeMediaDownloader {
         val destination=File(directory,"$stem.$ext")
         val partial=File(directory,"native_original.$ext.part")
         val validator=File(directory,"native_original.$ext.etag")
-        if(destination.isFile && destination.length()>0L)return destination
+        val receipt=File(directory,"$stem.$ext.receipt")
+        // A prior APK could leave a nonempty but truncated/corrupt staged
+        // destination. Existence alone is NEVER a completion proof.
+        if(destination.isFile && NativeMediaReceipt.matches(destination,receipt))
+            return destination
         var current=address
         var redirects=0
         var continuationTotal:Long?=null
@@ -224,6 +228,10 @@ internal object NativeMediaDownloader {
                 check(partial.renameTo(destination)){
                     "Cannot finalize downloaded native original media"
                 }
+                // Persist a length+SHA256 receipt only after the exact full
+                // response was downloaded and the staged file finalized.
+                // Interrupted receipt writes force revalidation, never reuse.
+                NativeMediaReceipt.write(destination,receipt)
                 validator.delete()
                 return destination
             }finally{
