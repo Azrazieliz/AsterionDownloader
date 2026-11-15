@@ -98,11 +98,15 @@ class SiteLoginActivity:Activity() {
             orientation=LinearLayout.VERTICAL
             setBackgroundColor(ui.background)
         }
-        val title=ui.text(this,"Connect website account",19f,ui.white,true)
+        val archivebate=Uri.parse(address).host.orEmpty().removePrefix("www.")=="archivebate.com"
+        val title=ui.text(this,if(archivebate)"Connect Archivebate listing" else
+            "Connect website account",19f,ui.white,true)
         title.setPadding(ui.px(this,15),ui.px(this,14),ui.px(this,15),ui.px(this,4))
         shell.addView(title)
         shell.addView(ui.text(this,
-            "Log in on the website. Cookies stay in Android's browser storage; sign-in is not shared with other sites.",
+            if(archivebate)
+                "Use Archivebate's own Continue control to display real video cards, then SAVE CONNECTION. No account login is needed for publicly available recordings."
+            else "Log in on the website. Cookies stay in Android's browser storage; sign-in is not shared with other sites.",
             12f,ui.secondary).apply{
             setPadding(ui.px(this@SiteLoginActivity,15),0,
                 ui.px(this@SiteLoginActivity,15),ui.px(this@SiteLoginActivity,10))
