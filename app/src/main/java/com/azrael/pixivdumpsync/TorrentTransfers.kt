@@ -183,6 +183,9 @@ class TorrentTransferService : Service() {
             }catch(e:Throwable){
                 if(e is InterruptedException || stopRequests.contains(id))
                     update(id,"Paused · original pieces preserved; resume to continue")
+                else if(e is java.io.IOException &&
+                    e.message.orEmpty().contains("torrent stalled"))
+                    update(id,"STALLED: "+e.message+" · Resume keeps verified pieces")
                 else
                     update(id,"FAILED: "+(e.message?:e.javaClass.simpleName))
             }finally {
@@ -346,7 +349,7 @@ class TorrentTransferService : Service() {
         // handle after restoring the user's file selection.
         if(session.isPaused)session.resume()
         handle.resume()
-        var lastProgress=0f
+        var lastVerifiedWanted=0L
         var lastAdvance=android.os.SystemClock.elapsedRealtime()
         var reannouncedSinceAdvance=false
         while (true) {
@@ -365,9 +368,12 @@ class TorrentTransferService : Service() {
             }
             val status = handle.status()
             val currentProgress=status.progress()
+            val checkedBytes=status.totalWantedDone().coerceAtLeast(0L)
+            val wantedBytes=status.totalWanted().coerceAtLeast(0L)
+            val checking=status.state().toString().contains("checking",ignoreCase=true)
             val now=android.os.SystemClock.elapsedRealtime()
-            if(currentProgress>lastProgress){
-                lastProgress=currentProgress
+            if(checkedBytes>lastVerifiedWanted){
+                lastVerifiedWanted=checkedBytes
                 lastAdvance=now
                 reannouncedSinceAdvance=false
             }
@@ -375,7 +381,8 @@ class TorrentTransferService : Service() {
             val seeds=status.numSeeds().coerceIn(0,connected)
             val leechers=(connected-seeds).coerceAtLeast(0)
             val idle=now-lastAdvance
-            if(TorrentPeerDiagnostics.shouldReannounce(
+            if(!checking && !status.isFinished() &&
+                TorrentPeerDiagnostics.shouldReannounce(
                     idle,seeds,reannouncedSinceAdvance)){
                 // Reannounce only once per 2-minute stall, respecting the
                 // tracker's own min_interval. Discover new seeders without
@@ -386,18 +393,19 @@ class TorrentTransferService : Service() {
             // Connected peers are not necessarily seeders; a swarm can have
             // many leechers and still lack the pieces we need. Expose both.
             // Preserve all previously verified pieces on a stalled transfer.
-            if(connected==0 && idle>=5L*60_000L)
+            if(!checking && !status.isFinished() && connected==0 && idle>=5L*60_000L)
                 throw java.io.IOException(
                     "No connected peers for five minutes; torrent stalled; partials quarantined")
-            if(connected>0 && idle>=7L*60_000L)
+            if(!checking && !status.isFinished() && connected>0 && idle>=7L*60_000L)
                 throw java.io.IOException(
                     "Connected to $connected peers ($seeds seeders, $leechers leechers) "+
                     "but no verified piece advanced for seven minutes; "+
                     "torrent stalled; partials quarantined")
             val percent = (currentProgress * 100).toInt().coerceIn(0, 100)
-            val speed=status.downloadRate().coerceAtLeast(0)/1024
+            val speed=status.downloadPayloadRate().coerceAtLeast(0)/1024
             val detail=TorrentPeerDiagnostics.describe(
-                percent,speed.toLong(),connected,seeds,idle)
+                percent,speed.toLong(),connected,seeds,if(checking)0L else idle,
+                checkedBytes,wantedBytes,speed.toLong())
             update(id, "${info.name().take(32)} · $detail",percent)
             if (status.isFinished()) break // libtorrent has verified selected pieces
             Thread.sleep(2000)
