@@ -225,6 +225,17 @@ internal object LegacyPixivInventory {
         return try{refresh(ctx)}
         finally{refreshing.set(false)}
     }
+    /** Schedule occasional best-effort indexing without holding a Pixiv
+     * sync lease or blocking native image downloads. The async refresher
+     * checks the same AtomicBoolean to avoid concurrent full-tree walks.
+     */
+    fun refreshAsyncIfDue(ctx:Context,intervalMs:Long=12L*60*60*1000):Boolean {
+        if(System.currentTimeMillis()-prefs(ctx).getLong("checked",0L)<intervalMs)
+            return false
+        if(refreshing.get())return false
+        refreshAsync(ctx)
+        return true
+    }
     fun refreshAsync(ctx:Context,onComplete:((Int,Throwable?)->Unit)?=null){
         if(!refreshing.compareAndSet(false,true))return
         val app=ctx.applicationContext
