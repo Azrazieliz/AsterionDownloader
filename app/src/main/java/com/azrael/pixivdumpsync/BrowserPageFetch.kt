@@ -466,7 +466,8 @@ object BrowserPageFetch {
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_200L)
                             }else if(selectedPlayerPage &&
-                                selectedPlayerWaits++<6 &&
+                                selectedPlayerWaits++<
+                                    SelectedPlayerWaitPolicy.maxPolls(host) &&
                                 ((if(host=="javideo.net") {
                                     // Only the selected iframe appears after
                                     // JAVIDEO's Play button; its HTML5 video is

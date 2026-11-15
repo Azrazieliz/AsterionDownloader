@@ -11,7 +11,11 @@ import android.content.Context
  * HTTP only rather than duplicating the Chaquopy runtime and crashing.
  */
 internal object VideoAgentAdmission {
-    internal const val MIN_FREE_FOR_TWO_EXTRACTORS=1_500_000_000L
+    // Two Chaquopy runtimes + two independently allocating WebViews caused
+    // unacceptable pressure on the actual 12GB Samsung with ~3.3GB free.
+    // Keep the second process able to download direct media in parallel,
+    // but enable a second heavy website/Python extractor only with 4GB free.
+    internal const val MIN_FREE_FOR_TWO_EXTRACTORS=4_000_000_000L
 
     internal fun secondaryNativeOnly(freeBytes:Long,lowMemory:Boolean):Boolean =
         lowMemory || freeBytes<MIN_FREE_FOR_TWO_EXTRACTORS
