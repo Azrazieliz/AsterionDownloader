@@ -20,7 +20,11 @@ internal object LegacyYtDlpTransfer {
             // The Maven AAR was built with yt-dlp 2026.6.9. New provider
             // extractor fixes are bundled as a checksum-pinned pure-Python
             // wheel in the APK, with the AAR copy retained as fallback.
-            VideoExtractorVersion.activate(context.applicationContext)
+            check(VideoExtractorVersion.activate(context.applicationContext)) {
+                "Required yt-dlp "+VideoExtractorVersion.VERSION+
+                    " failed runtime activation. Refusing silent downgrade to "+
+                    "the older unsupported embedded extractor."
+            }
             initialized=true
         }
     }
