@@ -149,9 +149,19 @@ object BrowserPageFetch {
             // Never click a download hyperlink, unrelated card or ad.
             if(location.hostname.replace(/^www\./,'')==='rule34video.com' &&
                 /^\/videos?\/\d{1,12}(?:\/|$)/.test(location.pathname)){
-                const actions=[...document.querySelectorAll('button,[role="button"]')]
-                    .filter(el=>!el.closest('aside,.related,.recommended,'+
-                        '.recommendations,.ads,.advertisement,.sidebar'));
+                const actions=[...document.querySelectorAll(
+                        'button,[role="button"],a[href]')]
+                    .filter(el=>{
+                        if(el.closest('aside,.related,.recommended,'+
+                                '.recommendations,.ads,.advertisement,.sidebar'))
+                            return false;
+                        if(el.tagName.toLowerCase()!=='a')return true;
+                        const href=(el.getAttribute('href')||'').trim().toLowerCase();
+                        // Open only an in-page modal; actual /get_file links
+                        // are extracted as URLs and never clicked/downloaded.
+                        return !href || href.startsWith('#') ||
+                            href.startsWith('javascript:void');
+                    });
                 const action=actions.find(el=>/^(?:download|download video)$/i
                     .test((el.innerText||el.textContent||'').trim()));
                 if(action && !action.dataset.asterionDownloadOpened){

@@ -806,7 +806,13 @@ object VideoEngine {
         // No generic fallback is permitted for this provider. If the selected
         // player does not identify one unambiguous source, fail instead.
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
+        val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         val strictJavGuru=NetworkRoute.siteKey(item.url)=="jav.guru"
+        if(strictRule34 && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Rule34Video selected page exposed no verified download quality links; "+
+                    "the player page and unrelated previews are not transferable"))
         if(strictJavGuru && publishedOriginals.isEmpty())
             throw IllegalStateException(
                 "Jav Guru did not expose a selected STREAM player. "+
@@ -968,6 +974,9 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictRule34 && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Rule34Video published original failed the verified first-party transfer"))
             if(strictThreeD && !downloaded)
                 throw (last?:IllegalStateException(
                     "3DHentaiX selected original failed; unrelated media "+

@@ -164,17 +164,19 @@ internal object PublisherOriginalExtractors {
         // must not be interpreted as "no original" before inspecting the
         // authorized rendered selected page.
         if(host=="rule34video.com"){
-            val static=fromHtml(selected,page.outerHtml())
-            if(static.any{Rule34VideoOriginalSource.firstPartyDownload(selected,it.url)})
-                return static
-            val rendered=runCatching {
-                if(!com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(selected) &&
-                    !com.azrael.galleryflow.SiteSession.bound(context,selected))
-                    emptyList()
-                else fromHtml(selected,
-                    com.azrael.pixivdumpsync.BrowserPageFetch.html(context,selected))
-            }.getOrDefault(emptyList())
-            return (rendered+static).distinctBy{it.url}
+            fun published(html:String)=Rule34VideoOriginalSource.parse(html,selected)
+                .map{Candidate(it.url,selected,host)}
+            val static=published(page.outerHtml())
+            if(static.isNotEmpty())return static
+            // Keep the actual browser exception (e.g. HTTP 503 / access
+            // challenge); do not silently replace it with a generic player.
+            check(com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(selected) ||
+                com.azrael.galleryflow.SiteSession.bound(context,selected)){
+                "Rule34Video selected original requires accessible browser session"
+            }
+            val rendered=com.azrael.pixivdumpsync.BrowserPageFetch
+                .html(context,selected)
+            return published(rendered)
         }
         // Do not short-circuit HentaiBros or 3DHentai ahead of their
         // publisher-specific resolver: the old early return silently skipped
