@@ -308,6 +308,32 @@ object BrowserPageFetch {
                                 .slice(0,1000).map(p=>'<p>'+
                                     esc((p.innerText||p.textContent||'').slice(0,20000))+
                                     '</p>').join(''):'';
+                            // Jav Guru's real shortcode player is not a normal
+                            // iframe. The old synthetic DOM omitted its article
+                            // ID, data-localize keys and inline iframe_url JSON,
+                            // making the exact player resolver ALWAYS return
+                            // zero candidates after WebView/browser fallback.
+                            if(publisher==='jav.guru' &&
+                                /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(currentPath)){
+                                const postId=currentPath.split('/').filter(Boolean)[0];
+                                const article=document.getElementById('post-'+postId);
+                                const extra=document.getElementById('wp-btn-iframe-js-extra');
+                                if(article && extra){
+                                    const selected=[...article.querySelectorAll(
+                                        'a.wp-btn-iframe__shortcode[data-localize]')]
+                                        .slice(0,18).map(btn=>
+                                            '<a class="wp-btn-iframe__shortcode" data-localize="'+
+                                            esc(btn.getAttribute('data-localize')||'')+'">'+
+                                            esc((btn.innerText||btn.textContent||'').trim())+'</a>'
+                                        ).join('');
+                                    const config=(extra.textContent||'').slice(0,100_000)
+                                        .replace(/<\\/script/gi,'<\\\\/script');
+                                    if(selected && config.includes('iframe_url'))
+                                        return '<html><body><article id="post-'+postId+'">'+
+                                            selected+'</article><script>'+config+
+                                            '</script></body></html>';
+                                }
+                            }
                             const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
                                 '</title></head><body><h1>'+esc(realH1)+
