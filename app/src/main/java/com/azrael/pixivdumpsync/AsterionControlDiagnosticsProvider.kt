@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoTransferJournal
+import com.asterion.videoflow.DownloaderEventJournal
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -38,7 +39,8 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
             "diagnostics.capabilities",
             "diagnostics.snapshot",
             "diagnostics.crash_summary",
-            "diagnostics.video_jobs"
+            "diagnostics.video_jobs",
+            "diagnostics.events"
         )
         private fun signer(context:Context):String {
             val pm=context.packageManager
@@ -102,6 +104,7 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
         .put("global_logcat",false).put("raw_media_export",false)
         .put("download_queue",true).put("video_workers",true)
         .put("verified_transfer_bytes",true).put("crash_exit_summary",true)
+        .put("cross_process_stage_events",true)
         .put("http_per_request_trace",false)
         .put("supported_actions",JSONArray(SUPPORTED.sorted()))
 
@@ -229,6 +232,8 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
             val data=when(action){
                 "diagnostics.capabilities"->capabilities()
                 "diagnostics.video_jobs"->videoJobs(input.optInt("limit",12))
+                "diagnostics.events"->DownloaderEventJournal.recent(app,
+                    input.optLong("since",0L),input.optInt("limit",18))
                 "diagnostics.crash_summary"->crashSummary()
                 "diagnostics.snapshot"->JSONObject()
                     .put("capabilities",capabilities())
