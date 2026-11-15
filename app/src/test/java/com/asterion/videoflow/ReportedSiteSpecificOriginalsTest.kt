@@ -44,6 +44,34 @@ class ReportedSiteSpecificOriginalsTest {
         assertTrue(NativeMediaDownloader.isNativeEligible(selected,expected))
     }
 
+    @Test fun hentaBrosActualWordpressWpfpElementDoesNotRequireFlowplayerClass(){
+        val selected="https://hentaibros.net/deco-x-deco-the-animation-episode-1/"
+        val html="""<article class="post"><header class="entry-header">
+          <div class="video-player"><div class="responsive-player">
+            <div id="wpfp_3235" data-item='{"sources":[
+              {"src":"https://cdn.example/Selected Episode 01.mp4","type":"video/mp4"}]}'>
+            </div></div></div></header>
+          <aside class="related"><div class="video-player">
+            <div id="wpfp_9999" data-item='{"sources":[
+              {"src":"https://cdn.example/unrelated.mp4"}]}'></div>
+          </div></aside></article>"""
+        val sources=SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(html,selected),selected,"hentaibros.net")
+        assertEquals(listOf("https://cdn.example/Selected%20Episode%2001.mp4"),
+            sources.map{it.url})
+        assertEquals(selected,sources.single().referer)
+    }
+
+    @Test fun hentaBrosRejectsAmbiguousSelectedPlayers(){
+        val selected="https://hentaibros.net/episode-1/"
+        val html="""<main><div class="video-player">
+            <div id="wpfp_1" data-item='{"sources":[{"src":"https://cdn.example/one.mp4"}]}'></div>
+            <div id="wpfp_2" data-item='{"sources":[{"src":"https://cdn.example/two.mp4"}]}'></div>
+        </div></main>"""
+        assertTrue(SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(html,selected),selected,"hentaibros.net").isEmpty())
+    }
+
     @Test fun roshyPublishesNamedOriginalFileHostsNotNativeVideoFiles(){
         val page="https://roshy.tv/video/test-original-scene/"
         val k2s="https://k2s.cc/file/aabbccdd/scene.mp4"
