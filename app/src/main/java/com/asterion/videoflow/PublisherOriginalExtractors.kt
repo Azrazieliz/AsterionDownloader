@@ -167,6 +167,23 @@ internal object PublisherOriginalExtractors {
             val exact=FreePornVideosOriginalSource.selectedOriginal(page,selected)
             if(exact!=null)return listOf(Candidate(exact,selected,host))
         }
+        // Archivebate's watch page frequently returns its cover cards
+        // BEFORE the exact Mixdrop player is inserted by JavaScript. If
+        // static selected HTML is empty, inspect ONLY publisher-selected
+        // rendered iframe candidates. Generic watch-page Python extraction
+        // then cannot mask a missing selected player with "Unsupported URL".
+        if(host=="archivebate.com" &&
+            ArchivebateSelectedMedia.isSelectedArticle(selected)){
+            val static=fromHtml(selected,page.outerHtml())
+            if(static.isNotEmpty())return static
+            val rendered=WebDiscovery.embeddedCandidates(
+                selected,context,explicitlySelected=true)
+                .filter{ArchivebateSelectedMedia.isSelectedEmbed(selected,it)}
+                .distinct()
+            return rendered.singleOrNull()?.let{
+                listOf(Candidate(it,selected,host))
+            }.orEmpty()
+        }
         // The real Rule34Video download-quality links can be created only
         // after the selected page's Download control opens. Static HTML alone
         // must not be interpreted as "no original" before inspecting the
