@@ -26,6 +26,17 @@ class Mp4HentaiPublishedHostTest {
         assertEquals(result,extracted)
     }
 
+    @Test fun permittedPublisherRedirectRetainsSelectedHosterIdentity(){
+        assertTrue(Mp4HentaiPublishedHost.isPublishedHost(selected,
+            "https://upfilesgo.com/nGfW"))
+        assertTrue(Mp4HentaiPublishedHost.isPublishedHost(selected,
+            "https://www.mirrored.to/files/DF7298C6/file.mp4_links"))
+        assertFalse(Mp4HentaiPublishedHost.isPublishedHost(selected,
+            "https://example.net/file.mp4"))
+        assertFalse(Mp4HentaiPublishedHost.isPublishedHost(selected,
+            "https://upfilesgo.com/"))
+    }
+
     @Test fun externalHostsAreNeverImplicitTrustedMedia(){
         assertFalse(Mp4HentaiPublishedHost.isPublishedHost(selected,
             "https://mirrored.to.evil.example/files/ABC/file"))
