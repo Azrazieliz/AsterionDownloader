@@ -322,8 +322,11 @@ class AsterionHomeActivity:Activity(){
         CrashDiagnostics.install(this)
         window.statusBarColor=theme.background
         window.navigationBarColor=theme.background
-        page=getSharedPreferences("asterion_display",MODE_PRIVATE)
-            .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
+        val requested=intent?.getStringExtra("asterion_page")
+        page=requested?.takeIf{it in setOf(
+            "Home","Pixiv","Site","Porn","Hentai","Sources","Queue","Settings")}
+            ?:getSharedPreferences("asterion_display",MODE_PRIVATE)
+                .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
         val head=theme.row(this).apply{setPadding(dp(14),dp(12),dp(14),dp(12))}
         backControl=text("‹",29f,theme.white,true).apply {
@@ -470,6 +473,17 @@ class AsterionHomeActivity:Activity(){
                 runCatching{XPhotoScheduler.ensure(applicationContext)}
             }
         },1100L)
+    }
+    override fun onNewIntent(next:Intent){
+        super.onNewIntent(next)
+        setIntent(next)
+        val requested=next.getStringExtra("asterion_page")
+        if(requested in setOf("Home","Pixiv","Site","Porn","Hentai",
+                "Sources","Queue","Settings")){
+            history.clear()
+            page=requested!!
+            if(::body.isInitialized)render()
+        }
     }
     override fun onResume(){
         super.onResume()
