@@ -229,7 +229,7 @@ object BrowserPageFetch {
                             // Preserve the source identity/duration guards in
                             // SiteSpecificOriginalSources; never inspect ads.
                             if(selectedPlayerHost==='3dhentaix.com' ||
-                                (selectedPlayerHost==='voe.sx' &&
+                                (['voe.sx','kamehaus.net'].includes(selectedPlayerHost) &&
                                  /^\/e\/[A-Za-z0-9_-]{6,80}\/?$/.test(location.pathname))){
                                 const roots=selectedPlayerHost==='3dhentaix.com'?
                                     [...document.querySelectorAll(
