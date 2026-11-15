@@ -22,7 +22,7 @@ import java.util.Locale
  */
 internal object JavGuruOriginalSource {
     data class Player(val server:String,val url:String)
-    private val order=listOf("VO","SB","LU","VI","DD","JK")
+    private val order=listOf("LU","VO","SB","VI","DD","JK")
     private val articlePath=Regex("""^/([0-9]{4,10})/[a-z0-9][a-z0-9_-]{3,240}/?$""",
         RegexOption.IGNORE_CASE)
     private val shortcode=Regex("""(?s)\bvar\s+([a-z]{10})\s*=\s*(\{.*?\})\s*;""")
