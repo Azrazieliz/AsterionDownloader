@@ -24,6 +24,19 @@ internal object FreePornVideosOriginalSource {
                 "freepornvideos.xxx" &&
             uri.path.orEmpty().length>1 && media!=page
     }.getOrDefault(false)
+    /** A publisher-owned MP4 for the exact requested artwork ID, not the
+     * same site's preview, advert, or another selected scene. */
+    internal fun selectedFileQuality(page:String,media:String):Int? {
+        if(!firstPartyFormat(page,media))return null
+        val id=Regex("""^/videos/([0-9]{2,12})/""")
+            .find(URI(page).path.orEmpty())?.groupValues?.get(1)?:return null
+        val uri=runCatching{URI(media)}.getOrNull()?:return null
+        if(uri.rawQuery!=null)return null
+        val pattern=Regex("""(?i)^/get_file/[a-z0-9_/%.-]{15,400}/"""+
+            Regex.escape(id)+"""_(2160|1440|1080|720|480|360)m\.mp4/?$""")
+        return pattern.matchEntire(uri.path.orEmpty())
+            ?.groupValues?.get(1)?.toIntOrNull()
+    }
     /** The selected HTML5 player publishes quality-labelled first-party
      * /get_file/.../<selected ID>_2160m.mp4/ links, including a trailing '/'.
      * Previously we discarded them and invoked Python for the article URL.
@@ -31,22 +44,15 @@ internal object FreePornVideosOriginalSource {
      */
     internal fun selectedOriginal(doc:Document,selected:String):String? {
         if(!selectedPage(selected))return null
-        val id=Regex("""^/videos/([0-9]{2,12})/""")
-            .find(URI(selected).path.orEmpty())?.groupValues?.get(1)?:return null
-        val path=Regex(
-            """(?i)^/get_file/[a-z0-9_/%.-]{15,400}/"""+
-                Regex.escape(id)+"""_(2160|1440|1080|720|480|360)m\.mp4/?$""")
         val formats=doc.select("video source[src],video[src]").mapNotNull{element->
             val url=runCatching{
                 URI(selected).resolve(element.attr("src")).toString()
             }.getOrNull()?:return@mapNotNull null
             val uri=runCatching{URI(url)}.getOrNull()
                 ?:return@mapNotNull null
-            val matched=path.matchEntire(uri.path.orEmpty())
+            val resolution=selectedFileQuality(selected,url)
                 ?:return@mapNotNull null
-            if(uri.rawQuery!=null || !firstPartyFormat(selected,url))
-                return@mapNotNull null
-            (matched.groupValues[1].toIntOrNull()?:0) to url
+            resolution to url
         }.distinctBy{it.second}
         return formats.maxByOrNull{it.first}?.second
     }
