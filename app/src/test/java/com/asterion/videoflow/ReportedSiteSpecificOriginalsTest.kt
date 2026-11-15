@@ -60,6 +60,23 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(html,page),page).map{it.url})
     }
 
+    @Test fun roshyIframeWebpageIsNotAPlayableOriginal(){
+        val publisher="https://roshy.tv/video/test-original-scene/"
+        val player="https://kamehaus.net/e/242urr647yem"
+        val file="https://nitroflare.com/view/AAABBBCCC/scene.mp4"
+        val media="https://cdn.media.example.net/selected/master.m3u8"
+        val initial=listOf(
+            SiteSpecificOriginalSources.Source(player,publisher),
+            SiteSpecificOriginalSources.Source(file,publisher))
+        val pending=SiteSpecificOriginalSources.roshyTransferableCandidates(
+            initial,emptyList())
+        assertEquals(listOf(file),pending.map{it.url})
+        val resolved=SiteSpecificOriginalSources.roshyTransferableCandidates(
+            initial,listOf(SiteSpecificOriginalSources.Source(media,player)))
+        assertEquals(listOf(media,file),resolved.map{it.url})
+        assertFalse(resolved.any{it.url==player})
+    }
+
     @Test fun roshyRefusesUnattributedKamehausPlayers(){
         val selected="https://roshy.tv/video/test-original-scene/"
         val html="""<div id="main-content"><div class="is-single-post-main-player">

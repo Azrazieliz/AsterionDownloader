@@ -374,6 +374,18 @@ internal object SiteSpecificOriginalSources {
         return (stream+out.values).distinctBy{it.url}
     }
     /**
+     * Preserve genuine published file-host alternatives while forbidding
+     * automatic "success" from a Kamehaus HTML iframe. Only resolved
+     * media-bearing sources are transferable as an original stream.
+     */
+    internal fun roshyTransferableCandidates(
+        published:List<Source>,verifiedStream:List<Source>
+    ):List<Source> =
+        (verifiedStream.filter{isMedia(it.url)}+
+            published.filter{isMedia(it.url) || isHosterPage(it.url)})
+            .distinctBy{it.url}
+
+    /**
      * MP4Hentai is a VIDEO publisher. Its /YYYY/MM/<title> URL is only the
      * selected playback page. Extract the actual media from that selected
      * video's player; never download page HTML or unrelated article anchors.
@@ -605,29 +617,22 @@ internal object SiteSpecificOriginalSources {
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->{
                 val initial=roshy(doc,selected)
-                val player=initial.firstOrNull { host(it.url)=="kamehaus.net" }
-                val stream=player?.let {
-                    runCatching {
-                        val rendered=BrowserPageFetch.html(context,it.url,
-                            playerReferer=selected)
-                        mediaElements(Jsoup.parse(rendered,it.url),it.url,
-                            "main .video-player video[src]")
+                val frames=initial.filter{host(it.url)=="kamehaus.net"}
+                // The Kamehaus /e/<id> URL is a webpage, not original media.
+                // Its selected HTML5 currentSrc/HLS must be resolved before
+                // transfer; an unverified iframe cannot masquerade as MP4.
+                val verifiedStream=if(frames.size==1)
+                    selectedIframeMedia(context,selected,frames.single())
+                else emptyList()
+                val jsStream=if(frames.isEmpty() && initial.none{isMedia(it.url)})
+                    runCatching{
+                        val rendered=BrowserPageFetch.html(context,selected)
+                        mediaElements(Jsoup.parse(rendered,selected),selected,
+                            "main .video-player video[src],"+
+                            "main .video-player video source[src]")
                     }.getOrDefault(emptyList())
-                }.orEmpty()
-                if(player!=null || initial.any{isMedia(it.url)})
-                    (stream+initial).distinctBy{it.url} else {
-                // Beeteam368 may create the original player after JS loads.
-                // Inspect only that selected player; no new browser module.
-                val rendered=runCatching {
-                    if(!BrowserPageFetch.publicEligible(selected) &&
-                        !SiteSession.bound(context,selected))emptyList()
-                    else mediaElements(Jsoup.parse(
-                        BrowserPageFetch.html(context,selected),selected),
-                        selected,"main .video-player video[src]"+
-                            ",main .video-player source[src]")
-                }.getOrDefault(emptyList())
-                (rendered+initial).distinctBy{it.url}
-                }
+                else emptyList()
+                roshyTransferableCandidates(initial,verifiedStream+jsStream)
             }
             "mp4hentai.com"->{
                 val first=mp4hentai(doc,selected)
