@@ -72,19 +72,26 @@ class SyncEngine(private val context: Context) {
             LegacyPixivInventory.status(context)
         }
         val status=legacy.getOrNull()
-        val unavailable=legacy.exceptionOrNull()?.message ?:
-            if(status!=null){
-                when{
-                    status.linkedFolders==0 &&
-                        LegacyPixivInventory.legacyKurohaInstalled(context)->
-                        "Kuroha is installed; link its saved Pixiv folder in Settings first"
-                    status.linkedFolders>0 && status.scanning->
-                        "The Kuroha inventory is still scanning"
-                    status.linkedFolders>0 && status.lastError!=null->
-                        status.lastError
-                    else->null
-                }
-            }else null
+        // Unavailable legacy storage is a duplicate-risk gate for BULK
+        // historical backfill only. Previous code stopped LIVE checks, direct
+        // one-off downloads and even CLOUD upload before any Pixiv request.
+        // Live respects existing cursors; backfill still needs complete
+        // read-only access to Kuroha files before replaying old artwork.
+        val unavailable=if(mode==SyncMode.BACKFILL){
+            legacy.exceptionOrNull()?.message ?:
+                if(status!=null){
+                    when{
+                        status.linkedFolders==0 &&
+                            LegacyPixivInventory.legacyKurohaInstalled(context)->
+                            "Kuroha originals need one-time folder access before backfill"
+                        status.linkedFolders>0 && status.scanning->
+                            "The Kuroha inventory is still scanning"
+                        status.linkedFolders>0 && status.lastError!=null->
+                            status.lastError
+                        else->null
+                    }
+                }else null
+        }else null
         if(unavailable!=null){
             stats.errors++
             progress("Pixiv sync held to avoid duplicate downloads: "+
