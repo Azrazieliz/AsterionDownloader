@@ -198,7 +198,8 @@ val verifyBundledYtDlp by tasks.registering {
 
 // Do not affect ordinary source-only tests; protect actual APK packaging.
 tasks.matching {
-    it.name == "packageAcceptance" || it.name == "mergeAcceptanceAssets"
+    it.name in setOf("packageAcceptance","mergeAcceptanceAssets",
+        "packageRelease","mergeReleaseAssets")
 }.configureEach {
     dependsOn(verifyBundledYtDlp)
 }
