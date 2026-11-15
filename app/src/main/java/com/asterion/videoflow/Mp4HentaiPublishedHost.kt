@@ -65,7 +65,7 @@ internal object Mp4HentaiPublishedHost {
     internal fun publishedHref(base:String,raw:String):String?=runCatching{
         URI(base).resolve(raw.trim().replace("&amp;","&")
             .replace(" ","%20").replace("[","%5B").replace("]","%5D"))
-            .toString().substringBefore('#')
+            .toString().substringBefore('#').takeIf(::safe)
     }.getOrNull()
 
     private fun direct(url:String):Boolean =
