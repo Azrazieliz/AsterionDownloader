@@ -159,6 +159,14 @@ internal object PublisherOriginalExtractors {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
         val page=WebDiscovery.selectedDocument(selected,context)
+        // The selected FreePornVideos video publishes actual full-quality
+        // MP4 <source> links under its own /get_file/ endpoint. Dispatch the
+        // selected-ID-bound publisher source directly; Python page metadata
+        // extraction is not a prerequisite for a real first-party MP4.
+        if(host=="freepornvideos.xxx"){
+            val exact=FreePornVideosOriginalSource.selectedOriginal(page,selected)
+            if(exact!=null)return listOf(Candidate(exact,selected,host))
+        }
         // The real Rule34Video download-quality links can be created only
         // after the selected page's Download control opens. Static HTML alone
         // must not be interpreted as "no original" before inspecting the
