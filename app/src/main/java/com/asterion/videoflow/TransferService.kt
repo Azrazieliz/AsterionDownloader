@@ -806,6 +806,11 @@ object VideoEngine {
         // No generic fallback is permitted for this provider. If the selected
         // player does not identify one unambiguous source, fail instead.
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
+        val strictJavGuru=NetworkRoute.siteKey(item.url)=="jav.guru"
+        if(strictJavGuru && publishedOriginals.isEmpty())
+            throw IllegalStateException(
+                "Jav Guru did not expose a selected STREAM player. "+
+                "The unsupported page and advertising iframe will not be retried.")
         if(strictThreeD && publishedOriginals.size!=1)
             throw IllegalStateException(
                 "3DHentaiX original identity unverified: selected player "+
@@ -922,6 +927,16 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(strictJavGuru && userRequested){
+                    // The shortcode and both first-party relay steps
+                    // already prove the selected hoster identity. Start its
+                    // original transfer without repeating generic JavGuru
+                    // Python metadata extraction and its 50s timeout.
+                    try {
+                        execute(source.url,source.referer)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else{
                     val checked=runCatching{preflight(source.url,source.referer)}
                     if(checked.isSuccess &&
@@ -942,6 +957,10 @@ object VideoEngine {
                 throw (last?:IllegalStateException(
                     "3DHentaiX selected original failed; unrelated media "+
                     "and generic extractor fallback are prohibited"))
+            if(strictJavGuru && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Jav Guru selected STREAM players failed. "+
+                    "The publisher page and unrelated ads are not download candidates."))
             val publisherReferers=publishedOriginals.associate{it.url to it.referer}
             if(!downloaded) for(candidate in (publisherReferers.keys+variants)){
                 if(VideoTransferLimits.resolvingStalled(
