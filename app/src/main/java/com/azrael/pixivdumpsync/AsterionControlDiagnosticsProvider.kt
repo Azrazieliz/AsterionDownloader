@@ -126,11 +126,15 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
                     .put("rss_kb",item.rss))
             }
         }
-        val saved=java.io.File(context.filesDir,"last_asterion_crash.txt")
-        val savedPresent=saved.isFile
-        // Existing crash handler keeps the full stack on-device.
-        // This read-only bridge exposes only safe existence and class metadata.
-        return result.put("exit_reasons",exits).put("private_java_crash_record_exists",savedPresent)
+        val legacy=java.io.File(context.filesDir,"last_asterion_crash.txt")
+        val processRecords=java.io.File(context.filesDir,"crash-diagnostics-v2")
+            .listFiles().orEmpty().count{it.isFile && it.name.endsWith(".txt")}
+        // Java crashes now use one atomic record per actual Android process.
+        // Retain the older single-file record for previous installed builds.
+        // Never expose stack traces, filenames or private data over IPC.
+        return result.put("exit_reasons",exits)
+            .put("private_java_crash_record_exists",legacy.isFile || processRecords>0)
+            .put("private_java_process_records_count",processRecords)
             .put("private_crash_stack_exported",false)
     }
 
