@@ -38,6 +38,13 @@ TARGETS = {
     "3DHentaiX": "https://3dhentaix.com/",
     "3DHentaiX actual detail": "https://3dhentaix.com/ntr-witness-milf-1-3/",
     "3DHentaiX exact reported failure": "https://3dhentaix.com/ntr-compilation/",
+    "3DHentaiX selected published scene": "https://3dhentaix.com/filling-up-bellies-part-3/",
+    "MP4Hentai": "https://mp4hentai.com/",
+    "MP4Hentai current WordPress video": "https://mp4hentai.com/2026/11/nagi-kannagi-18min50s-v/",
+    "MP4Hentai selected Mirror host": "https://www.mirrored.to/files/DF7298C6/%5Bityppp%5D_Nagi_%28Kannagi%29_18min50S_V.mp4_links",
+    "MP4Hentai selected Upfiles host": "https://upfiles.com/nGfW",
+    "HentaiHaven selected episode": "https://hentaihaven.xxx/watch/mouse-cursor-de-genjitsu-o-sousa-dekiru-you-ni-natta-no-de-onnanoko-o-ippai-click-shimasu/",
+    "Rule34Video previously validated selected": "https://rule34video.com/video/4727779/female-v-x-bbc-reverse-cowgirl/",
     "HentaiBros exact reported failure": "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
     "FullPorner exact reported failure": "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
     "FullPorner observed first party player": "https://fullporner.com/player/9509933/14",
@@ -181,6 +188,16 @@ def main():
                     player_hosts=list(dict.fromkeys(
                         urllib.parse.urlsplit(absolute(TARGETS[name],x)).hostname or ""
                         for x in parsed.players if absolute(TARGETS[name],x)))[:12],
+                    published_external_file_host_links=sum(
+                        bool(absolute(TARGETS[name],a)) and
+                        (urllib.parse.urlsplit(absolute(TARGETS[name],a)).hostname or "")
+                            .lower().removeprefix("www.") in
+                            ("mirrored.to", "upfiles.com", "upfilesgo.com")
+                        for a in parsed.anchors),
+                    first_party_quality_link_count=sum(
+                        "download=true" in a.lower() and
+                        first_party(host,absolute(TARGETS[name],a))
+                        for a in parsed.anchors if absolute(TARGETS[name],a)),
                     player_kinds=[
                         ("m3u8" if ".m3u8" in x.lower() else "mp4" if ".mp4" in x.lower()
                          else "iframe_or_other")
@@ -273,7 +290,9 @@ def main():
         status=("player_url_observed" if raw_players else
             "rendered_stream_choices_but_no_direct_media_url"))
     # Render actual browser DOM only where static HTTP did not expose cards.
-    for name in ("Jav Guru detail", "Archivebate", "Rule34Video", "3DHentaiX actual detail"):
+    for name in ("Jav Guru detail", "Archivebate", "Rule34Video",
+                 "3DHentaiX actual detail", "Rule34Video previously validated selected",
+                 "MP4Hentai current WordPress video", "HentaiHaven selected episode"):
         value = report.get(name,{})
         if value.get("http") not in (200,201) or value.get("first_party_links",0)<3:
             browser=render_dom(TARGETS[name])
