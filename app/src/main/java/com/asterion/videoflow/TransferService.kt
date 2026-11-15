@@ -957,6 +957,8 @@ object VideoEngine {
                     continue
                 if(Rule34VideoOriginalSource.firstPartyDownload(
                     item.url,source.url) ||
+                    ThreeDHentaiSignedOriginal.firstPartyFormat(
+                        item.url,source.url) ||
                     FullPornerOriginalSource.verifiedMedia(
                         item.url,source.referer,source.url)){
                     try {

@@ -694,7 +694,36 @@ internal object SiteSpecificOriginalSources {
                     }.getOrDefault(emptyList())
             }
             "javideo.net"->javideoOriginals(context,doc,selected)
-            "hentaibros.net","3dhentaix.com","hentaihaven.xxx"->{
+            "3dhentaix.com"->{
+                // The actual article publishes an expiring selected-post
+                // signed MP4 only through its own WordPress AJAX. Static DOM
+                // contains an empty video tag plus unrelated teaser cards.
+                // Follow the publisher API FIRST, as Rule34 does for its
+                // authoritative quality link. Never substitute sidebar MP4.
+                val signed=runCatching {
+                    ThreeDHentaiSignedOriginal.resolve(context,selected,doc)
+                }
+                if(signed.isSuccess)
+                    listOf(Source(signed.getOrThrow(),selected))
+                else{
+                    val static=selectedStatic(doc,selected,owner)
+                    if(static.size==1)static
+                    else{
+                        val rendered=runCatching {
+                            if(!BrowserPageFetch.publicEligible(selected) &&
+                                !SiteSession.bound(context,selected))emptyList()
+                            else selectedStatic(Jsoup.parse(
+                                BrowserPageFetch.html(context,selected),selected),
+                                selected,owner)
+                        }.getOrDefault(emptyList())
+                        if(rendered.size==1)rendered
+                        else throw (signed.exceptionOrNull()
+                            ?:IllegalStateException(
+                                "3DHentai selected post has no verified original"))
+                    }
+                }
+            }
+            "hentaibros.net","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
                     runCatching {
                         if(!BrowserPageFetch.publicEligible(selected) &&
