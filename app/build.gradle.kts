@@ -33,11 +33,11 @@ android {
     testBuildType = "phonepilot"
 
     defaultConfig {
-        applicationId = "com.azrael.pixivdumpsync"
+        applicationId = "com.asterion.downloader"
         minSdk = 29
         targetSdk = 35
-        versionCode = 96
-        versionName = "1.3.67"
+        versionCode = 97
+        versionName = "1.3.68"
 
         testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
@@ -131,10 +131,13 @@ android {
             matchingFallbacks += listOf("debug")
         }
         release {
+            // The permanent Asterion Downloader app is independent of the
+            // pre-existing Kuroha package and the retired Acceptance pilot.
+            // Sign every production update with the same retained owner key.
             isMinifyEnabled = false
-            if (hasOriginalSigningKey) {
-                signingConfig = signingConfigs.getByName("originalUpgradeKey")
-            }
+            signingConfig = if (hasStablePreviewKey)
+                signingConfigs.getByName("stablePreviewKey")
+            else null
         }
     }
 
