@@ -156,8 +156,11 @@ object WatchPornPanel {
             }
         },ui.lp(a,9))
         block.addView(status,ui.lp(a,7))
-        block.addView(ui.action(a,"OPEN VIDEOFLOW · WATCHES / DOWNLOADS",false){
-            a.startActivity(android.content.Intent(a,com.asterion.videoflow.MainActivity::class.java))
+        block.addView(ui.action(a,"MANAGE WATCHED VIDEO PAGES",false){
+            a.startActivity(android.content.Intent(a,AsterionHomeActivity::class.java)
+                .putExtra("asterion_page","Sources")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP))
         },ui.lp(a,6))
         body.addView(block,ui.lp(a,13))
         body.addView(result,ui.lp(a,7))
