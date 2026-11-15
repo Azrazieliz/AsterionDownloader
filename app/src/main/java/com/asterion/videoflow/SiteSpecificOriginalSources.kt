@@ -288,6 +288,15 @@ internal object SiteSpecificOriginalSources {
             if(response.statusCode() !in 200..299)continue
             val embed=response.url().toString()
             if(!JavGuruOriginalSource.selectedEmbed(stream.server,embed))continue
+            // The verified selected LuluStream hoster publishes its complete
+            // HLS playlist in packed JWPlayer source configuration, not in
+            // an HTML video tag. Parse that single source before considering
+            // the hoster as an extractor fallback.
+            val hls=JavGuruOriginalSource.selectedHls(embed,response.body())
+            if(hls!=null){
+                found.putIfAbsent(hls,Source(hls,embed))
+                continue
+            }
             val player=Jsoup.parse(response.body(),embed)
             // Do not promote generic embeds, ad players or script URL
             // strings as the selected original. Only an unambiguous video
