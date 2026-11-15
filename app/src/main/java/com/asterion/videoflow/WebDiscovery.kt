@@ -336,7 +336,9 @@ object WebDiscovery {
         return regex.findAll(html).map{it.groupValues[1].replace("&amp;","&")}
             .filter{
                 val u=runCatching{URI(it)}.getOrNull()
-                u?.scheme=="https" && u.host=="watchporn.to" &&
+                u?.scheme=="https" &&
+                    u.host.orEmpty().lowercase(java.util.Locale.ROOT) in
+                        setOf("watchporn.to","www.watchporn.to") &&
                     u.path.orEmpty().contains("/get_file/") &&
                     u.path.orEmpty().contains(".mp4") &&
                     !u.path.orEmpty().contains("preview",true)
