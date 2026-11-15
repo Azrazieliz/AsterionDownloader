@@ -576,6 +576,37 @@ class AsterionHomeActivity:Activity(){
             11f,theme.secondary)
         put(summary,providerLabel!!,5)
         put(body,summary,12)
+        // Owner-only, signed two-sided authorization. No Control access until
+        // expressly enabled here AND independently approved in Control.
+        val diagnostics=card()
+        put(diagnostics,text("Asterion Control diagnostics",15f,theme.white,true),0)
+        val enabled=AsterionControlDiagnosticsProvider.approved(this)
+        put(diagnostics,text(if(enabled)
+            "Authorized: Control may inspect read-only failures, job queues, worker stages and verified bytes."
+            else "Disabled: no other app may inspect your Downloader engine. No media or credentials are exported.",
+            11f,theme.secondary),6)
+        put(diagnostics,button(if(enabled)"REVOKE CONTROL DIAGNOSTICS" else "AUTHORIZE CONTROL DIAGNOSTICS"){
+            if(enabled){
+                AlertDialog.Builder(this).setTitle("Revoke Control diagnostics?")
+                    .setMessage("All future cross-app requests will be denied. Downloads and saved files remain untouched.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Revoke"){_,_->
+                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,false)}
+                            .onSuccess{toast("Control diagnostic access revoked");render()}
+                            .onFailure{toast("Authorization change failed: "+it.javaClass.simpleName)}
+                    }.show()
+            }else{
+                AlertDialog.Builder(this).setTitle("Authorize Asterion Control?")
+                    .setMessage("Pin the installed Control application's current signing certificate. Only its authenticated, approved requests may read sanitized crash, queue and worker diagnostics. No URLs, cookies, media files, private keys or download commands are exposed. You must separately approve Downloader in Control.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Authorize"){_,_->
+                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,true)}
+                            .onSuccess{toast("Read-only diagnostics authorized for installed Control signer");render()}
+                            .onFailure{toast("Control authorization unavailable: "+it.javaClass.simpleName)}
+                    }.show()
+            }
+        },9)
+        put(body,diagnostics,12)
         AsterionSuggestedUi.render(this,body)
     }
     private fun renderBooks(){
