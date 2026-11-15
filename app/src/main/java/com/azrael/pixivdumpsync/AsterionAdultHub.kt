@@ -96,7 +96,39 @@ object AsterionAdultHub {
     /** Each preview belongs to its website; performer previews belong to
      * their followed model. Never mix an unrequested global "Latest" feed.
      */
+    /** Site refresh must not rebuild the Activity, tabs, scroll view or
+     * unrelated modules. Coalesce independent provider callbacks and swap
+     * only this Adult/Hentai section after the next section is prepared.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun render(a:Activity,parent:LinearLayout,area:String,refresh:()->Unit){
+        require(area in setOf("ADULT","HENTAI"))
+        val surface=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        parent.addView(surface)
+        val pending=java.util.concurrent.atomic.AtomicBoolean(false)
+        lateinit var repaint:()->Unit
+        repaint=repaint@{
+            if(a.isFinishing || a.isDestroyed || surface.parent!==parent ||
+                !pending.compareAndSet(false,true))return@repaint
+            surface.postDelayed({
+                pending.set(false)
+                if(!a.isFinishing && !a.isDestroyed && surface.parent===parent){
+                    val next=LinearLayout(a).apply{
+                        orientation=LinearLayout.VERTICAL
+                    }
+                    renderContents(a,next,area,repaint)
+                    surface.removeAllViews()
+                    surface.addView(next)
+                }
+            },1_200L)
+        }
+        val first=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        renderContents(a,first,area,repaint)
+        surface.addView(first)
+    }
+
+    private fun renderContents(a:Activity,parent:LinearLayout,area:String,
+                               refresh:()->Unit){
         require(area in setOf("ADULT","HENTAI"))
         val isAdult=area=="ADULT"
         val title=if(isAdult)"Porn" else "Hentai"
@@ -204,9 +236,9 @@ object AsterionAdultHub {
                 // Explicit refresh checks every provider; nothing is hidden
                 // behind a management dialog or an arbitrary four-site cycle.
                 for(site in sources){
-                    KyoraCreatorPreviews.load(a,site.url,force=true){snapshot->
-                        if(!a.isFinishing&&!a.isDestroyed)refresh()
-                    }
+                    // Avoid one full section rebuild for each independent
+                    // callback. The final index callback redraws once.
+                    KyoraCreatorPreviews.load(a,site.url,force=true){_ -> }
                 }
                 SourceIndex.refreshPreviews(a.applicationContext,area){checked->
                     a.runOnUiThread{
