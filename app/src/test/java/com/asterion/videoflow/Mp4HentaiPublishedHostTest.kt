@@ -26,6 +26,22 @@ class Mp4HentaiPublishedHostTest {
         assertEquals(result,extracted)
     }
 
+    @Test fun actualMirrorHrefWithLiteralBracketsIsNotSilentlyDropped(){
+        val html="""<article class="post"><div class="entry-content">
+          <p>Download Links: Uncensored
+            <a href="https://www.mirrored.to/files/DF7298C6/[ityppp]_Nagi_(Kannagi)_18min50S_V.mp4_links">Mirror</a>
+            <a href="https://upfiles.com/nGfW">Upfiles</a>
+          </p></div></article>"""
+        val links=Mp4HentaiPublishedHost.selectedLinks(
+            Jsoup.parse(html,selected),selected)
+        assertEquals(2,links.size)
+        assertTrue(links.any{it.contains("%5Bityppp%5D")})
+        assertTrue(links.any{it=="https://upfiles.com/nGfW"})
+        assertTrue(links.all{Mp4HentaiPublishedHost.isPublishedHost(selected,it)})
+        assertNull(Mp4HentaiPublishedHost.publishedHref(
+            selected,"https://invalid .test/[not-a-host]"))
+    }
+
     @Test fun permittedPublisherRedirectRetainsSelectedHosterIdentity(){
         assertTrue(Mp4HentaiPublishedHost.isPublishedHost(selected,
             "https://upfilesgo.com/nGfW"))
