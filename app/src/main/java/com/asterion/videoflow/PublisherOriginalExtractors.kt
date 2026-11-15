@@ -158,6 +158,23 @@ internal object PublisherOriginalExtractors {
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
+        // The real Rule34Video download-quality links can be created only
+        // after the selected page's Download control opens. Static HTML alone
+        // must not be interpreted as "no original" before inspecting the
+        // authorized rendered selected page.
+        if(host=="rule34video.com"){
+            val static=fromHtml(selected,page.outerHtml())
+            if(static.any{Rule34VideoOriginalSource.firstPartyDownload(selected,it.url)})
+                return static
+            val rendered=runCatching {
+                if(!com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(selected) &&
+                    !com.azrael.galleryflow.SiteSession.bound(context,selected))
+                    emptyList()
+                else fromHtml(selected,
+                    com.azrael.pixivdumpsync.BrowserPageFetch.html(context,selected))
+            }.getOrDefault(emptyList())
+            return (rendered+static).distinctBy{it.url}
+        }
         // Do not short-circuit HentaiBros or 3DHentai ahead of their
         // publisher-specific resolver: the old early return silently skipped
         // the real player and only inspected static teaser tags.

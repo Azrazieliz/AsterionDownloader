@@ -65,6 +65,18 @@ object WebDiscovery {
             "access not available").any{it in text}
     }
 
+    /** A verification shell may return HTTP 200 with no real player. */
+    internal fun accessChallenge(doc:Document):Boolean {
+        if(doc.select("video[src],video source[src]").isNotEmpty())return false
+        val title=doc.title().lowercase()
+        val text=doc.text().take(1200).lowercase()
+        return title.contains("just a moment") ||
+            title.contains("attention required") ||
+            text.contains("verify you are human") ||
+            text.contains("checking your browser before accessing") ||
+            text.contains("enable javascript and cookies to continue")
+    }
+
     private fun open(url:String,context:Context?=null):Document{
         require(isUrl(url)){"Invalid public provider URL"}
         var current=url
@@ -106,14 +118,29 @@ object WebDiscovery {
                         else " · request unsuccessful"
                 }
                 val document=response.parse()
+                val sourceHost=runCatching{URI(url).host.orEmpty()
+                    .lowercase().removePrefix("www.")}.getOrDefault("")
+                if(sourceHost=="hentaihaven.xxx" && accessChallenge(document)){
+                    if(context!=null &&
+                        (SiteSession.bound(context,current) ||
+                            com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current))){
+                        val html=com.azrael.pixivdumpsync.BrowserPageFetch
+                            .html(context,current)
+                        val rendered=Jsoup.parse(html,current)
+                        check(!accessChallenge(rendered)){
+                            "HentaiHaven selected episode remains behind site verification"
+                        }
+                        return rendered
+                    }
+                    throw IllegalStateException(
+                        "HentaiHaven selected episode requires verified site access")
+                }
                 // Archivebate's public homepage legitimately returns HTTP 200
                 // with an 18+ Continue gateway and ZERO /watch/ links. Chrome
                 // observed 36 genuine watch links only AFTER the user's
                 // normal Continue action, and a real MP4 playback response.
                 // For an already-connected site, read the owner's WebView
                 // session instead of accepting a successful-but-empty shell.
-                val sourceHost=runCatching{URI(url).host.orEmpty()
-                    .lowercase().removePrefix("www.")}.getOrDefault("")
                 if(epornerAccessGate(document)){
                     if(context!=null && SiteSession.bound(context,current)){
                         val html=com.azrael.pixivdumpsync.BrowserPageFetch

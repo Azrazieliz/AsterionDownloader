@@ -388,7 +388,9 @@ internal object SiteSpecificOriginalSources {
             "meta[itemprop=contentUrl][content]")
         // A public first-party player may publish an exact media assignment.
         // No file in an unrelated recommendation/sidebar is an original.
-        return (player+jsSources(doc,selected)).distinctBy{it.url}
+        val published=Mp4HentaiPublishedHost.selectedLinks(doc,selected)
+            .map{Source(it,selected)}
+        return (player+jsSources(doc,selected)+published).distinctBy{it.url}
     }
     /** HelloPorn /video-<id>-<slug> embeds its selected original in a
      * specific VOE /e/<id> player. The selected page has no HTML5 MP4.

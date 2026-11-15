@@ -920,6 +920,14 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(Mp4HentaiPublishedHost.isPublishedHost(item.url,source.url)){
+                    try {
+                        val direct=inspectPublisher{Mp4HentaiPublishedHost.resolve(
+                            context,item.url,source.url)}
+                        execute(direct,source.url)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,source.url)){
                     try {
                         execute(inspectPublisher{ArchivebateSelectedMedia.resolve(
@@ -953,6 +961,13 @@ object VideoEngine {
                     }else heldReason=checked.getOrThrow().second.reason
                 }
             }
+            // A published external file-host landing page is not playable
+            // media and must never be downloaded as a successful MP4. Do not
+            // silently retry the MP4Hentai article through generic yt-dlp.
+            if(!downloaded && publishedOriginals.any{
+                    Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
+                throw (last?:IllegalStateException(
+                    "MP4Hentai selected file hosts exposed no verified media URL"))
             if(strictThreeD && !downloaded)
                 throw (last?:IllegalStateException(
                     "3DHentaiX selected original failed; unrelated media "+

@@ -111,6 +111,10 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://mp4hentai.com/2026/07/upcoming-october-2026-hentai-release/"))
     }
+    @Test fun hentaiHavenNestedEpisodeRemainsRecognized(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://hentaihaven.xxx/watch/example-series/episode-4/"))
+    }
     @Test fun archivebateLegalAndCategoryPagesAreNotVideo(){
         assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/2257"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/"))

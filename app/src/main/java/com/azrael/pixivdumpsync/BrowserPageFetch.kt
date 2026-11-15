@@ -81,7 +81,7 @@ object BrowserPageFetch {
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
-            "roshy.tv")
+            "roshy.tv","rule34video.com")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {
@@ -143,7 +143,22 @@ object BrowserPageFetch {
                             if(/just a moment|attention required|verify you are human|enable javascript and cookies/i.test(title+' '+body))return '';
                             const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({
                                 '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-                            const anchors=[...document.querySelectorAll('a[href],option[value]')]
+                            // Rule34Video populates its first-party quality anchors only after
+            // the selected video's Download button reveals the format dialog.
+            // Never click a download hyperlink, unrelated card or ad.
+            if(location.hostname.replace(/^www\./,'')==='rule34video.com' &&
+                /^\/videos?\/\d{1,12}(?:\/|$)/.test(location.pathname)){
+                const actions=[...document.querySelectorAll('button,[role="button"]')]
+                    .filter(el=>!el.closest('aside,.related,.recommended,'+
+                        '.recommendations,.ads,.advertisement,.sidebar'));
+                const action=actions.find(el=>/^(?:download|download video)$/i
+                    .test((el.innerText||el.textContent||'').trim()));
+                if(action && !action.dataset.asterionDownloadOpened){
+                    action.dataset.asterionDownloadOpened='true';
+                    action.click();
+                }
+            }
+            const anchors=[...document.querySelectorAll('a[href],option[value]')]
                                 .slice(0,10000).map(el=>{
                                     const img=el.querySelector('img');
                                     const poster=el.querySelector('video[poster]');
@@ -369,6 +384,9 @@ object BrowserPageFetch {
                                         .javideoSelected(
                                             org.jsoup.Jsoup.parse(page,url),url)
                                         .isEmpty()
+                                } else if(host=="rule34video.com") {
+                                    com.asterion.videoflow.Rule34VideoOriginalSource
+                                        .parse(page,url).isEmpty()
                                 } else !Regex("""<video\s+src="https://[^"]+""")
                                     .containsMatchIn(page)) ||
                                     (host in setOf("hentaibros.net","3dhentaix.com") &&
