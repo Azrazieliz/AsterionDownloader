@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
@@ -103,7 +102,6 @@ class XFollowingImportActivity:Activity(){
             settings.allowFileAccess=false
             settings.allowContentAccess=false
             android.webkit.CookieManager.getInstance().setAcceptCookie(true)
-            addJavascriptInterface(Bridge(),"AsterionFollowing")
             webViewClient=object:WebViewClient(){
                 override fun shouldOverrideUrlLoading(v:WebView,request:WebResourceRequest):Boolean{
                     val u=request.url.toString()
@@ -155,9 +153,7 @@ class XFollowingImportActivity:Activity(){
         setContentView(layout)
         browser.loadUrl("https://x.com/home")
     }
-    inner class Bridge {
-        @JavascriptInterface
-        fun found(raw:String) {
+    private fun acceptScan(raw:String) {
             val batch=runCatching {
                 val obj=JSONObject(raw)
                 val arr=obj.optJSONArray("users")?:JSONArray()
@@ -171,13 +167,12 @@ class XFollowingImportActivity:Activity(){
                 }
                 Triple(items,obj.optInt("position",0),obj.optInt("extent",0))
             }.getOrNull()?:return
-            runOnUiThread {
-                if(!scanning||completed)return@runOnUiThread
+                if(!scanning||completed)return
                 val own=getPreferences(MODE_PRIVATE).getString("own_x_handle","")
                     .orEmpty().trim().removePrefix("@")
                 val page=Uri.parse(browser.url.orEmpty()).path.orEmpty()
                 if(!XFollowingImportPolicy.isOwnFollowingPage(page,own))
-                    return@runOnUiThread
+                    return
                 val fresh=batch.first.filter{validHandle(it)&&discovered.add(it)}
                 listPosition=batch.second
                 listExtent=batch.third
@@ -203,9 +198,7 @@ class XFollowingImportActivity:Activity(){
                 }
                 previousCount=discovered.size
                 updateStatus()
-            }
         }
-    }
     private fun updateStatus() {
         label.text=if(completed)
             "Automatic scan reached the end. "+discovered.size+
@@ -270,14 +263,21 @@ class XFollowingImportActivity:Activity(){
                           if(target.scrollTop<=before && cells.length){
                             cells[cells.length-1].scrollIntoView({block:'end'});
                           }
-                          AsterionFollowing.found(JSON.stringify({
+                          return JSON.stringify({
                             users:[...found].map(handle=>({handle,following:true})),
                             position:Math.round(target.scrollTop),
                             extent:Math.round(target.scrollHeight-target.clientHeight)
-                          }));
-                          return found.size;
+                          });
                         })()
-                    """.trimIndent(),null)
+                    """.trimIndent()){ encoded ->
+                        // evaluateJavascript returns only the TOP-level frame's
+                        // evaluated value. Unlike addJavascriptInterface, ads
+                        // and third-party iframes cannot inject fake followers.
+                        val json=runCatching{
+                            org.json.JSONTokener(encoded).nextValue() as String
+                        }.getOrNull()
+                        if(json!=null)acceptScan(json)
+                    }
                 }else if(allowed(url) && path.trimEnd('/')=="/home"){
                     label.text="Open your own profile /following list. Then this app automatically imports the entire list."
                 }
@@ -290,7 +290,6 @@ class XFollowingImportActivity:Activity(){
     override fun onDestroy(){
         handler.removeCallbacks(scanner)
         importWorker.shutdown()
-        browser.removeJavascriptInterface("AsterionFollowing")
         browser.destroy()
         super.onDestroy()
     }
