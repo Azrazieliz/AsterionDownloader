@@ -116,6 +116,75 @@ internal object JavGuruOriginalSource {
         return target.takeIf(::firstParty)
     }
 
+    /** LuluStream's currently published selected player uses a Dean
+     * Edwards P.A.C.K.E.R literal for JWPlayer's sources. Decode text only,
+     * with strict size/time bounds and without executing external JS.
+     *
+     * The HLS URL is short-lived: resolve it anew on every selected request.
+     * A media link from another script, a recommendation or an ad is rejected.
+     */
+    fun selectedHls(embed:String,html:String):String? {
+        if(!selectedEmbed("LU",embed))return null
+        val h=safe(embed)?.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        if(h !in setOf("streamhihi.com","lulustream.com"))return null
+        if(html.length !in 250..1_000_000)return null
+        val document=Jsoup.parse(html,embed)
+        val packedPattern=Regex(
+            """(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\\.|[^'\\])*)'\.split\('\|'\)"""
+        )
+        for(script in document.select("script:not([src])").take(60)){
+            val body=script.data().ifBlank{script.html()}
+            if(!body.contains("eval(function(p,a,c,k,e,d)"))continue
+            for(match in packedPattern.findAll(body).take(4)){
+                val packed=match.groupValues[1]
+                val radix=match.groupValues[2].toIntOrNull()?:continue
+                val count=match.groupValues[3].toIntOrNull()?:continue
+                val words=match.groupValues[4].split('|')
+                if(radix !in 2..36 || count !in 1..850 ||
+                    packed.length !in 50..120_000 || words.size>900)continue
+                val alphabet="0123456789abcdefghijklmnopqrstuvwxyz"
+                fun baseToken(number:Int):String {
+                    var n=number
+                    if(n==0)return "0"
+                    val result=StringBuilder()
+                    while(n>0){
+                        result.append(alphabet[n%radix])
+                        n/=radix
+                    }
+                    return result.reverse().toString()
+                }
+                var decoded=packed
+                for(index in count-1 downTo 0){
+                    val word=words.getOrNull(index).orEmpty()
+                    if(word.isBlank())continue
+                    decoded=Regex("""\b"""+Regex.escape(baseToken(index))+"""\b""")
+                        .replace(decoded){word}
+                    if(decoded.length>180_000)break
+                }
+                if(decoded.length>180_000 || !decoded.contains("jwplayer") ||
+                    !decoded.contains("sources:"))continue
+                val sourceRegex=Regex(
+                    """(?is)\bsources\s*:\s*\[\s*\{\s*file\s*:\s*["'](https://[^"'<>\\\s]{12,2500})["']"""
+                )
+                val candidates=sourceRegex.findAll(decoded)
+                    .map{it.groupValues[1].replace("\\/","/")}
+                    .distinct().take(3).toList()
+                if(candidates.size!=1)continue
+                val candidate=candidates.single()
+                val uri=safe(candidate)?:continue
+                val host=uri.host.orEmpty().lowercase(Locale.ROOT)
+                if(!(host=="tnmr.org" || host.endsWith(".tnmr.org") ||
+                    host=="lulucdn.com" || host.endsWith(".lulucdn.com")))continue
+                if(!uri.path.orEmpty().matches(
+                        Regex("""(?i)^/hls[0-9]*/[a-zA-Z0-9_./-]{5,200}/master\.m3u8$""")))
+                    continue
+                if(uri.rawQuery.isNullOrBlank())continue
+                return candidate
+            }
+        }
+        return null
+    }
+
     /** Selected player redirects must resolve to actual video embeds, not
      * publisher ads or generic pages on the watch site's own domain.
      * The server is tied to a selected shortcode, not a guessed host. */
