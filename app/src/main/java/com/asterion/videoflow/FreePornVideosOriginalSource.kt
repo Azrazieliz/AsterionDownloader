@@ -35,9 +35,8 @@ internal object FreePornVideosOriginalSource {
             .find(URI(selected).path.orEmpty())?.groupValues?.get(1)?:return null
         val path=Regex(
             """(?i)^/get_file/[a-z0-9_/%.-]{15,400}/"""+
-                Regex.escape(id)+"""_(2160|1440|1080|720|480|360)m\\.mp4/?$""")
-        val formats=doc.select("video source[src][type=video/mp4],"+
-            "video source[src$=.mp4],video[src]").mapNotNull{element->
+                Regex.escape(id)+"""_(2160|1440|1080|720|480|360)m\.mp4/?$""")
+        val formats=doc.select("video source[src],video[src]").mapNotNull{element->
             val url=runCatching{
                 URI(selected).resolve(element.attr("src")).toString()
             }.getOrNull()?:return@mapNotNull null
