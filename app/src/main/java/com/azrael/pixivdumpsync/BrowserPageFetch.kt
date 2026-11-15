@@ -314,7 +314,7 @@ object BrowserPageFetch {
                             // making the exact player resolver ALWAYS return
                             // zero candidates after WebView/browser fallback.
                             if(publisher==='jav.guru' &&
-                                /^\\/[0-9]{4,10}\\/[a-z0-9_-]{4,240}\\/?$/i.test(currentPath)){
+                                new RegExp('^/[0-9]{4,10}/[a-z0-9_-]{4,240}/?$','i').test(currentPath)){
                                 const postId=currentPath.split('/').filter(Boolean)[0];
                                 const article=document.getElementById('post-'+postId);
                                 const extra=document.getElementById('wp-btn-iframe-js-extra');
@@ -326,8 +326,7 @@ object BrowserPageFetch {
                                             esc(btn.getAttribute('data-localize')||'')+'">'+
                                             esc((btn.innerText||btn.textContent||'').trim())+'</a>'
                                         ).join('');
-                                    const config=(extra.textContent||'').slice(0,100_000)
-                                        .replace(/<\\/script/gi,'<\\\\/script');
+                                    const config=(extra.textContent||'').slice(0,100_000);
                                     if(selected && config.includes('iframe_url'))
                                         return '<html><body><article id="post-'+postId+'">'+
                                             selected+'</article><script>'+config+
