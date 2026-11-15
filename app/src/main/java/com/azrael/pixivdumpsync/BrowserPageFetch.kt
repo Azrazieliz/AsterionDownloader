@@ -33,12 +33,12 @@ object BrowserPageFetch {
         "streamtape.site","sbtape.com",
         "hqpornerxxx.com","helloporn.com","javideo.net",
         "hentaihaven.xxx","mp4hentai.com","roshy.tv",
-        "mirrored.to","upfilesgo.com")
+        "mirrored.to","upfiles.com","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
         return uri.scheme=="https" && uri.userInfo==null &&
-            host in publicBrowserHosts
+            uri.port==-1 && host in publicBrowserHosts
     }
     fun html(context:Context,url:String,playerReferer:String?=null):String {
         com.asterion.videoflow.NetworkRoute.requireVpn(context,url)
