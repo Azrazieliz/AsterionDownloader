@@ -116,6 +116,27 @@ class AsterionHomeActivity:Activity(){
                                     "$count existing Pixiv pages indexed; no files moved"
                                 else "Pixiv inventory scan failed: "+error.message)
                                 if(::body.isInitialized)render()
+                                // Resume the exact requested backfill ONLY after
+                                // Kuroha's inventory scan completed successfully.
+                                val pending=getSharedPreferences(
+                                    "asterion_pending_pixiv_legacy",MODE_PRIVATE)
+                                val mode=pending.getString("mode",null)
+                                if(error==null && mode==SyncMode.BACKFILL.name &&
+                                    AppPower.enabled(this) &&
+                                    SessionStore.isLoggedIn(this)){
+                                    val artist=pending.getString("artist",null)
+                                    pending.edit().clear().apply()
+                                    val resume=Intent(this,SyncForegroundService::class.java)
+                                        .setAction(SyncForegroundService.ACTION_START)
+                                        .putExtra(SyncForegroundService.EXTRA_MODE,mode)
+                                        .putExtra(SyncForegroundService.EXTRA_SELECTED_ONLY,
+                                            artist.isNullOrBlank())
+                                    if(!artist.isNullOrBlank())resume.putExtra(
+                                        SyncForegroundService.EXTRA_TARGET_ARTIST_ID,artist)
+                                    runCatching{startForegroundService(resume)}
+                                        .onSuccess{toast("Pixiv backfill resumed after Kuroha indexing")}
+                                        .onFailure{toast("Pixiv backfill could not start: "+it.message)}
+                                }
                             }
                         }
                     }.onFailure{toast("Kuroha folder unavailable: "+it.message)}
