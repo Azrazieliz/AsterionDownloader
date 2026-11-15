@@ -168,7 +168,10 @@ class SyncForegroundService : Service() {
     private fun notification(): Notification {
         val s = SyncControl.snapshot()
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this, 0, Intent(this,
+                com.azrael.pixivdumpsync.AsterionHomeActivity::class.java)
+                .putExtra("asterion_page","Site"),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val toggleAction = if (s.paused) ACTION_RESUME else ACTION_PAUSE
         val toggleLabel = if (s.paused) "Resume" else "Pause"
