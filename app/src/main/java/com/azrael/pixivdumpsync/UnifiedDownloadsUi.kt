@@ -191,14 +191,25 @@ object UnifiedDownloadsUi {
                         else->null
                     },
                     onRemove=if(state==State.DONE) ({
-                        VideoDb(a).use{db->
-                            if(db.flagWrongOriginal(item.id))
-                                VideoTransferJournal.record(a,item.id,"wrong_media",
-                                    "Owner reported incorrect selected video")
-                        }
+                        android.app.AlertDialog.Builder(a)
+                            .setTitle("Saved video")
+                            .setItems(arrayOf(
+                                "Remove from download list (keep file)",
+                                "Report wrong original (retain evidence)")){_,choice->
+                                if(choice==0)hideRow(a,Row(
+                                    "Video",item.title,"",State.DONE,null,0L,{},key=
+                                    "video:"+item.id))
+                                else VideoDb(a).use{db->
+                                    if(db.flagWrongOriginal(item.id))
+                                        VideoTransferJournal.record(a,item.id,
+                                            "wrong_media",
+                                            "Owner reported incorrect selected video")
+                                }
+                            }.show()
                     }) else ({
                         VideoEngine.cancelVideo(a.applicationContext,item.id)
-                    }),hasPrimaryAction=!retired || state==State.DONE)
+                    }),hasPrimaryAction=!retired || state==State.DONE,
+                    key="video:"+item.id)
             }
         }
         ChapterQueue(a).use{db->
@@ -232,7 +243,13 @@ object UnifiedDownloadsUi {
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         else->null
-                    })
+                    },
+                    onRemove=if(state!=State.ACTIVE)({
+                        if(state==State.DONE)hideRow(a,Row(
+                            "Comic ZIP",item.title,"",state,null,0L,{},
+                            key="comic:"+item.id))
+                        else ChapterQueue(a).use{it.dismiss(item.id)}
+                    }) else null,key="comic:"+item.id)
             }
         }
         NovelEpubQueue(a).use{db->
@@ -301,7 +318,12 @@ object UnifiedDownloadsUi {
                 },if(present)item.savedUri else null,mime=mime,
                     actionText=if(providerCooling)"COOLDOWN"
                         else if(item.state=="RETRY" && state==State.HELD)"RETRY"
-                        else null)
+                        else null,
+                    onRemove=if(state!=State.ACTIVE)({
+                        if(state==State.DONE)hideRow(a,Row(type,name,"",state,
+                            null,0L,{},key="novel:"+item.url))
+                        else NovelEpubQueue(a).use{it.dismiss(item.url)}
+                    }) else null,key="novel:"+item.url)
             }
         }
         XPhotoQueue(a).use{db->
@@ -336,7 +358,12 @@ object UnifiedDownloadsUi {
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         else->null
-                    })
+                    },
+                    onRemove=if(state!=State.ACTIVE)({
+                        if(state==State.DONE)hideRow(a,Row(
+                            "X",name,"",state,null,0L,{},key="x:"+item.id))
+                        else XPhotoQueue(a).use{it.dismiss(item.id)}
+                    }) else null,key="x:"+item.id)
             }
         }
         // Pixiv and Kyora store successful originals in MediaStore rather
