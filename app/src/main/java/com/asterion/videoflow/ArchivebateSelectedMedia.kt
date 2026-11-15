@@ -27,6 +27,16 @@ import org.json.JSONTokener
  * the visible HTML5 player, without altering access controls or DRM.
  */
 internal object ArchivebateSelectedMedia {
+    /** Listing pages, recommendations and thumbnails must never enter the
+     * selected recording's player-transfer lane. */
+    fun isSelectedArticle(watch:String):Boolean {
+        val u=runCatching{URI(watch)}.getOrNull()?:return false
+        return u.scheme=="https" && u.userInfo==null && u.port==-1 &&
+            u.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==
+                "archivebate.com" &&
+            Regex("""^/watch/[0-9]{1,16}/?$""").matches(u.path.orEmpty()) &&
+            u.rawQuery.isNullOrBlank()
+    }
     fun isSelectedEmbed(watch:String,embed:String):Boolean {
         val source=runCatching{URI(watch)}.getOrNull()?:return false
         val player=runCatching{URI(embed)}.getOrNull()?:return false
