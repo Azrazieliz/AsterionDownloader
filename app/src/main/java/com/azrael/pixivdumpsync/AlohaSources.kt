@@ -30,6 +30,7 @@ CosplayTele|https://cosplaytele.com/|COSPLAY
 Kiutaku|https://kiutaku.com/|COSPLAY
 Porn Pics|https://www.pornpics.com/|COSPLAY
 NotFans|https://notfans.com/|ADULT
+Archivebate|https://archivebate.com/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
@@ -66,7 +67,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==36 && sites.distinctBy{it.url}.size==36){"Incorrect approved Aloha source set"}
+            require(sites.size==37 && sites.distinctBy{it.url}.size==37){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
