@@ -178,7 +178,8 @@ class SyncForegroundService : Service() {
         val open = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, AsterionHomeActivity::class.java)
+                .putExtra("asterion_page","Pixiv"),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
