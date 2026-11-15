@@ -15,7 +15,7 @@ import java.util.Locale
 internal object SiteSpecificOriginalSources {
     data class Source(val url:String,val referer:String)
     private val owners=setOf("fullporner.com","hqpornerxxx.com","helloporn.com",
-        "javideo.net","roshy.tv","mp4hentai.com","hentaibros.net",
+        "jav.guru","javideo.net","roshy.tv","mp4hentai.com","hentaibros.net",
         "3dhentaix.com","hentaihaven.xxx","uncensoredhentai.xxx")
     internal fun host(url:String):String=runCatching {
         URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
@@ -255,6 +255,55 @@ internal object SiteSpecificOriginalSources {
         // player host, so give it the EXACT iframe rather than a made-up MP4.
         return listOf(Source(playerPage,if(playerPage==link)selected else link))
     }
+    /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
+     * whereas its only static iframe is a pop-under advertisement. Follow
+     * the publisher-attested shortcode and its first-party /searcho/ relay
+     * to the final real embed. Never give the watch page or ad to Python.
+     */
+    internal fun javGuru(context:Context,doc:Document,selected:String):List<Source>{
+        val streams=JavGuruOriginalSource.published(selected,doc.outerHtml())
+        val found=LinkedHashMap<String,Source>()
+        for(stream in streams.take(3)){
+            val wrapper=runCatching{
+                Jsoup.connect(stream.url)
+                    .userAgent(NativeMediaDownloader.USER_AGENT)
+                    .header("Referer",selected)
+                    .ignoreHttpErrors(true).followRedirects(false)
+                    .timeout(8_000).maxBodySize(350_000)
+                    .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
+                    .execute()
+            }.getOrNull()?:continue
+            if(wrapper.statusCode() !in 200..299)continue
+            val next=JavGuruOriginalSource.nextIframe(
+                stream.url,wrapper.body())?:continue
+            val response=runCatching{
+                Jsoup.connect(next)
+                    .userAgent(NativeMediaDownloader.USER_AGENT)
+                    .header("Referer",stream.url)
+                    .ignoreHttpErrors(true).followRedirects(true)
+                    .timeout(8_000).maxBodySize(700_000)
+                    .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
+                    .execute()
+            }.getOrNull()?:continue
+            if(response.statusCode() !in 200..299)continue
+            val embed=response.url().toString()
+            if(!JavGuruOriginalSource.selectedEmbed(stream.server,embed))continue
+            val player=Jsoup.parse(response.body(),embed)
+            val exact=(mediaElements(player,embed,
+                "video[src],video source[src],source[type^=video][src]")+
+                jsSources(player,embed)).distinctBy{it.url}
+            if(exact.isNotEmpty()){
+                for(media in exact)
+                    found.putIfAbsent(media.url,media)
+            }else{
+                // The exact publisher-authored external embed is a supported
+                // yt-dlp hoster candidate, NOT the unsupported jav.guru URL.
+                found.putIfAbsent(embed,Source(embed,stream.url))
+            }
+        }
+        return found.values.toList()
+    }
+
     /** Roshy uses its site-owned Beeteam368 "Original Stream" player as
      * well as file-host download links. Prefer the actual selected player
      * media; do NOT confuse preview tiles or a hoster HTML page with media.
@@ -486,6 +535,7 @@ internal object SiteSpecificOriginalSources {
         if(owner !in owners || !VideoSiteProfiles.isVideoPage(selected))
             return emptyList()
         val originals=when(owner){
+            "jav.guru"->javGuru(context,doc,selected)
             "fullporner.com","hqpornerxxx.com","uncensoredhentai.xxx" ->
                 fromPlayer(context,doc,selected,owner)
             "roshy.tv"->{
