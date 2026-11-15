@@ -60,6 +60,17 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(html,page),page).map{it.url})
     }
 
+    @Test fun roshyRefusesUnattributedKamehausPlayers(){
+        val selected="https://roshy.tv/video/test-original-scene/"
+        val html="""<div id="main-content"><div class="is-single-post-main-player">
+            <div id="beeteam368_player_345"></div></div>
+            <script>jQuery('#beeteam368_player_123').beeteam368_pro_player(
+            {"video_mode":"embed","video_url":"<iframe src='https://kamehaus.net/e/otherScene'></iframe>"});
+            </script></div>"""
+        assertTrue(SiteSpecificOriginalSources.roshy(
+            Jsoup.parse(html,selected),selected).isEmpty())
+    }
+
     @Test fun fullPornerSelectedPlayerFindsExtensionlessOriginalButNotRecommendation(){
         val selected="https://fullporner.com/watch/6af84d762f7835591446cc91"
         val player="https://fullporner.com/player/9509933/14"
