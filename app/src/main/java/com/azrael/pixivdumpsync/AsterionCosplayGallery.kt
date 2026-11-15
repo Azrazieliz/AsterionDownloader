@@ -304,6 +304,8 @@ object AsterionCosplayGallery {
                 "inspect provider and sign-in status in Manage websites. "+
                 "Unverified website logos are not media thumbnails.",
             12f,ui.secondary),ui.lp(a,9))
-
+        // Retain every original Kyora operation without opening its
+        // competing MainActivity. The GalleryDb and worker stay unchanged.
+        UnifiedKyoraFeatures.render(a,parent,refresh)
     }
 }
