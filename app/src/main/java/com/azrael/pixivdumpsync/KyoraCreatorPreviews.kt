@@ -239,7 +239,9 @@ object KyoraCreatorPreviews {
                             "original photos verified from gallery pages")
                     items=originals
                 }
-                if(items.isEmpty())error("No gallery thumbnails exposed by listing")
+                if(items.isEmpty())error(if(SiteControls.key(url)=="archivebate.com")
+                    "Archivebate has no visible video cards. Open CONNECT SITE, use its Continue control, save the verified session, then CHECK NEW."
+                    else "No gallery thumbnails exposed by listing")
                 Snapshot(items,System.currentTimeMillis(),null)
             }.getOrElse{
                 Snapshot(stored?.entries.orEmpty(),System.currentTimeMillis(),
