@@ -135,8 +135,11 @@ object VideoEngine {
              targetHost:String?=null) {
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context))return
         if(!busy.compareAndSet(false,true)) return
-        val nativeOnly=android.app.Application.getProcessName()
-            .orEmpty().endsWith(":videoflow_secondary")
+        // The isolated second process can execute a different webpage or
+        // Python original concurrently: process-global yt-dlp CWD, Python
+        // modules and native library state are NOT shared with agent one.
+        // Under actual low-memory pressure it falls back to native-only.
+        val nativeOnly=VideoAgentAdmission.nativeOnly(context)
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         try {
             val db=VideoDb(context)

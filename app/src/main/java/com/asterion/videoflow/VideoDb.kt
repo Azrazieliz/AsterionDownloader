@@ -228,8 +228,10 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             while(c.moveToNext()){
                 if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(c.getString(1)))
                     continue
-                // Secondary agent streams real HTTP media in parallel but
-                // must never instantiate a duplicate embedded Python runtime.
+                // Secondary agent may also resolve selected webpage media
+                // when memory permits (independent Android process and CWD).
+                // Under memory pressure it deliberately takes direct HTTP
+                // originals only, keeping Python from multiplying OOM risk.
                 if(nativeOnly && !NativeMediaDownloader.isNativeEligible(
                         c.getString(1),c.getString(1)))continue
                 val watchId=c.getLong(7)
