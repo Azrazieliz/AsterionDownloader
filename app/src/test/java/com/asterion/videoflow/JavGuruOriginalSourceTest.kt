@@ -60,6 +60,28 @@ class JavGuruOriginalSourceTest {
             "https://go.mayzaent.com/stream",html))
     }
 
+    @Test fun selectedLuluPlayerUnpacksExactlyOneRealHlsAndRejectsAd(){
+        val embed="https://streamhihi.com/e/d6e0h3sguz1b"
+        val url="https://3idpeoIOgbFV.tnmr.org/hls2/02/04704/d3i157qffqx9_h/master.m3u8?t=selected&s=1"
+        val dictionary=MutableList(36){""}
+        dictionary[35]="jwplayer"
+        dictionary[34]="setup"
+        dictionary[33]="sources"
+        dictionary[32]="file"
+        val packed="z(\"37\").y({x:[{w:\"$url\"}]})"
+        val script="""eval(function(p,a,c,k,e,d){while(c--)if(k[c])p=p.replace(new RegExp('\\b'+c.toString(a)+'\\b','g'),k[c]);return p}('$packed',36,36,'${dictionary.joinToString("|")}'.split('|')))"""
+        assertEquals(url,JavGuruOriginalSource.selectedHls(embed,
+            "<html><script>$script</script></html>"))
+        val ad=packed.replace(url,
+            "https://go.mayzaent.com/hls2/02/04704/test/master.m3u8?t=ad")
+        assertNull(JavGuruOriginalSource.selectedHls(embed,
+            "<html><script>${script.replace(packed,ad)}</script></html>"))
+        assertNull(JavGuruOriginalSource.selectedHls(
+            "https://go.mayzaent.com/e/fake", "<script>$script</script>"))
+        assertNull(JavGuruOriginalSource.selectedHls(embed,
+            "<script>var sources=[{file:'$url'}];</script>"))
+    }
+
     @Test fun onlyPublisherSelectedEmbeddedVideoHostIsEligible(){
         assertTrue(JavGuruOriginalSource.selectedEmbed(
             "LU","https://streamhihi.com/e/d6e0h3sguz1b"))
