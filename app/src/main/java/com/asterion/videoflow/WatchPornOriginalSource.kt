@@ -18,7 +18,7 @@ internal object WatchPornOriginalSource {
     fun isExactPage(url:String):Boolean=runCatching {
         val uri=URI(url)
         uri.scheme=="https" && uri.userInfo==null && uri.port==-1 &&
-            uri.host=="watchporn.to" &&
+            uri.host.orEmpty().lowercase(java.util.Locale.ROOT) in setOf("watchporn.to","www.watchporn.to") &&
             Regex("""^/video/[0-9]{2,10}/[a-zA-Z0-9_-]{2,250}/?$""")
                 .matches(uri.path.orEmpty())
     }.getOrDefault(false)
@@ -43,7 +43,8 @@ internal object WatchPornOriginalSource {
         if(jsonDurations.none{it==duration})return null
         val media=WebDiscovery.watchPornDirect(html)?:return null
         val u=runCatching{URI(media)}.getOrNull()?:return null
-        if(u.scheme!="https" || u.host!="watchporn.to" ||
+        if(u.scheme!="https" ||
+            u.host.orEmpty().lowercase(java.util.Locale.ROOT) !in setOf("watchporn.to","www.watchporn.to") ||
             u.userInfo!=null || !u.path.orEmpty().contains("/get_file/") ||
             !u.path.orEmpty().contains(".mp4"))return null
         return Original(media,duration)
@@ -57,11 +58,13 @@ internal object WatchPornOriginalSource {
             .timeout(16_000).maxBodySize(3_000_000)
             .apply {
                 NetworkRoute.javaProxy(context,pageUrl)?.let{proxy(it)}
-                SiteSession.cookie(pageUrl)?.let{header("Cookie",it)}
+                (context?.let{SiteSession.cookie(it,pageUrl)} ?: SiteSession.cookie(pageUrl))
+                    ?.let{header("Cookie",it)}
             }
             .execute()
         if(response.statusCode() !in 200..299)return null
-        if(response.url().host!="watchporn.to")return null
+        if(response.url().host.orEmpty().lowercase(java.util.Locale.ROOT) !in
+            setOf("watchporn.to","www.watchporn.to"))return null
         return parse(response.body(),pageUrl)
     }
 }
