@@ -15,7 +15,7 @@ data class XSourceRecord(
 data class XPhotoTask(val id:Long,val source:String,val photo:String,val state:String,
     val saved:String?,val attempts:Int,val error:String?,val updated:Long=0L)
 
-class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.sqlite",null,2) {
+class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.sqlite",null,3) {
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY, handle TEXT, cursor TEXT,
@@ -38,6 +38,17 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             db.execSQL("ALTER TABLE sources ADD COLUMN live_enabled INTEGER NOT NULL DEFAULT 1")
             db.execSQL("ALTER TABLE sources ADD COLUMN backfill_enabled INTEGER NOT NULL DEFAULT 1")
             db.execSQL("ALTER TABLE sources ADD COLUMN history_complete INTEGER NOT NULL DEFAULT 0")
+        }
+        if(oldVersion<3){
+            // Owner-confirmed false-positive X import from the previous
+            // recommendations-blind importer. Preserve completed originals,
+            // halt pending tasks, then remove this un-followed subscription.
+            db.execSQL("""UPDATE photos SET status='paused',
+                error='Incorrect X following import removed'
+                WHERE lower(source) IN
+                  (SELECT lower(url) FROM sources WHERE lower(handle)='bcgame')
+                  AND status NOT IN ('done','paused')""")
+            db.execSQL("DELETE FROM sources WHERE lower(handle)='bcgame'")
         }
     }
     fun addSource(value:String):Boolean {
@@ -119,8 +130,18 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
             "source=? AND status='error'",arrayOf(url))
     }
     fun removeSource(url:String){
-        // Retain already archived photos for this source.
-        writableDatabase.delete("sources","url=?",arrayOf(url))
+        // Stop any unfinished transfer belonging to a removed subscription,
+        // while retaining already saved original files and history.
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            db.execSQL("""UPDATE photos SET status='paused',
+                error='X following source removed'
+                WHERE source=? AND status NOT IN ('done','paused')""",
+                arrayOf(url))
+            db.delete("sources","url=?",arrayOf(url))
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
     }
     fun sources():List<Triple<String,String,String?>> {
         val result=ArrayList<Triple<String,String,String?>>()
