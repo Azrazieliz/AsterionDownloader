@@ -35,6 +35,21 @@ class JavGuruOriginalSourceTest {
             "https://go.mayzaent.com/1077002/other/",post).isEmpty())
     }
 
+
+    @Test fun exactLuluStreamIsAttemptedBeforeUnsupportedAlternativeHosters(){
+        val voKey="aaaaaaaaaa"
+        val voUrl="https://jav.guru/searcho/?ed=2613a7577637338603566346f256"
+        val voEncoded=Base64.getEncoder().encodeToString(voUrl.toByteArray())
+        val fixture=post.replace(
+            "<ul><li><a",
+            "<ul><li><a class=\"wp-btn-iframe__shortcode\" data-localize=\"$voKey\">STREAM VO</a></li><li><a")
+            .replace("var uqntxohyiq =",
+                "var aaaaaaaaaa = {\"iframe_url\":\"$voEncoded\"}; var uqntxohyiq =")
+        val buttons=JavGuruOriginalSource.published(selected,fixture)
+        assertEquals(listOf("LU","VO"),buttons.map{it.server})
+        assertEquals(wrapper,buttons.first().url)
+    }
+
     @Test fun publisherReversedTokenCreatesExactSelectedSecondIframe(){
         val html="""<html>
           <script>window.cfg = {
