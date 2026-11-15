@@ -964,8 +964,9 @@ class AsterionHomeActivity:Activity(){
         val general=card()
         put(general,text("VIDEOFLOW · URL AND CUSTOM SOURCE LISTS",17f,theme.white,true))
         put(general,text("For general video downloads, paste a direct video URL or follow a specific channel. Adult provider searches are in Porn & Hentai.",12f,theme.secondary))
-        put(general,button("OPEN VIDEOFLOW SOURCES & DOWNLOADS"){
-            startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
+        UnifiedVideoFlowFeatures.urlEntry(this,general)
+        put(general,button("VIDEO SITE SOURCES"){
+            page="Sources";render()
         })
         put(body,general,10)
     }
@@ -1246,16 +1247,8 @@ class AsterionHomeActivity:Activity(){
     private fun renderSources(){
         section("Monitored sources","Pixiv artists, image sites, video accounts and name searches.")
         put(body,button("SCAN X PHOTOS"){XPhotoEngine.start(this)})
-        val watches=VideoDb(this).use{it.listWatches()}
-        for(w in watches){
-            val c=card()
-            put(c,text(w.label,14f,theme.white,true),0)
-            put(c,text(w.address,11f,theme.secondary))
-            put(c,button(if(w.enabled)"PAUSE SOURCE" else "ENABLE SOURCE"){
-                VideoDb(this).use{it.enableWatch(w.id,!w.enabled)};render()
-            })
-            put(body,c,9)
-        }
+        // The original VideoFlow watch DB and scheduler now live here.
+        UnifiedVideoFlowFeatures.sources(this,body){render()}
         NameWatchDb(this).use{db->
             for(w in db.list()){
                 val c=card()
@@ -1269,7 +1262,6 @@ class AsterionHomeActivity:Activity(){
                 put(body,c,9)
             }
         }
-        put(body,button("SCAN ENABLED SOURCES"){VideoEngine.launch(this,true)})
         val discoveries=SearchResultsDb(this).use{it.list(60)}
         if(discoveries.isNotEmpty()){
             put(body,text("SEARCH RESULTS",17f,theme.white,true),21)
@@ -1386,59 +1378,10 @@ class AsterionHomeActivity:Activity(){
             },5220)
         },6)
         put(body,inventory,10)
-        val netPrefs=getSharedPreferences("video_options",MODE_PRIVATE)
-        val tor=Switch(this).apply{
-            text="Use Orbot / Tor for hidden (.onion) sites"
-            setTextColor(theme.white)
-            isChecked=netPrefs.getBoolean("tor_proxy",false)
-            setOnCheckedChangeListener{_,value->
-                netPrefs.edit().putBoolean("tor_proxy",value).apply()
-            }
-        }
-        put(body,tor)
-        val prefs=getSharedPreferences("video_options",MODE_PRIVATE)
-        put(body,text("VIDEO DISCOVERY",16f,theme.white,true),11)
-        put(body,text("Search runs across integrated video sites and your saved video watches automatically. No search-provider setup is needed.",
-            12f,theme.secondary),6)
-        put(body,button("MANAGE SAVED SEARCHES"){page="Sources";render()})
-        val quality=card()
-        put(quality,text("VIDEO QUALITY",14f,theme.white,true),0)
-        val choices=listOf("Best MP4","Best available","1080p max","720p max","Audio only")
-        val values=listOf("best[ext=mp4]/best","best",
-            "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
-            "bestvideo[height<=720]+bestaudio/best[height<=720]","bestaudio/best")
-        val spinner=Spinner(this)
-        spinner.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,choices)
-        spinner.setSelection(values.indexOf(prefs.getString("quality",values[0])).coerceAtLeast(0))
-        put(quality,spinner)
-        put(quality,button("SAVE QUALITY"){
-            prefs.edit().putString("quality",values[spinner.selectedItemPosition]).apply()
-            toast("Quality saved")
-        })
-        put(body,quality)
-        val advanced=appearance.getBoolean("advanced_open",false)
-        put(body,button(if(advanced)"HIDE LEGACY ENGINE TOOLS"
-            else "SHOW LEGACY ENGINE TOOLS"){
-            appearance.edit().putBoolean("advanced_open",!advanced).apply()
-            render()
-        },12)
-        if(advanced){
-            val settings=card()
-            put(settings,text("ADVANCED COMPATIBILITY",14f,theme.white,true),0)
-            put(settings,text("These are existing original-engine utilities within the "+
-                "same APK. Normal use stays in Asterion's unified modules.",
-                12f,theme.secondary),6)
-            put(settings,button("Pixiv filters and account tools"){
-                startActivity(Intent(this,MainActivity::class.java))
-            },9)
-            put(settings,button("Kyora gallery configuration"){
-                startActivity(Intent(this,com.azrael.galleryflow.MainActivity::class.java))
-            },6)
-            put(settings,button("VideoFlow compatibility settings"){
-                startActivity(Intent(this,com.asterion.videoflow.MainActivity::class.java))
-            },6)
-            put(body,settings,10)
-        }
+        // Every original VideoFlow configuration, diagnostic and session
+        // command is available in Asterion. Competing legacy MainActivities
+        // remain internally compiled only for data/engine compatibility.
+        UnifiedVideoFlowFeatures.settings(this,body)
         put(body,text("Cloud uploads are not marked verified without confirmation from the destination. Originals are retained.",12f,theme.secondary))
     }
 }
