@@ -107,29 +107,33 @@ object VideoEngine {
         // Attempt each independent process even if the other one fails.
         // A previously swallowed secondary-process exception silently reduced
         // the engine to one downloader on Android's FGS-restricted paths.
+        var primaryScheduled=false
         val primaryStarted=try{
             if(Build.VERSION.SDK_INT>=26)context.startForegroundService(intent)
             else context.startService(intent)
             true
         }catch(_:Exception){
             if(allowJobFallback)
-                Scheduling.requestPrimaryImmediate(context,scan,targetHost)
+                primaryScheduled=Scheduling.requestPrimaryImmediate(
+                    context,scan,targetHost)
             false
         }
+        var secondaryScheduled=false
         val secondaryStarted=try{
             val second=Intent(context,TransferAgentTwoService::class.java)
             if(Build.VERSION.SDK_INT>=26)context.startForegroundService(second)
             else context.startService(second)
             true
         }catch(_:Exception){
-            if(allowJobFallback)Scheduling.requestSecondaryImmediate(context)
+            if(allowJobFallback)
+                secondaryScheduled=Scheduling.requestSecondaryImmediate(context)
             false
         }
-        // The primary PollJobService starts its own work() when FGS startup
-        // was denied; secondary also has an independent secondary-process job.
-        // Either isolated process can continue transferring on its own.
-        // Do not report a failed launch when the second process started.
-        return primaryStarted || secondaryStarted
+        // Android may defer foreground starts while successfully accepting
+        // the durable JobScheduler fallback. The old return value discarded
+        // successful job scheduling and falsely told users nothing started.
+        return primaryStarted || secondaryStarted ||
+            primaryScheduled || secondaryScheduled
     }
     fun work(context: Context, scan: Boolean, onStatus: (String)->Unit = {},
              targetHost:String?=null) {

@@ -214,8 +214,11 @@ class MainActivity:Activity() {
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),107)
         }
-        if(!VideoEngine.launch(this,scan))
-            toast("Added to the queue, but Android blocked immediate background start")
+        if(!com.azrael.pixivdumpsync.AppPower.enabled(this)) {
+            toast("Download processing is disabled; turn it on to start queued items")
+        } else if(!VideoEngine.launch(this,scan)) {
+            toast("Android could not start or schedule a transfer worker")
+        }
     }
     private fun empty(heading:String,description:String)=card().apply{
         addView(text("◇",25f,primary,true).apply{gravity=Gravity.CENTER})
@@ -227,7 +230,7 @@ class MainActivity:Activity() {
     private fun downloads(){
         add(content,title("Downloads","Active transfers, saved videos and failures"))
         val tabs=row()
-        listOf("All","Active","Saved","Held","Failed").forEach{label->
+        listOf("All","Active","Saved","Held","Paused","Failed").forEach{label->
             tabs.addView(pill(label,label==filter){filter=label;draw()},
                 LinearLayout.LayoutParams(0,-2,1f).apply{rightMargin=dp(5)})
         }
@@ -248,10 +251,14 @@ class MainActivity:Activity() {
         val box=card()
         val label=when(v.status){
             "done"->"SAVED";"error"->"FAILED";"running"->"DOWNLOADING"
+            "paused"->"PAUSED";"retry_wait"->"RETRY SCHEDULED"
             "full_only_hold"->"AWAITING VERIFIED FULL VERSION"
             else->"QUEUED"
         }
-        val color=when(v.status){"done"->mint;"error"->bad;"running"->primary;else->amber}
+        val color=when(v.status){
+            "done"->mint;"error"->bad;"running"->primary
+            "paused"->grey;else->amber
+        }
         box.addView(text(label,11f,color,true))
         add(box,text(v.title,14f,white,true),7)
         add(box,text(v.url,11f,grey),6)
@@ -289,6 +296,7 @@ class MainActivity:Activity() {
             val actions=row()
             val labelAction=when(v.status){
                 "done"->"OPEN";"error"->"RETRY"
+                "retry_wait"->"RETRY NOW"
                 "full_only_hold"->"RECHECK FULL VERSION"
                 "running"->"PAUSE"
                 "paused"->"RESUME"
@@ -297,7 +305,7 @@ class MainActivity:Activity() {
             actions.addView(button(labelAction,false){
                 when(v.status){
                     "done"->openSaved(v)
-                    "error","full_only_hold"->{
+                    "error","full_only_hold","retry_wait"->{
                         db.retry(v.id);requestTransfer(false);draw()
                     }
                     "running"->{VideoEngine.pauseVideo(this,v.id);draw()}
@@ -309,7 +317,16 @@ class MainActivity:Activity() {
                 AlertDialog.Builder(this).setTitle("Remove from history?")
                     .setMessage("The history entry will be removed. Previously saved files remain on your device.")
                     .setNegativeButton("Cancel",null)
-                    .setPositiveButton("REMOVE"){_,_->db.delete(v.id);draw()}
+                    .setPositiveButton("REMOVE"){_,_->
+                        // A running worker owns a lease and open staging file.
+                        // Revoke its claim and interrupt its actual process
+                        // before hiding the row; never leave an invisible
+                        // download running after the user removes it.
+                        if(v.status=="running")
+                            VideoEngine.cancelVideo(this,v.id)
+                        else db.delete(v.id)
+                        draw()
+                    }
                     .show()
             },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(8)})
             add(box,actions,13)
