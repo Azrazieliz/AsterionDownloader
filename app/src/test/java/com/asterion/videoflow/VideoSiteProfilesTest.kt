@@ -105,6 +105,7 @@ class VideoSiteProfilesTest {
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://3dhentaix.com/phantom/"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/anal/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/inflation/"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/explore/categories/"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://mp4hentai.com/2026/11/si-give-me-more-segs/"))

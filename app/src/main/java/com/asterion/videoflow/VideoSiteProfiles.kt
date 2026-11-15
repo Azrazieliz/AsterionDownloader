@@ -81,6 +81,7 @@ internal object VideoSiteProfiles {
                 cleanPath in setOf("anal","creampie","pov","futanari",
                     "gangbang","uncensored","rape","ahegao","bondage",
                     "monster","succubus","incest","public-sex","tentacles",
+                    "inflation",
                     "fantasy","cosplay","school-girls","dark-skin",
                     "ugly-bastard","yuri","categories","studios")))return false
         if(domain(url)=="hentaibros.net" &&

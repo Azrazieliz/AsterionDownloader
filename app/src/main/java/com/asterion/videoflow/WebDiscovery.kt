@@ -3,6 +3,7 @@ package com.asterion.videoflow
 import org.jsoup.Jsoup
 import android.content.Context
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import com.azrael.galleryflow.SiteSession
 import java.net.URI
 
@@ -44,6 +45,19 @@ object WebDiscovery {
         mediaFiles.containsMatchIn(address) ||
         videoPaths.any { it.containsMatchIn(address) } ||
         VideoSiteProfiles.isVideoPage(address)
+    /** Reject navigational category/tags/ad links from 3DHentaiX listings.
+     * A category with a top-level slug is not an episode just because the
+     * URL resembles the site's flat /video-title/ post routes.
+     * Explicit user taps on a real page remain independently inspectable.
+     */
+    internal fun listingAnchorEligible(source:String,anchor:Element):Boolean {
+        val host=runCatching{URI(source).host.orEmpty()
+            .lowercase().removePrefix("www.")}.getOrDefault("")
+        if(host!="3dhentaix.com")return true
+        return anchor.closest("header,nav,footer,aside,.menu,.menu-item,"+
+            ".categories,.category-list,.category-grid,.tag-cloud,"+
+            ".ads,.advertisement,.banner,[data-ad]")==null
+    }
     /** Redirects are bounded to the same approved provider. Site cookies are
      * attached afresh to each same-provider request, never forwarded through
      * an automatic third-party redirect.
@@ -220,6 +234,7 @@ object WebDiscovery {
         }
         if(isVideoPage(root.location()))add(root.location(),root.title())
         root.select("a[href]").forEach {a->
+            if(!listingAnchorEligible(origin,a))return@forEach
             add(a.attr("abs:href"),a.attr("title").ifBlank{a.text()})
         }
         return found.values.take(limit.coerceIn(1,350))
@@ -249,6 +264,7 @@ object WebDiscovery {
         }
         val found=linkedMapOf<String,VideoHit>()
         for(a in doc.select("a[href]").take(1500)){
+            if(!listingAnchorEligible(root,a))continue
             val url=normalize(a.absUrl("href"))?:continue
             val uri=URI(url)
             if(!VideoSiteProfiles.sameProvider(root,url))continue

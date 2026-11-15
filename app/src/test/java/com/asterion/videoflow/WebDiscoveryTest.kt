@@ -25,6 +25,24 @@ class WebDiscoveryTest {
             assertFalse("Expected a blocked local address: "+it,WebDiscovery.isUrl(it))
         }
     }
+    @Test fun threeDHentaiNavigationIsNotAnIndexedVideo(){
+        val doc=org.jsoup.Jsoup.parse("""
+            <header><nav><a href="/inflation/">Inflation category</a></nav></header>
+            <main><article class="post">
+            <a href="/ntr-compilation/">NTR compilation post</a>
+            </article><div class="category-grid">
+            <a href="/inflation/">Category tile</a></div></main>""",
+            "https://3dhentaix.com/")
+        val links=doc.select("a[href]")
+        assertFalse(WebDiscovery.listingAnchorEligible(
+            "https://3dhentaix.com/",links[0]))
+        assertTrue(WebDiscovery.listingAnchorEligible(
+            "https://3dhentaix.com/",links[1]))
+        assertFalse(WebDiscovery.listingAnchorEligible(
+            "https://3dhentaix.com/",links[2]))
+        assertTrue(WebDiscovery.listingAnchorEligible(
+            "https://javideo.net/",links[0]))
+    }
     @Test fun identifyTypicalVideoUrls(){
         assertTrue(WebDiscovery.isVideoPage("https://example.com/videos/abc123"))
         assertTrue(WebDiscovery.isVideoPage("https://www.pornhub.com/view_video.php?viewkey=1234"))
