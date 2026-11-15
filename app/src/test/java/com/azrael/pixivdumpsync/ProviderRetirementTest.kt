@@ -14,6 +14,8 @@ class ProviderRetirementTest {
         assertTrue(ProviderRetirement.isRetired("https://www.peekvids.com/video/a"))
         assertTrue(ProviderRetirement.isRetired("https://www.tnaflix.com/video/a"))
         assertTrue(ProviderRetirement.isRetired("https://camstreams.tv/"))
+        assertTrue(ProviderRetirement.isRetired("https://chaturbate.com/"))
+        assertTrue(ProviderRetirement.isRetired("https://www.chaturbate.com/performer/"))
         assertFalse(ProviderRetirement.isRetired("https://archivebate.com/"))
         assertFalse(ProviderRetirement.isRetired("https://www.archivebate.com/watch/16458050"))
     }
@@ -21,6 +23,7 @@ class ProviderRetirementTest {
         assertFalse(ProviderRetirement.isRetired("https://pornhits.com.evil.example/"))
         assertFalse(ProviderRetirement.isRetired("https://mypornhits.com/"))
         assertFalse(ProviderRetirement.isRetired("https://omg.porn.attacker.example/"))
+        assertFalse(ProviderRetirement.isRetired("https://chaturbate.com.evil.example/"))
         assertFalse(ProviderRetirement.isRetired("https://hentaibros.net/"))
     }
 }
