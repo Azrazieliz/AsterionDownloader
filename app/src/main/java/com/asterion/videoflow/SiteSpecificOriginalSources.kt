@@ -289,9 +289,14 @@ internal object SiteSpecificOriginalSources {
             val embed=response.url().toString()
             if(!JavGuruOriginalSource.selectedEmbed(stream.server,embed))continue
             val player=Jsoup.parse(response.body(),embed)
-            val exact=(mediaElements(player,embed,
-                "video[src],video source[src],source[type^=video][src]")+
-                jsSources(player,embed)).distinctBy{it.url}
+            // Do not promote generic embeds, ad players or script URL
+            // strings as the selected original. Only an unambiguous video
+            // inside the final hoster's real player is a direct-media source.
+            val exact=mediaElements(player,embed,
+                "#player video[src],#player video source[src],"+
+                "#video-player video[src],#video-player video source[src],"+
+                ".jwplayer video[src],.jwplayer video source[src]")
+                .distinctBy{it.url}.takeIf{it.size==1}.orEmpty()
             if(exact.isNotEmpty()){
                 for(media in exact)
                     found.putIfAbsent(media.url,media)
