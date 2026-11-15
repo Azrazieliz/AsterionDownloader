@@ -22,7 +22,7 @@ import com.azrael.galleryflow.GalleryRequestLedger
 import com.azrael.galleryflow.SyncMode
 import java.net.URI
 
-/** One top-level application for all sources; legacy specialists remain advanced tools. */
+/** One top-level application. Specialist engines remain; their competing UIs do not. */
 class AsterionHomeActivity:Activity(){
     private val theme=NocturneDesign
     private lateinit var root:LinearLayout
@@ -103,6 +103,67 @@ class AsterionHomeActivity:Activity(){
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
         super.onActivityResult(requestCode,resultCode,data)
+        if(requestCode==708){
+            val source=data?.data
+            if(resultCode==RESULT_OK && source!=null){
+                kotlin.concurrent.thread(name="asterion-unified-kyora-import"){
+                    val result=runCatching{
+                        com.azrael.galleryflow.LegacySourceImporter(
+                            applicationContext).importSites(source)
+                    }
+                    runOnUiThread{
+                        if(isFinishing||isDestroyed)return@runOnUiThread
+                        result.onSuccess{toast("Imported $it Kyora source settings; saved files unchanged")}
+                            .onFailure{toast("Kyora import failed: "+it.message)}
+                        render()
+                    }
+                }
+            }
+            return
+        }
+        if(requestCode==551){
+            val source=data?.data
+            if(resultCode==RESULT_OK && source!=null){
+                kotlin.concurrent.thread(name="asterion-unified-video-cookie-import"){
+                    val result=runCatching{
+                        val folder=java.io.File(filesDir,"videoflow").apply{mkdirs()}
+                        val dest=java.io.File(folder,"cookies.txt")
+                        val staged=java.io.File(folder,"cookies.txt.new")
+                        contentResolver.openInputStream(source)?.use{input->
+                            staged.outputStream().use{out->
+                                val bytes=ByteArray(16_384)
+                                var total=0L
+                                while(true){
+                                    val n=input.read(bytes)
+                                    if(n<0)break
+                                    total+=n
+                                    require(total<=4_000_000L){"Cookie file too large"}
+                                    out.write(bytes,0,n)
+                                }
+                            }
+                        }?:error("Selected file cannot be opened")
+                        require(staged.length()>0L){"Cookie file was empty"}
+                        val header=staged.bufferedReader().use{it.readLine().orEmpty()}
+                        require(header.startsWith("# Netscape HTTP Cookie File") ||
+                            header.startsWith("# HTTP Cookie File") ||
+                            header.startsWith("# Netscape") ||
+                            header.contains("cookies.txt",ignoreCase=true)){
+                            "Expected Netscape cookies.txt format"
+                        }
+                        check(staged.renameTo(dest) || run{
+                            staged.copyTo(dest,overwrite=true);staged.delete();true
+                        }){"Private cookie import failed"}
+                        "Authenticated video cookie file imported privately"
+                    }
+                    runOnUiThread{
+                        if(isFinishing||isDestroyed)return@runOnUiThread
+                        result.onSuccess{toast(it)}
+                            .onFailure{toast("Video cookie import: "+it.message)}
+                    }
+                }
+            }
+            return
+        }
         if(requestCode==5222){
             if(resultCode==RESULT_OK && data?.data!=null){
                 val uri=data.data!!
