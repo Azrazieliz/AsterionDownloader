@@ -161,3 +161,39 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }
+
+
+/** Fail closed before producing the ONE remaining acceptance APK.
+ * Earlier APKs omitted the wheel declared in VideoExtractorVersion, and
+ * silently ran the old unsupported extractor despite passing unit tests.
+ * The exact wheel is published by PyPI with an independently checked SHA.
+ */
+val verifyBundledYtDlp by tasks.registering {
+    doLast {
+        val wheel = file("src/main/assets/yt_dlp-2026.10.26-py3-none-any.whl")
+        check(wheel.isFile) {
+            "Required yt-dlp 2026.10.26 wheel is missing. Do not build " +
+                "another acceptance APK without the actual pinned binary asset."
+        }
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        wheel.inputStream().buffered().use { stream ->
+            val buffer = ByteArray(131_072)
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        check(actual == "a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae") {
+            "Bundled yt-dlp wheel has an unexpected checksum: refusing acceptance APK"
+        }
+    }
+}
+
+// Do not affect ordinary source-only tests; protect actual APK packaging.
+tasks.matching {
+    it.name == "packageAcceptance" || it.name == "mergeAcceptanceAssets"
+}.configureEach {
+    dependsOn(verifyBundledYtDlp)
+}
