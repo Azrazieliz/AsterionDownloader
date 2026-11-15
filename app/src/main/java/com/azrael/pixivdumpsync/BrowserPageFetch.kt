@@ -361,8 +361,16 @@ object BrowserPageFetch {
                                 },1_500L)
                             }else if(selectedPlayerPage &&
                                 selectedPlayerWaits++<6 &&
-                                (!Regex("""<video\s+src="https://[^"]+""")
-                                    .containsMatchIn(page) ||
+                                ((if(host=="javideo.net") {
+                                    // Only the selected iframe appears after
+                                    // JAVIDEO's Play button; its HTML5 video is
+                                    // a separate advert, not the original.
+                                    com.asterion.videoflow.SiteSpecificOriginalSources
+                                        .javideoSelected(
+                                            org.jsoup.Jsoup.parse(page,url),url)
+                                        .isEmpty()
+                                } else !Regex("""<video\s+src="https://[^"]+""")
+                                    .containsMatchIn(page)) ||
                                     (host in setOf("hentaibros.net","3dhentaix.com") &&
                                      Regex("""data-duration="([0-9]{1,9})""")
                                          .findAll(page).none{
