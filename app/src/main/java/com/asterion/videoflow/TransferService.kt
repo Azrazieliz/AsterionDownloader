@@ -971,6 +971,21 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(strictIframe && userRequested &&
+                    source.referer==item.url &&
+                    SiteSpecificOriginalSources.selectedExtractorFrame(
+                        item.url,source.url)){
+                    // Rule34 succeeds by using a publisher-attested original
+                    // directly. Here the equivalent publisher-attested
+                    // artifact is an exact selected VOE/Streamtape iframe.
+                    // It is NOT treated as an MP4: try the actual extractor,
+                    // then require media bytes and playable-file validation.
+                    // Skipping duplicate metadata avoids two failing probes.
+                    try {
+                        execute(source.url,source.referer)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else if(runCatching{
                     java.net.URI(source.url).path.orEmpty().matches(
                         Regex("""(?i)^.*\.(?:m3u8|mpd)$"""))

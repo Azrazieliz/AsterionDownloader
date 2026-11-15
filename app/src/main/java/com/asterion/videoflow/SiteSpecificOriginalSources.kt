@@ -27,9 +27,12 @@ internal object SiteSpecificOriginalSources {
     internal fun isHosterPage(link:String):Boolean {
         val path=runCatching{URI(link).path.orEmpty()}.getOrDefault("")
         return when(host(link)){
-            "k2s.cc"->path.startsWith("/file/")
-            "nitroflare.com"->path.startsWith("/view/")
-            "uploadgig.com"->path.startsWith("/file/download/")
+            "k2s.cc"->path.startsWith("/file/") ||
+                path.startsWith("/download/")
+            "nitroflare.com"->path.startsWith("/view/") ||
+                path.startsWith("/download/")
+            "uploadgig.com"->path.startsWith("/file/") ||
+                path.startsWith("/download/")
             else->false
         }
     }
@@ -436,6 +439,32 @@ internal object SiteSpecificOriginalSources {
      * landing page, recommendation, advertising clip or ambiguous source.
      * Static and browser results must refer to the same exact selected iframe.
      */
+    /**
+     * A published exact player is an extractor input, not verified media.
+     * Restrict fallback to the SAME one selected iframe when its HTML5
+     * currentSrc cannot be obtained, never an autoplay advert or sidebar.
+     */
+    internal fun selectedExtractorFrame(selected:String,player:String):Boolean {
+        val page=runCatching{URI(selected)}.getOrNull()?:return false
+        val frame=runCatching{URI(player)}.getOrNull()?:return false
+        if(page.scheme!="https" || frame.scheme!="https" ||
+            page.port!=-1 || frame.port!=-1 || frame.userInfo!=null ||
+            !VideoSiteProfiles.isVideoPage(selected) ||
+            !WebDiscovery.isUrl(player))return false
+        val path=frame.path.orEmpty()
+        return when(host(selected)){
+            "javideo.net" -> host(player) in setOf("streamtape.com",
+                "streamtape.to","streamtape.net","streamtape.site",
+                "sbtape.com") &&
+                Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
+                    .matches(path)
+            "helloporn.com"->host(player)=="voe.sx" &&
+                Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                    .matches(path)
+            else->false
+        }
+    }
+
     private fun selectedIframeMedia(
         context:Context,selected:String,frame:Source
     ):List<Source> {
@@ -484,7 +513,12 @@ internal object SiteSpecificOriginalSources {
             rendered?.let{helloPorn(Jsoup.parse(it,selected),selected)}.orEmpty()
         }
         if(frames.size!=1)return emptyList()
-        return selectedIframeMedia(context,selected,frames.single())
+        val exact=selectedIframeMedia(context,selected,frames.single())
+        return exact.ifEmpty {
+            // Exact VOE /e/ selected player may be supported by yt-dlp even
+            // when currentSrc is hidden from the Android WebView snapshot.
+            frames.filter{selectedExtractorFrame(selected,it.url)}
+        }
     }
 
     /**
@@ -515,7 +549,10 @@ internal object SiteSpecificOriginalSources {
         val frames=if(initialFrames.isNotEmpty())initialFrames
             else rendered?.let{javideoSelected(it,selected)}.orEmpty()
         if(frames.size!=1)return emptyList()
-        return selectedIframeMedia(context,selected,frames.single())
+        val exact=selectedIframeMedia(context,selected,frames.single())
+        return exact.ifEmpty {
+            frames.filter{selectedExtractorFrame(selected,it.url)}
+        }
     }
 
     /**

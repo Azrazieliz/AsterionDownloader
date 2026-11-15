@@ -126,6 +126,37 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(selected,SiteSpecificOriginalSources.playerLink(
             Jsoup.parse(html,page),"fullporner.com"))
     }
+    @Test fun selectedHosterFallbackAdmitsExactPlayersButNeverAdIframes(){
+        val jav="https://javideo.net/en/mida-863-mosaic"
+        val voe="https://helloporn.com/video-28699-selected-video"
+        val stream="https://streamtape.com/e/AaBbCcDdEe12345"
+        val player="https://voe.sx/e/wx8walm5hqkj"
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(jav,stream))
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(voe,player))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            jav,"https://streamtape.com/e/../ads"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            jav,"https://streamtape.com.evil.example/e/AaBbCcDdEe12345"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            voe,"https://ads.example/e/wx8walm5hqkj"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            "https://rule34video.com/video/4727779/",stream))
+    }
+
+    @Test fun publishedRoshyDownloadPageVariantsRemainExtractorCandidates(){
+        val page="https://roshy.tv/video/test-original-scene/"
+        val variants=listOf(
+            "https://k2s.cc/download/aabbcc",
+            "https://nitroflare.com/download/AAABBBCC",
+            "https://uploadgig.com/file/abcdef",
+            "https://uploadgig.com/download/abcdef")
+        val sources=SiteSpecificOriginalSources.roshyTransferableCandidates(
+            variants.map{SiteSpecificOriginalSources.Source(it,page)},emptyList())
+        assertEquals(variants,sources.map{it.url})
+        assertTrue(sources.all{
+            !NativeMediaDownloader.isNativeEligible(page,it.url)})
+    }
+
     @Test fun liveHelloPornSelectedVideoUsesOnlyVoeEmbedOriginal(){
         val selected="https://helloporn.com/video-28699-fakedrivingschool-naughty-student-late-for-her-exam-j"
         val player="https://voe.sx/e/wx8walm5hqkj"
