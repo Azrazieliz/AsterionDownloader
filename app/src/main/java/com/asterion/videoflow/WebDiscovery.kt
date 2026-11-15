@@ -240,6 +240,15 @@ object WebDiscovery {
         return found.values.take(limit.coerceIn(1,350))
     }
 
+    /** If the title anchor occurs before the poster anchor for the same
+     * selected video, preserve the first card and enrich its missing cover.
+     * Never replace a genuine thumbnail with a later placeholder.
+     */
+    internal fun withDiscoveredPreview(first:VideoHit,later:VideoHit):VideoHit =
+        if(first.preview.isNullOrBlank() && !later.preview.isNullOrBlank())
+            first.copy(preview=later.preview)
+        else first
+
     /** One bounded source-page traversal. Caller saves 'next' before marking the page done. */
     fun page(address:String,root:String,context:Context?=null):VideoPage {
         require(isUrl(address)&&isUrl(root)){"Invalid source URL"}
@@ -275,7 +284,10 @@ object WebDiscovery {
             val thumbnail=a.selectFirst("img")?.let{
                 com.azrael.pixivdumpsync.SitePreviewImage.best(it)
             }
-            found.putIfAbsent(url,VideoHit(title,url,thumbnail))
+            val candidate=VideoHit(title,url,thumbnail)
+            val previous=found[url]
+            if(previous==null)found[url]=candidate
+            else found[url]=withDiscoveredPreview(previous,candidate)
             if(found.size>=350)break
         }
         // Some sites put the accessible video original only in a native HTML

@@ -11,10 +11,10 @@ import java.util.concurrent.Executors
 
 /** Bounded 3-thread video-result thumbnail loader; never blocks the UI. */
 object VideoSearchPreviews {
-    private val workers=java.util.concurrent.ThreadPoolExecutor(3,3,0L,
-        java.util.concurrent.TimeUnit.MILLISECONDS,
-        java.util.concurrent.ArrayBlockingQueue<Runnable>(72),
-        java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy())
+    // A screen may queue 120 video cards. The previous queue held 72 and
+    // DiscardOldestPolicy silently removed the FIRST cards before loading.
+    // Keep a bounded first-visible-first queue without UI-thread network work.
+    private val workers=PreviewLoadExecutor.create(3)
     private val memory=object:LruCache<String,Bitmap>(12*1024*1024){
         override fun sizeOf(key:String,value:Bitmap):Int=value.byteCount
     }

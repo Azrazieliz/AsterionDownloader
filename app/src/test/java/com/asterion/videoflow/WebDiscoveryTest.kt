@@ -5,6 +5,15 @@ import org.junit.Test
 
 /** URL validation only; transport for non-public hosts is configured separately. */
 class WebDiscoveryTest {
+    @Test fun laterPosterAnchorRecoversMissingFirstJavideoThumbnail(){
+        val url="https://javideo.net/fc2ppv-5007485"
+        val first=VideoHit("FC2PPV-5007485",url,null)
+        val withCover=VideoHit("FC2PPV-5007485",url,
+            "https://cdn.javideo.net/202611/fc2ppv-5007485-1794709028.webp")
+        assertEquals(withCover.preview,WebDiscovery.withDiscoveredPreview(first,withCover).preview)
+        assertEquals(withCover.preview,
+            WebDiscovery.withDiscoveredPreview(withCover,first).preview)
+    }
     @Test fun validWebVideoUrl() {
         assertTrue(WebDiscovery.isUrl("https://www.example.com/videos/123456"))
         assertTrue(WebDiscovery.isUrl("https://media.example.com/sample.mp4?token=abc"))

@@ -13,10 +13,9 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 
 object RemoteImageLoader {
-    private val executor = java.util.concurrent.ThreadPoolExecutor(4,4,0L,
-        java.util.concurrent.TimeUnit.MILLISECONDS,
-        java.util.concurrent.ArrayBlockingQueue<Runnable>(96),
-        java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy())
+    // Creator/gallery screens also present more than 96 cards. Never evict
+    // the earliest visible thumbnails merely because later rows are queued.
+    private val executor = PreviewLoadExecutor.create(4)
 
     private val memory = object : LruCache<String, Bitmap>(
         minOf(
