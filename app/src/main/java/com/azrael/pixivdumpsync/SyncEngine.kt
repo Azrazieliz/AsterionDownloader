@@ -67,31 +67,24 @@ class SyncEngine(private val context: Context) {
         // Import owner-authorized Kuroha/PixiFlow originals BEFORE any Pixiv
         // requests are planned. Never re-download blindly while a linked
         // legacy folder is unavailable or its first scan is still running.
-        val legacy=runCatching {
+        val legacy=if(mode==SyncMode.BACKFILL)runCatching {
             LegacyPixivInventory.refreshIfDue(context)
             LegacyPixivInventory.status(context)
-        }
-        val status=legacy.getOrNull()
+        }else null
+        val status=legacy?.getOrNull()
         // Unavailable legacy storage is a duplicate-risk gate for BULK
         // historical backfill only. Previous code stopped LIVE checks, direct
         // one-off downloads and even CLOUD upload before any Pixiv request.
         // Live respects existing cursors; backfill still needs complete
         // read-only access to Kuroha files before replaying old artwork.
-        val unavailable=if(mode==SyncMode.BACKFILL){
-            legacy.exceptionOrNull()?.message ?:
-                if(status!=null){
-                    when{
-                        status.linkedFolders==0 &&
-                            LegacyPixivInventory.legacyKurohaInstalled(context)->
-                            "Kuroha originals need one-time folder access before backfill"
-                        status.linkedFolders>0 && status.scanning->
-                            "The Kuroha inventory is still scanning"
-                        status.linkedFolders>0 && status.lastError!=null->
-                            status.lastError
-                        else->null
-                    }
-                }else null
-        }else null
+        val unavailable=PixivLegacySyncGate.reason(
+            mode=mode,
+            kurohaInstalled=if(mode==SyncMode.BACKFILL)
+                LegacyPixivInventory.legacyKurohaInstalled(context) else false,
+            linkedFolders=status?.linkedFolders?:0,
+            scanning=status?.scanning?:false,
+            lastError=status?.lastError,
+            refreshError=legacy?.exceptionOrNull()?.message)
         if(unavailable!=null){
             stats.errors++
             progress("Pixiv sync held to avoid duplicate downloads: "+
