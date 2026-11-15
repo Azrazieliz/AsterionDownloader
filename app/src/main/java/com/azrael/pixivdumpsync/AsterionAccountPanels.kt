@@ -72,25 +72,24 @@ object AsterionAccountPanels {
             say(a,"Connect your Pixiv account before downloading.")
             return
         }
-        if(mode==SyncMode.BACKFILL &&
-            LegacyPixivInventory.legacyKurohaInstalled(a) &&
-            LegacyPixivInventory.status(a).linkedFolders==0){
-            // Owner permission is needed ONCE; do not silently duplicate all
-            // historical Kuroha pages or claim a backfill started.
-            a.getSharedPreferences("asterion_pending_pixiv_legacy",0).edit()
-                .putString("mode",mode.name).putString("artist",id).apply()
-            @Suppress("DEPRECATION")
-            a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            },5222)
-            say(a,"Choose Kuroha's saved Pixiv image folder once; backfill will resume automatically.")
-            return
-        }
-        val current=SyncControl.snapshot()
-        if(current.running){
-            say(a,"Pixiv is already syncing: "+current.message)
-            return
+        // Match the working legacy Pixiv interface. In particular, never
+        // insert a second folder-permission gate or a UI-side running-state
+        // rejection before dispatching to the same native SyncForegroundService.
+        // The service and SyncEngine remain the authoritative coordinators.
+        if(mode!=SyncMode.CLOUD){
+            val eligible=AppDb(a).use{db->
+                if(id!=null)listOfNotNull(db.artist(id))
+                else if(mode==SyncMode.LIVE)db.listSelectedLiveArtists()
+                else db.listSelectedArtists()
+            }
+            val feedCanRun=id==null && mode==SyncMode.LIVE &&
+                SessionStore.followingFeedEnabled(a)
+            if(eligible.isEmpty() && !feedCanRun){
+                say(a,if(mode==SyncMode.LIVE)
+                    "Enable the Following feed or select a watched artist with Live enabled"
+                    else "Select at least one Pixiv artist for backfill")
+                return
+            }
         }
         val intent=Intent(a,SyncForegroundService::class.java).apply{
             action=SyncForegroundService.ACTION_START
@@ -99,8 +98,9 @@ object AsterionAccountPanels {
             if(id!=null)putExtra(SyncForegroundService.EXTRA_TARGET_ARTIST_ID,id)
         }
         runCatching{a.startForegroundService(intent)}
-            .onSuccess{say(a,if(id==null)"Pixiv "+mode.name.lowercase()+" started"
-                          else "Started "+mode.name.lowercase()+" for artist "+id)}
+            .onSuccess{say(a,if(id==null)
+                "Pixiv "+mode.name.lowercase()+" request sent to sync service"
+                else "Pixiv "+mode.name.lowercase()+" requested for artist "+id)}
             .onFailure{say(a,"Pixiv sync error: "+it.message)}
     }
     fun pixiv(a:Activity,p:LinearLayout,refresh:()->Unit){
