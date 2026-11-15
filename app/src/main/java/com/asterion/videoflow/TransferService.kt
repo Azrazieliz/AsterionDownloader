@@ -906,7 +906,22 @@ object VideoEngine {
             if(!downloaded && userRequested &&
                 FreePornVideosOriginalSource.selectedPage(item.url) &&
                 !FullLengthVideoPolicy.isExplicitPreview(item.title,item.url)){
-                val format=publisherResult{
+                // This is the exact selected scene, matched by the numeric
+                // /videos/<id>/ and /get_file/.../<id>_<quality>m.mp4/
+                // identifiers. Do not start Python when the publisher has
+                // already supplied the attributable first-party original.
+                val selectedFormat=publishedOriginals.firstOrNull{
+                    FreePornVideosOriginalSource.selectedFileQuality(
+                        item.url,it.url)!=null
+                }
+                if(selectedFormat!=null){
+                    try{
+                        execute(selectedFormat.url,selectedFormat.referer,
+                            verifiedFirstPartyMp4=true)
+                        downloaded=true
+                    }catch(t:Exception){last=t}
+                }
+                val format=if(downloaded)Result.success(null) else publisherResult{
                     ensureExtractor(context)
                     val selected=connectedCookies?.takeIf{
                         it.isFile&&it.length()>0L}
