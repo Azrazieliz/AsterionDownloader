@@ -1405,7 +1405,8 @@ object SourceIndex {
             var doc=fetchPage(context,source,address)
             // A JS-only website may reply HTTP 200 with no actual content.
             // Re-read the authorized browser DOM before treating it as empty.
-            if(SiteSession.bound(context,address) &&
+            if((SiteSession.bound(context,address) ||
+                BrowserPageFetch.publicEligible(address)) &&
                 SourceIndexParser.entries(doc,source.url,source.area,
                     System.currentTimeMillis()).isEmpty()){
                 val browser=runCatching{BrowserPageFetch.html(context,address)}
