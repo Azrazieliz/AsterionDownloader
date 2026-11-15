@@ -31,6 +31,16 @@ class Rule34VideoOriginalSourceTest {
         assertTrue(formats.all{NativeMediaDownloader.isNativeEligible(
             selected,it.url,true)})
     }
+    @Test fun relatedQualityLinkIsNotTheSelectedOriginal(){
+        val html="""<main><aside class="related">
+            <a href="/get_file/2026/1/unrelated.mp4?download=true">MP4 1080p</a>
+            </aside><div class="download-options">
+            <a href="/get_file/2026/1/selected.mp4?download=true">MP4 720p3 MB</a>
+            </div></main>"""
+        val originals=Rule34VideoOriginalSource.parse(html,selected)
+        assertEquals(1,originals.size)
+        assertTrue(originals.single().url.contains("/selected.mp4"))
+    }
     @Test fun selectedQualityParserRejectsUnrelatedHtml5AndMetadataSources(){
         val html="""<main><video src="https://cdn.example/other.mp4"></video>
             <meta itemprop="contentUrl" content="https://cdn.example/other.mp4"/>

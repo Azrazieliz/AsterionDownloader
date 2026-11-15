@@ -53,6 +53,12 @@ internal object Rule34VideoOriginalSource {
         val doc=Jsoup.parse(html,page)
         val found=LinkedHashMap<String,Original>()
         for(a in doc.select("a[href]").take(1_500)){
+            // Publisher quality links can coexist with related video cards.
+            // The related card is not the user-selected original, even when
+            // its text also says MP4 1080p.
+            if(a.closest("aside,.related,.recommended,.recommendations,"+
+                    ".sidebar,.more-videos,.ads,.advertisement,.banner,"+
+                    "[data-ad]")!=null)continue
             val label=videoLabel.find(a.text().trim())?:continue
             val raw=a.attr("href")
             val url=runCatching{URI(page).resolve(raw).toString()}.getOrNull()

@@ -22,6 +22,16 @@ class VideoFailureHosterTest {
         }
     }
 
+    @Test fun absentSelectedPlayerDoesNotEnterBlindRetry(){
+        for(message in listOf(
+            "Selected publisher iframe exposed no attributable direct media",
+            "Rule34Video selected page exposed no verified download quality links",
+            "Selected article exposed no attributable original")) {
+            val kind=VideoFailurePolicy.classify(message)
+            assertEquals(message,VideoFailurePolicy.Kind.UNSUPPORTED,kind)
+            assertEquals(0,VideoFailurePolicy.maxRetries(kind))
+        }
+    }
     @Test fun realServer503IsTemporaryNotFalseOriginalSuccess(){
         assertEquals(VideoFailurePolicy.Kind.TRANSIENT,
             VideoFailurePolicy.classify("Provider HTTP 503 · request unsuccessful"))

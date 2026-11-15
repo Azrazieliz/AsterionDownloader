@@ -809,6 +809,14 @@ object VideoEngine {
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         val strictIframe=NetworkRoute.siteKey(item.url) in
             setOf("javideo.net","helloporn.com")
+        val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
+            setOf("mp4hentai.com","hentaihaven.xxx") &&
+            VideoSiteProfiles.isVideoPage(item.url)
+        if(strictSelectedArticle && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Selected article exposed no attributable original; "+
+                    "the HTML page and recommended media are not downloads"))
         if(strictIframe && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -981,6 +989,9 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictSelectedArticle && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Selected article file host or player exposed no transferable original"))
             if(strictIframe && !downloaded)
                 throw (last?:IllegalStateException(
                     "Selected external player did not transfer the original media"))
