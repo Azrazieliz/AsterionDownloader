@@ -87,9 +87,11 @@ class XFollowingImportActivity:Activity(){
                     return a?a.getAttribute('href'):'';
                 })()"""){raw->
                     val found=raw.trim('"').trim('/').substringBefore('/')
-                    if(validHandle(found))
+                    if(validHandle(found)){
+                        getPreferences(MODE_PRIVATE).edit()
+                            .putString("own_x_handle",found).apply()
                         browser.loadUrl("https://x.com/"+found+"/following")
-                    else Toast.makeText(this,
+                    }else Toast.makeText(this,
                         "Enter your own X username above to open the account list.",
                         Toast.LENGTH_LONG).show()
                 }
@@ -159,11 +161,25 @@ class XFollowingImportActivity:Activity(){
             val batch=runCatching {
                 val obj=JSONObject(raw)
                 val arr=obj.optJSONArray("users")?:JSONArray()
-                val items=(0 until minOf(arr.length(),500)).map{arr.optString(it)}
+                val items=(0 until minOf(arr.length(),500)).mapNotNull{index->
+                    val evidence=arr.optJSONObject(index)?:return@mapNotNull null
+                    val handle=evidence.optString("handle")
+                    handle.takeIf {
+                        XFollowingImportPolicy.isFollowedAccount(
+                            it,evidence.optBoolean("following",false))
+                    }
+                }
                 Triple(items,obj.optInt("position",0),obj.optInt("extent",0))
             }.getOrNull()?:return
             runOnUiThread {
                 if(!scanning||completed)return@runOnUiThread
+                // A JS callback arriving after navigation or from X's
+                // recommendations feed must never modify the following list.
+                val own=getPreferences(MODE_PRIVATE).getString("own_x_handle","")
+                    .orEmpty().trim().removePrefix("@")
+                val page=Uri.parse(browser.url.orEmpty()).path.orEmpty()
+                if(!XFollowingImportPolicy.isOwnFollowingPage(page,own))
+                    return@runOnUiThread
                 val fresh=batch.first.filter{validHandle(it)&&discovered.add(it)}
                 listPosition=batch.second
                 listExtent=batch.third
@@ -213,13 +229,70 @@ class XFollowingImportActivity:Activity(){
                     browser.evaluateJavascript("""
                         (function(){
                           const found=new Set();
+                          // X may inject "Who to follow" recommendations
+                          // into the same virtualized list. A visible UserCell
+                          // is not evidence of an actual account relationship.
                           const cells=[...document.querySelectorAll(
-                            '[data-testid="UserCell"], [data-testid="user"]')];
+                            '[data-testid="UserCell"]')];
                           cells.forEach(cell=>{
-                            cell.querySelectorAll('[data-testid="User-Name"] a[href],a[href^="/"]')
+                            const actions=[...cell.querySelectorAll(
+                              'button,[role="button"]')];
+                            const following=actions.some(b=>{
+                              const id=(b.getAttribute('data-testid')||'')
+                                .toLowerCase();
+                              const label=(b.getAttribute('aria-label')||
+                                b.textContent||'').trim().toLowerCase();
+                              return id==='unfollow' ||
+                                /(?:^|-)unfollow$/.test(id) ||
+                                label==='following'||label==='unfollow';
+                            });
+                            if(!following)return;
+                            cell.querySelectorAll(
+                              '[data-testid="User-Name"] a[href]')
                               .forEach(a=>{
                                 const match=(a.getAttribute('href')||'')
-                                  .match(new RegExp('^/([A-Za-z0-9_]{1,15})/?$'));
+                                  .match(new RegExp('^/([A-Za-z0-9_]{1,15})/?
+                          const scrollables=[document.scrollingElement,
+                              ...document.querySelectorAll('main,section,[data-testid="primaryColumn"],div')]
+                            .filter(Boolean).filter(el=>el.scrollHeight>el.clientHeight+120);
+                          scrollables.sort((a,b)=>
+                            (b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight));
+                          const target=scrollables[0]||document.scrollingElement;
+                          const move=Math.max(380,Math.floor(window.innerHeight*0.78));
+                          const before=target.scrollTop;
+                          if(target===document.scrollingElement){
+                              window.scrollBy(0,move);
+                          }else{
+                              target.scrollTop+=move;
+                          }
+                          if(target.scrollTop<=before && cells.length){
+                            cells[cells.length-1].scrollIntoView({block:'end'});
+                          }
+                          AsterionFollowing.found(JSON.stringify({
+                            users:[...found].map(handle=>({handle,following:true})),
+                            position:Math.round(target.scrollTop),
+                            extent:Math.round(target.scrollHeight-target.clientHeight)
+                          }));
+                          return found.size;
+                        })()
+                    """.trimIndent(),null)
+                }else if(allowed(url) && path.trimEnd('/')=="/home"){
+                    label.text="Open your own profile /following list. Then this app automatically imports the entire list."
+                }
+            }
+            handler.postDelayed(this,2000L)
+        }
+    }
+    override fun onResume(){super.onResume();scanning=true;handler.post(scanner)}
+    override fun onPause(){scanning=false;handler.removeCallbacks(scanner);super.onPause()}
+    override fun onDestroy(){
+        handler.removeCallbacks(scanner)
+        importWorker.shutdown()
+        browser.removeJavascriptInterface("AsterionFollowing")
+        browser.destroy()
+        super.onDestroy()
+    }
+}));
                                 if(match && (cell.innerText||'').toLowerCase()
                                      .includes('@'+match[1].toLowerCase()))
                                   found.add(match[1]);
