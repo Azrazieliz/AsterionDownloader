@@ -39,6 +39,26 @@ internal object ArchivebateSelectedMedia {
             player.rawQuery.isNullOrBlank()
     }
 
+    /** Mixdrop currently redirects its published /e/<id> to mxdrop.click.
+     * Allow only the identical selected player path on its observed canonical
+     * domain, not popunders, other video IDs or arbitrary third parties.
+     * The source /watch/ must still attest the original mixdrop.ag embed.
+     */
+    internal fun selectedRedirect(original:String,destination:String):Boolean {
+        val start=runCatching{URI(original)}.getOrNull()?:return false
+        val target=runCatching{URI(destination)}.getOrNull()?:return false
+        val initialHost=start.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        val finalHost=target.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        return start.scheme=="https" && target.scheme=="https" &&
+            start.userInfo==null && target.userInfo==null &&
+            initialHost=="mixdrop.ag" &&
+            finalHost in setOf("mixdrop.ag","mxdrop.click") &&
+            start.path==target.path &&
+            Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(target.path.orEmpty()) &&
+            start.rawQuery.isNullOrBlank() && target.rawQuery.isNullOrBlank() &&
+            start.port==-1 && target.port==-1
+    }
+
     /** Accept the precise video CDN host observed inside the selected player,
      * not an ad domain, parent-page preview, playlist or guessed media URL.
      */
@@ -143,9 +163,7 @@ internal object ArchivebateSelectedMedia {
                         // actual user-selected published Mixdrop player.
                         val dest=request.url
                         return request.isForMainFrame &&
-                            (dest.scheme!="https" ||
-                                dest.host.orEmpty().lowercase(Locale.ROOT)
-                                    .removePrefix("www.")!="mixdrop.ag")
+                            !selectedRedirect(embed,dest.toString())
                     }
                     override fun onPageFinished(v:WebView,url:String){
                         if(done.count>0L)main.postDelayed({inspect()},1_400L)
