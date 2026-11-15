@@ -197,6 +197,14 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         if(it.moveToFirst())it.getInt(0)else 0
     }
     fun retry(id:Long){change(id,"queued")}
+    /** Stop/hide queued, paused or completed photo work without touching
+     * source follows, saved originals or the file system.
+     */
+    fun dismiss(id:Long):Boolean =
+        writableDatabase.update("photos",ContentValues().apply{
+            put("status","dismissed");put("updated",System.currentTimeMillis())
+        },"id=? AND status!='running' AND status!='dismissed'",
+            arrayOf(id.toString()))>0
 
     fun retryDueFailures():Int{
         val now=System.currentTimeMillis()
@@ -230,7 +238,7 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
     fun recent(limit:Int=100):List<XPhotoTask>{
         val out=ArrayList<XPhotoTask>()
         readableDatabase.rawQuery("""SELECT id,source,photo_url,status,saved_uri,attempts,error,updated
-            FROM photos ORDER BY id DESC LIMIT ${limit.coerceIn(1,1000)}""",null).use{c->
+            FROM photos WHERE status!='dismissed' ORDER BY id DESC LIMIT ${limit.coerceIn(1,1000)}""",null).use{c->
             while(c.moveToNext()){
                 // Older database rows may have NULL / text timestamps. Android
                 // CursorWindow.getLong can throw here and crash the entire X screen.
