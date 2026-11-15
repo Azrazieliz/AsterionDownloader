@@ -167,6 +167,20 @@ internal object PublisherOriginalExtractors {
         // post, authorized rendered player or file hoster metadata.
         if(SiteSpecificOriginalSources.owns(selected)){
             val resolved=SiteSpecificOriginalSources.resolve(context,selected,page)
+            if(host=="jav.guru" && resolved.isEmpty() &&
+                com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(selected)){
+                // On Android a publisher can serve HTTP 200 with a thin
+                // JavaScript shell. The static HTML lacks shortcode keys;
+                // retry the SAME selected article through WebView's rendered
+                // shortcode snapshot rather than treating the shell as video.
+                val rendered=com.azrael.pixivdumpsync.BrowserPageFetch
+                    .html(context,selected)
+                val browser=Jsoup.parse(rendered,selected)
+                val browserOriginals=SiteSpecificOriginalSources.resolve(
+                    context,selected,browser)
+                if(browserOriginals.isNotEmpty())
+                    return browserOriginals.distinctBy{it.url}
+            }
             // Retain publisher-attested fallbacks only; never substitute
             // generic page thumbnails, ads, or another selected item.
             // 3DHentaiX can expose unrelated playable recommendations.
