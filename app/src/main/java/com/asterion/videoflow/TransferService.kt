@@ -547,6 +547,7 @@ object VideoEngine {
             "Download claim is no longer owned by this worker"
         }
         fun <T> inspectPublisher(inspect:()->T):T {
+            val inspectedAt=android.os.SystemClock.elapsedRealtime()
             val future=publisherExecutor.submit<T>{inspect()}
             extractionJobs[item.id]=future
             try {
@@ -554,8 +555,14 @@ object VideoEngine {
                     if(stopRequests.contains(item.id) || Thread.currentThread().isInterrupted ||
                         !db.touchClaim(item.id,item.lease))
                         throw java.util.concurrent.CancellationException("Transfer paused or superseded")
+                    val now=android.os.SystemClock.elapsedRealtime()
+                    if(VideoTransferLimits.preparationBudgetExceeded(
+                            now-preparationStart,
+                            VideoPayloadBytes.count(parent)>0L))
+                        throw java.util.concurrent.TimeoutException(
+                            "Total selected-media resolution budget exceeded")
                     val remaining=VideoTransferLimits.NO_BYTES_RESOLVE_MS-
-                        (android.os.SystemClock.elapsedRealtime()-preparationStart)
+                        (now-inspectedAt)
                     if(remaining<=0L)
                         throw java.util.concurrent.TimeoutException(
                             "Selected publisher did not expose a transferable original "+
@@ -700,7 +707,9 @@ object VideoEngine {
                     }
                     val current=VideoPayloadBytes.count(parent)
                     if(VideoTransferLimits.resolvingStalled(
-                            now-preparationStart,current))
+                            now-start,current) ||
+                        VideoTransferLimits.preparationBudgetExceeded(
+                            now-preparationStart,current>0L))
                         throw java.util.concurrent.TimeoutException(
                             "Selected video yielded no original bytes after "+
                             (VideoTransferLimits.NO_BYTES_RESOLVE_MS/1000)+"s; "+
@@ -759,9 +768,12 @@ object VideoEngine {
                         throw java.util.concurrent.CancellationException("Video paused")
                     if(!db.touchClaim(item.id,item.lease))
                         throw java.util.concurrent.CancellationException("Lease released")
-                    if(VideoTransferLimits.resolvingStalled(
-                            android.os.SystemClock.elapsedRealtime()-preparationStart,
-                            VideoPayloadBytes.count(parent)))
+                    val now=android.os.SystemClock.elapsedRealtime()
+                    if(VideoTransferLimits.resolvingStalled(now-started,
+                            VideoPayloadBytes.count(parent)) ||
+                        VideoTransferLimits.preparationBudgetExceeded(
+                            now-preparationStart,
+                            VideoPayloadBytes.count(parent)>0L))
                         throw java.util.concurrent.TimeoutException(
                             "Provider metadata resolution took too long without original bytes")
                     if(android.os.SystemClock.elapsedRealtime()-started>=
@@ -1038,12 +1050,12 @@ object VideoEngine {
                     "The publisher page and unrelated ads are not download candidates."))
             val publisherReferers=publishedOriginals.associate{it.url to it.referer}
             if(!downloaded) for(candidate in (publisherReferers.keys+variants)){
-                if(VideoTransferLimits.resolvingStalled(
+                if(VideoTransferLimits.preparationBudgetExceeded(
                         android.os.SystemClock.elapsedRealtime()-preparationStart,
-                        VideoPayloadBytes.count(parent)))
+                        VideoPayloadBytes.count(parent)>0L))
                     throw java.util.concurrent.TimeoutException(
-                        "Selected publisher did not expose a transferable original "+
-                        "within the resolver time budget")
+                        "Selected publisher exhausted its total original "+
+                        "resolution budget")
                 if(stopRequests.contains(item.id))
                     throw java.util.concurrent.CancellationException("Video paused")
                 if(ArchivebateSelectedMedia.isSelectedEmbed(item.url,candidate)){
@@ -1130,9 +1142,9 @@ object VideoEngine {
                         // container and MediaStore verification unchanged.
                         // Automatic discovery still requires its existing policy.
                         if(userRequested &&
-                            !VideoTransferLimits.resolvingStalled(
+                            !VideoTransferLimits.preparationBudgetExceeded(
                                 android.os.SystemClock.elapsedRealtime()-preparationStart,
-                                VideoPayloadBytes.count(parent)) &&
+                                VideoPayloadBytes.count(parent)>0L) &&
                             !FullLengthVideoPolicy.isExplicitPreview(item.title,candidate)){
                             try{
                                 execute(candidate,candidateReferer)
@@ -1165,9 +1177,9 @@ object VideoEngine {
                         }else{
                             last=checked.exceptionOrNull()
                             if(userRequested &&
-                                !VideoTransferLimits.resolvingStalled(
+                                !VideoTransferLimits.preparationBudgetExceeded(
                                     android.os.SystemClock.elapsedRealtime()-preparationStart,
-                                    VideoPayloadBytes.count(parent)) &&
+                                    VideoPayloadBytes.count(parent)>0L) &&
                                 !FullLengthVideoPolicy.isExplicitPreview(item.title,media)){
                                 try{
                                     execute(media,candidate)

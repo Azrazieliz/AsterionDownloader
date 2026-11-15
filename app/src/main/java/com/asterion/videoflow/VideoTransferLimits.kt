@@ -11,6 +11,12 @@ internal object VideoTransferLimits {
     // starts transferring, regular progress/idle rules apply without any
     // artificial file-size or length restriction.
     const val NO_BYTES_RESOLVE_MS = 80_000L
+    // Multiple selected hosters/players may each have an independent public
+    // resolution step. Stop the entire attempt eventually, but do not deduct
+    // prior failed candidate time from a genuine new media transfer.
+    const val TOTAL_FIRST_BYTE_BUDGET_MS = 4L * 60_000L
+    fun preparationBudgetExceeded(totalElapsedMs:Long,hasMediaBytes:Boolean):Boolean =
+        !hasMediaBytes && totalElapsedMs>=TOTAL_FIRST_BYTE_BUDGET_MS
     fun resolvingStalled(elapsedMs:Long,bytes:Long):Boolean =
         bytes<=0L && elapsedMs>=NO_BYTES_RESOLVE_MS
     const val TRANSFER_MAX_MS = 48L * 60L * 60_000L
