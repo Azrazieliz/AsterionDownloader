@@ -23,9 +23,6 @@ import java.util.concurrent.Executors
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
     private val thumbnails=Executors.newFixedThreadPool(2)
-    // Immutable text-only snapshot; never cache Activity-bound click closures.
-    // Navigating away and back should not blank the whole Downloads view.
-    @Volatile private var lastVisibleRows:List<Pair<String,String>> = emptyList()
     private enum class State { ACTIVE, QUEUED, PAUSED, HELD, FAILED, DONE }
     private enum class Filter(val label:String) {
         ALL("All"),ACTIVE("Transferring"),QUEUED("Queued"),PAUSED("Paused"),
@@ -74,83 +71,8 @@ object UnifiedDownloadsUi {
         return name?.takeIf{it.isNotBlank()}?.take(130)
             ?:fallback.substringAfterLast('/').substringBefore('?').take(130)
     }
-    /** User-exportable failure receipt from real on-device jobs.
-     * Never include source URLs, signed media URLs, cookies or authentication. */
-    private fun videoFailureReport(a:Activity):String=buildString {
-        appendLine("ASTERION DOWNLOADER — DEVICE TRANSFER DIAGNOSTIC")
-        appendLine("Generated: "+java.text.DateFormat.getDateTimeInstance()
-            .format(java.util.Date()))
-        appendLine("Device: "+android.os.Build.MODEL+" / Android "+android.os.Build.VERSION.RELEASE)
-        appendLine("Fields: local ID, source host, state, progress, transfer stage, verified bytes, sanitized failure")
-        val credentials=Regex(
-            """(?i)(?:cookie|authorization|bearer|token|password|signature|apikey|api_key)\s*[:=]\s*[^\s;,]+""")
-        val urls=Regex("""(?i)https?://[^\s'"<>]+""")
-        VideoDb(a).use{db->
-            for(tab in listOf("Active","Failed","Held","Queued","Paused","Saved")){
-                val entries=db.listVideosForTab(tab,80)
-                appendLine("[$tab] sampled="+entries.size)
-                for(item in entries){
-                    val host=runCatching{java.net.URI(item.url).host.orEmpty()}
-                        .getOrDefault("unavailable").take(90)
-                    // A selected watch-page path identifies the broken player
-                    // without exporting signed CDN URLs, queries or credentials.
-                    val selectedPath=runCatching{
-                        java.net.URI(item.url).rawPath.orEmpty()
-                            .take(180).replace(Regex("""[^A-Za-z0-9/_%.+~-]"""),"_")
-                    }.getOrDefault("")
-                    val transfer=VideoTransferJournal.current(a,item.id)
-                    val message=item.error.orEmpty().replace(urls,"[url]")
-                        .replace(credentials,"[redacted]")
-                        .replace(Regex("""[\r\n\t]+""")," ").take(250)
-                    append("id=").append(item.id).append(" host=").append(host)
-                        .append(" selected_path=").append(selectedPath)
-                        .append(" state=").append(item.status)
-                        .append(" progress=").append(item.progress)
-                        .append(" stage=").append(transfer?.stage?:"none")
-                        .append(" verified_bytes=").append(transfer?.verifiedBytes?:0L)
-                        .append(" last_stage_detail=").append(
-                            transfer?.detail.orEmpty().replace(urls,"[url]")
-                                .replace(credentials,"[redacted]").take(100))
-                        .append(" error=").appendLine(message)
-                }
-            }
-        }
-        appendLine(ArchivebateDiagnostics.report(a))
-    }
-
     private fun collect(a:Activity):List<Row>{
         val rows=ArrayList<Row>()
-        rows+=Row("Diagnostics","Export actual download failures",
-            "Copies source hosts, failed stages, byte counts and exact error categories; no account data",
-            State.HELD,null,System.currentTimeMillis(),{
-                val text=videoFailureReport(a)
-                a.getSystemService(android.content.ClipboardManager::class.java)
-                    .setPrimaryClip(android.content.ClipData.newPlainText(
-                        "Asterion Downloader transfer diagnostic",text))
-                Toast.makeText(a,"Download diagnostic copied",Toast.LENGTH_SHORT).show()
-            },actionText="COPY FAILURE REPORT")
-        // An Android native crash/ANR or OOM may never reach the application's
-        // Java uncaught handler. Surface the OS's real last-exit diagnostic
-        // instead of requiring another speculative APK.
-        CrashDiagnostics.safeForClipboard(a)?.let{report->
-            val prefs=a.getSharedPreferences("asterion_crash_reviewed",0)
-            val key=report.hashCode()
-            if(prefs.getInt("last_copied",Int.MIN_VALUE)!=key){
-                val title=report.lineSequence().firstOrNull()
-                    .orEmpty().take(160)
-                rows+=Row("Diagnostics","Previous Android process failure",
-                    title.ifBlank{"Android crash, ANR or memory exit was recorded"},
-                    State.HELD,null,System.currentTimeMillis(),{
-                    val clipboard=a.getSystemService(
-                        android.content.ClipboardManager::class.java)
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
-                        "Asterion Downloader crash report",report))
-                    prefs.edit().putInt("last_copied",key).apply()
-                    Toast.makeText(a,"Crash report copied; saved files unchanged",
-                        Toast.LENGTH_LONG).show()
-                },actionText="COPY CRASH REPORT")
-            }
-        }
         VideoRuntimeState.failure(a)?.let{failure->
             rows+=Row("Video engine","Video engine unavailable",
                 "Embedded Python startup failed · "+failure.take(160),
@@ -494,44 +416,50 @@ object UnifiedDownloadsUi {
             }
         }.thenByDescending{it.updated})
     }
+    /** Refresh the Downloads content in place. The Activity, its global
+     * navigation, scroll view and the existing cards remain alive while the
+     * database is read. A refresh must never restart transfers or remove the
+     * entire screen; stale results from a previous page are discarded.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun render(a:Activity,parent:LinearLayout,refresh:()->Unit){
-        val prior=lastVisibleRows
-        val snapshot=LinearLayout(a).apply{
-            orientation=LinearLayout.VERTICAL
-            if(prior.isNotEmpty()){
-                addView(ui.text(a,"Restoring latest queue · refreshing",
-                    12f,ui.secondary),ui.lp(a,4))
-                for((name,detail) in prior.take(12)){
-                    addView(ui.text(a,name,13f,ui.white,true),ui.lp(a,3))
-                    addView(ui.text(a,detail,11f,ui.secondary),ui.lp(a,4))
+        val surface=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        parent.addView(surface)
+        val loading=ui.text(a,"Loading downloads…",13f,ui.secondary)
+        surface.addView(loading,ui.lp(a,8))
+        val inFlight=java.util.concurrent.atomic.AtomicBoolean(false)
+        lateinit var reload:()->Unit
+        reload=reload@{
+            if(a.isFinishing || a.isDestroyed || surface.parent!==parent ||
+                !inFlight.compareAndSet(false,true))return@reload
+            kotlin.concurrent.thread(name="asterion-downloads-read"){
+                // A visual refresh is read-only: it must not reconcile or
+                // restart queue agents merely because a user taps Refresh.
+                val result=runCatching{collect(a)}
+                a.runOnUiThread{
+                    inFlight.set(false)
+                    if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
+                        return@runOnUiThread
+                    result.onSuccess{rows->
+                        val next=LinearLayout(a).apply{
+                            orientation=LinearLayout.VERTICAL
+                        }
+                        show(a,next,reload,rows)
+                        // Replace only this module's view, in the same frame.
+                        // This avoids blanking the whole Activity/scroller.
+                        surface.removeAllViews()
+                        surface.addView(next)
+                    }.onFailure{error->
+                        if(loading.parent===surface)
+                            loading.text="Unable to load downloads: "+
+                                error.message.orEmpty().take(140)
+                        else Toast.makeText(a,"Refresh failed: "+
+                            error.message.orEmpty().take(120),Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
-        if(prior.isNotEmpty())parent.addView(snapshot,ui.lp(a,8))
-        val loading=ui.text(a,
-            if(prior.isEmpty())"Loading downloads…" else "Refreshing transfers…",
-            13f,ui.secondary)
-        parent.addView(loading,ui.lp(a,8))
-        kotlin.concurrent.thread(name="asterion-downloads-read"){
-            val app=a.applicationContext
-            val cleared=runCatching{DirectDownloadRetry.reconcileStalled(app)}
-                .getOrDefault(0)
-            if(cleared>0)ModuleOriginalAgents.startAll(app)
-            val result=runCatching{collect(a)}
-            a.runOnUiThread {
-                if(a.isFinishing || a.isDestroyed || loading.parent!==parent)
-                    return@runOnUiThread
-                parent.removeView(loading)
-                result.onSuccess{rows->
-                    lastVisibleRows=rows.take(18).map{
-                        it.filename.take(150) to it.info.take(130)
-                    }
-                    if(snapshot.parent===parent)parent.removeView(snapshot)
-                    show(a,parent,refresh,rows)
-                }.onFailure{parent.addView(ui.text(a,
-                    "Unable to refresh downloads: "+it.message,13f,ui.danger))}
-            }
-        }
+        reload()
     }
     private fun thumbnail(a:Activity,view:ImageView,row:Row){
         val uri=row.saved
@@ -573,7 +501,7 @@ object UnifiedDownloadsUi {
                 if(!a.isFinishing && !a.isDestroyed &&
                     heading.parent===parent && heading.isAttachedToWindow)
                     refresh()
-            },5_000L)
+            },8_000L)
         }
         if(!AppPower.enabled(a)){
             val notice=ui.card(a,12)
