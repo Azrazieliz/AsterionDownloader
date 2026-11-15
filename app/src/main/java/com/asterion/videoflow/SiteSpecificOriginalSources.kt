@@ -703,33 +703,13 @@ internal object SiteSpecificOriginalSources {
             }
             "javideo.net"->javideoOriginals(context,doc,selected)
             "3dhentaix.com"->{
-                // The actual article publishes an expiring selected-post
-                // signed MP4 only through its own WordPress AJAX. Static DOM
-                // contains an empty video tag plus unrelated teaser cards.
-                // Follow the publisher API FIRST, as Rule34 does for its
-                // authoritative quality link. Never substitute sidebar MP4.
-                val signed=runCatching {
-                    ThreeDHentaiSignedOriginal.resolve(context,selected,doc)
-                }
-                if(signed.isSuccess)
-                    listOf(Source(signed.getOrThrow(),selected))
-                else{
-                    val static=selectedStatic(doc,selected,owner)
-                    if(static.size==1)static
-                    else{
-                        val rendered=runCatching {
-                            if(!BrowserPageFetch.publicEligible(selected) &&
-                                !SiteSession.bound(context,selected))emptyList()
-                            else selectedStatic(Jsoup.parse(
-                                BrowserPageFetch.html(context,selected),selected),
-                                selected,owner)
-                        }.getOrDefault(emptyList())
-                        if(rendered.size==1)rendered
-                        else throw (signed.exceptionOrNull()
-                            ?:IllegalStateException(
-                                "3DHentai selected post has no verified original"))
-                    }
-                }
+                // LIVE browser-byte evidence: 3DHentai's HTML5 element can
+                // play a third-party 6 MB unrelated advertising MP4. Its
+                // existence, duration or mime type CANNOT attest selected
+                // content. Resolve the signed first-party post_id + nonce
+                // URL only; if that API fails, stop rather than save an ad.
+                listOf(Source(ThreeDHentaiSignedOriginal.resolve(
+                    context,selected,doc),selected))
             }
             "hentaibros.net","hentaihaven.xxx"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
