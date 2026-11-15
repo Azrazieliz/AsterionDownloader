@@ -503,6 +503,36 @@ class MainActivity:Activity() {
             toast("Cloud settings saved")
         },12)
         add(content,cloud,12)
+        val diagnostics=card()
+        diagnostics.addView(text("CRASH & TRANSFER DIAGNOSTICS",12f,primary,true))
+        add(diagnostics,text("Inspect real Android process exits, transfer stages, selected-provider errors, and byte counts. No cookies or signed media links are displayed.",12f,grey),10)
+        add(diagnostics,button("SHOW DIAGNOSTIC REPORT",false){
+            val report=runCatching{VideoDiagnosticsReport.create(this)}
+                .getOrElse{problem->
+                    "Diagnostic collection failed: "+
+                    VideoDiagnosticsReport.sanitize(
+                        problem.message?:problem.javaClass.simpleName)
+                }
+            val viewer=ScrollView(this).apply{
+                addView(text(report,12f,white).apply{
+                    setTextIsSelectable(true)
+                    setPadding(dp(15),dp(15),dp(15),dp(15))
+                })
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Asterion Download diagnostic report")
+                .setView(viewer)
+                .setPositiveButton("COPY REPORT"){_,_->
+                    val clipboard=getSystemService(CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("Asterion Download diagnostics",report))
+                    toast("Diagnostic report copied")
+                }
+                .setNegativeButton("CLOSE",null)
+                .show()
+        },11)
+        add(content,diagnostics,12)
         add(content,text("Saved videos: Downloads/VideoFlow. VideoFlow does not bypass DRM or website authentication.",12f,grey),17)
         add(content,gap(24))
     }
