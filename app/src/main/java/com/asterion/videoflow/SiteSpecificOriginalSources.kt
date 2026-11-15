@@ -627,16 +627,24 @@ internal object SiteSpecificOriginalSources {
         val gated=owner=="hentaibros.net" || owner=="3dhentaix.com"
         val direct=mediaElements(doc,selected,css,gated)
         val published=if(owner=="hentaibros.net"){
-            val player=doc.select(".video-player .flowplayer[data-item]")
-                .firstOrNull {
-                    it.closest("aside,.related,.recommendations,.ads,.sidebar")==null
-                }
-            val sources=player?.attr("data-item")?.let {
+            // Live HentaiBros posts use <div id="wpfp_3235"
+            // data-item="{...sources...}"> in the selected video-player,
+            // NOT a .flowplayer element. The previous selector discarded
+            // the actual official MP4 and then reported "no original".
+            val players=doc.select(".video-player [data-item]").filter {
+                (it.id().matches(Regex("""wpfp_[0-9]{1,10}""")) ||
+                    it.hasClass("flowplayer")) &&
+                it.closest("aside,.related,.recommendations,.ads,.sidebar,"+
+                    ".more-videos,.recommended-videos") == null
+            }
+            // Multiple independent configured players may include adverts
+            // or unrelated recommendations. Never guess which one is selected.
+            val sources=players.singleOrNull()?.attr("data-item")?.let {
                 runCatching { JSONObject(it).optJSONArray("sources") }.getOrNull()
             }
             (0 until minOf(sources?.length()?:0,10)).mapNotNull { index ->
                 val raw=sources?.optJSONObject(index)?.optString("src").orEmpty()
-                val link=https(raw,doc.location())?.takeIf(::isMedia)
+                val link=https(raw,selected)?.takeIf(::isMedia)
                 link?.let { Source(it,selected) }
             }
         } else if(gated)emptyList() else jsSources(doc,selected)
