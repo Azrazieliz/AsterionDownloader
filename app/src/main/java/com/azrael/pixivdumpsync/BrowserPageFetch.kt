@@ -76,6 +76,7 @@ object BrowserPageFetch {
         // gateway for a source that the user has not connected.
         var archivebateContinued=false
         var archivebateWaits=0
+        var mirroredHostWaits=0
         // Only the explicitly selected publishers with JS-loaded players.
         // This waits for the actual HTML5 media and metadata to appear;
         // it does not intercept arbitrary network requests or browse pages.
@@ -151,6 +152,9 @@ object BrowserPageFetch {
                             const title=document.title||'';
                             const body=(document.body?.innerText||'').slice(0,800);
                             if(/just a moment|attention required|verify you are human|enable javascript and cookies/i.test(title+' '+body))return '';
+                            const mirroredPending=
+                                location.hostname.replace(/^www\./,'')==='mirrored.to' &&
+                                /fetching hosting links/i.test(document.body?.innerText||'');
                             const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({
                                 '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
                             // Rule34Video populates its first-party quality anchors only after
@@ -425,7 +429,9 @@ object BrowserPageFetch {
                             }
                             const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
-                                '</title></head><body><h1>'+esc(realH1)+
+                                '</title>'+(mirroredPending?
+                                    '<meta name="asterion-host-list-pending" content="true">':
+                                    '')+'</head><body><h1>'+esc(realH1)+
                                 '</h1><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+players+
@@ -449,6 +455,16 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
+                            }else if(host=="mirrored.to" &&
+                                page.contains("asterion-host-list-pending") &&
+                                mirroredHostWaits++<8){
+                                // Mirrored's observed dl=0 page initially
+                                // shows "Fetching hosting links" before the
+                                // user's selected file-host list is injected.
+                                // An empty shell is not a video or a success.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_200L)
                             }else if(selectedPlayerPage &&
                                 selectedPlayerWaits++<6 &&
                                 ((if(host=="javideo.net") {
