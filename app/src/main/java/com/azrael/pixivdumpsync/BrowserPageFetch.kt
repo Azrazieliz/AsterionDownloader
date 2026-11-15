@@ -96,9 +96,12 @@ object BrowserPageFetch {
                     .matches(Uri.parse(url).path.orEmpty())
                 "nhplayer.com" -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
-                "voe.sx","kamehaus.net",
+                "voe.sx","kamehaus.net" ->
+                    Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                        .matches(Uri.parse(url).path.orEmpty())
                 "streamtape.com","streamtape.to","streamtape.net",
-                "streamtape.site","sbtape.com" -> Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
+                "streamtape.site","sbtape.com" ->
+                    Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
@@ -254,7 +257,13 @@ object BrowserPageFetch {
                                     [...document.querySelectorAll(
                                         'main .video-player,article .video-player,'+
                                         'main #player,article #player')]:
-                                    [...document.querySelectorAll('#player,.video-player')];
+                                    (()=>{
+                                        const wrappers=[...document.querySelectorAll(
+                                            '#player,.video-player')];
+                                        return wrappers.length?wrappers:
+                                            [...document.querySelectorAll(
+                                                'video#mainvideo,video#player')];
+                                    })();
                                 const selected=roots.filter(el=>
                                     !el.closest('aside,.related,.recommendations,'+
                                         '.ads,.advertisement,.sidebar'));
@@ -269,7 +278,8 @@ object BrowserPageFetch {
                                         play.dataset.asterionActivated='true';
                                         play.click();
                                     }
-                                    const v=root.querySelector('video');
+                                    const v=root.tagName.toLowerCase()==='video'?
+                                        root:root.querySelector('video');
                                     if(v && v.paused){
                                         try{
                                             const p=v.play();
