@@ -57,10 +57,15 @@ class SessionCookieProvider:ContentProvider() {
             // a bounded transaction size; fail rather than truncating HTML.
             val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(ctx,url)
             return Bundle().apply {
-                if(html.length<=340_000)putString("html",html)
-                else putString("error",
-                    "Authenticated page exceeded 340,000 characters; use a "+
-                    "provider-specific paginated scan")
+                if(html.toByteArray(Charsets.UTF_8).size<=SessionHtmlEnvelope.RAW_LIMIT)
+                    putString("html",html)
+                else {
+                    val packed=SessionHtmlEnvelope.compress(html)
+                    if(packed!=null)putString("html_gzip",packed)
+                    else putString("error",
+                        "Authenticated page exceeds safe Binder transfer limits; "+
+                        "provider must expose a smaller selected-player snapshot")
+                }
             }
         }
         val cookie=SiteSession.cookie(url)
