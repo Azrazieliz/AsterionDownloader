@@ -59,6 +59,9 @@ object BrowserPageFetch {
                 Uri.parse("content://"+context.packageName+".session-cookies"),
                 "read_site_html",url,null)
             val html=response?.getString("html")
+                ?:response?.getString("html_gzip")?.let{
+                    com.azrael.galleryflow.SessionHtmlEnvelope.expand(it)
+                }
             if(html.isNullOrBlank())throw IllegalStateException(
                 response?.getString("error")?:
                     "Connected provider browser could not supply accessible content")
