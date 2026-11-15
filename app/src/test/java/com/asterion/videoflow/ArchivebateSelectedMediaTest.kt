@@ -32,6 +32,21 @@ class ArchivebateSelectedMediaTest {
             watch,"https://mixdrop.ag/e/ABcdEF123?redirect=advert"))
     }
 
+    @Test fun realCanonicalPlayerRedirectIsAllowedButOtherMediaAndAdsAreBlocked(){
+        val selected="https://mixdrop.ag/e/z1p3lkkjhv17mj"
+        assertTrue(ArchivebateSelectedMedia.selectedRedirect(
+            selected,"https://mxdrop.click/e/z1p3lkkjhv17mj"))
+        assertTrue(ArchivebateSelectedMedia.selectedRedirect(selected,selected))
+        assertFalse(ArchivebateSelectedMedia.selectedRedirect(
+            selected,"https://mxdrop.click/e/OTHER12345678"))
+        assertFalse(ArchivebateSelectedMedia.selectedRedirect(
+            selected,"https://mxdrop.click/ads/redirect"))
+        assertFalse(ArchivebateSelectedMedia.selectedRedirect(
+            selected,"https://ads.example/e/z1p3lkkjhv17mj"))
+        assertFalse(ArchivebateSelectedMedia.selectedRedirect(
+            selected,"https://mxdrop.click/e/z1p3lkkjhv17mj?redirect=ad"))
+    }
+
     @Test fun selectedMediaCannotBeAnAdvertisementOrParentPagePreview(){
         assertTrue(ArchivebateSelectedMedia.isSelectedMedia(
             "https://cdn.freefile.io/path/real-original.mp4?token=private"))
