@@ -4,6 +4,11 @@ name: Downloader actual Android transfer simulation
 # on every staging-source patch. Run this manually after source preflight.
 on:
   workflow_dispatch:
+  # Explicit, one-time CI marker. Production staging edits never
+  # automatically assemble another APK or consume acceptance capacity.
+  push:
+    branches: [work/downloader-single-build-staging-20261112]
+    paths: ['ci/dual-native-overlap-acceptance.txt']
 
 permissions:
   contents: read
@@ -73,6 +78,7 @@ jobs:
             grep -Fx '0' android-transfer-exit.txt
             if grep -q 'Process crashed' android-transfer-simulation.txt; then cat android-transfer-crash-logcat.txt; exit 1; fi
             grep -F 'AST_SIM: NATIVE_OK' android-transfer-simulation.txt
+            grep -F 'AST_SIM: PARALLEL_NATIVE_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PYTHON_RUNTIME_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: EMBEDDED_OK' android-transfer-simulation.txt
             grep -F 'AST_SIM: PASS' android-transfer-simulation.txt

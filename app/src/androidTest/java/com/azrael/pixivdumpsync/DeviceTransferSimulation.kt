@@ -13,6 +13,9 @@ import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.SocketException
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.concurrent.thread
 
 /**
@@ -47,6 +50,8 @@ class DeviceTransferSimulation:Instrumentation() {
             val payload=ByteArray(256_013){(it*13%251).toByte()}
             val server=ServerSocket(0,16,InetAddress.getByName("127.0.0.1"))
             val ended=java.util.concurrent.atomic.AtomicBoolean(false)
+            val simultaneous=AtomicInteger(0)
+            val maximumSimultaneous=AtomicInteger(0)
             val serving=thread(name="local-media-server",isDaemon=true){
                 while(!ended.get()){
                     val peer=try{server.accept()}catch(_:SocketException){break}
@@ -63,6 +68,8 @@ class DeviceTransferSimulation:Instrumentation() {
                                 if(line.startsWith("Range:",true))rangeHeader=line
                             }
                             val chunked=request.contains("/chunked-original.mp4")
+                            val slow=request.contains("/slow-original-")
+                            val streaming=slow && request.startsWith("GET ")
                             val offset=if(chunked)Regex("""bytes=([0-9]+)-""")
                                 .find(rangeHeader)?.groupValues?.get(1)?.toIntOrNull()?:0 else 0
                             check(offset in 0 until payload.size)
@@ -77,9 +84,30 @@ class DeviceTransferSimulation:Instrumentation() {
                                 length+"\r\nETag: \"local-static-test\"\r\n"+
                                 "Connection: close\r\n\r\n"
                             val out=socket.getOutputStream()
-                            out.write(header.toByteArray(Charsets.US_ASCII))
-                            if(!request.startsWith("HEAD "))out.write(payload,offset,length)
-                            out.flush()
+                            if(streaming){
+                                val running=simultaneous.incrementAndGet()
+                                maximumSimultaneous.accumulateAndGet(running){a,b->maxOf(a,b)}
+                            }
+                            try{
+                                out.write(header.toByteArray(Charsets.US_ASCII))
+                                if(!request.startsWith("HEAD ")) {
+                                    if(streaming){
+                                        // Real overlapping body delivery, not
+                                        // merely two submitted or queued jobs.
+                                        var position=offset
+                                        while(position<=end){
+                                            val n=minOf(2_048,end-position+1)
+                                            out.write(payload,position,n)
+                                            out.flush()
+                                            position+=n
+                                            Thread.sleep(15)
+                                        }
+                                    }else out.write(payload,offset,length)
+                                }
+                                out.flush()
+                            }finally{
+                                if(streaming)simultaneous.decrementAndGet()
+                            }
                         }
                     }
                 }
@@ -103,6 +131,37 @@ class DeviceTransferSimulation:Instrumentation() {
                     "Contiguous 206 chunks failed to reconstruct complete original"
                 }
                 status("NATIVE_206_OK "+rangeResult.length()+" bytes / exact SHA-equivalent")
+
+                val startTogether=CountDownLatch(1)
+                val transferProblems=ConcurrentLinkedQueue<String>()
+                val pair=List(2){index->
+                    thread(name="native-overlap-$index"){
+                        try{
+                            startTogether.await()
+                            val folder=File(root,"parallel-$index").apply{mkdirs()}
+                            val actual=NativeMediaDownloader.download(
+                                "http://127.0.0.1:"+server.localPort+
+                                    "/slow-original-$index.mp4",null,folder)
+                            check(actual.readBytes().contentEquals(payload)){
+                                "Parallel original $index has corrupt bytes"
+                            }
+                        }catch(t:Throwable){
+                            transferProblems.add(t.javaClass.simpleName+":"+
+                                t.message.orEmpty().take(150))
+                        }
+                    }
+                }
+                startTogether.countDown()
+                pair.forEach{it.join(18_000)}
+                check(pair.none{it.isAlive}){"Native parallel workers exceeded 18 seconds"}
+                check(transferProblems.isEmpty()){
+                    "Native parallel download failed: "+transferProblems.joinToString()
+                }
+                check(maximumSimultaneous.get()>=2){
+                    "Two native original streams did not overlap in real body bytes"
+                }
+                status("PARALLEL_NATIVE_OK 2 complete originals; "+
+                    "real concurrent streams="+maximumSimultaneous.get())
                 val embedded=File(root,"chaquopy").apply{mkdirs()}
                 Log.i("ASTERION_SIM","AST_SIM: PYTHON_BEGIN")
                 LegacyYtDlpTransfer.initialize(context)
