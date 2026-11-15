@@ -27,6 +27,23 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(SiteSpecificOriginalSources.isHosterPage(page))
     }
 
+    @Test fun realHentaibrosFlowplayerEscapedJsonProducesExactNativeOriginal(){
+        val selected="https://hentaibros.net/deco-x-deco-the-animation-episode-1/"
+        val html="""<article class="entry-content"><div class="video-player">
+          <div class="responsive-player">
+           <div id="wpfp_3235"
+             data-item="{&quot;sources&quot;:[{&quot;src&quot;:&quot;https:\/\/povblowjob.net\/Deco x Deco The Animation 01 Fixed Sub.mp4&quot;,&quot;type&quot;:&quot;video\/mp4&quot;}],&quot;id&quot;:&quot;3241&quot;}"
+             class="freedomplayer flowplayer no-brand is-splash is-paused"></div>
+          </div></div></article>"""
+        val result=SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(html,selected),selected,"hentaibros.net")
+        assertEquals(1,result.size)
+        val expected="https://povblowjob.net/Deco%20x%20Deco%20The%20Animation%2001%20Fixed%20Sub.mp4"
+        assertEquals(expected,result.single().url)
+        assertEquals(selected,result.single().referer)
+        assertTrue(NativeMediaDownloader.isNativeEligible(selected,expected))
+    }
+
     @Test fun roshyPublishesNamedOriginalFileHostsNotNativeVideoFiles(){
         val page="https://roshy.tv/video/test-original-scene/"
         val k2s="https://k2s.cc/file/aabbccdd/scene.mp4"
