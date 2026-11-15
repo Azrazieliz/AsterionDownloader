@@ -13,7 +13,10 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 
 object RemoteImageLoader {
-    private val executor = Executors.newFixedThreadPool(4)
+    private val executor = java.util.concurrent.ThreadPoolExecutor(4,4,0L,
+        java.util.concurrent.TimeUnit.MILLISECONDS,
+        java.util.concurrent.ArrayBlockingQueue<Runnable>(96),
+        java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy())
 
     private val memory = object : LruCache<String, Bitmap>(
         minOf(
