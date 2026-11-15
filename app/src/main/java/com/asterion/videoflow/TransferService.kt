@@ -90,7 +90,8 @@ object VideoEngine {
     }
     fun notification(context: Context, message: String): Notification {
         makeChannel(context)
-        val open=PendingIntent.getActivity(context, 0, Intent(context,MainActivity::class.java),
+        val open=PendingIntent.getActivity(context, 0, Intent(context,com.azrael.pixivdumpsync.AsterionHomeActivity::class.java)
+                .putExtra("asterion_page","Queue"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(context,CHANNEL).setContentTitle("Asterion · VideoFlow")
             .setContentText(message).setSmallIcon(android.R.drawable.stat_sys_download)
