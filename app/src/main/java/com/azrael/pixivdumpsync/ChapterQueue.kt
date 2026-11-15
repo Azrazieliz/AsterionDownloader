@@ -47,14 +47,28 @@ class ChapterQueue(context:Context):SQLiteOpenHelper(context,"asterion_chapter_q
             put("requested_by","user")
             put("updated",System.currentTimeMillis())
         }
-        return writableDatabase.insertWithOnConflict("tasks",null,v,
+        val inserted=writableDatabase.insertWithOnConflict("tasks",null,v,
             SQLiteDatabase.CONFLICT_IGNORE)>0L
+        if(inserted)return true
+        return writableDatabase.update("tasks",ContentValues().apply{
+            put("state","queued");put("sync_enabled",1)
+            put("requested_by","user");put("updated",System.currentTimeMillis())
+        },"url=? AND state='dismissed'",arrayOf(url.trim()))>0
     }
+    /** Only remove an inactive job from the list. The original ZIP and all
+     * cached chapter images remain intact. A worker never claims dismissed.
+     */
+    fun dismiss(id:Long):Boolean =
+        writableDatabase.update("tasks",ContentValues().apply{
+            put("state","dismissed");put("sync_enabled",0)
+            put("updated",System.currentTimeMillis())
+        },"id=? AND state NOT IN ('working','dismissed')",
+            arrayOf(id.toString()))>0
     fun list():List<ChapterTask>{
         val result=ArrayList<ChapterTask>()
         readableDatabase.rawQuery("""SELECT id,url,title,state,progress,error,saved_uri,attempts,updated,
                    sync_enabled,last_check,fingerprint
-            FROM tasks ORDER BY updated DESC LIMIT 1000""",null).use{c->
+            FROM tasks WHERE state!='dismissed' ORDER BY updated DESC LIMIT 1000""",null).use{c->
             while(c.moveToNext()){
                 result.add(ChapterTask(c.getLong(0),c.getString(1),c.getString(2),
                     c.getString(3),c.getInt(4),c.getString(5),c.getString(6),
