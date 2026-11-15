@@ -115,9 +115,9 @@ object AsterionAccountPanels {
         add(a,account,ui.text(a,"${artists.size} artists · "+
             "${artists.count{it.selected}} selected · "+
             "Last sync: "+SessionStore.lastSyncSummary(a),12f,ui.secondary))
-        pair(a,account,"PIXIV LOGIN","ACCOUNT & FOLLOWING",
-            {a.startActivity(Intent(a,LoginActivity::class.java))},
-            {a.startActivity(Intent(a,MainActivity::class.java))})
+        action(a,account,"PIXIV ACCOUNT / LOGIN",false){
+            a.startActivity(Intent(a,LoginActivity::class.java))
+        }
         switch(a,account,"Automatic Pixiv updates",SessionStore.autoSync(a)){
             SessionStore.setAutoSync(a,it)
             if(it)Scheduler.ensure(a) else Scheduler.cancel(a)
@@ -127,9 +127,9 @@ object AsterionAccountPanels {
             {AppDb(a).use{it.setAllSelected(false);it.setAllLiveEnabled(false)};refresh()})
         pair(a,account,"SYNC NEW ART","BACKFILL ARTISTS",
             {pixivSync(a,SyncMode.LIVE)},{pixivSync(a,SyncMode.BACKFILL)})
-        action(a,account,"NEW ARTWORK FROM FOLLOWING",false){
-            a.startActivity(Intent(a,FollowingActivity::class.java))
-        }
+        // Former Pixiv archive, Following feed, cloud and filter controls
+        // are first-class actions here, not links to competing legacy screens.
+        PixivUnifiedFeatures.controls(a,account,refresh)
         val create=card(a,p)
         add(a,create,ui.text(a,"Add artists",17f,ui.white,true),0)
         add(a,create,ui.text(a,
@@ -150,7 +150,9 @@ object AsterionAccountPanels {
         if(artists.isEmpty())add(a,p,ui.text(a,
             "No artists in this installation yet. Connect Pixiv or import existing artists.",
             13f,ui.secondary))
-        for(artist in artists.take(20)){
+        val pixivUi=a.getSharedPreferences("asterion_pixiv_unified",0)
+        val artistLimit=pixivUi.getInt("artists_visible",20).coerceIn(20,2000)
+        for(artist in artists.take(artistLimit)){
             val c=card(a,p)
             val head=ui.row(a)
             val avatar=ImageView(a).apply{
@@ -204,10 +206,15 @@ object AsterionAccountPanels {
             pair(a,c,"CHECK NEW","BACKFILL",
                 {pixivSync(a,SyncMode.LIVE,artist.userId)},
                 {pixivSync(a,SyncMode.BACKFILL,artist.userId)})
+            PixivUnifiedFeatures.artistExtras(a,c,artist,refresh)
         }
-        if(artists.size>20)action(a,p,"SHOW ALL ${artists.size} ARTISTS",false){
-            a.startActivity(Intent(a,MainActivity::class.java))
+        if(artists.size>artistLimit)action(a,p,
+            "SHOW NEXT ${minOf(20,artists.size-artistLimit)} · ${artists.size-artistLimit} REMAINING",false){
+            pixivUi.edit().putInt("artists_visible",
+                (artistLimit+20).coerceAtMost(2000)).apply()
+            refresh()
         }
+        PixivUnifiedFeatures.feed(a,p,refresh)
     }
     private fun cosplaySync(a:Activity,mode:GallerySyncMode,id:String?=null){
         val service=Intent(a,com.azrael.galleryflow.SyncForegroundService::class.java).apply{
