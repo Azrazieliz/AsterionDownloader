@@ -43,8 +43,14 @@ class NovelEpubQueue(context:Context):
             put("url",url);put("title",title.take(180))
             put("state","PENDING");put("last_update",System.currentTimeMillis())
         }
-        return writableDatabase.insertWithOnConflict("novels",null,v,
+        val inserted=writableDatabase.insertWithOnConflict("novels",null,v,
             SQLiteDatabase.CONFLICT_IGNORE)>0
+        if(inserted)return true
+        return writableDatabase.update("novels",ContentValues().apply{
+            put("state","PENDING");put("sync_enabled",1)
+            put("retry_after",0L);putNull("last_error")
+            put("last_update",System.currentTimeMillis())
+        },"url=? AND state='DISMISSED'",arrayOf(url))>0
     }
     @Synchronized fun recover(){
         writableDatabase.execSQL("UPDATE novels SET state='PENDING' WHERE state='WORKING'")
@@ -103,12 +109,22 @@ class NovelEpubQueue(context:Context):
             counts.getOrDefault("RETRY",0),counts.getOrDefault("WORKING",0),
             counts.getOrDefault("DONE",0),error)
     }
+    /** Stop a queued/blocked book and hide its queue record, without deleting
+     * any cached chapters or the existing EPUB file. Manual re-adding this
+     * exact URL reactivates the subscription.
+     */
+    fun dismiss(url:String):Boolean =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","DISMISSED");put("sync_enabled",0)
+            put("retry_after",0L);put("last_update",System.currentTimeMillis())
+        },"url=? AND state NOT IN ('WORKING','DISMISSED')",
+            arrayOf(url))>0
     fun list(limit:Int=50):List<NovelArchiveStatus>{
         val results=ArrayList<NovelArchiveStatus>()
         readableDatabase.rawQuery(
             """SELECT url,title,state,attempts,last_error,saved_uri,last_update,
                       sync_enabled,last_check,retry_after
-               FROM novels ORDER BY last_update DESC
+               FROM novels WHERE state!='DISMISSED' ORDER BY last_update DESC
                LIMIT ${limit.coerceIn(1,300)}""",null).use{cursor->
             while(cursor.moveToNext()){
                 results+=NovelArchiveStatus(
