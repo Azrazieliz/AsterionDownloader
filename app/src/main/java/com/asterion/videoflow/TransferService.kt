@@ -848,6 +848,7 @@ object VideoEngine {
         // A previous 3DHentaiX job saved a real but UNRELATED playable video.
         // No generic fallback is permitted for this provider. If the selected
         // player does not identify one unambiguous source, fail instead.
+        val strictArchivebate=ArchivebateSelectedMedia.isSelectedArticle(item.url)
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         val strictIframe=NetworkRoute.siteKey(item.url) in
@@ -855,6 +856,11 @@ object VideoEngine {
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
+        if(strictArchivebate && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Archivebate selected recording exposed no verified Mixdrop "+
+                    "player; generic Python page extraction is not an original"))
         if(strictSelectedArticle && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1064,6 +1070,11 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictArchivebate && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Archivebate selected Mixdrop player did not expose a "+
+                    "transferable original; cannot substitute a generic "+
+                    "Python extractor, preview, or unrelated scene"))
             if(strictSelectedArticle && !downloaded)
                 throw (last?:IllegalStateException(
                     "Selected article file host or player exposed no transferable original"))
