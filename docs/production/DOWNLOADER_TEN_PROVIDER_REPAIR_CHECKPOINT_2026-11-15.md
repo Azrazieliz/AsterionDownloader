@@ -1,5 +1,20 @@
 # Asterion Download — ten-provider repair checkpoint — 2026-11-15
 
+## Owner's actual on-device acceptance result — 2026-11-15
+
+**Supersedes source-only success interpretations.** The owner directly tested the newly delivered owner-signed acceptance build and reported:
+
+- **Rule34Video:** works (the only reported video-provider success). Preserve this exact selected-file route and native transfer.
+- **JAVIDEO:** still fails to download and some *first listing thumbnails no longer display*.
+- **Every other reported provider:** still fails in the owner's actual on-device workflow (Jav Guru, Archivebate, HelloPorn, Pornhub, Roshy JAV, 3DHentaiX, HentaiHaven, MP4Hentai).
+- **Random crashes:** still occur. No proven root cause or crash-free on-device run exists.
+- The owner's direct acceptance result overrides successful source unit tests, CI HTTP probes and controlled emulator tests.
+
+**Current acceptance verdict: FAILED — not releasable or finished.** Do not build/publish another "all fixed" APK from speculative extractor edits. Continue with real selected-page/device failure receipts, recorded file bytes and a confirmed device crash trace.
+
+**Confirmed listing regression cause in code:** VideoSearchPreviews queued up to 120 first-page cards into a 72-slot DiscardOldestPolicy executor. Under load, early thumbnail requests were silently discarded. The fix staged in `0634b862` preserves first-visible queued image tasks, expands capacity and merges later real cover links for duplicate video URLs; this remains **source-only until device verified**.
+
+
 **Branch:** `work/downloader-single-build-staging-20261112`  
 **Policy:** the owner's single remaining **signed acceptance APK** is RESERVED. Do not publish a purported repaired app until all relevant on-device acceptance requirements actually pass. A passing JVM suite, Linux probe or Android emulator with controlled media is not a live-provider receipt.
 
