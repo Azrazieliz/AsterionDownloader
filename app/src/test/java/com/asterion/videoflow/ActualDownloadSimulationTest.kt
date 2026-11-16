@@ -276,4 +276,32 @@ class ActualDownloadSimulationTest {
         }
     }
 
+
+    @Test fun completedStagedFileCannotBeReusedForAnotherSelectedCandidate(){
+        val first=ByteArray(103_000){(it*13%251).toByte()}
+        val second=ByteArray(103_000){(it*41%241).toByte()}
+        Fixture{req,out->
+            write(out,"200 OK",if(req.path.startsWith("/first"))first else second)
+        }.use{http->
+            val dir=directory()
+            try{
+                val firstFile=NativeMediaDownloader.download(
+                    http.url("/first.mp4"),null,dir)
+                assertArrayEquals(first,firstFile.readBytes())
+                assertTrue(File(dir,"native_original.mp4.origin").exists())
+                // Both calls use the same stem and staging directory. A
+                // length/SHA receipt alone must not return candidate A.
+                val secondFile=NativeMediaDownloader.download(
+                    http.url("/second.mp4"),null,dir)
+                assertArrayEquals(second,secondFile.readBytes())
+                assertEquals(2,http.requests.size)
+                // Repeating exactly B may reuse its correctly bound receipt.
+                val repeat=NativeMediaDownloader.download(
+                    http.url("/second.mp4"),null,dir)
+                assertArrayEquals(second,repeat.readBytes())
+                assertEquals(2,http.requests.size)
+            }finally{dir.deleteRecursively()}
+        }
+    }
+
 }
