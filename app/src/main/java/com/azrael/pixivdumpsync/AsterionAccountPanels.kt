@@ -76,21 +76,9 @@ object AsterionAccountPanels {
         // insert a second folder-permission gate or a UI-side running-state
         // rejection before dispatching to the same native SyncForegroundService.
         // The service and SyncEngine remain the authoritative coordinators.
-        if(mode!=SyncMode.CLOUD){
-            val eligible=AppDb(a).use{db->
-                if(id!=null)listOfNotNull(db.artist(id))
-                else if(mode==SyncMode.LIVE)db.listSelectedLiveArtists()
-                else db.listSelectedArtists()
-            }
-            val feedCanRun=id==null && mode==SyncMode.LIVE &&
-                SessionStore.followingFeedEnabled(a)
-            if(eligible.isEmpty() && !feedCanRun){
-                say(a,if(mode==SyncMode.LIVE)
-                    "Enable the Following feed or select a watched artist with Live enabled"
-                    else "Select at least one Pixiv artist for backfill")
-                return
-            }
-        }
+        // Do not enumerate 1,000+ artist records and contend on SQLite on
+        // the Activity/main thread before accepting a manual Backfill tap.
+        // The foreground worker validates selection and records exact errors.
         val intent=Intent(a,SyncForegroundService::class.java).apply{
             action=SyncForegroundService.ACTION_START
             putExtra(SyncForegroundService.EXTRA_MODE,mode.name)
