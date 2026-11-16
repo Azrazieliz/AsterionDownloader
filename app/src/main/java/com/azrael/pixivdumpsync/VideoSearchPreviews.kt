@@ -49,7 +49,9 @@ object VideoSearchPreviews {
             // Only a failed/missing Rule34Video poster triggers an additional
             // selected-page request. All work remains off the UI thread.
             val candidates=sequence<String>{
-                if(validUrl!=null)yieldAll(PublisherPreviewFallback.candidates(validUrl,referer))
+                validUrl?.let{verifiedPoster->
+                    yieldAll(PublisherPreviewFallback.candidates(verifiedPoster,referer))
+                }
                 if(rule34Page!=null){
                     val poster=runCatching{
                         Rule34PosterEvidence.readPoster(app,rule34Page)
