@@ -23,24 +23,44 @@ object VideoSearchPreviews {
         image.setImageResource(R.drawable.ic_source_video)
         image.scaleType=ImageView.ScaleType.CENTER_INSIDE
         image.contentDescription="Video preview unavailable"
-        if(url==null||!SearchRanking.validUrl(url))return
-        synchronized(lock){memory.get(url)}?.let{
+        val validUrl=url?.takeIf{SearchRanking.validUrl(it)}
+        // A genuine Rule34Video download can exist without a catalog poster.
+        // Obtain only the exact selected page's publisher-attested OG/poster
+        // metadata; never fabricate a thumbnail from an unrelated video.
+        val rule34Page=referer?.takeIf{
+            com.asterion.videoflow.Rule34VideoOriginalSource.videoId(it)!=null
+        }
+        val key=validUrl?:rule34Page?:return
+        synchronized(lock){memory.get(key)}?.let{
             image.scaleType=ImageView.ScaleType.CENTER_CROP
             image.setImageBitmap(it)
             image.contentDescription="Video thumbnail"
             return
         }
-        image.tag=url
+        image.tag=key
         val app=a.applicationContext
         val view=java.lang.ref.WeakReference(image)
         // Do not retain Activity/ImageView references in the unbounded
         // thumbnail network queue after the app enters the background.
         workers.execute{
             var bitmap:Bitmap?=null
-            // Jav Guru's advertised CDN currently answers HTTP 403 for real
-            // poster bytes. Use its first-party published WP image path first,
-            // falling back to the original CDN only when necessary.
-            for(candidateUrl in PublisherPreviewFallback.candidates(url,referer)){
+            var failure:String?=null
+            // Fallback is lazy: existing verified poster URLs load first.
+            // Only a failed/missing Rule34Video poster triggers an additional
+            // selected-page request. All work remains off the UI thread.
+            val candidates=sequence<String>{
+                if(validUrl!=null)yieldAll(PublisherPreviewFallback.candidates(validUrl,referer))
+                if(rule34Page!=null){
+                    val poster=runCatching{
+                        Rule34PosterEvidence.readPoster(app,rule34Page)
+                    }.onFailure{problem->
+                        failure="selected_page_"+problem.javaClass.simpleName+
+                            ": "+problem.message.orEmpty().take(80)
+                    }.getOrNull()
+                    if(poster!=null && poster!=validUrl)yield(poster)
+                }
+            }
+            for(candidateUrl in candidates){
                 bitmap=runCatching{
                 val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
                     app,referer?:url)
@@ -68,6 +88,9 @@ object VideoSearchPreviews {
                                 ?.let{setRequestProperty("Cookie",it)}
                     }
                 }
+                val status=(connection as? java.net.HttpURLConnection)?.responseCode
+                if(status!=null && status !in 200..299)
+                    throw java.io.IOException("poster_http_"+status)
                 val mime=connection.contentType.orEmpty().lowercase()
                 val bytes=connection.getInputStream().use{input->
                     val buffer=java.io.ByteArrayOutputStream()
@@ -103,15 +126,21 @@ object VideoSearchPreviews {
                         inSampleSize=sample
                         inPreferredConfig=Bitmap.Config.RGB_565
                     })
+                }.onFailure{problem->
+                    failure=problem.javaClass.simpleName+": "+
+                        problem.message.orEmpty().take(100)
                 }.getOrNull()
                 if(bitmap!=null)break
             }
             val ready=bitmap
+            if(ready==null && rule34Page!=null)
+                ThumbnailFailureJournal.record(app,rule34Page,
+                    failure?:"selected_page_did_not_publish_poster")
             if(ready!=null){
-                synchronized(lock){memory.put(url,ready)}
+                synchronized(lock){memory.put(key,ready)}
                 view.get()?.post{
                     val target=view.get()
-                    if(target!=null && target.tag==url &&
+                    if(target!=null && target.tag==key &&
                         target.isAttachedToWindow){
                         target.scaleType=ImageView.ScaleType.CENTER_CROP
                         target.setImageBitmap(ready)
