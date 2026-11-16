@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.security.MessageDigest
 import java.util.Locale
 
 /** Native HTTP lane for *direct* media files. yt-dlp still resolves webpage
@@ -98,11 +99,26 @@ internal object NativeMediaDownloader {
         val destination=File(directory,"$stem.$ext")
         val partial=File(directory,"native_original.$ext.part")
         val validator=File(directory,"native_original.$ext.etag")
+        val origin=File(directory,"native_original.$ext.origin")
+        val originHash=MessageDigest.getInstance("SHA-256")
+            .digest(address.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
         val receipt=File(directory,"$stem.$ext.receipt")
         // A prior APK could leave a nonempty but truncated/corrupt staged
         // destination. Existence alone is NEVER a completion proof.
         if(destination.isFile && NativeMediaReceipt.matches(destination,receipt))
             return destination
+        // Native candidates of one video can share this staging directory.
+        // Never resume another candidate's bytes (nor a pre-upgrade partial
+        // without an origin binding) merely because the extension matches.
+        val matchesOrigin=runCatching {
+            origin.isFile && origin.readText().trim()==originHash
+        }.getOrDefault(false)
+        if(partial.isFile && partial.length()>0L && !matchesOrigin){
+            partial.delete()
+            validator.delete()
+            origin.delete()
+        }
         var current=address
         var redirects=0
         var continuationTotal:Long?=null
@@ -116,10 +132,17 @@ internal object NativeMediaDownloader {
             }
             val originalHost=URI(address).host
             val sameHost=originalHost.equals(uri.host,ignoreCase=true)
-            val resumed=partial.length()>0L && (
-                continuationTotal!=null ||
-                (validator.isFile && validator.readText().isNotBlank()))
-            val offset=if(resumed)partial.length() else 0L
+            val offset=partial.length().coerceAtLeast(0L)
+            // Many publisher CDNs omit ETag. Compare the tail of the saved
+            // file with an overlapping ranged response before appending.
+            // This safely resumes a timed-out response without guessing media
+            // identity, and never uses stale bytes from another URL.
+            val ifRange=runCatching {
+                if(validator.isFile)validator.readText().trim() else ""
+            }.getOrDefault("")
+            val overlap=if(offset>0L && ifRange.isBlank())
+                minOf(offset,64L).toInt() else 0
+            val requestStart=offset-overlap
             val conn=(if(proxy==null)URL(current).openConnection()
                 else URL(current).openConnection(proxy)) as HttpURLConnection
             conn.instanceFollowRedirects=false
@@ -133,8 +156,7 @@ internal object NativeMediaDownloader {
             if(sameHost && !cookieHeader.isNullOrBlank())
                 conn.setRequestProperty("Cookie",cookieHeader)
             if(offset>0L){
-                conn.setRequestProperty("Range","bytes=$offset-")
-                val ifRange=if(validator.isFile)validator.readText().trim() else ""
+                conn.setRequestProperty("Range","bytes=$requestStart-")
                 if(ifRange.isNotBlank())conn.setRequestProperty("If-Range",ifRange)
             }
             try{
@@ -167,23 +189,50 @@ internal object NativeMediaDownloader {
                 // Demand the next exact offset until the TOTAL is received.
                 // A preview, repeated chunk or a 200 ignoring Range is not complete.
                 val fullRange=if(status==206)
-                    contiguousRange(contentRange,offset)
+                    contiguousRange(contentRange,requestStart)
                         ?:throw IOException(
                             "Media provider returned an incomplete or mismatched byte range")
                     else null
                 if(continuationTotal!=null &&
                     (fullRange==null || fullRange.total!=continuationTotal))
                     throw IOException("Media source changed or ignored continued byte range")
-                val matchingRange=status==206 && offset>0L
-                val append=matchingRange
+                val append=status==206 && offset>0L
                 if(!append){partial.delete();validator.delete()}
+                origin.writeText(originHash)
                 val etag=conn.getHeaderField("ETag")?.trim().orEmpty()
                 if(etag.isNotBlank())validator.writeText(etag)
                 else validator.delete()
                 val expected=fullRange?.let{it.end-it.start+1L}
                     ?:conn.contentLengthLong.takeIf{it>=0L}
                 var written=0L
+                var consumed=0L
                 conn.inputStream.use{input->
+                    if(append && overlap>0) {
+                        // Revalidate actual publisher bytes before appending.
+                        // An MP4 with the same size can still be a different
+                        // video after an expiring CDN redirect or player change.
+                        val previous=ByteArray(overlap)
+                        java.io.RandomAccessFile(partial,"r").use {
+                            it.seek(requestStart)
+                            it.readFully(previous)
+                        }
+                        val received=ByteArray(overlap)
+                        var read=0
+                        while(read<overlap){
+                            val n=input.read(received,read,overlap-read)
+                            if(n<0)throw IOException(
+                                "Media resume overlap was truncated")
+                            if(n>0)read+=n
+                        }
+                        if(!previous.contentEquals(received)){
+                            partial.delete()
+                            validator.delete()
+                            origin.delete()
+                            throw IOException(
+                                "Media resume source changed; discarded mismatched partial")
+                        }
+                        consumed=overlap.toLong()
+                    }
                     FileOutputStream(partial,append).buffered(131_072).use{output->
                         val buffer=ByteArray(131_072)
                         while(true){
@@ -195,6 +244,7 @@ internal object NativeMediaDownloader {
                             if(n==0)continue
                             output.write(buffer,0,n)
                             written+=n
+                            consumed+=n
                             val whole=fullRange?.total?:expected?.plus(offset)
                             if(whole!=null && whole>0L)
                                 progress((((offset+written)*95L)/whole)
@@ -203,8 +253,8 @@ internal object NativeMediaDownloader {
                         output.flush()
                     }
                 }
-                if(expected!=null && written!=expected)
-                    throw IOException("Incomplete native transfer: $written of $expected bytes")
+                if(expected!=null && consumed!=expected)
+                    throw IOException("Incomplete native transfer: $consumed of $expected bytes")
                 if(fullRange!=null && partial.length()!=fullRange.end+1L)
                     throw IOException("Incomplete HTTP 206 chunk: "+
                         partial.length()+" of "+(fullRange.end+1L)+" bytes")
@@ -235,6 +285,7 @@ internal object NativeMediaDownloader {
                 // Interrupted receipt writes force revalidation, never reuse.
                 NativeMediaReceipt.write(destination,receipt)
                 validator.delete()
+                origin.delete()
                 return destination
             }finally{
                 conn.disconnect()
