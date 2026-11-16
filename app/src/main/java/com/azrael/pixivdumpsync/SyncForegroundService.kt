@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
@@ -30,6 +34,58 @@ class SyncForegroundService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
     @Volatile private var currentRun: Future<*>? = null
     @Volatile private var lastNotificationAt = 0L
+    private val mainHandler=Handler(Looper.getMainLooper())
+    private val deferredLock=Any()
+    private val deferredPrefs="asterion_pixiv_manual_backfill_v1"
+    private val deferredKey="queued_requests"
+
+    /** Manual history requests are never silently dropped by an active Live run.
+     * Persist the FIFO across service restarts without resetting artist cursors.
+     */
+    private fun enqueueBackfill(selectedOnly:Boolean,artist:String?):Int =
+        synchronized(deferredLock){
+            val prefs=getSharedPreferences(deferredPrefs,MODE_PRIVATE)
+            val queue=runCatching{JSONArray(prefs.getString(deferredKey,"[]"))}
+                .getOrDefault(JSONArray())
+            for(i in 0 until queue.length()){
+                val it=queue.optJSONObject(i)?:continue
+                if(it.optBoolean("selected_only")==selectedOnly &&
+                    it.optString("artist")==artist.orEmpty())return@synchronized queue.length()
+            }
+            check(queue.length()<48){"Too many pending Pixiv backfill requests"}
+            queue.put(JSONObject().put("selected_only",selectedOnly)
+                .put("artist",artist.orEmpty()).put("requested_ms",System.currentTimeMillis()))
+            check(prefs.edit().putString(deferredKey,queue.toString()).commit()){
+                "Cannot save deferred Pixiv backfill"
+            }
+            queue.length()
+        }
+
+    private fun popBackfill():Intent?=synchronized(deferredLock){
+        val prefs=getSharedPreferences(deferredPrefs,MODE_PRIVATE)
+        val queue=runCatching{JSONArray(prefs.getString(deferredKey,"[]"))}
+            .getOrDefault(JSONArray())
+        if(queue.length()==0)return@synchronized null
+        val next=queue.optJSONObject(0)?:return@synchronized null
+        val remaining=JSONArray()
+        for(i in 1 until queue.length())remaining.put(queue.get(i))
+        if(!prefs.edit().putString(deferredKey,remaining.toString()).commit())
+            return@synchronized null
+        Intent(this,SyncForegroundService::class.java)
+            .setAction(ACTION_START)
+            .putExtra(EXTRA_MODE,SyncMode.BACKFILL.name)
+            .putExtra(EXTRA_SELECTED_ONLY,next.optBoolean("selected_only",true))
+            .apply{
+                next.optString("artist").takeIf{it.isNotBlank()}
+                    ?.let{putExtra(EXTRA_TARGET_ARTIST_ID,it)}
+            }
+    }
+    private fun clearDeferredBackfills(){
+        synchronized(deferredLock){
+            getSharedPreferences(deferredPrefs,MODE_PRIVATE).edit()
+                .remove(deferredKey).commit()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +122,7 @@ class SyncForegroundService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_STOP -> {
+                clearDeferredBackfills()
                 SyncControl.stop()
                 currentRun?.cancel(true)
                 updateNotification(force = true)
@@ -92,6 +149,20 @@ class SyncForegroundService : Service() {
         val autoTriggered = intent?.getBooleanExtra(EXTRA_AUTO_TRIGGERED, false) ?: false
 
         if (currentRun?.isDone == false) {
+            if(mode==SyncMode.BACKFILL){
+                val size=runCatching{enqueueBackfill(selectedOnly,targetArtistId)}
+                size.onSuccess{position->
+                    SyncControl.updateMessage("Pixiv backfill queued behind active "+
+                        (SyncControl.snapshot().mode?.name?:"sync")+" · "+position+
+                        " manual request(s) pending")
+                }.onFailure{failure->
+                    android.util.Log.e("AsterionPixivBackfill",
+                        "Could not persist manual request",failure)
+                    SyncControl.updateMessage("Pixiv backfill queue rejected · "+
+                        (failure.message?:failure.javaClass.simpleName).take(90))
+                }
+                updateNotification(force=true)
+            }
             return START_NOT_STICKY
         }
 
@@ -147,10 +218,21 @@ class SyncForegroundService : Service() {
                     SyncControl.forceFinish(if (current.stopping) "Stopped" else "Idle")
                 }
                 updateNotification(force = true)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
-                currentRun = null
-                stopSelf()
+                // The next owner-requested Backfill has priority over a new
+                // periodic JobScheduler pass and must not wait for the OS to
+                // start a second foreground service minutes later.
+                mainHandler.post {
+                    currentRun=null
+                    val next=if(AppPower.enabled(this))popBackfill() else null
+                    if(next!=null){
+                        onStartCommand(next,0,startId)
+                    }else{
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        getSystemService(NotificationManager::class.java)
+                            .cancel(NOTIFICATION_ID)
+                        stopSelfResult(startId)
+                    }
+                }
             }
         }
 
