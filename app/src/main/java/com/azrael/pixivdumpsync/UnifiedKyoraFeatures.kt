@@ -241,7 +241,7 @@ internal object UnifiedKyoraFeatures {
             val albums=GalleryDb(a).use{
                 it.galleryCards(entity.entityId,shownAlbums+1)}
             for(album in albums.take(shownAlbums)){
-                action(a,card,"OPEN · "+album.title.take(65)+
+                add(a,card,"OPEN · +album.title.take(65)+
                     " ("+album.count+" images)"){
                     a.startActivity(Intent(a,
                         com.azrael.galleryflow.GalleryDetailActivity::class.java)
@@ -256,7 +256,7 @@ internal object UnifiedKyoraFeatures {
                             album.title))
                 }
             }
-            if(albums.size>shownAlbums)action(a,card,"SHOW MORE SAVED GALLERIES"){
+            if(albums.size>shownAlbums)add(a,card,"SHOW MORE SAVED GALLERIES"){
                 prefs.edit().putInt(galleryKey,
                     (shownAlbums+10).coerceAtMost(100)).apply()
                 refresh()
