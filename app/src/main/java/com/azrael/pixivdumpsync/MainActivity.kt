@@ -1378,33 +1378,9 @@ class MainActivity : Activity() {
             return
         }
 
-        if (mode != SyncMode.CLOUD) AppDb(this).use { db ->
-            val eligible = if (targetArtistId != null) {
-                listOfNotNull(db.artist(targetArtistId))
-            } else if (mode == SyncMode.LIVE) {
-                db.listSelectedLiveArtists()
-            } else {
-                db.listSelectedArtists()
-            }
-
-            val feedCanRun =
-                targetArtistId == null &&
-                    mode == SyncMode.LIVE &&
-                    SessionStore.followingFeedEnabled(this)
-
-            if (eligible.isEmpty() && !feedCanRun) {
-                Toast.makeText(
-                    this,
-                    if (mode == SyncMode.LIVE) {
-                        "Enable the Following feed or select at least one watched artist with Live enabled"
-                    } else {
-                        "Select at least one artist"
-                    },
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
-        }
+        // No SQLite artist enumeration on the UI click path. A large
+        // Pixiv library could block the button before Android even received
+        // the Backfill intent; SyncEngine validates the source in its worker.
 
         val intent = Intent(this, SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
