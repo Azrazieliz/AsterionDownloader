@@ -52,7 +52,10 @@
 4. Media-looking HentaiBros and 3DHentaiX DOM elements include small unrelated/ambiguous responses; accepting the first playable MP4 reproduces the wrong-video defect.
 5. Real book chapter HTTP and image file bytes work at the PC public-site layer, but this is **not** validation of Android EPUB or gallery queues.
 
-## Pending long-running test and release boundary
-The existing `scripts/real_freepornvideos_acceptance.py` full-file verification was started through Asterion Control with exact bundled wheel, ffprobe and a 1.2GB free-space guard. Its receipt must be read before upgrading FreePornVideos beyond metadata/range verified. The script has a hard 512MiB file-size cap, 390-second transfer budget, validates MP4 `ftyp`, compares complete Content-Length, validates local playback duration with ffprobe, and deletes its transient original. It does not modify app content.
+## Completed full-file test: FreePornVideos still fails
+
+The original `scripts/real_freepornvideos_acceptance.py` was run with the exact bundled wheel, local FFprobe, a 1.2-GB minimum free-space guard and temporary staging. The engine selected a **480p** first-party original and received **HTTP 200** with declared **Content-Length 231,602,681 bytes**. However the bounded full transfer **exceeded the 390-second deadline**. The script classified the outcome `blocked` and deleted temporary staging (`media_retained=false`). It did **not** emit `received_bytes` before timing out, so no verified byte count, complete file, or duration can be asserted. The subprocess exited 0 because its test script serializes blocked outcomes as JSON; this is **NOT a passing transfer**.
+
+**Interpretation:** this case passes extractor discovery and 32-KiB media-range verification but **fails complete-file transfer** under the selected PC network conditions. Exact bottleneck (remote throughput, stalled read, route, or downloader logic) is not isolated by this script's final receipt. Do not substitute guessed speed, pretend it finished, or infer the Android MediaStore lane passes.
 
 **Release gate still OPEN:** no provider here has an Android-installed-app verified complete MediaStore receipt and correct selected playable video. No APK was built or released in this test series.
