@@ -65,7 +65,7 @@ object VideoSearchPreviews {
             for(candidateUrl in candidates){
                 bitmap=runCatching{
                 val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
-                    app,referer?:url)
+                    app,referer?:key)
                 val connection=(if(proxy!=null)URL(candidateUrl).openConnection(proxy)
                     else URL(candidateUrl).openConnection()).apply{
                     connectTimeout=6000
