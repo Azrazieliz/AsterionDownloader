@@ -96,6 +96,71 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
         return id != null && id.matches("[A-Za-z0-9_.:-]{8,100}");
     }
 
+    /** Preserve stage-specific diagnostics without exporting media URLs or credentials. */
+    private static String diagnosticMessage(String raw) {
+        if (raw == null) return "";
+        return raw.replaceAll("(?i)https?://[^\\s'\\\"<>]+", "[url]")
+            .replaceAll("(?i)(cookie|authorization|bearer|token|password|signature|api[_-]?key)\\s*[:=]\\s*[^\\s;,]+", "[credential]")
+            .replaceAll("[\\r\\n\\t]+", " ").trim().substring(
+                0, Math.min(240, raw.replaceAll("(?i)https?://[^\\s'\\\"<>]+", "[url]")
+                    .replaceAll("(?i)(cookie|authorization|bearer|token|password|signature|api[_-]?key)\\s*[:=]\\s*[^\\s;,]+", "[credential]")
+                    .replaceAll("[\\r\\n\\t]+", " ").trim().length()));
+    }
+
+    private static String diagnosticCategory(String raw) {
+        String s = raw == null ? "" : raw.toLowerCase(Locale.US);
+        if (s.contains("429") || s.contains("rate limit")) return "http_429";
+        if (s.contains("403") || s.contains("401") || s.contains("forbidden")) return "http_auth_denied";
+        if (s.contains("vpn") || s.contains("remote exit") ||
+            s.contains("region")) return "network_route_required";
+        if (s.contains("identity unverified") || s.contains("attributable"))
+            return "selected_media_identity_unverified";
+        if (s.contains("file hosts exposed") || s.contains("file-host"))
+            return "file_hoster_unresolved";
+        if (s.contains("selected player") || s.contains("iframe") ||
+            s.contains("stream player") || s.contains("embed"))
+            return "selected_player_unresolved";
+        if (s.contains("extractor") || s.contains("unsupported url"))
+            return "extractor_failure";
+        if (s.contains("timeout") || s.contains("timed out")) return "timeout";
+        if (s.contains("network") || s.contains("dns")) return "network_error";
+        if (s.contains("permission")) return "permission_error";
+        return "unclassified";
+    }
+
+    private static String resolverComponent(String host) {
+        if ("archivebate.com".equals(host)) return "ArchivebateSelectedMedia";
+        if ("rule34video.com".equals(host)) return "Rule34VideoOriginalSource/VideoSearchPreviews";
+        if ("pornhub.com".equals(host)) return "NetworkRoute/PublisherOriginalExtractors";
+        if ("3dhentaix.com".equals(host)) return "ThreeDHentaiSignedOriginal";
+        if ("jav.guru".equals(host)) return "JavGuruOriginalSource";
+        if ("javideo.net".equals(host)) return "SiteSpecificOriginalSources.javideoOriginals";
+        if ("mp4hentai.com".equals(host)) return "Mp4HentaiPublishedHost";
+        if ("roshy.tv".equals(host)) return "SiteSpecificOriginalSources.roshy";
+        if ("hentaihaven.xxx".equals(host)) return "SiteSpecificOriginalSources.selectedStatic";
+        if ("uncensoredhentai.xxx".equals(host)) return "SiteSpecificOriginalSources.fromPlayer";
+        if ("fullporner.com".equals(host)) return "SiteSpecificOriginalSources.fromPlayer";
+        return "PublisherOriginalExtractors/TransferService";
+    }
+
+    private static JSONObject transferStage(Context ctx, long id) throws Exception {
+        java.io.File file = new java.io.File(new java.io.File(
+            ctx.getFilesDir(), "videoflow-transfer-stages-v2"), id + ".stage");
+        JSONObject state = new JSONObject().put("stage", "not_recorded")
+            .put("verified_bytes", 0L);
+        if (!file.isFile() || file.length() > 1024L) return state;
+        String[] parts = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+            StandardCharsets.UTF_8).trim().split("\\|", 4);
+        if (parts.length != 4) return state;
+        long bytes;
+        try { bytes = Long.parseLong(parts[3]); }
+        catch (NumberFormatException bad) { bytes = 0; }
+        return state.put("stage", parts[0].replaceAll("[^A-Za-z0-9_]", "").substring(
+                0, Math.min(24, parts[0].length())))
+            .put("stage_message", diagnosticMessage(parts[2]))
+            .put("verified_bytes", Math.max(0L, bytes));
+    }
+
     /** Actual persisted VideoFlow queue counts; never an invented worker heartbeat. */
     private JSONObject videoFlowEvidence(Context ctx) throws Exception {
         java.io.File file = ctx.getDatabasePath("videoflow.sqlite");
@@ -130,25 +195,33 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
             cursor = null;
             JSONArray failures = new JSONArray();
             cursor = database.rawQuery(
-                "SELECT id,updated,error FROM videos WHERE state='error' " +
-                "ORDER BY updated DESC LIMIT 8", null);
+                "SELECT id,updated,error,url,attempts,retry_after,request_origin " +
+                "FROM videos WHERE state='error' ORDER BY updated DESC LIMIT 16", null);
             while (cursor.moveToNext()) {
+                long id = cursor.getLong(0);
                 String raw = cursor.getString(2);
-                String code = "unspecified_error";
-                if (raw != null) {
-                    String lower = raw.toLowerCase(Locale.US);
-                    if (lower.contains("403")) code = "http_403";
-                    else if (lower.contains("429")) code = "http_429";
-                    else if (lower.contains("timeout") || lower.contains("timed out"))
-                        code = "timeout";
-                    else if (lower.contains("extractor")) code = "extractor_failure";
-                    else if (lower.contains("network")) code = "network_error";
-                    else if (lower.contains("permission")) code = "permission_error";
-                }
+                String host = "";
+                try {
+                    String rawHost = Uri.parse(cursor.getString(3)).getHost();
+                    if (rawHost != null) {
+                        host = rawHost.toLowerCase(Locale.US).replaceFirst("^www\\.", "");
+                    }
+                } catch (RuntimeException ignored) { /* unavailable URL */ }
+                JSONObject stage = transferStage(ctx, id);
                 failures.put(new JSONObject()
-                    .put("item_id", cursor.getLong(0))
+                    .put("item_id", id)
                     .put("last_updated_ms", cursor.getLong(1))
-                    .put("error_category", code));
+                    .put("error_category", diagnosticCategory(raw))
+                    .put("provider_host", host.replaceAll("[^a-z0-9.-]", "").substring(
+                        0, Math.min(90, host.length())))
+                    .put("failure_message", diagnosticMessage(raw))
+                    .put("resolver_component", resolverComponent(host))
+                    .put("stage", stage.optString("stage"))
+                    .put("stage_message", stage.optString("stage_message"))
+                    .put("verified_bytes", stage.optLong("verified_bytes"))
+                    .put("attempts", cursor.getInt(4))
+                    .put("retry_after_ms", cursor.getLong(5))
+                    .put("request_origin", cursor.getString(6)));
             }
             return evidence.put("stored_queue_counts_verified", true)
                 .put("counts", counts).put("items_counted", total)
