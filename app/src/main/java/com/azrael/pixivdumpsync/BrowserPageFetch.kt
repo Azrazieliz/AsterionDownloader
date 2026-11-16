@@ -348,6 +348,28 @@ object BrowserPageFetch {
                             // documented player iframe. Never serialize ad,
                             // social/comment or recommendation iframe URLs.
                             const publisher=location.hostname.replace(/^www\./,'');
+                            // Real HentaiBros public HTML may contain no
+                            // wpfp_* config until JavaScript initializes the
+                            // selected Flowplayer. Preserve that publisher
+                            // data-item in this compact WebView snapshot so
+                            // the native selected-original resolver can bind
+                            // the exact work rather than choose an unrelated
+                            // HTML5 preview with a valid MP4 MIME.
+                            const hentaibrosPlayerConfig=publisher==='hentaibros.net'
+                                ? (()=>{
+                                    const nodes=[...document.querySelectorAll(
+                                        '.video-player [data-item]')].filter(el=>
+                                        (/^wpfp_\d{1,10}$/.test(el.id||'') ||
+                                          el.classList.contains('flowplayer')) &&
+                                        !el.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,.sidebar'));
+                                    if(nodes.length!==1)return '';
+                                    const data=nodes[0].getAttribute('data-item')||'';
+                                    return data?
+                                        '<div id="'+esc(nodes[0].id||'')+
+                                        '" class="flowplayer" data-item="'+esc(data)+
+                                        '"></div>':'';
+                                })():'';
                             const currentPath=location.pathname||'';
                             const embeds=[...document.querySelectorAll(
                                 'iframe[src]')].filter(el=>{
@@ -437,7 +459,8 @@ object BrowserPageFetch {
                                     '')+'</head><body><h1>'+esc(realH1)+
                                 '</h1><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
-                                paragraphs+'</div><div class="video-player">'+players+
+                                paragraphs+'</div><div class="video-player">'+
+                                hentaibrosPlayerConfig+players+
                                 embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
