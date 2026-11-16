@@ -359,8 +359,13 @@ object SourceIndexPanel {
                     if(!AppPower.enabled(a)){
                         Toast.makeText(a,"App is paused in Settings",
                             Toast.LENGTH_SHORT).show()
-                    }else thread(name="asterion-check-provider"){
-                        SiteControls.applyToEngines(a.applicationContext,site.url)
+                    }else {
+                        // Acknowledge immediately instead of waiting for a
+                        // database-wide Sync preference reconciliation, which
+                        // may block the per-site Backfill for several minutes.
+                        Toast.makeText(a,"Backfill requested · "+name,
+                            Toast.LENGTH_SHORT).show()
+                        thread(name="asterion-check-provider"){
                         val result=runCatching{
                             if(site.area=="COSPLAY" &&
                                 AlohaSources.by(AlohaArea.COSPLAY).any{
@@ -376,6 +381,7 @@ object SourceIndexPanel {
                         a.runOnUiThread{
                             if(!a.isFinishing)Toast.makeText(a,result,
                                 Toast.LENGTH_SHORT).show()
+                        }
                         }
                     }
                 },LinearLayout.LayoutParams(0,-2,1f))
