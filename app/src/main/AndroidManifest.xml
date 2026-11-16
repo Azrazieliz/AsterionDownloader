@@ -33,8 +33,17 @@
         <!-- Opt-in signed/UID-checked Control diagnostics. No arbitrary
              ContentProvider reads, writable files, or implicit authorization. -->
         <provider android:name=".AsterionControlDiagnosticsProvider"
+            android:authorities="${applicationId}.asterion.diagnostics"
+            android:exported="true"
+            android:grantUriPermissions="false"/>
+        <!-- Control native v1: original-owner signing identity is checked on
+             every Binder call; exact app status and sanitized queue receipts.
+             Legacy diagnostic adapter retains its separate authority above. -->
+        <provider
+            android:name="com.asterion.bridge.AsterionControlBridgeProvider"
             android:authorities="${applicationId}.asterion.bridge"
-            android:exported="true"/>
+            android:exported="true"
+            android:grantUriPermissions="false"/>
         <!-- Receiver authenticates OS caller UID and installed signing certificate,
              then requires per-peer user approval for independent Asterion keys. -->
         <!-- Dedicated, non-exported process keeps STOP responsive during a
