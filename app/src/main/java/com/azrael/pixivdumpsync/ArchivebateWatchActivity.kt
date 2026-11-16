@@ -32,6 +32,8 @@ class ArchivebateWatchActivity:Activity() {
         const val VIDEO_TITLE="archivebate_selected_title"
     }
     private var player:WebView?=null
+    // Never accept a navigation to a different recording or advertising player.
+    private var selectedEmbed:String?=null
     override fun onCreate(state:Bundle?){
         super.onCreate(state)
         val watch=intent.getStringExtra(WATCH_URL).orEmpty()
@@ -42,8 +44,7 @@ class ArchivebateWatchActivity:Activity() {
         ArchivebateDiagnostics.record(this,"watch_open","recording="+recordingId)
         val title=intent.getStringExtra(VIDEO_TITLE)
             ?.take(180)?.ifBlank{"Archivebate recording"}?:"Archivebate recording"
-        if(!WebDiscovery.isVideoPage(watch) ||
-            !watch.startsWith("https://archivebate.com/watch/")){
+        if(!ArchivebateSelectedMedia.isSelectedArticle(watch)){
             Toast.makeText(this,"Invalid selected Archivebate recording",
                 Toast.LENGTH_LONG).show()
             finish();return
@@ -80,11 +81,13 @@ class ArchivebateWatchActivity:Activity() {
         video.webViewClient=object:WebViewClient(){
             override fun shouldOverrideUrlLoading(
                 view:WebView,request:WebResourceRequest):Boolean{
-                val host=request.url.host.orEmpty().lowercase(Locale.ROOT)
-                    .removePrefix("www.")
-                // Player resources are not navigations. Deny main-frame ads.
+                // The selected Mixdrop iframe redirects to mxdrop.click on real
+                // publisher pages. Permit only the original /e/<id> path;
+                // every unrelated player or ad navigation stays blocked.
+                val selected=selectedEmbed
                 return request.isForMainFrame &&
-                    (request.url.scheme!="https" || host!="mixdrop.ag")
+                    (selected==null || !ArchivebateSelectedMedia.selectedRedirect(
+                        selected,request.url.toString()))
             }
         }
         root.addView(video,LinearLayout.LayoutParams(-1,0,1f))
@@ -143,6 +146,7 @@ class ArchivebateWatchActivity:Activity() {
             runOnUiThread{
                 if(isFinishing || isDestroyed)return@runOnUiThread
                 response.onSuccess{embed->
+                    selectedEmbed=embed
                     ArchivebateDiagnostics.record(this,"selected_embed_found")
                     info.text="Play the selected recording, then download "+
                         "only its actual original."
