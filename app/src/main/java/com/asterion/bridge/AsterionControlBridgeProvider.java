@@ -96,6 +96,74 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
         return id != null && id.matches("[A-Za-z0-9_.:-]{8,100}");
     }
 
+    /** Actual persisted VideoFlow queue counts; never an invented worker heartbeat. */
+    private JSONObject videoFlowEvidence(Context ctx) throws Exception {
+        java.io.File file = ctx.getDatabasePath("videoflow.sqlite");
+        JSONObject evidence = new JSONObject()
+            .put("source", "videoflow.sqlite / videos")
+            .put("database_present", file.isFile())
+            .put("stored_queue_counts_verified", false)
+            .put("live_workers_verified", false);
+        if (!file.isFile()) return evidence;
+        android.database.sqlite.SQLiteDatabase database = null;
+        android.database.Cursor cursor = null;
+        try {
+            database = android.database.sqlite.SQLiteDatabase.openDatabase(
+                file.getAbsolutePath(), null,
+                android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+            JSONObject counts = new JSONObject();
+            cursor = database.rawQuery(
+                "SELECT state,COUNT(*),MAX(updated) FROM videos GROUP BY state",
+                null);
+            int total = 0;
+            long latestUpdate = 0L;
+            while (cursor.moveToNext()) {
+                String state = cursor.getString(0);
+                if (!("queued".equals(state) || "running".equals(state) ||
+                      "error".equals(state) || "done".equals(state))) continue;
+                int count = cursor.getInt(1);
+                total += count;
+                latestUpdate = Math.max(latestUpdate, cursor.getLong(2));
+                counts.put(state, count);
+            }
+            cursor.close();
+            cursor = null;
+            JSONArray failures = new JSONArray();
+            cursor = database.rawQuery(
+                "SELECT id,updated,error FROM videos WHERE state='error' " +
+                "ORDER BY updated DESC LIMIT 8", null);
+            while (cursor.moveToNext()) {
+                String raw = cursor.getString(2);
+                String code = "unspecified_error";
+                if (raw != null) {
+                    String lower = raw.toLowerCase(Locale.US);
+                    if (lower.contains("403")) code = "http_403";
+                    else if (lower.contains("429")) code = "http_429";
+                    else if (lower.contains("timeout") || lower.contains("timed out"))
+                        code = "timeout";
+                    else if (lower.contains("extractor")) code = "extractor_failure";
+                    else if (lower.contains("network")) code = "network_error";
+                    else if (lower.contains("permission")) code = "permission_error";
+                }
+                failures.put(new JSONObject()
+                    .put("item_id", cursor.getLong(0))
+                    .put("last_updated_ms", cursor.getLong(1))
+                    .put("error_category", code));
+            }
+            return evidence.put("stored_queue_counts_verified", true)
+                .put("counts", counts).put("items_counted", total)
+                .put("last_persisted_update_ms", latestUpdate)
+                .put("recent_failed_items", failures)
+                .put("live_workers_verified", false);
+        } catch (android.database.sqlite.SQLiteException error) {
+            return evidence.put("read_error_class", error.getClass().getSimpleName())
+                .put("stored_queue_counts_verified", false);
+        } finally {
+            if (cursor != null) cursor.close();
+            if (database != null) database.close();
+        }
+    }
+
     private JSONObject processEvidence() throws Exception {
         Context ctx = context();
         PackageManager pm = ctx.getPackageManager();
@@ -135,6 +203,12 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
                         .put("rss_kb", Math.max(0L, exit.getRss())));
                 }
             }
+        }
+        if (ctx.getPackageName().startsWith("com.azrael.pixivdumpsync")) {
+            JSONObject video = videoFlowEvidence(ctx);
+            evidence.put("videoflow", video)
+                .put("engine_telemetry_available",
+                    video.optBoolean("stored_queue_counts_verified", false));
         }
         return evidence.put("android_historical_exits", exits)
             .put("android_historical_exits_count", exits.length());
