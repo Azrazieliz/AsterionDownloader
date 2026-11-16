@@ -40,14 +40,18 @@ object ProviderBackfillActions {
                 else "Site is already scanning, paused or unavailable"
         }
         if(site.area in setOf("ADULT","VIDEOS","HENTAI")){
-            // Manual history acquisition is separate from the Sync switch.
-            VideoDb(a).use{db->
-                // Preserve the previous historical cursor and completed files.
-                db.addWatch(site.url,site.name)
+            // Manual Backfill must NOT share the transfer loop: VideoEngine
+            // first drains up to six downloads before it starts discovery.
+            // SiteRunControl has an independent, durable per-provider worker
+            // and preserves existing saved cursors and download state.
+            val started=SiteRunControl.start(a.applicationContext,site.url,site.area)
+            val state=SiteRunControl.status(a,site.url).state
+            return when {
+                started -> "Historical backfill started for "+host
+                state=="RUNNING" -> "Historical backfill already running for "+host
+                state=="QUEUED" -> "Historical backfill queued for "+host
+                else -> "Unable to start historical check for "+host+" ("+state+")"
             }
-            val accepted=VideoEngine.launch(a,true,host)
-            return if(accepted)"Video scan queued for "+host
-                else "Unable to start video check for "+host
         }
         if(site.area=="COSPLAY"){
             // A site homepage is not a Kiutaku /tag/<id> entity. The public
