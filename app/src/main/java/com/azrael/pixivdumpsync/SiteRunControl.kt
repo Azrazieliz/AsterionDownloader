@@ -113,6 +113,8 @@ object SiteRunControl {
         val app=context.applicationContext
         if(active.containsKey(key(address)))return false
         changeRequest(app,area,address,true)
+        app.getSharedPreferences(PREFS,0).edit()
+            .putLong(key(address)+":requested_ms",System.currentTimeMillis()).apply()
         record(app,address,"QUEUED","Manual historical backfill requested")
         val launched=spawn(app,address,area)
         if(!launched)scheduleIfPending(app)
@@ -204,7 +206,11 @@ object SiteRunControl {
         val request=token(area,address)
         try{
             if(request !in requests(context))return
-            record(context,address,"RUNNING","Checking history and original files")
+            val requested=context.getSharedPreferences(PREFS,0)
+                .getLong(id+":requested_ms",0L)
+            val latency=(System.currentTimeMillis()-requested).coerceAtLeast(0L)
+            record(context,address,"RUNNING",
+                "Backfill worker started after "+latency+"ms · checking history")
             val complete=runOne(context,address,area){
                 cancelled.get() || externalStop()
             }
