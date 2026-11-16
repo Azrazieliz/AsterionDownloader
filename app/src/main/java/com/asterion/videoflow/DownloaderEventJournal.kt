@@ -105,4 +105,31 @@ internal object DownloaderEventJournal {
                 if(since>0 && oldest>since+1)oldest-since-1 else 0)
             .put("scope","sanitized_download_stages_only")
     }
+
+    /** Exact failed job's bounded cross-process timeline, newest first.
+     * Numeric video ID only; no URLs, headers or media metadata.
+     */
+    fun forVideo(context:Context,id:Long,limit:Int=20):JSONObject{
+        require(id>0L && limit in 1..40){"Invalid video diagnostic cursor"}
+        val rows=JSONArray()
+        Store(context).use{store->
+            store.readableDatabase.rawQuery(
+                "SELECT seq,timestamp_utc_ms,pid,thread_id,stage,result_code,verified_bytes "+
+                    "FROM events WHERE video_id=? ORDER BY seq DESC LIMIT ?",
+                arrayOf(id.toString(),limit.toString())).use{cursor->
+                while(cursor.moveToNext()){
+                    rows.put(JSONObject().put("sequence",cursor.getLong(0))
+                        .put("utc_ms",cursor.getLong(1))
+                        .put("pid",cursor.getInt(2))
+                        .put("thread_id",cursor.getLong(3))
+                        .put("stage",cursor.getString(4))
+                        .put("result",cursor.getString(5))
+                        .put("verified_bytes",cursor.getLong(6)))
+                }
+            }
+        }
+        return JSONObject().put("video_id",id).put("events",rows)
+            .put("scope","sanitized_cross_process_job_history")
+    }
+
 }
