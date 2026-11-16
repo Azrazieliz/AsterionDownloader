@@ -648,8 +648,14 @@ internal object SiteSpecificOriginalSources {
                 link?.let { Source(it,selected) }
             }
         } else if(gated)emptyList() else jsSources(doc,selected)
-        return (published+direct)
-            .distinctBy{it.url}
+        // When the selected WordPress player itself publishes its original,
+        // do not append other HTML5 videos from the same wrapper. Live pages
+        // may load separate playable previews/advertising elements here.
+        // Returning both let TransferService fall through to a wrong video
+        // when the authoritative original transfer failed.
+        val selectedSources=if(owner=="hentaibros.net" && published.isNotEmpty())
+            published else published+direct
+        return selectedSources.distinctBy{it.url}
     }
     fun resolve(context:Context,selected:String,doc:Document):
             List<PublisherOriginalExtractors.Candidate>{
