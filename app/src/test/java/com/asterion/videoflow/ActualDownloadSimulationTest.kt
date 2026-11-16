@@ -209,7 +209,9 @@ class ActualDownloadSimulationTest {
                 assertArrayEquals(payload,saved.readBytes())
                 assertEquals(2,requests.get())
                 assertEquals("bytes=57267-",http.requests[1].header("Range"))
-                assertFalse(File(dir,"native_original.mp4.origin").exists())
+                // The non-secret source binding must survive a successful
+                // transfer to prevent a later candidate reusing its receipt.
+                assertTrue(File(dir,"native_original.mp4.origin").exists())
             }finally{dir.deleteRecursively()}
         }
     }
