@@ -424,12 +424,24 @@ class SyncEngine(private val context: Context) {
     ) {
         SyncControl.setMode(SyncMode.BACKFILL)
 
+        val requestAt=System.currentTimeMillis()
+        val enumeration="Pixiv backfill · loading selected artist index"
+        SyncControl.updateMessage(enumeration)
+        progress(enumeration)
         val artists = if (targetArtistId != null) {
             listOfNotNull(db.artist(targetArtistId))
         } else {
             db.listSelectedArtists()
         }
+        require(artists.isNotEmpty()) {
+            if (targetArtistId==null) "No selected Pixiv artists for backfill"
+            else "Pixiv artist is not present in the watched list"
+        }
         stats.artists = maxOf(stats.artists, artists.size)
+        val initial="Pixiv backfill · ${artists.size} artists · first request pending ("+
+            (System.currentTimeMillis()-requestAt)+"ms to enumerate)"
+        SyncControl.updateMessage(initial)
+        progress(initial)
 
         for ((artistIndex, artist) in artists.withIndex()) {
             if (!SyncControl.checkpoint()) return
@@ -601,12 +613,16 @@ class SyncEngine(private val context: Context) {
         stats: Stats,
         progress: (String) -> Unit
     ) {
+        val indexStarted=System.currentTimeMillis()
+        progress("Pixiv artist ${artist.userId} · fetching artwork IDs")
         val snapshot = api.userArtworkSnapshot(
             artist.userId,
             previewLimit = 5,
             resolveMissingPreviews = false
         )
         val ids = snapshot.ids
+        progress("Pixiv artist ${artist.userId} · ${ids.size} works indexed in "+
+            (System.currentTimeMillis()-indexStarted)+"ms · beginning originals")
 
         if (snapshot.previews.isNotEmpty()) {
             db.updateArtistPresentation(
