@@ -52,9 +52,9 @@ object VideoSearchPreviews {
                 validUrl?.let{verifiedPoster->
                     yieldAll(PublisherPreviewFallback.candidates(verifiedPoster,referer))
                 }
-                if(rule34Page!=null){
+                rule34Page?.let{selectedPage->
                     val poster=runCatching{
-                        Rule34PosterEvidence.readPoster(app,rule34Page)
+                        Rule34PosterEvidence.readPoster(app,selectedPage)
                     }.onFailure{problem->
                         failure="selected_page_"+problem.javaClass.simpleName+
                             ": "+problem.message.orEmpty().take(80)
