@@ -54,3 +54,11 @@ This is a **non-destructive repair**. Existing app installation, signing identit
 - [ ] Books EPUB, Koikatsu-card proportions, Pixiv dedup, cosplay modules, and other previously working sources remain intact.
 
 **Release gate:** A successful source commit or Gradle compilation is NOT a verified user-usable app. Do not mark this repair complete until the device tests above succeed. Preserve all existing user data and previous successful provider behavior.
+## 16 November device transfer receipt — exact release state
+
+- **Source built**: `2652300bd05a088bc38d16d640b8456ab804b1c7`; Gradle `:app:verifyBundledYtDlp :app:assembleAcceptance` succeeded after the Acceptance Kotlin/Java compile and JVM unit suite passed on the previous code-only commit.
+- **APK**: `app-acceptance.apk`, 54,320,617 bytes, SHA-256 `9e714a689fbe2e37e5cef88169afa3cc17eac733e30ce6c9901b98ea8e52d235`, package `com.azrael.pixivdumpsync.acceptance`, versionCode 99, versionName `1.3.70-acceptance`.
+- **Verified signer**: Android V2, CN=Asterion Downloader Acceptance, certificate SHA-256 `8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19`.
+- **Verified Asterion Control private Wi-Fi file transfer**: 54,320,617/54,320,617 bytes and matching SHA-256, saved on Samsung as `Downloads/Asterion Control/AsterionDownloader-1.3.70-acceptance.apk`; MediaStore URI `content://media/external/downloads/1000119305`.
+- **Installation**: NOT VERIFIED. Asterion Control rejected remote `phone_app_launch` because its owner foreground screen was not active; do not report installed, updated, or user-validated. The Samsung's screen was actively showing other apps, so do not force an installer by overriding local owner gates.
+- **Provider fixes**: not complete; nine observed failures listed above remain OPEN, including failures based on remote site restrictions or missing publisher-original source. The new APK is a partial repair/test build, not a passing provider release.
