@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import com.azrael.pixivdumpsync.CrashDiagnostics
+import com.azrael.pixivdumpsync.ThumbnailFailureJournal
 import java.net.URI
 import java.util.Date
 
@@ -62,6 +63,12 @@ internal object VideoDiagnosticsReport {
                 .append(" progress=").append(video.progress)
                 .append(" stage=").append(stage?.stage?:"unknown")
                 .append(" bytes=").append(stage?.verifiedBytes?:0L)
+                .append(" stageUpdatedMs=").append(stage?.updated?:0L)
+                .append(" recordUpdatedMs=").append(video.updated)
+                .append(" lease=").append(video.lease)
+            if(!stage?.detail.isNullOrBlank())
+                builder.append(" lastStageDetail=")
+                    .append(sanitize(stage?.detail.orEmpty()))
             if(!video.error.isNullOrBlank()){
                 builder.append(" errorKind=")
                     .append(VideoFailurePolicy.classify(video.error))
@@ -69,9 +76,19 @@ internal object VideoDiagnosticsReport {
                     .append(sanitize(video.error))
             }
             builder.append('\n')
+            if(label=="Failed"){
+                val events=runCatching{
+                    DownloaderEventJournal.forVideo(context,video.id,16)
+                }.getOrNull()
+                if(events!=null)builder.append("  stageTimeline=")
+                    .append(events.toString()).append('\n')
+            }
         }
         if(rows.size>140)builder.append("Additional entries omitted: ")
             .append(rows.size-140).append('\n')
+        builder.append("\nTHUMBNAIL AND POSTER LOAD FAILURES\n")
+        builder.append(ThumbnailFailureJournal.report(context,30)
+            .ifBlank{"No locally recorded thumbnail failures"}).append('\n')
         val crash=CrashDiagnostics.safeForClipboard(context)
         builder.append("\nANDROID PROCESS EXIT AND CRASH RECORDS\n")
         builder.append(crash?.takeIf{it.isNotBlank()}
