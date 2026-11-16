@@ -287,7 +287,7 @@ object AsterionAdultHub {
             }
             identity.addView(avatar,LinearLayout.LayoutParams(ui.px(a,52),ui.px(a,52)))
             media.firstOrNull()?.let{item->
-                if(item.kind=="video")VideoSearchPreviews.display(a,avatar,item.preview,item.source)
+                if(item.kind=="video")VideoSearchPreviews.display(a,avatar,item.preview,item.url)
                 else RemoteImageLoader.load(a,avatar,item.preview,item.source)
             }
             if(media.isEmpty())searches.firstOrNull()?.let{hit->
@@ -295,7 +295,7 @@ object AsterionAdultHub {
             }
             if(media.isEmpty() && searches.isEmpty())
                 public.firstOrNull()?.let{item->
-                    VideoSearchPreviews.display(a,avatar,item.cover,site.url)
+                    VideoSearchPreviews.display(a,avatar,item.cover,item.url)
                 }
             val nameBlock=LinearLayout(a).apply{
                 orientation=LinearLayout.VERTICAL
