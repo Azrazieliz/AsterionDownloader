@@ -43,6 +43,16 @@ def main():
     print("selected_article_http",code,"html_bytes",len(body),
         "candidate_wordpress_players",len(p.selected),flush=True)
     if len(p.selected)!=1:
+        for tag,pattern in (
+            ("wpfp_ids",r"wpfp_\\d+"),
+            ("data_item_attrs",r"data-item\\s*="),
+            ("video_tags",r"<video\\b"),
+            ("source_tags",r"<source\\b"),
+            ("flowplayer",r"flowplayer"),
+            ("player_class",r"video-player"),
+            ("wp_player",r"wp-video-shortcode"),
+            ("official_source_domain",r"povblowjob\\.net")):
+            print("MARKER",tag,len(re.findall(pattern,body,re.I)),flush=True)
         print("FAIL_PLAYER_ATTRIBUTION",flush=True);return 2
     config=json.loads(html.unescape(p.selected[0]))
     arr=config.get("sources",[])
