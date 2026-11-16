@@ -180,4 +180,100 @@ class ActualDownloadSimulationTest {
                 }finally{dir1.deleteRecursively();dir2.deleteRecursively()}
             }
     }
+
+    @Test fun interruptionWithoutEtagResumesAfterVerifyingRealOverlap(){
+        val payload=ByteArray(360_110){(it*31%251).toByte()}
+        val requests=AtomicInteger()
+        Fixture{req,out->
+            if(requests.incrementAndGet()==1)
+                write(out,"200 OK",payload.copyOfRange(0,57_331),
+                    length=payload.size.toLong())
+            else{
+                val start=req.header("Range").removePrefix("bytes=")
+                    .substringBefore('-').toInt()
+                write(out,"206 Partial Content",payload.copyOfRange(start,payload.size),
+                    headers=mapOf("Content-Range" to
+                        "bytes $start-${payload.size-1}/${payload.size}"))
+            }
+        }.use{http->
+            val dir=directory()
+            try{
+                assertNotNull(runCatching{
+                    NativeMediaDownloader.download(http.url("/movie.mp4"),null,dir)
+                }.exceptionOrNull())
+                assertEquals(57_331L,File(dir,"native_original.mp4.part").length())
+                assertFalse(File(dir,"native_original.mp4.etag").exists())
+                assertTrue(File(dir,"native_original.mp4.origin").isFile)
+                val saved=NativeMediaDownloader.download(
+                    http.url("/movie.mp4"),null,dir)
+                assertArrayEquals(payload,saved.readBytes())
+                assertEquals(2,requests.get())
+                assertEquals("bytes=57267-",http.requests[1].header("Range"))
+                assertFalse(File(dir,"native_original.mp4.origin").exists())
+            }finally{dir.deleteRecursively()}
+        }
+    }
+
+    @Test fun changedNoEtagOriginalCannotBeMixedWithOldPartial(){
+        val first=ByteArray(172_000){(it*17%251).toByte()}
+        val replacement=ByteArray(172_000){(it*23%241).toByte()}
+        val calls=AtomicInteger()
+        Fixture{req,out->
+            when(calls.incrementAndGet()){
+                1->write(out,"200 OK",first.copyOfRange(0,17_509),
+                    length=first.size.toLong())
+                2->{
+                    val start=req.header("Range").removePrefix("bytes=")
+                        .substringBefore('-').toInt()
+                    write(out,"206 Partial Content",
+                        replacement.copyOfRange(start,replacement.size),
+                        headers=mapOf("Content-Range" to
+                            "bytes $start-${replacement.size-1}/${replacement.size}"))
+                }
+                else->write(out,"200 OK",replacement)
+            }
+        }.use{http->
+            val dir=directory()
+            try{
+                assertNotNull(runCatching{
+                    NativeMediaDownloader.download(http.url("/movie.mp4"),null,dir)
+                }.exceptionOrNull())
+                val mismatch=runCatching{
+                    NativeMediaDownloader.download(http.url("/movie.mp4"),null,dir)
+                }.exceptionOrNull()
+                assertTrue(mismatch?.message.orEmpty().contains("source changed"))
+                assertFalse(File(dir,"native_original.mp4.part").exists())
+                assertFalse(File(dir,"native_original.mp4.origin").exists())
+                val saved=NativeMediaDownloader.download(
+                    http.url("/movie.mp4"),null,dir)
+                assertArrayEquals(replacement,saved.readBytes())
+                assertTrue(http.requests[2].header("Range").isBlank())
+            }finally{dir.deleteRecursively()}
+        }
+    }
+
+    @Test fun partialFromDifferentCandidateIsNeverResumedAsNewMedia(){
+        val first=ByteArray(90_000){(it*11%251).toByte()}
+        val second=ByteArray(90_000){(it*37%241).toByte()}
+        Fixture{req,out->
+            if(req.path.startsWith("/first"))
+                write(out,"200 OK",first.copyOfRange(0,18_111),
+                    length=first.size.toLong())
+            else write(out,"200 OK",second)
+        }.use{http->
+            val dir=directory()
+            try{
+                assertNotNull(runCatching{
+                    NativeMediaDownloader.download(http.url("/first.mp4"),null,dir)
+                }.exceptionOrNull())
+                assertTrue(File(dir,"native_original.mp4.part").exists())
+                val saved=NativeMediaDownloader.download(
+                    http.url("/second.mp4"),null,dir)
+                assertArrayEquals(second,saved.readBytes())
+                assertEquals(2,http.requests.size)
+                assertTrue(http.requests[1].header("Range").isBlank())
+            }finally{dir.deleteRecursively()}
+        }
+    }
+
 }
