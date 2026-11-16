@@ -241,7 +241,7 @@ internal object UnifiedKyoraFeatures {
             val albums=GalleryDb(a).use{
                 it.galleryCards(entity.entityId,shownAlbums+1)}
             for(album in albums.take(shownAlbums)){
-                add(a,card,"OPEN · +album.title.take(65)+
+                add(a,card,"OPEN · "+album.title.take(65)+
                     " ("+album.count+" images)"){
                     a.startActivity(Intent(a,
                         com.azrael.galleryflow.GalleryDetailActivity::class.java)
