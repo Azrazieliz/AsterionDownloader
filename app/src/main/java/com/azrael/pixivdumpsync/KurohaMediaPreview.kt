@@ -81,9 +81,14 @@ internal object KurohaMediaPreview {
                         RemoteImageLoader.load(a, thumb, tile.thumbnail, tile.referer)
                     }
                 }
-                // No image URL: keep the honest video icon and tappable
-                // indexed-page card. Never attempt to load an empty URL or
-                // count the icon as a successfully fetched media thumbnail.
+                else if(tile.video){
+                    // Rule34Video may publish the video without a catalog
+                    // poster. The loader can inspect the exact selected page
+                    // asynchronously; unrelated providers retain their icon.
+                    VideoSearchPreviews.display(a,thumb,null,tile.referer)
+                }
+                // No verified poster: keep the honest tappable video icon.
+                // Do not count a placeholder as a successful thumbnail.
             }
             holder.addView(HorizontalScrollView(a).apply {
                 isHorizontalScrollBarEnabled = false
