@@ -99,12 +99,14 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
     /** Preserve stage-specific diagnostics without exporting media URLs or credentials. */
     private static String diagnosticMessage(String raw) {
         if (raw == null) return "";
-        return raw.replaceAll("(?i)https?://[^\\s'\\\"<>]+", "[url]")
+        String text = raw.replaceAll("(?i)https?://[^\\s'\\\"<>]+", "[url]")
             .replaceAll("(?i)(cookie|authorization|bearer|token|password|signature|api[_-]?key)\\s*[:=]\\s*[^\\s;,]+", "[credential]")
-            .replaceAll("[\\r\\n\\t]+", " ").trim().substring(
-                0, Math.min(240, raw.replaceAll("(?i)https?://[^\\s'\\\"<>]+", "[url]")
-                    .replaceAll("(?i)(cookie|authorization|bearer|token|password|signature|api[_-]?key)\\s*[:=]\\s*[^\\s;,]+", "[credential]")
-                    .replaceAll("[\\r\\n\\t]+", " ").trim().length()));
+            .replaceAll("[\\r\\n\\t]+", " ").trim();
+        return text.substring(0, Math.min(240, text.length()));
+    }
+    private static String shortIdentifier(String raw, int limit) {
+        String safe = raw == null ? "" : raw.replaceAll("[^a-zA-Z0-9._-]", "");
+        return safe.substring(0, Math.min(limit, safe.length()));
     }
 
     private static String diagnosticCategory(String raw) {
@@ -155,8 +157,7 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
         long bytes;
         try { bytes = Long.parseLong(parts[3]); }
         catch (NumberFormatException bad) { bytes = 0; }
-        return state.put("stage", parts[0].replaceAll("[^A-Za-z0-9_]", "").substring(
-                0, Math.min(24, parts[0].length())))
+        return state.put("stage", shortIdentifier(parts[0], 24))
             .put("stage_message", diagnosticMessage(parts[2]))
             .put("verified_bytes", Math.max(0L, bytes));
     }
@@ -212,8 +213,7 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
                     .put("item_id", id)
                     .put("last_updated_ms", cursor.getLong(1))
                     .put("error_category", diagnosticCategory(raw))
-                    .put("provider_host", host.replaceAll("[^a-z0-9.-]", "").substring(
-                        0, Math.min(90, host.length())))
+                    .put("provider_host", shortIdentifier(host, 90))
                     .put("failure_message", diagnosticMessage(raw))
                     .put("resolver_component", resolverComponent(host))
                     .put("stage", stage.optString("stage"))
