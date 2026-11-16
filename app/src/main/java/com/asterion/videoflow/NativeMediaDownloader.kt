@@ -106,7 +106,14 @@ internal object NativeMediaDownloader {
         val receipt=File(directory,"$stem.$ext.receipt")
         // A prior APK could leave a nonempty but truncated/corrupt staged
         // destination. Existence alone is NEVER a completion proof.
-        if(destination.isFile && NativeMediaReceipt.matches(destination,receipt))
+        // A SHA/length receipt proves the staged file's integrity, not
+        // which candidate supplied it. Bind final-file reuse to the exact
+        // selected source URL as well, or another scene may be returned.
+        val matchesExistingSource=runCatching {
+            origin.isFile && origin.readText().trim()==originHash
+        }.getOrDefault(false)
+        if(destination.isFile && matchesExistingSource &&
+            NativeMediaReceipt.matches(destination,receipt))
             return destination
         // Native candidates of one video can share this staging directory.
         // Never resume another candidate's bytes (nor a pre-upgrade partial
@@ -285,7 +292,8 @@ internal object NativeMediaDownloader {
                 // Interrupted receipt writes force revalidation, never reuse.
                 NativeMediaReceipt.write(destination,receipt)
                 validator.delete()
-                origin.delete()
+                // Keep only this SHA-256 source binding (never a private URL)
+                // so a future candidate cannot reuse another scene's file.
                 return destination
             }finally{
                 conn.disconnect()
