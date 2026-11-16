@@ -357,4 +357,21 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(PublisherOriginalExtractors.owns(
             "https://xxxclub.to/torrents/details/480815"))
     }
+    @Test fun hentaBrosDoesNotFallbackToSameWrapperUnrelatedVideo(){
+        val selected="https://hentaibros.net/deco-x-deco-the-animation-episode-1/"
+        val html="""<main><div class="video-player">
+            <video src="https://cdn.example/secondary.mp4"
+                data-duration="1200" controls></video>
+            <div id="wpfp_3235" data-item='{"sources":[
+                {"src":"https://cdn.example/actual-original.mp4",
+                 "type":"video/mp4"}]}'></div>
+        </div></main>"""
+        val candidates=SiteSpecificOriginalSources.selectedStatic(
+            Jsoup.parse(html,selected),selected,"hentaibros.net")
+        assertEquals(listOf("https://cdn.example/actual-original.mp4"),
+            candidates.map{it.url})
+        assertEquals(selected,candidates.single().referer)
+    }
+
+
 }
