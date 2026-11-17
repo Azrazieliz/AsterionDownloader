@@ -52,6 +52,20 @@ class WebDiscoveryTest {
         assertTrue(WebDiscovery.listingAnchorEligible(
             "https://javideo.net/",links[0]))
     }
+    @Test fun strictPlayerPublishersNeverIndexGenericPreviewMedia(){
+        listOf("archivebate.com","helloporn.com","hentaihaven.xxx",
+            "javideo.net").forEach { host ->
+            assertTrue(host,WebDiscovery.requiresSelectedPlayerForListing(
+                "https://$"+"host/watch/selected-item"))
+        }
+        listOf("rule34video.com","hentaibros.net","fullporner.com",
+            "freepornvideos.xxx").forEach { host ->
+            assertFalse(host,WebDiscovery.requiresSelectedPlayerForListing(
+                "https://$"+"host/watch/selected-item"))
+        }
+        assertFalse(WebDiscovery.requiresSelectedPlayerForListing(
+            "https://helloporn.com.evil.example/preview"))
+    }
     @Test fun identifyTypicalVideoUrls(){
         assertTrue(WebDiscovery.isVideoPage("https://example.com/videos/abc123"))
         assertTrue(WebDiscovery.isVideoPage("https://www.pornhub.com/view_video.php?viewkey=1234"))
