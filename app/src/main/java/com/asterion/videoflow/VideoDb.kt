@@ -201,6 +201,10 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                ORDER BY updated ASC LIMIT 10000""",
             arrayOf(now)).use{scan->
             while(scan.moveToNext()){
+                // A manually selected video (watch_id=0) is independent of
+                // other selections, even when their titles share a series.
+                // Episode ordering applies to automatic watched-site jobs.
+                if(scan.getLong(2)==0L)continue
                 val title=scan.getString(1)
                 val series=com.azrael.pixivdumpsync.SequenceOrder
                     .episodeSeries(title)?:continue
@@ -242,8 +246,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                         continue
                 }
                 val name=c.getString(2)
-                val series=com.azrael.pixivdumpsync.SequenceOrder
-                    .episodeSeries(name)
+                val series=if(watchId==0L)null else
+                    com.azrael.pixivdumpsync.SequenceOrder.episodeSeries(name)
                 if(series!=null){
                     val number=com.azrael.pixivdumpsync.SequenceOrder.index(
                         com.azrael.pixivdumpsync.SequenceOrder.Kind.EPISODE,
