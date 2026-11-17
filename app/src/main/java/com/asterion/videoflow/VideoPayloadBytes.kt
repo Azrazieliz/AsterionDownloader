@@ -18,8 +18,9 @@ internal object VideoPayloadBytes {
         val fragment=name.replace(Regex("""(?i)\.part-frag[0-9]{1,10}$"""),".part")
         if(fragment.endsWith(".part")) {
             val withoutPart=fragment.removeSuffix(".part")
-            return media.any { withoutPart.endsWith("."+it) } ||
-                media.any { withoutPart.contains("."+it+".") }
+            // The payload extension must be the final segment before .part.
+            // "movie.mp4.ytdl.part-Frag2" is metadata, not downloaded video.
+            return media.any { withoutPart.endsWith("."+it) }
         }
         return media.any { name.endsWith("."+it) }
     }
