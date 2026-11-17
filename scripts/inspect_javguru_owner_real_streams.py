@@ -144,8 +144,18 @@ def run():
                             not re.search(r"(?:preview|teaser|sample|trailer)",parsed.path,re.I)):
                             candidates.append(link)
                 candidates=list(dict.fromkeys(candidates))
+                contexts=[]
+                for piece in decoded:
+                    for match in list(re.finditer(r"\b(?:jwplayer|sources?|file|links|video|url)\b",piece,re.I))[:6]:
+                        part=piece[max(0,match.start()-45):match.end()+95]
+                        part=re.sub(r"https?://[^\s\"'<>\\]{4,800}","[URL]",part)
+                        part=re.sub(r"[A-Za-z0-9_+=/-]{30,}","[OPAQUE]",part)
+                        contexts.append(re.sub(r"\s+"," ",part)[:140])
                 details={"packed_decoded":sum(bool(x) for x in decoded),
                     "selected_media_candidates":len(candidates),
+                    "decoded_markers":{key:sum(x.lower().count(key) for x in decoded)
+                        for key in ("jwplayer","sources","file","links","m3u8","mp4")},
+                    "safe_source_context":contexts[:10],
                     "media_shapes":[{"host":urllib.parse.urlsplit(x).hostname,
                         "ext":urllib.parse.urlsplit(x).path.rsplit(".",1)[-1][:8],
                         "signed":bool(urllib.parse.urlsplit(x).query)}
