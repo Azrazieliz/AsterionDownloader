@@ -141,13 +141,19 @@ object BrowserPageFetch {
                 }
                 override fun onPageFinished(v:WebView,finished:String){
                     if(host=="archivebate.com" &&
-                        SiteSession.bound(context,url) && !archivebateContinued){
+                        Uri.parse(url).path.orEmpty().trim('/')=="" &&
+                        (SiteSession.bound(context,url) || publicEligible(url)) &&
+                        !archivebateContinued){
                         archivebateContinued=true
                         main.postDelayed({
                             if(latch.count==0L)return@postDelayed
                             v.evaluateJavascript("""(function(){
+                                if(location.hostname.replace(/^www\\./,'')!=='archivebate.com' ||
+                                   location.pathname.replace(/\\/+/g,'')!=='')return false;
                                 const action=[...document.querySelectorAll(
                                     'button,a,[role="button"]')]
+                                    .filter(el=>!el.closest(
+                                        'aside,.ads,.advertisement,.sidebar,.related,[data-ad]'))
                                     .find(el=>/^continue$/i.test(
                                         (el.innerText||el.textContent||'').trim()));
                                 if(!action)return false;
@@ -522,7 +528,7 @@ object BrowserPageFetch {
                                 error.set("The browser still shows a website verification page.")
                                 latch.countDown()
                             }else if(host=="archivebate.com" &&
-                                SiteSession.bound(context,url) &&
+                                (SiteSession.bound(context,url) || publicEligible(url)) &&
                                 Uri.parse(url).path.orEmpty().trim('/')=="" &&
                                 !ArchivebateListingPresence.hasSelectedWatch(page) &&
                                 archivebateWaits++<6){
