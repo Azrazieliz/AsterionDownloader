@@ -30,7 +30,22 @@ internal object EmbeddedYtDlpTransfer {
         paths.asMap()[PyObject.fromJava("temp")]=
             PyObject.fromJava(directory.absolutePath)
         opts.asMap()[PyObject.fromJava("paths")]=paths
-        put("format",format)
+        // Verified on the owner's PC against one selected HentaiHaven
+        // episode's REAL octopusmanifest HLS: separate 360p video "800"
+        // and audio-English. The generic best/mp4-only selector chooses
+        // no valid combined format; MPEG-TS then preserves downloaded
+        // fragments until FFmpeg merges video and audio to Matroska.
+        // This policy is strictly limited to the publisher-attributed
+        // HentaiHaven episode HLS, never generic manifests or other sites.
+        val havenEpisodeHls=!referer.isNullOrBlank() &&
+            HentaiHavenEpisodeSource.isEpisode(referer) &&
+            HentaiHavenEpisodeSource.isApprovedHls(url)
+        put("format",if(havenEpisodeHls)
+            "bv[height<=480]+ba/bv+ba" else format)
+        if(havenEpisodeHls){
+            put("hls_use_mpegts",true)
+            put("merge_output_format","mkv")
+        }
         put("noplaylist",true)
         put("continuedl",true)
         put("overwrites",false)
