@@ -13,15 +13,42 @@ import urllib.parse,urllib.request
 from pathlib import Path
 from verify_nine_exact_original_full_files import fullporner,req
 LIMIT=1_500_000_000
+def short_selected_source():
+ from verify_fullporner_short_publisher_original import (
+    PUBLISHER,Listings,site,inspect)
+ listing=Listings()
+ listing.feed(site(PUBLISHER))
+ candidates=[]
+ for raw in listing.pages:
+  u=urllib.parse.urlsplit(urllib.parse.urljoin(PUBLISHER,raw))
+  if u.scheme=="https" and u.hostname in ("fullporner.com","www.fullporner.com") and (
+      __import__("re").fullmatch(r"/watch/[a-fA-F0-9]{24}/?",u.path)):
+   if u.geturl() not in candidates:candidates.append(u.geturl())
+  if len(candidates)>=12:break
+ assert candidates,"No actual official publisher watch links"
+ with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+  valid=[x for x in pool.map(inspect,candidates) if "bytes" in x]
+ small=sorted((v for v in valid if 1_000_000<v["bytes"]<120_000_000),
+     key=lambda a:a["bytes"])
+ assert small,("No selected short full original",len(valid))
+ x=small[0]
+ print(json.dumps({"stage":"ACTUAL_SHORT_SELECTED_WATCH",
+   "selected_id":x["selected_id"],"quality":x["quality"],
+   "selected_original_bytes":x["bytes"],
+   "publisher_watch_path":x["selected"]}),flush=True)
+ return {"provider":"fullporner","selected_id":x["selected_id"],
+     "quality":x["quality"],"source":x["source"],"referer":x["referer"]}
+
 def main():
  cli=argparse.ArgumentParser()
  cli.add_argument("--workers",type=int,default=8)
  cli.add_argument("--chunk-mb",type=int,default=8)
  cli.add_argument("--max-seconds",type=int,default=430)
+ cli.add_argument("--short-published",action="store_true")
  o=cli.parse_args()
  assert o.workers in range(1,13)
  assert o.chunk_mb in range(1,17)
- selected=fullporner()
+ selected=short_selected_source() if o.short_published else fullporner()
  media=selected["source"];referer=selected["referer"]
  with urllib.request.urlopen(req(media,referer,"bytes=0-255"),timeout=28) as response:
   assert response.status==206
