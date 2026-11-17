@@ -44,7 +44,10 @@ internal object PornhubOriginalSource {
         if(uri.scheme!="https" || uri.port!=-1 ||
             uri.userInfo!=null || uri.fragment!=null)return false
         val h=uri.host.orEmpty().lowercase(Locale.ROOT)
-        if(h!="em-h.phncdn.com")return false
+        // Real selected 2026-11-17 watch publishes hm-h.phncdn.com,
+        // not only the historically observed em-h host. Permit ONLY these
+        // exact publisher CDN hosts, never arbitrary *.phncdn.com.
+        if(h !in setOf("em-h.phncdn.com","hm-h.phncdn.com"))return false
         return uri.path.orEmpty().matches(
             Regex("""(?i)^/[A-Za-z0-9_./\-]{12,700}\.m3u8$""")) &&
             !FullLengthVideoPolicy.isExplicitPreview("",url)
