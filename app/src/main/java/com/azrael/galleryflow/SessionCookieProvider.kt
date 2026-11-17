@@ -33,7 +33,11 @@ class SessionCookieProvider:ContentProvider() {
         if(method=="is_site_connected")return Bundle().apply{
             putBoolean("connected",connected)
         }
-        if(!connected)return Bundle()
+        // Archivebate's exactly selected public Mixdrop player is not a
+        // private login/session read. Agent 2 runs in an isolated process,
+        // so the previous blanket login gate rejected every public recorded
+        // watch before reaching the verified publisher player. The next
+        // branch still accepts ONLY ArchivebateSelectedMedia.isSelectedEmbed.
         if(method=="resolve_archivebate_selected"){
             val embed=extras?.getString("embed").orEmpty()
             // Read only the user-selected watch page's own published player.
@@ -51,6 +55,7 @@ class SessionCookieProvider:ContentProvider() {
                         it.message.orEmpty().take(180))}
             }
         }
+        if(!connected)return Bundle()
         if(method=="read_site_html") {
             // Connected browser verification can only be resumed in the main
             // process, which owns the login's WebView cookie jar. Binder has
