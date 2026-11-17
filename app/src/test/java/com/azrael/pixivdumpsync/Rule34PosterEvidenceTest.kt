@@ -53,6 +53,7 @@ class Rule34PosterEvidenceTest {
         val ua="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
         val doc=Jsoup.connect(page).userAgent(ua).timeout(20_000).get()
         val url=Rule34PosterEvidence.selectedFlashvarsPoster(page,doc.outerHtml())
+            ?:error("Selected publisher did not expose a matching player preview")
         assertEquals("Live selected poster must match video ID",poster,url)
         val conn=URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout=12_000
