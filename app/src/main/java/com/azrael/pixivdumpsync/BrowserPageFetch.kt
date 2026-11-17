@@ -37,8 +37,15 @@ object BrowserPageFetch {
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
+        val selectedPornhub=host=="pornhub.com" &&
+            uri.path=="/view_video.php" &&
+            uri.rawQuery.orEmpty().split('&').count{
+                it.startsWith("viewkey=") &&
+                    it.removePrefix("viewkey=")
+                        .matches(Regex("[A-Za-z0-9_-]{5,50}"))
+            }==1
         return uri.scheme=="https" && uri.userInfo==null &&
-            uri.port==-1 && host in publicBrowserHosts
+            uri.port==-1 && (host in publicBrowserHosts || selectedPornhub)
     }
     fun html(context:Context,url:String,playerReferer:String?=null):String {
         com.asterion.videoflow.NetworkRoute.requireVpn(context,url)
@@ -88,7 +95,7 @@ object BrowserPageFetch {
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
-            "roshy.tv","rule34video.com",
+            "roshy.tv","rule34video.com","pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com")
         val selectedPlayerPage=selectedPlayerHost && (
@@ -371,6 +378,28 @@ object BrowserPageFetch {
                                         '"></div>':'';
                                 })():'';
                             const currentPath=location.pathname||'';
+                            // Pornhub's real selected watch publishes one
+                            // flashvars_<id> object, not an HTML5 video[src].
+                            // Keep only the first-party selected player
+                            // configuration; never serialize ads, suggested
+                            // video cards, tokens from unrelated sites, or
+                            // an unverified external player.
+                            if(publisher==='pornhub.com' &&
+                                currentPath==='/view_video.php' &&
+                                /^[A-Za-z0-9_-]{5,50}$/.test(
+                                    new URLSearchParams(location.search).get('viewkey')||'')){
+                                const names=Object.keys(window).filter(k=>
+                                    /^flashvars_[A-Za-z0-9_]{1,72}$/.test(k) &&
+                                    window[k] && Array.isArray(
+                                        window[k].mediaDefinitions));
+                                if(names.length===1){
+                                    const data=JSON.stringify(window[names[0]]);
+                                    if(data && data.length<350000)
+                                        return '<html><script>var '+names[0]+
+                                            ' = '+data.replace(/</g,'\\u003c')+
+                                            ';</script></html>';
+                                }
+                            }
                             const embeds=[...document.querySelectorAll(
                                 'iframe[src]')].filter(el=>{
                                 let u;
@@ -505,6 +534,9 @@ object BrowserPageFetch {
                                 } else if(host=="rule34video.com") {
                                     com.asterion.videoflow.Rule34VideoOriginalSource
                                         .parse(page,url).isEmpty()
+                                } else if(host=="pornhub.com") {
+                                    !page.contains("flashvars_") ||
+                                        !page.contains("mediaDefinitions")
                                 } else !Regex("""<video\s+src="https://[^"]+""")
                                     .containsMatchIn(page)) ||
                                     (host in setOf("hentaibros.net","3dhentaix.com") &&
