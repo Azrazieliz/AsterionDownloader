@@ -24,7 +24,7 @@ class WorkingVideoProviderFreezeTest {
         "FreePornVideosOriginalSource.kt" to "184e349e1b97800746578f79aa2bc1c9250fdeaa"
     )
     private fun sourceFile(name:String):File {
-        val cwd=File(System.getProperty("user.dir"))
+        val cwd=File(System.getProperty("user.dir") ?: ".")
         val module=if(File(cwd,"src/main/java").isDirectory)cwd
             else File(cwd,"app")
         return File(module,"src/main/java/com/asterion/videoflow/$name")
