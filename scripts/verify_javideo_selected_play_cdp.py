@@ -146,6 +146,46 @@ def main():
             "playerSetup":r"player\s*\.\s*setup","source":r"source",
             "csrf":r"csrf|nonce","encryption":r"encrypt|decrypt|CryptoJS"
          }.items()}}),flush=True)
+       # Inspect ONLY the exact first-party player selected by the
+       # publisher's actual Play control, after its JS initializes.
+       ws.send(json.dumps({"id":170,"method":"Page.navigate",
+          "params":{"url":first_party[0]}}))
+       for _ in range(12):
+        msg=json.loads(ws.recv(timeout=6))
+        if msg.get("id")==170:break
+       rendered={}
+       for iteration in range(24):
+        rendered=evaluate(ws,220+iteration,r"""(() => {
+          const players=[...document.querySelectorAll('video')];
+          const loaded=players.map(v=>{
+            if(v.paused){v.muted=true;
+              try{const p=v.play();if(p&&p.catch)p.catch(()=>{});}catch(e){}
+            }
+            return {src:v.currentSrc||v.src||
+                v.querySelector('source[src]')?.src||'',
+              ready:v.readyState,
+              duration:Number.isFinite(v.duration)?Math.round(v.duration):null};
+          });
+          return {host:location.hostname,pathname:location.pathname,
+            ready:document.readyState,videoCount:players.length,
+            sources:loaded,frameCount:document.querySelectorAll('iframe').length,
+            challenge:/verify you are human|captcha|access denied/i
+              .test(document.body?.innerText?.slice(0,2000)||'')};
+        })()""") or {}
+        if rendered.get("challenge") or any(
+           x.get("src") for x in rendered.get("sources",[])):break
+        time.sleep(.8)
+       sources=rendered.get("sources",[])
+       print(json.dumps({"stage":"RENDERED_FIRST_PARTY_SELECTED_PLAYER",
+        "host":rendered.get("host"),"page_kind":rendered.get("pathname","").split("/")[:2],
+        "ready":rendered.get("ready"),"video_count":rendered.get("videoCount"),
+        "iframe_count":rendered.get("frameCount"),
+        "challenge":rendered.get("challenge"),
+        "sources":[{"host":urllib.parse.urlsplit(x.get("src","")).hostname,
+            "scheme":urllib.parse.urlsplit(x.get("src","")).scheme,
+            "path_ext":urllib.parse.urlsplit(x.get("src","")).path.rsplit(".",1)[-1][-10:],
+            "ready":x.get("ready"),"duration_s":x.get("duration")}
+            for x in sources[:4]]}),flush=True)
      except Exception as exc:
       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
        "error_class":type(exc).__name__}),flush=True)
