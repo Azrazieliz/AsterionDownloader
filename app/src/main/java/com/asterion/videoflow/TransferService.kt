@@ -887,7 +887,7 @@ object VideoEngine {
         // Prewarm the existing extractor BEFORE acquiring a short-lived
         // signed Jav Guru/Pornhub HLS URL. Avoid a Python/yt-dlp startup
         // pause between publisher discovery and the first media fragment.
-        if(userRequested && VideoHlsDispatch.needsRuntimeBeforeSource(item.url)){
+        if(VideoHlsDispatch.needsRuntimeBeforeSource(item.url)){
             VideoTransferJournal.record(context,item.id,"signed_hls_runtime")
             inspectPublisher{ensureExtractor(context)}
             signedRuntimePrimed=true
