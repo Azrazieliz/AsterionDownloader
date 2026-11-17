@@ -48,6 +48,6 @@ def main():
         "first_ftyp":chunkA[4:8]==b"ftyp",
         "overlap_matches":stable,"first_host":a["host"],"second_host":b["host"],
         "bytes_read":len(chunkA)+len(chunkB),"classification":
-        "RANGE_RESUME_VERIFIED_NOT_FULL_FILE" if stable else "RANGE_RESUME_FAILED"},flush=True))
+        "RANGE_RESUME_VERIFIED_NOT_FULL_FILE" if stable else "RANGE_RESUME_FAILED"}),flush=True)
     return 0 if stable and a["status"]==206 and b["status"]==206 and chunkA[4:8]==b"ftyp" else 2
 if __name__=="__main__":raise SystemExit(main())
