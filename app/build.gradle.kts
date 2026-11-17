@@ -214,6 +214,7 @@ val verifyFrozenVideoProviders by tasks.registering {
     doLast {
         val expected = linkedMapOf(
             "ArchivebateSelectedMedia.kt" to "7380651fe85ba193c6de3ca891622291a7cca6d8",
+        "RoshyPackedOriginalSource.kt" to "a63a72b58f0ed1c3d0c78790e9e9f5b49dab8e83",
         "FullPornerOriginalSource.kt" to "312878511c2b3fbb2be47e571d6cba5de8fbcd67",
             "FullPornerParallelOriginal.kt" to "598c7392829a599093b0bd20b1a46ed63051446b",
             "ThreeDHentaiSignedOriginal.kt" to "9bff43bbdf5d29479e4ac41636b21a2c3b159fa7",
