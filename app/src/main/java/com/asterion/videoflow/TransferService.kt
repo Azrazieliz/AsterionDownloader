@@ -610,7 +610,20 @@ object VideoEngine {
                               verifiedFirstPartyMp4:Boolean=false) {
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
-            val selected=connectedCookies?.takeIf{it.isFile&&it.length()>0}
+            // A user can connect the selected external video host (VOE,
+            // Streamtape or the first-party JAVIDEO player) independently
+            // of the publisher. Its own session must be used by yt-dlp;
+            // using only the watch-page's cookies cannot open that host.
+            // Existing Netscape cookie entries remain scoped to their host.
+            val selectedHostCookies=if(SiteSession.bound(context,link) &&
+                    runCatching {
+                        java.net.URI(item.url).host.orEmpty().lowercase() !=
+                            java.net.URI(link).host.orEmpty().lowercase()
+                    }.getOrDefault(false))
+                AuthorizedVideoSession.temporaryCookies(context,link)
+                else null
+            val selected=selectedHostCookies?.takeIf{it.isFile&&it.length()>0}
+                ?:connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
             val proxy=NetworkRoute.extractorProxy(context,item.url)
             val quality=prefs.getString("quality","best[ext=mp4]/best")
@@ -629,7 +642,7 @@ object VideoEngine {
                             java.net.URI(link).host,ignoreCase=true)
                     }.getOrDefault(false)
                     NativeMediaDownloader.download(link,referer,parent,
-                        cookieHeader=if(sameHost)
+                        cookieHeader=if(SiteSession.bound(context,link))
                             SiteSession.cookie(context,link) else null,
                         filenameStem=item.title+" ["+item.id+"]",
                         proxy=NetworkRoute.javaProxy(context,item.url),
@@ -789,6 +802,9 @@ object VideoEngine {
                 // Do not retain cancelled pending FutureTasks forever.
                 VideoExecutionPools.discardCancelled(
                     if(native)nativeExecutor else transferExecutor)
+                // The embedded player session is only needed while its
+                // exact extraction is active; never persist it on disk.
+                selectedHostCookies?.delete()
             }
         }
         fun preflight(link:String,referer:String?=null):
