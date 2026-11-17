@@ -96,6 +96,7 @@ def main():
             "http_headers":{"User-Agent":UA,"Referer":episode},
             "socket_timeout":22,"retries":1,"fragment_retries":1,
             "skip_unavailable_fragments":False,"concurrent_fragment_downloads":2,
+            "hls_use_mpegts":True,"merge_output_format":"mkv",
             "nopart":False,"overwrites":False}
         with yt_dlp.YoutubeDL(opts) as downloader:
             metadata=downloader.extract_info(hls,download=False)
@@ -125,9 +126,18 @@ def main():
                 "video_height":chosen["height"],
                 "audio_track_count":len(audios),
                 "format_id_is_publisher_listed":True}),flush=True)
-        with yt_dlp.YoutubeDL({**opts,"format":format_id,
-                "ignore_no_formats_error":False}) as transfer:
-            transfer.extract_info(hls,download=True)
+        try:
+            with yt_dlp.YoutubeDL({**opts,"format":format_id,
+                    "ignore_no_formats_error":False}) as transfer:
+                transfer.extract_info(hls,download=True)
+        except Exception:
+            staged=[{"extension":f.suffix.lower(),"bytes":f.stat().st_size}
+                for f in destination.iterdir() if f.is_file()]
+            print(json.dumps({"provider":"hentaihaven",
+                "stage":"FAILED_CONVERSION_STAGING_FACTS",
+                "staging_files":staged[:10],
+                "full_file_verified":False}),flush=True)
+            raise
         files=[f for f in destination.iterdir()
             if f.is_file() and f.suffix.lower() in (".mp4",".mkv",".ts",".webm")]
         if len(files)!=1:raise RuntimeError("Selected original did not yield exactly one final media")
