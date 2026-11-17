@@ -44,4 +44,12 @@ try:
   "external_iframes":len(re.findall(r"<iframe",markup,re.I)),
   "gate":bool(re.search(r"just a moment|verify you are human|cf-turnstile",markup[:20000],re.I)),
   "browser_error":bool(re.search(r"ERR_CONNECTION|This site can.t be reached|ERR_NAME_NOT_RESOLVED",markup,re.I))}),flush=True)
+ if proc.returncode!=0 or len(markup)<500:
+  # Edge exit=0 with empty stdout is NOT a functioning selected media page.
+  # Previous diagnostic silently labelled this as success. Keep an explicit
+  # nonzero status so live acceptance cannot pass on a blank renderer.
+  print(json.dumps({"provider":"HelloPorn",
+   "status":"SELECTED_VOE_RENDER_UNVERIFIED",
+   "edge_exit":proc.returncode,"dom_bytes":len(markup)}),flush=True)
+  raise SystemExit(3)
 finally:shutil.rmtree(folder,ignore_errors=True)
