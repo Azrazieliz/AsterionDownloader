@@ -64,8 +64,10 @@ object VideoEngine {
         }
     }
     fun pauseVideo(context:Context,id:Long){
-        VideoDb(context).use{it.pause(id)}
-        signalCancellation(context,id)
+        // Only cancel if an eligible active/queued row was actually paused.
+        // A stale button must not interrupt a completed or dismissed video.
+        val changed=VideoDb(context).use{it.pause(id)}
+        if(changed)signalCancellation(context,id)
     }
     fun cancelVideo(context:Context,id:Long):Boolean{
         val changed=VideoDb(context).use{it.dismiss(id)}
@@ -79,9 +81,13 @@ object VideoEngine {
         return result
     }
     fun resumeVideo(context:Context,id:Long){
-        stopRequests.remove(id)
-        VideoDb(context).use{it.retry(id)}
-        launch(context,false)
+        // A tap on Running/Saved is NOT a retry: do not clear a live
+        // worker's stop signal, steal its lease or start a second writer.
+        val changed=VideoDb(context).use{it.retry(id)}
+        if(changed){
+            stopRequests.remove(id)
+            launch(context,false)
+        }
     }
     const val CHANNEL="videoflow-transfers"
     fun makeChannel(context: Context) {
