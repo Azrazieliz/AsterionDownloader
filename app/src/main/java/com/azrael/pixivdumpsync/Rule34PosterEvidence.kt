@@ -78,7 +78,7 @@ internal object Rule34PosterEvidence {
     fun readPoster(context:Context,page:String):String? {
         if(Rule34VideoOriginalSource.videoId(page)==null)return null
         val response=Jsoup.connect(page)
-            .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36")
+            .userAgent(com.asterion.videoflow.NativeMediaDownloader.USER_AGENT)
             .header("Accept","text/html,application/xhtml+xml")
             .ignoreHttpErrors(true).followRedirects(true)
             .timeout(7000).maxBodySize(900000)
