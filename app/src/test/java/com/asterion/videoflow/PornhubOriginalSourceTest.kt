@@ -35,6 +35,18 @@ class PornhubOriginalSourceTest {
         assertEquals(hls,results[0].url)
         assertEquals(240,results[1].height)
     }
+    @Test fun realObservedHmHPublisherCdnIsAcceptedWithoutBroadHostTrust(){
+        val observed="https://hm-h.phncdn.com/videos/abc123/sample_1080.m3u8?token=selected"
+        val sources=PornhubOriginalSource.published(selected,published(observed))
+        assertEquals(2,sources.size)
+        assertEquals(observed,sources.first().url)
+        val unrelated="https://hm-h.phncdn.com.evil.example/videos/abc123/sample_1080.m3u8"
+        assertEquals(1,PornhubOriginalSource.published(
+            selected,published(unrelated)).size)
+        val unverified="https://unknown.phncdn.com/videos/abc123/sample_1080.m3u8"
+        assertEquals(1,PornhubOriginalSource.published(
+            selected,published(unverified)).size)
+    }
     @Test fun invalidWatchRouteAndUnrelatedAdOrHostAreRejected(){
         assertTrue(PornhubOriginalSource.published(
             "https://www.pornhub.com/",published()).isEmpty())
