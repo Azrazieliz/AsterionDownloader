@@ -13,6 +13,7 @@ import urllib.parse
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from verify_javguru_exact_selected_hls import Doc, get, value
+from verify_roshy_selected_packed_hls import Script as PackerScript, deobfuscate
 
 WATCH=("https://jav.guru/1077276/mxgs-1452-meruty-kiss-drooling-saliva-melting-french-kiss-full-course-sato-meru/")
 PREFERRED=["VO","SB","DD","JK"]
@@ -124,8 +125,33 @@ def run():
                 "mp4_literals":markup.lower().count(".mp4"),
                 "packed_jwplayer":markup.count("eval(function(p,a,c,k,e,d)"),
                 "external_iframes":len(re.findall(r"<iframe\b",markup,re.I))}
+            details={}
+            if flags["packed_jwplayer"]:
+                scripts=PackerScript();scripts.feed(markup)
+                decoded=[deobfuscate(x) for x in scripts.raw
+                    if "eval(function(p,a,c,k,e,d)" in x]
+                candidates=[]
+                for body in decoded:
+                    if not body or "jwplayer" not in body:continue
+                    for entry in re.finditer(
+                        r"""(?i)\b(?:file|src)\s*:\s*["'](https?://[^"'<>\\\s]{8,2500})["']""",
+                        body):
+                        link=entry.group(1).replace("\\/","/")
+                        parsed=urllib.parse.urlsplit(link)
+                        if (parsed.scheme=="https" and parsed.hostname and
+                            parsed.hostname not in ("googletagmanager.com",
+                                "doubleclick.net","a.pemsrv.com") and
+                            not re.search(r"(?:preview|teaser|sample|trailer)",parsed.path,re.I)):
+                            candidates.append(link)
+                candidates=list(dict.fromkeys(candidates))
+                details={"packed_decoded":sum(bool(x) for x in decoded),
+                    "selected_media_candidates":len(candidates),
+                    "media_shapes":[{"host":urllib.parse.urlsplit(x).hostname,
+                        "ext":urllib.parse.urlsplit(x).path.rsplit(".",1)[-1][:8],
+                        "signed":bool(urllib.parse.urlsplit(x).query)}
+                        for x in candidates[:4]]}
             print(json.dumps({"server":tag,"status":"PUBLISHED_HOSTER_HTML_ONLY",
-                "final_host":host,"html_bytes":len(markup),**flags}),flush=True)
+                "final_host":host,"html_bytes":len(markup),**flags,**details}),flush=True)
             accepted+=1
         except Exception as error:
             print(json.dumps({"server":tag,"status":"SELECTED_PLAYER_NOT_RESOLVED",
