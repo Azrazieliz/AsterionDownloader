@@ -10,6 +10,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.net.URI
+import java.net.URLDecoder
+import org.jsoup.Jsoup
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -74,10 +76,108 @@ internal object ArchivebateSelectedMedia {
      */
     fun isSelectedMedia(raw:String):Boolean {
         val u=runCatching{URI(raw)}.getOrNull()?:return false
-        return u.scheme=="https" && u.userInfo==null &&
-            u.host.orEmpty().lowercase(Locale.ROOT)=="cdn.freefile.io" &&
-            Regex("""(?i)\.(mp4|m4v)(?:$|/)""").containsMatchIn(u.path.orEmpty()) &&
+        val hostname=u.host.orEmpty().lowercase(Locale.ROOT)
+        // Real selected Mixdrop source (HTTP 206, MP4 ftyp) is on
+        // gfve4dog1.mxcontent.net, not the older cdn.freefile.io host.
+        // Require a proper mxcontent subdomain and exact MP4 path; an
+        // unrelated advertising host or parent-page preview is not media.
+        val publisherCdn=hostname=="cdn.freefile.io" ||
+            Regex("""^[a-z0-9]{6,32}\.mxcontent\.net$""").matches(hostname)
+        return u.scheme=="https" && u.userInfo==null && u.port==-1 &&
+            u.fragment==null && publisherCdn &&
+            Regex("""(?i)\.(mp4|m4v)$""").containsMatchIn(u.path.orEmpty()) &&
             NativeMediaDownloader.isDirectMediaUrl(raw)
+    }
+
+    private fun assigned(source:String,key:String):String? {
+        val anchors=Regex("""\bMDCore\."""+Regex.escape(key)+"""\s*=\s*""")
+            .findAll(source).take(2).toList()
+        if(anchors.size!=1)return null
+        return runCatching {
+            JSONTokener(source.substring(anchors.single().range.last+1))
+                .nextValue() as? String
+        }.getOrNull()
+    }
+
+    /**
+     * Public selected Mixdrop /e/<id> contains one P.A.C.K.E.R script:
+     * MDCore.wurl="//gfve4dog1.mxcontent.net/...mp4?...";
+     * MDCore.referrer="https%3A%2F%2Farchivebate.com%2Fwatch%2F16458050"
+     * Both values come from the same exact selected player. Never accept
+     * unrelated scripts, previews, other player IDs or arbitrary hosters.
+     */
+    internal fun fromDecoded(watch:String,embed:String,canonical:String,
+                             decoded:String):String? {
+        if(!isSelectedEmbed(watch,embed) ||
+            !selectedRedirect(embed,canonical) ||
+            decoded.length !in 100..50_000 ||
+            !decoded.contains("MDCore.wurl") ||
+            !decoded.contains("MDCore.referrer"))
+            return null
+        val rawRef=assigned(decoded,"referrer")?:return null
+        val ref=runCatching{URLDecoder.decode(rawRef,"UTF-8")}
+            .getOrNull()?:return null
+        if(ref!=watch)return null
+        val name=assigned(decoded,"vfile")?:return null
+        if(!name.matches(Regex("""[A-Za-z0-9._\-]{4,180}\.mp4""")))
+            return null
+        val raw=assigned(decoded,"wurl")?:return null
+        val url=runCatching{URI(canonical).resolve(raw).normalize()}
+            .getOrNull()?:return null
+        if(!isSelectedMedia(url.toString()))return null
+        // Older public selected embeds use cdn.freefile.io; the verified
+        // current Mixdrop player has mxcontent.net and an opaque signed URL.
+        return url.toASCIIString()
+    }
+
+    internal fun publishedPlayerHtml(watch:String,embed:String,
+                                     canonical:String,html:String):String? {
+        if(!isSelectedEmbed(watch,embed) ||
+            !selectedRedirect(embed,canonical) ||
+            html.length !in 150..1_500_000)return null
+        val page=Jsoup.parse(html,canonical)
+        val media=LinkedHashSet<String>()
+        for(script in page.select("script:not([src])").take(70)){
+            val body=script.data().ifBlank{script.html()}
+            if(!body.contains("eval(function(p,a,c,k,e,d)"))continue
+            val decoded=RoshyPackedOriginalSource.unpack(body)?:continue
+            val link=fromDecoded(watch,embed,canonical,decoded)?:continue
+            media.add(link)
+        }
+        // Two original players would not prove the user's selected scene.
+        return media.singleOrNull()
+    }
+
+    /** Obtain only the selected canonical /e/<id> HTML through a bounded
+     * publisher-authorized HTTPS GET. No script execution or ad navigation.
+     * If a site requires interactive playback the existing WebView remains
+     * the fallback; do not weaken its session or access checks.
+     */
+    private fun publicPackedPlayer(context:Context,watch:String,
+                                   embed:String):String? {
+        if(!isSelectedEmbed(watch,embed))return null
+        fun load(url:String):org.jsoup.Connection.Response =
+            Jsoup.connect(url)
+                .userAgent(NativeMediaDownloader.USER_AGENT)
+                .referrer(watch)
+                .header("Accept-Encoding","identity")
+                .ignoreHttpErrors(true).followRedirects(false)
+                .timeout(17_000).maxBodySize(1_500_000)
+                .apply { NetworkRoute.javaProxy(context,watch)
+                    ?.let{proxy(it)} }.execute()
+        val first=load(embed)
+        val source=if(first.statusCode() in 300..399) {
+            val location=first.header("Location")
+                ?.takeIf{it.isNotBlank()}?:return null
+            val resolved=runCatching{
+                URI(embed).resolve(location).normalize().toString()
+            }.getOrNull()?:return null
+            if(!selectedRedirect(embed,resolved))return null
+            resolved to load(resolved)
+        }else embed to first
+        if(source.second.statusCode()!=200)return null
+        return publishedPlayerHtml(watch,embed,source.first,
+            source.second.body())
     }
 
     /** VideoFlow workers use isolated processes. Browser inspection must run
@@ -118,6 +218,12 @@ internal object ArchivebateSelectedMedia {
         check(Looper.myLooper()!=Looper.getMainLooper()){
             "Player inspection must start off Android's UI thread"
         }
+        // Prefer publisher-attested public MDCore.wurl directly over an
+        // unpredictable WebView video.currentSrc probe. Live selected MXCDN
+        // responded HTTP 206 / video/mp4 with MP4 ftyp. The WebView remains
+        // a fallback when the public player is genuinely unavailable.
+        runCatching{publicPackedPlayer(context,watch,embed)}
+            .getOrNull()?.let{return it}
         // No artificial account requirement for genuinely public players.
         // Authenticated pages still require their valid browser session
         // upstream before the exact selected embed can be discovered.
