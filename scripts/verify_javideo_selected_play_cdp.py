@@ -114,6 +114,28 @@ def main():
         for x in frames[:4]],
       "exact_selected_streamtape_count":len(set(exact))}),flush=True)
     if found.get("visibleGate"):return 2
+    first_party=list(dict.fromkeys(
+      x["uri"] for x in frames if
+      urllib.parse.urlsplit(x["uri"]).hostname=="play.javideo.net" and
+      not x.get("ad")))
+    if len(first_party)==1:
+     try:
+      req=urllib.request.Request(first_party[0],headers={
+       "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36",
+       "Referer":SELECTED,"Accept-Encoding":"identity"})
+      with urllib.request.urlopen(req,timeout=12) as response:
+       html=response.read(850000).decode("utf8","replace")
+       nested=re.findall(r"""<iframe[^>]+src=["']([^"'<>]{5,2000})""",html,re.I)
+       nested_hosts=sorted(set(urllib.parse.urlsplit(
+        urllib.parse.urljoin(first_party[0],x)).hostname for x in nested))
+       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
+         "http":response.status,"bytes":len(html),"iframe_hosts":nested_hosts[:8],
+         "video_tags":len(re.findall(r"<video\\b",html,re.I)),
+         "hls_literals":len(re.findall(r"\\.m3u8",html,re.I)),
+         "mp4_literals":len(re.findall(r"\\.mp4",html,re.I))}),flush=True)
+     except Exception as exc:
+      print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
+       "error_class":type(exc).__name__}),flush=True)
     if len(set(exact))==1:
      print(json.dumps({"status":"EXACT_STREAMTAPE_IFRAME_FOUND_NOT_FULL_MEDIA"}),flush=True)
      return 0
