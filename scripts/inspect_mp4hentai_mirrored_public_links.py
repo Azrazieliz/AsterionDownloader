@@ -94,8 +94,13 @@ with urllib.request.urlopen(r,timeout=25) as response:
         for a in front.links:
          label=a["text"].strip()
          if re.search(r"download|mirror|upfile|file|host|click|direct|go to",label,re.I):
+          url=urllib.parse.urlsplit(urllib.parse.urljoin(dest.geturl(),a["href"]))
+          segments=[v for v in url.path.split("/") if v]
           interesting.append({"label":label[:55],"id":a["id"][:45],
              "class":a["class"][:65],"route":shape(a["href"]),
+             "first_route_segment":segments[0][:35] if segments else "",
+             "segment_count":len(segments),
+             "query_keys":sorted(urllib.parse.parse_qs(url.query))[:6],
              "onclick":bool(a["onclick"])})
         print(json.dumps({"stage":"PUBLISHER_SELECTED_JS_LINKS",
           "browser_exit":result.returncode,
