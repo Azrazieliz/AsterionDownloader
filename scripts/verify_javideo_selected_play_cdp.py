@@ -167,6 +167,15 @@ def main():
        rendered={}
        for iteration in range(24):
         rendered=evaluate(ws,220+iteration,r"""(() => {
+          const root=document.querySelector(
+            '#player,.video-player,.vjs-player,.player-container,video.video-js');
+          const control=root?.querySelector('.vjs-big-play-button,'+
+            'button[aria-label="Play"],button[title="Play"]') ||
+            (root?.tagName?.toLowerCase()==='video'?
+              root.parentElement?.querySelector('.vjs-big-play-button'):null);
+          if(control && !control.dataset.asterionProbeActivated) {
+            control.dataset.asterionProbeActivated='true';control.click();
+          }
           const players=[...document.querySelectorAll('video')];
           const loaded=players.map(v=>{
             if(v.paused){v.muted=true;
