@@ -2,7 +2,7 @@
 """Read-only, owner-approved VideoFlow queue/events via existing Asterion Control.
 Never prints media URLs, titles, cookies or network tokens.
 """
-import json,os,sys
+import json,os,sys,uuid
 from pathlib import Path
 control_root=Path(os.environ.get("ASTERION_CONTROL_PYTHON_ROOT",r"D:\AsterionControlRelease"))
 if not (control_root/"asterion_remote"/"phone_bridge.py").is_file():
@@ -15,7 +15,7 @@ for action,payload in (
     ("diagnostics.events",{"limit":20})
 ):
     item={"package":package,"action":action,
-          "request_id":"freeze20261117"+action.replace(".","")+"a1",
+          "request_id":"freeze"+uuid.uuid4().hex,
           "payload":payload}
     try:
         response=request("/app-bridge/invoke","POST",item,timeout=15).json()
