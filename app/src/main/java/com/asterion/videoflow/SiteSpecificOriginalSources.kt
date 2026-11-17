@@ -286,7 +286,20 @@ internal object SiteSpecificOriginalSources {
      * to the final real embed. Never give the watch page or ad to Python.
      */
     internal fun javGuru(context:Context,doc:Document,selected:String):List<Source>{
-        val streams=JavGuruOriginalSource.published(selected,doc.outerHtml())
+        val initial=JavGuruOriginalSource.published(selected,doc.outerHtml())
+        // Some Android HTTP responses provide a 200 shell without the real
+        // selected WordPress STREAM shortcode/inline iframe_url config. The
+        // site's own WebView renders that exact chosen post using its normal
+        // authorized session. Inspect it only when static parsing found zero
+        // actual selected controls; never use the advertising iframe.
+        val streams=initial.ifEmpty {
+            if(!BrowserPageFetch.publicEligible(selected) &&
+                !SiteSession.bound(context,selected))emptyList()
+            else runCatching {
+                JavGuruOriginalSource.published(selected,
+                    BrowserPageFetch.html(context,selected))
+            }.getOrDefault(emptyList())
+        }
         val found=LinkedHashMap<String,Source>()
         for(stream in streams.take(3)){
             val wrapper=runCatching{
