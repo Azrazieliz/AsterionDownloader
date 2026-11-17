@@ -1,7 +1,13 @@
 name: Asterion Downloader one-build source preflight (no APK)
 on:
   push:
-    branches: [work/downloader-single-build-staging-20261112]
+    branches:
+      - work/downloader-single-build-staging-20261112
+      - repair/downloads-nine-providers-backfill-diagnostics-20261116
+    paths:
+      - '.github/workflows/downloader-one-build-preflight.yml'
+      - 'app/src/**'
+      - 'app/build.gradle.kts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,4 +25,4 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Compile source and run unit tests without assembling an APK
-        run: gradle testPilotUnitTest testAcceptanceUnitTest --stacktrace --console=plain
+        run: gradle :app:verifyFrozenVideoProviders testPilotUnitTest testAcceptanceUnitTest --stacktrace --console=plain
