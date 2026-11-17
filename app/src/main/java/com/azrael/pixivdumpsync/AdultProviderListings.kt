@@ -19,7 +19,7 @@ internal object AdultProviderListings {
     }.getOrDefault("")
 
     fun owns(base:String,area:String):Boolean =
-        area=="ADULT" && host(base) in hosts
+        area in setOf("ADULT","VIDEOS","HENTAI") && host(base) in hosts
 
     internal fun isListingPage(source:String,candidate:String):Boolean {
         if(!SourceIndexParser.safe(candidate) ||
