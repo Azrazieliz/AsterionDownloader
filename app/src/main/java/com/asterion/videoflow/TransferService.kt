@@ -605,6 +605,7 @@ object VideoEngine {
         // embedded Python YoutubeDL API with typed options instead. The
         // staged bytes are measured while the future is executing, not inferred
         // from a progress callback which can remain at zero indefinitely.
+        var signedRuntimePrimed=false
         fun executeControlled(link:String,referer:String?=null,
                               verifiedFirstPartyMp4:Boolean=false) {
             if(stopRequests.contains(item.id))
@@ -672,7 +673,9 @@ object VideoEngine {
                         return exit
                     }
                     fun typed():Int {
-                        ensureExtractor(context)
+                        // Do not recheck Python after fetching the short-lived
+                        // original playlist; source may expire before first byte.
+                        if(!signedRuntimePrimed)ensureExtractor(context)
                         if(manifest)VideoTransferJournal.record(
                             context,item.id,"selected_manifest_typed")
                         return EmbeddedYtDlpTransfer.download(
@@ -887,6 +890,7 @@ object VideoEngine {
         if(userRequested && VideoHlsDispatch.needsRuntimeBeforeSource(item.url)){
             VideoTransferJournal.record(context,item.id,"signed_hls_runtime")
             inspectPublisher{ensureExtractor(context)}
+            signedRuntimePrimed=true
         }
         val publisherOriginals=if(canInspectPublisherHtml &&
             PublisherOriginalExtractors.owns(item.url) &&
