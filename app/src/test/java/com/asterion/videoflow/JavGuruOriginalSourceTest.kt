@@ -107,4 +107,30 @@ class JavGuruOriginalSourceTest {
         assertFalse(JavGuruOriginalSource.selectedEmbed(
             "SB","http://streamhihi.com/e/d6e0h3sguz1b"))
     }
+    @Test fun currentOwnerPublishedRelayModesFollowSelectedWordpressTokenOnly(){
+        val selectedWrapper="https://jav.guru/searcho/?xd=2613a7577637338603566346f256"
+        val body="""<html><script>
+            window.cfg = {
+                cid: 'c19a2b5', base: 'https://jav.guru/searcho/',
+                rtype: 'MODE',
+                keys: ['data-c5b86','data-3297b','data-9f73a']
+            };
+            function activate_real_stream() {
+                var fullToken = part1 + part2 + part3;
+                var src = window.cfg.base+'?'+window.cfg.rtype+'r='+fullToken.rev();
+            }
+            </script>
+            <div id="c19a2b5" data-c5b86="2613a7577"
+                data-3297b="637338603" data-9f73a="566346f256"></div>
+            </html>"""
+        for(mode in listOf("x","t","h","o")){
+            val actual=JavGuruOriginalSource.nextIframe(
+                selectedWrapper,body.replace("MODE",mode))
+            assertEquals("https://jav.guru/searcho/?"+mode+
+                "r=652f6436653068337367757a3162",actual)
+        }
+        assertNull(JavGuruOriginalSource.nextIframe(
+            selectedWrapper,body.replace("MODE","z")))
+    }
+
 }
