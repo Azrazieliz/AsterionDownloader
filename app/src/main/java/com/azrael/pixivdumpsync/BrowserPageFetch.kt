@@ -257,9 +257,20 @@ object BrowserPageFetch {
                             // serialize that ad as the requested original.
                             if(selectedPlayerHost==='javideo.net'){
                                 const play=document.querySelector('#clickfakeplayer');
-                                if(play && !play.dataset.asterionActivated){
-                                    play.dataset.asterionActivated='true';
-                                    play.click();
+                                const selected=document.querySelector(
+                                    '.embed-responsive.player:not(.d-none) iframe[src]');
+                                if(play && !selected){
+                                    // The publisher Play widget sometimes starts
+                                    // before its own JS listener attaches. The
+                                    // original one-shot click left no selected
+                                    // iframe in 27s on a genuine live test.
+                                    const attempts=Number(play.dataset.asterionAttempts||0);
+                                    const last=Number(play.dataset.asterionLastClick||0);
+                                    if(attempts<3 && Date.now()-last>=3500){
+                                        play.dataset.asterionAttempts=String(attempts+1);
+                                        play.dataset.asterionLastClick=String(Date.now());
+                                        play.click();
+                                    }
                                 }
                             }
                             // Activate only the selected in-article player.
