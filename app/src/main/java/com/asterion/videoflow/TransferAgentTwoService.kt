@@ -13,7 +13,7 @@ class TransferAgentTwoService:Service(){
     @Volatile private var timedOut=false
     override fun onBind(intent:Intent?):IBinder?=null
 
-    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
+    @Synchronized override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
         if(timedOut){stopSelf();return START_NOT_STICKY}
         try{
             VideoEngine.makeChannel(this)
@@ -35,9 +35,15 @@ class TransferAgentTwoService:Service(){
         Thread({
             try{future.get()}catch(_:Exception){}
             finally{
-                if(active===future)active=null
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                // A second start may have replaced a just-finished future.
+                // An old waiter must never stop a newly active transfer job.
+                synchronized(this){
+                    if(active===future){
+                        active=null
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
             }
         },"videoflow-agent-two-lifecycle").start()
         return START_NOT_STICKY
