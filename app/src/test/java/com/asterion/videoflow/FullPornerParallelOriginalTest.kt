@@ -1,6 +1,12 @@
 package com.asterion.videoflow
 
-import com.sun.net.httpserver.HttpServer
+import java.io.Closeable
+import java.io.OutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.SocketException
+import java.util.Locale
+import kotlin.concurrent.thread
 import org.junit.Assert.*
 import org.junit.Test
 import java.net.InetSocketAddress
@@ -18,40 +24,77 @@ class FullPornerParallelOriginalTest {
             "ftyp".toByteArray(Charsets.US_ASCII).copyInto(it,4)
         }
 
-    private fun withServer(changedEtag:Boolean=false,
-        block:(String,MutableList<String>)->Unit) {
-        val received=CopyOnWriteArrayList<String>()
-        val server=HttpServer.create(InetSocketAddress("127.0.0.1",0),0)
-        val executor=Executors.newFixedThreadPool(4)
-        server.executor=executor
-        server.createContext("/selected.mp4"){request->
-            val range=request.requestHeaders.getFirst("Range").orEmpty()
-            received.add(range)
-            val parts=Regex("""bytes=(\d+)-(\d+)""").matchEntire(range)
-            if(parts==null){
-                request.sendResponseHeaders(400,-1)
-                request.close()
-            }else{
-                val start=parts.groupValues[1].toInt()
-                val end=parts.groupValues[2].toInt()
-                if(start<0 || end>=bytes.size || end<start){
-                    request.sendResponseHeaders(416,-1)
-                    request.close()
-                }else{
-                    val invalid=changedEtag && start>=4*1024*1024-64
-                    request.responseHeaders.add("Content-Type","video/mp4")
-                    request.responseHeaders.add("ETag",if(invalid)"\"v2\"" else "\"v1\"")
-                    request.responseHeaders.add("Content-Range",
-                        "bytes "+start+"-"+end+"/"+bytes.size)
-                    request.sendResponseHeaders(206,(end-start+1).toLong())
-                    val body=request.responseBody
-                    try{body.write(bytes,start,end-start+1)}finally{body.close()}
+    private data class Request(val headers:Map<String,String>) {
+        fun header(name:String)=headers[name.lowercase(Locale.ROOT)].orEmpty()
+    }
+    /** Same real localhost TCP fixture already used by
+     * ActualDownloadSimulationTest; com.sun.net.httpserver is not exposed
+     * by Android's JVM-unit-test compile SDK. */
+    private class Fixture(private val respond:(Request,OutputStream)->Unit):Closeable {
+        private val server=ServerSocket(0,16,InetAddress.getByName("127.0.0.1"))
+        private val stopped=AtomicBoolean(false)
+        val requests=CopyOnWriteArrayList<String>()
+        private val accepting=thread(name="asterion-fp-http",isDaemon=true) {
+            while(!stopped.get()){
+                val socket=try{server.accept()}catch(_:SocketException){break}
+                thread(isDaemon=true){
+                    socket.use {client->
+                        client.soTimeout=15_000
+                        val reader=client.getInputStream()
+                            .bufferedReader(Charsets.ISO_8859_1)
+                        if(reader.readLine()==null)return@use
+                        val headers=linkedMapOf<String,String>()
+                        while(true){
+                            val line=reader.readLine()?:break
+                            if(line.isBlank())break
+                            val p=line.indexOf(':')
+                            if(p>0)headers[line.substring(0,p).trim()
+                                .lowercase(Locale.ROOT)]=line.substring(p+1).trim()
+                        }
+                        val req=Request(headers)
+                        requests.add(req.header("Range"))
+                        runCatching{respond(req,client.getOutputStream())}
+                    }
                 }
             }
         }
-        server.start()
-        try{block("http://127.0.0.1:"+server.address.port+"/selected.mp4",received)}
-        finally{server.stop(0);executor.shutdownNow()}
+        fun url()="http://127.0.0.1:"+server.localPort+"/selected.mp4"
+        override fun close(){stopped.set(true);server.close();accepting.join(3000)}
+    }
+    private fun response(out:OutputStream,status:String,from:Int,to:Int,
+        changedEtag:Boolean) {
+        val head="HTTP/1.1 "+status+"\r\n"+
+            "Content-Type: video/mp4\r\n"+
+            "Content-Length: "+(to-from+1)+"\r\n"+
+            "Content-Range: bytes "+from+"-"+to+"/"+bytes.size+"\r\n"+
+            "ETag: "+(if(changedEtag)"\"v2\"" else "\"v1\"")+"\r\n"+
+            "Connection: close\r\n\r\n"
+        out.write(head.toByteArray(Charsets.US_ASCII))
+        out.write(bytes,from,to-from+1)
+        out.flush()
+    }
+    private fun withServer(changedEtag:Boolean=false,
+        block:(String,MutableList<String>)->Unit) {
+        Fixture{req,out->
+            val parts=Regex("""bytes=(\d+)-(\d+)""")
+                .matchEntire(req.header("Range"))
+            if(parts==null){
+                out.write(("HTTP/1.1 400 Bad Request\r\n"+
+                    "Content-Length: 0\r\nConnection: close\r\n\r\n")
+                    .toByteArray(Charsets.US_ASCII))
+                out.flush()
+            }else{
+                val from=parts.groupValues[1].toInt()
+                val to=parts.groupValues[2].toInt()
+                if(from<0 || to<from || to>=bytes.size){
+                    out.write(("HTTP/1.1 416 Range Not Satisfiable\r\n"+
+                        "Content-Length: 0\r\nConnection: close\r\n\r\n")
+                        .toByteArray(Charsets.US_ASCII))
+                    out.flush()
+                }else response(out,"206 Partial Content",from,to,
+                    changedEtag && from>=4*1024*1024-64)
+            }
+        }.use{http->block(http.url(),http.requests)}
     }
 
     @Test fun twoVerifiedRangesMakeExactPlayableBytesAndReceipt(){
