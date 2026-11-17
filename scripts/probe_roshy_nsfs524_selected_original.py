@@ -82,7 +82,16 @@ def main():
   hls=urllib.parse.urljoin(frame,tracks.get("hls4",""))
   u=urllib.parse.urlsplit(hls)
   if u.scheme!="https" or u.hostname!="kamehaus.net" or not re.fullmatch(
-      r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",u.path):return 7
+      r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",u.path):
+    print(json.dumps({"stage":"NSFS524_HLS4_SHAPE",
+      "host":u.hostname,"path_directory_names":[
+        part if len(part)<9 else "{opaque}" for part in u.path.split("/")[:7]],
+      "path_ext":u.path.split(".")[-1][:10],
+      "signed_query":bool(u.query),
+      "hls4_present":bool(tracks.get("hls4")),
+      "hls2_present":bool(tracks.get("hls2")),
+      "hls3_present":bool(tracks.get("hls3"))}),flush=True)
+    return 7
   with urllib.request.urlopen(urllib.request.Request(hls,headers={
     "User-Agent":UA,"Referer":frame,"Accept-Encoding":"identity"}),timeout=23) as response:
     payload=response.read(25000)
