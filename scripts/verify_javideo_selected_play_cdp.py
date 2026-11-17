@@ -94,6 +94,17 @@ def main():
      }))()""")
      if not isinstance(found,dict):break
      if found.get("visibleGate") or found.get("frames"):break
+     # Repeat the same selected publisher Play button only twice if its
+     # JavaScript handler wasn't installed at initial load. Never press
+     # adverts, recommendations or extra provider navigation.
+     if step in (5,13):
+      evaluate(ws,100+step,r"""(() => {
+        const selected=document.querySelector(
+            '.embed-responsive.player:not(.d-none) iframe[src]');
+        const play=document.querySelector('#clickfakeplayer');
+        if(!selected && play){play.click();return true;}
+        return false;
+      })()""")
      time.sleep(.9)
     assert isinstance(found,dict),"selected Play CDP evaluation returned no state"
     frames=found.get("frames",[])
