@@ -7,7 +7,10 @@ solves CAPTCHA, intercepts unrelated network traffic or uses ad iframe media.
 """
 import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil
 from pathlib import Path
-from websockets.sync.client import connect
+try:
+    from websockets.sync.client import connect
+except ImportError:
+    from cdp_stdlib_socket import connect
 EDGE=Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 SELECTED="https://javideo.net/en/fc2ppv-4994603"
 HOSTS={"streamtape.com","streamtape.to","streamtape.net","streamtape.site","sbtape.com"}
