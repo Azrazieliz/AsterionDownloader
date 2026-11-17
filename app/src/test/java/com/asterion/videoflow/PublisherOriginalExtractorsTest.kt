@@ -110,4 +110,29 @@ class PublisherOriginalExtractorsTest {
         assertTrue(PublisherOriginalExtractors.fromHtml(
             "https://unknown.example/video/123",html).isEmpty())
     }
+
+    @Test fun relatedLongVideoIsNeverSelectedEvenWithValidDuration(){
+        val selected=cases.getValue("hentaibros.net")
+        val html="""<main>
+            <div class="video-player">
+              <video data-duration="2100"
+                src="https://cdn.example/selected-original.mp4"></video>
+            </div>
+            <aside class="related">
+              <div class="video-player">
+                <video data-duration="2100"
+                  src="https://cdn.example/another-scene.mp4"></video>
+              </div>
+            </aside>
+            <div class="recommended">
+              <div class="video-player">
+                <video data-duration="2250"
+                  src="https://cdn.example/recommended.mp4"></video>
+              </div>
+            </div>
+        </main>"""
+        assertEquals(listOf("https://cdn.example/selected-original.mp4"),
+            PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
+    }
+
 }
