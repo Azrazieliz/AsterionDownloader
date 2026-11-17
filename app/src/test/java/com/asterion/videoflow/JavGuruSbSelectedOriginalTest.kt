@@ -6,7 +6,7 @@ import org.junit.Test
 /** Offline source fixture only; never a live complete media receipt. */
 class JavGuruSbSelectedOriginalTest {
     private val embed="https://javclan.com/e/SbSelectedAbc12"
-    private val media="https://g6example.premilkyway.com/hls2/01/abc123de/stream.urlset/master.m3u8?s=signature&e=123"
+    private val media="https://g6example.premilkyway.com/hls2/01/abc123de/stream.urlset/master.m3u8?token=signature&exp=123"
 
     private fun packed(url:String):String {
         val terms=MutableList(36){""}
@@ -30,9 +30,9 @@ class JavGuruSbSelectedOriginalTest {
 
     @Test fun ownerSelectedSbRejectsUnrelatedSourceAndUnsafeHost() {
         assertNull(JavGuruOriginalSource.selectedHls(
-            embed,"<html><script>${packed("https://g6example.premilkyway.com.evil.example/hls2/01/abc123de/stream.urlset/master.m3u8?s=abc")}</script></html>"))
+            embed,"<html><script>${packed("https://g6example.premilkyway.com.evil.example/hls2/01/abc123de/stream.urlset/master.m3u8?token=abc")}</script></html>"))
         assertNull(JavGuruOriginalSource.selectedHls(
-            embed,"<html><script>${packed("https://g6example.premilkyway.com/hls2/../ads/stream.urlset/master.m3u8?s=abc")}</script></html>"))
+            embed,"<html><script>${packed("https://g6example.premilkyway.com/hls2/../ads/stream.urlset/master.m3u8?token=abc")}</script></html>"))
         assertNull(JavGuruOriginalSource.selectedHls(
             "https://go.mayzaent.com/e/adid111111",
             "<html><script>${packed(media)}</script></html>"))
