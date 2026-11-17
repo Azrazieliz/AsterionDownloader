@@ -29,8 +29,12 @@ class VideoHlsFragmentProgressTest {
             assertNull(VideoHlsFragmentProgress.inspect(folder))
             File(folder,"selected.mp4.part").writeBytes(ByteArray(4096))
             assertEquals(72,VideoHlsFragmentProgress.inspect(folder)!!.completed)
-            File(folder,"another.mp4.part.ytdl").writeText(metadata)
-            assertNull("Two independent HLS track counts are ambiguous",
+            File(folder,"another.mp4.part.ytdl").writeText(
+                """{"downloader":{"current_fragment":{"index":22},"fragment_count":144}}""")
+            assertEquals("Progress cannot exceed the slowest verified track",
+                22,VideoHlsFragmentProgress.inspect(folder)!!.completed)
+            File(folder,"another.mp4.part.ytdl").writeText("invalid JSON")
+            assertNull("Corrupt track cannot create false completion",
                 VideoHlsFragmentProgress.inspect(folder))
         }finally{folder.deleteRecursively()}
     }
