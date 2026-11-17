@@ -35,4 +35,5 @@ def run(kv):
         return {"provider":name,"status":"error","reason_class":type(error).__name__}
 with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
     for item in concurrent.futures.as_completed([pool.submit(run,kv) for kv in CASES.items()]):
-        print(json.dumps(item.result(),ensure_ascii=True),flush=True)
+        result=item.result()
+        print(json.dumps({**result,"evidence":[line[:260] for line in result.get("evidence",[])][:9]},ensure_ascii=True),flush=True)
