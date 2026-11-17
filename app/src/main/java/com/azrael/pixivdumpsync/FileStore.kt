@@ -83,13 +83,24 @@ object FileStore {
         return files.toList()
     }
 
-    @Synchronized
     fun saveImage(
         context: Context,
         imageUrl: String,
         filename: String,
         referer: String,
         knownMissing: Boolean = false
+    ) {
+        FileSaveLockPolicy.forFilename(filename) {
+            saveImageForFilename(context, imageUrl, filename, referer, knownMissing)
+        }
+    }
+
+    private fun saveImageForFilename(
+        context: Context,
+        imageUrl: String,
+        filename: String,
+        referer: String,
+        knownMissing: Boolean
     ) {
         if (!knownMissing && exists(context, filename)) return
 
