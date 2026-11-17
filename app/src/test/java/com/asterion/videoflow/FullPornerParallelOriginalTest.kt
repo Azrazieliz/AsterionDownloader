@@ -44,7 +44,8 @@ class FullPornerParallelOriginalTest {
                     request.responseHeaders.add("Content-Range",
                         "bytes "+start+"-"+end+"/"+bytes.size)
                     request.sendResponseHeaders(206,(end-start+1).toLong())
-                    request.responseBody.use{out->out.write(bytes,start,end-start+1)}
+                    val body=request.responseBody
+                    try{body.write(bytes,start,end-start+1)}finally{body.close()}
                 }
             }
         }
