@@ -1,6 +1,7 @@
 package com.asterion.videoflow
 
 import android.content.Context
+import com.azrael.galleryflow.SiteSession
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
@@ -124,7 +125,14 @@ internal object Mp4HentaiPublishedHost {
                 .ignoreHttpErrors(true).ignoreContentType(true)
                 .followRedirects(false).timeout(14_000)
                 .maxBodySize(1_500_000)
-                .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
+                .apply{
+                    // Reuse only the owner's already-approved session for
+                    // THIS exact file host. Never forward publisher cookies
+                    // through a cross-host redirect or into advertising.
+                    SiteSession.cookie(context,current)?.takeIf{it.isNotBlank()}
+                        ?.let{header("Cookie",it)}
+                    NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                }
                 .execute()
             val status=response.statusCode()
             if(status in 300..399){
@@ -165,8 +173,12 @@ internal object Mp4HentaiPublishedHost {
                         .ignoreHttpErrors(true).ignoreContentType(true)
                         .followRedirects(false).timeout(14_000)
                         .maxBodySize(1_500_000)
-                        .apply {NetworkRoute.javaProxy(context,selected)
-                            ?.let{proxy(it)}}.execute()
+                        .apply {
+                            SiteSession.cookie(context,current)
+                                ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
+                            NetworkRoute.javaProxy(context,selected)
+                                ?.let{proxy(it)}
+                        }.execute()
                     if(posted.statusCode() in 300..399){
                         val forwarded=posted.header("Location")
                             ?.let{publishedHref(current,it)}
