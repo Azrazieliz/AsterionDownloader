@@ -16,7 +16,7 @@ internal object VideoHlsDispatch {
         if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
             uri.fragment!=null)return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
-        if(host=="pornhub.com"){
+        if(host in setOf("pornhub.com","m.pornhub.com")){
             if(uri.path!="/view_video.php")return false
             val keys=uri.rawQuery.orEmpty().split('&').filter{
                 it.startsWith("viewkey=")
