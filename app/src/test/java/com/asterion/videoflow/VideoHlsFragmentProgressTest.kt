@@ -33,7 +33,8 @@ class VideoHlsFragmentProgressTest {
                 """{"downloader":{"current_fragment":{"index":22},"fragment_count":144}}""")
             assertEquals("Progress cannot exceed the slowest verified track",
                 22,VideoHlsFragmentProgress.inspect(folder)!!.completed)
-            File(folder,"another.mp4.part.ytdl").writeText("invalid JSON")
+            File(folder,"another.mp4.part.ytdl").writeText(
+                """{"downloader":{"fragment_count":"corrupt"}}""")
             assertNull("Corrupt track cannot create false completion",
                 VideoHlsFragmentProgress.inspect(folder))
         }finally{folder.deleteRecursively()}
