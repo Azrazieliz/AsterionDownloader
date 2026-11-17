@@ -11,7 +11,7 @@ import java.net.URL
 /** Exact selected video quality variants; do not harvest recommendations. */
 class PornhubOriginalSourceTest {
     private val selected="https://www.pornhub.com/view_video.php?viewkey=phabcde123"
-    private val hls="https://em-h.phncdn.com/videos/abc123/sample_720.m3u8?token=publisher"
+    private val hls="https://em-h.phncdn.com/videos/abc123/original_720.m3u8?token=publisher"
     private fun published(url:String=hls, extra:String="")="""<html>
       <div id="player"></div><aside class="related">
       <video src="https://ads.invalid/unrelated.mp4"></video></aside>
@@ -20,7 +20,7 @@ class PornhubOriginalSourceTest {
          "video_unavailable":"false",
          "mediaDefinitions":[
            {"format":"hls","quality":"240",
-             "videoUrl":"https://em-h.phncdn.com/videos/abc123/sample_240.m3u8?t=one"},
+             "videoUrl":"https://em-h.phncdn.com/videos/abc123/original_240.m3u8?t=one"},
            {"format":"hls","quality":"720","videoUrl":"$url"},
            {"format":"mp4","quality":"1080",
              "videoUrl":"https://ads.invalid/popup.mp4"}]
@@ -36,14 +36,14 @@ class PornhubOriginalSourceTest {
         assertEquals(240,results[1].height)
     }
     @Test fun realObservedHmHPublisherCdnIsAcceptedWithoutBroadHostTrust(){
-        val observed="https://hm-h.phncdn.com/videos/abc123/sample_1080.m3u8?token=selected"
+        val observed="https://hm-h.phncdn.com/videos/abc123/original_1080.m3u8?token=selected"
         val sources=PornhubOriginalSource.published(selected,published(observed))
         assertEquals(2,sources.size)
         assertEquals(observed,sources.first().url)
-        val unrelated="https://hm-h.phncdn.com.evil.example/videos/abc123/sample_1080.m3u8"
+        val unrelated="https://hm-h.phncdn.com.evil.example/videos/abc123/original_1080.m3u8"
         assertEquals(1,PornhubOriginalSource.published(
             selected,published(unrelated)).size)
-        val unverified="https://unknown.phncdn.com/videos/abc123/sample_1080.m3u8"
+        val unverified="https://unknown.phncdn.com/videos/abc123/original_1080.m3u8"
         assertEquals(1,PornhubOriginalSource.published(
             selected,published(unverified)).size)
     }
