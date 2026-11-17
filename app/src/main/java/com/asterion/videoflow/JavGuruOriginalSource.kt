@@ -100,7 +100,7 @@ internal object JavGuruOriginalSource {
         val kind=property("rtype")?:return null
         if(!cid.matches(Regex("""[A-Za-z0-9]{3,32}""")) ||
             base!="https://jav.guru/searcho/" ||
-            kind !in setOf("e","v","s"))return null
+            kind !in setOf("e","v","s","x","t","h","o"))return null
         val list=Regex("""\bkeys\s*:\s*\[\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\]""")
             .find(js)?:return null
         val wrapper=doc.getElementById(cid)?:return null
