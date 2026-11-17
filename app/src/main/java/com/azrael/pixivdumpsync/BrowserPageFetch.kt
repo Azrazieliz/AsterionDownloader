@@ -115,7 +115,7 @@ object BrowserPageFetch {
                     Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
                 "play.javideo.net" ->
-                    Regex("""^/embed/[A-Za-z0-9_-]{5,100}/?$""")
+                    Regex("""^/(?:embed|player)/[A-Za-z0-9_-]{5,100}/?$""")
                         .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
