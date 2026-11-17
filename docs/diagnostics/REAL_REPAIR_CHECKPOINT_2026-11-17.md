@@ -69,3 +69,11 @@ Other OPEN failures: FreePornVideos complete transfer timeout; Hentaibros comple
 ## Current release gate and incomplete workflows
 Nine mandatory selected-original transfers still lack a complete correct video saved on Android: **Jav Guru, FullPorner, JAVIDEO, Pornhub, Roshy TV, 3DHentaiX, HentaiHaven, UncensoredHentai, MP4Hentai**. Other open bugs: full 231MB FreePornVideos transfer timeout; Hentaibros 235MB complete file; Rule34 posters on device; Pixiv backfill regression and unified legacy features; torrented selected-file release / antivirus-verdict integration; full FreeWebNovel novel and Android export; current X Following list cleansing; low-memory stability; two independent webpage extractors under actual phone RAM. These are not marked fixed by the passing isolated tests. Preserve originals and existing IDs/signature.
 
+
+## Final latest-branch source verification for this continuation
+
+- Full **offline Acceptance JVM suite** on the repair branch checked out at commit `594a3166764a5fbdd6333bd44349dc6d6751fad1` **BUILD SUCCESSFUL in 1m 1s, exit 0**, job `dl-final-offline-acceptance-20261117-0f83b9`. Live test opt-in variables explicitly disabled so a flaky external publisher could not silently cause a CI false pass.
+- After that run, `Rule34PosterEvidence.kt` and `VideoSearchPreviews.kt` had their old Chrome/125 user-agent strings changed to the shared `NativeMediaDownloader.USER_AGENT` (Chrome/131 variant) so selected publisher HTML and image requests use the same browser-compatible headers. Commits `9c0c85a` and `1f015d7`.
+- The **newest** compiled source, including those final user-agent changes, passed targeted offline `Rule34PosterEvidenceTest` and `XFollowingImportPolicyTest` after compilation: `BUILD SUCCESSFUL in 45s`, exit `0`, job `dl-final-compiled-preview-20261117-79916e`. Source repair was not installed on the phone.
+- **Phone release gate remains closed:** The installed `1.3.70-acceptance` build predates this repair branch. An on-device full-file retrieval/MediaStore receipt, correct source identity, repeated result and no-crash test are still required. No new APK made during this continuation.
+
