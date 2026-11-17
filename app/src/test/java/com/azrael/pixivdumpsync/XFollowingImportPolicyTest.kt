@@ -18,4 +18,23 @@ class XFollowingImportPolicyTest {
         assertFalse(XFollowingImportPolicy.isOwnFollowingPage("/owner_42/followers","owner_42"))
         assertFalse(XFollowingImportPolicy.isOwnFollowingPage("/owner_42/following",""))
     }
+    @Test fun followingPageMustAlsoBelongToAuthenticatedXProfile(){
+        assertTrue(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/owner_42/following","owner_42","/owner_42"))
+        assertTrue(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/Owner_42/following","owner_42","/OWNER_42/"))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/other_user/following","owner_42","/owner_42"))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/other_user/following","other_user","/owner_42"))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/owner_42/following","owner_42","/someone_else"))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/owner_42/following","owner_42",""))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/owner_42/following","owner_42","https://x.com/owner_42"))
+        assertFalse(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+            "/home","owner_42","/owner_42"))
+    }
+
 }
