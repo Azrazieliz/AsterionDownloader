@@ -40,9 +40,14 @@ class WorkingVideoProviderFreezeTest {
         frozen.forEach{(name,sha)->
             val source=sourceFile(name)
             assertTrue("Missing frozen provider source: "+name,source.isFile)
+            // Git on the owner's Windows checkout may convert LF to CRLF.
+            // Hash canonical repository bytes, not platform-specific checkout
+            // line endings; substantive source changes still fail the freeze.
+            val canonical=source.readText(Charsets.UTF_8)
+                .replace("\r\n","\n").toByteArray(Charsets.UTF_8)
             assertEquals(
                 "Working provider changed without revalidating its regression freeze: "+name,
-                sha,gitBlobSha(source.readBytes()))
+                sha,gitBlobSha(canonical))
         }
     }
     @Test fun hentaibrosSelectedFlowplayerStillFindsOriginalNotRelatedVideo(){
