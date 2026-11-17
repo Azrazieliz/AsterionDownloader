@@ -36,8 +36,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 101
-        versionName = "1.3.72"
+        versionCode = 102
+        versionName = "1.3.73"
 
         testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
