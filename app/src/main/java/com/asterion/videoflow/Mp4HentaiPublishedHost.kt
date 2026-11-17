@@ -74,6 +74,34 @@ internal object Mp4HentaiPublishedHost {
             ".g-recaptcha").isNotEmpty() ||
             doc.title().contains("Just a moment",ignoreCase=true)
 
+    internal data class FreeDownloadForm(val action:String,val csrf:String)
+
+    /** The selected public UpFiles page offers one ordinary FREE form.
+     * It is not a direct file URL, nor an authorization to solve CAPTCHA,
+     * skip paid queues or guess the subsequent CDN address.
+     */
+    internal fun publicFreeDownloadForm(doc:Document,current:String):FreeDownloadForm? {
+        if(hostname(current)!="upfilesgo.com" ||
+            !isHosterPage(current) || requiresInteractiveVerification(doc))
+            return null
+        val forms=doc.select("form#free-download-form")
+        if(forms.size!=1)return null
+        val form=forms.single()
+        if(!form.attr("method").equals("post",true))return null
+        val destination=publishedHref(current,form.attr("action"))?:return null
+        if(!isHosterPage(destination) ||
+            hostname(destination)!=hostname(current) ||
+            uri(destination)?.path!=uri(current)?.path ||
+            !uri(destination)?.rawQuery.isNullOrBlank())return null
+        val fields=form.select("input[name]")
+            .associate{it.attr("name") to it.attr("value")}
+        if(fields.keys!=setOf("_token","download_type") ||
+            !fields["download_type"].equals("free",true))return null
+        val csrf=fields["_token"].orEmpty()
+        if(!csrf.matches(Regex("[A-Za-z0-9_-]{16,300}")))return null
+        return FreeDownloadForm(destination,csrf)
+    }
+
     private fun direct(url:String):Boolean =
         safe(url) && NativeMediaDownloader.isDirectMediaUrl(url) &&
             !FullLengthVideoPolicy.isExplicitPreview("",url)
@@ -118,17 +146,55 @@ internal object Mp4HentaiPublishedHost {
                     "MP4Hentai host did not expose a verified HTML download page"
                 }
                 val doc=Jsoup.parse(response.body(),current)
-                // Actual selected UpFiles public flow returns an HTML
-                // file-captcha form after the normal free-download POST.
-                // Never relabel that challenge page as a completed MP4 or
-                // restart generic extraction indefinitely.
-                if(requiresInteractiveVerification(doc)) {
+                // This is the exact selected UpFiles public free-download
+                // action, obtained with the server's own CSRF token. It is
+                // not a CAPTCHA, paid tier, unrelated button or guessed MP4.
+                // Only same-hoster session cookies are sent to this form.
+                val free=publicFreeDownloadForm(doc,current)
+                val publicReply=if(free!=null) {
+                    val posted=Jsoup.connect(free.action)
+                        .userAgent(NativeMediaDownloader.USER_AGENT)
+                        .referrer(current)
+                        .header("Origin",URI(current).let{
+                            it.scheme+"://"+it.host
+                        })
+                        .cookies(response.cookies())
+                        .data("_token",free.csrf)
+                        .data("download_type","free")
+                        .method(org.jsoup.Connection.Method.POST)
+                        .ignoreHttpErrors(true).ignoreContentType(true)
+                        .followRedirects(false).timeout(14_000)
+                        .maxBodySize(1_500_000)
+                        .apply {NetworkRoute.javaProxy(context,selected)
+                            ?.let{proxy(it)}}.execute()
+                    if(posted.statusCode() in 300..399){
+                        val forwarded=posted.header("Location")
+                            ?.let{publishedHref(current,it)}
+                            ?:error("UpFiles free-download response omitted redirect")
+                        if(direct(forwarded))return forwarded
+                        check(isHosterPage(forwarded)){
+                            "UpFiles free-download redirected outside its verified hosters"
+                        }
+                        referer=current
+                        current=forwarded
+                        return@repeat
+                    }
+                    check(posted.statusCode() in 200..299 &&
+                        posted.contentType().orEmpty().contains("html",true)){
+                        "UpFiles public free download did not expose a verified file link"
+                    }
+                    Jsoup.parse(posted.body(),current)
+                } else doc
+                // The provider may require a genuinely interactive CAPTCHA
+                // AFTER its public free form. Surface that requirement;
+                // neither guess its answer nor mislabel HTML as a download.
+                if(requiresInteractiveVerification(publicReply)) {
                     error("MP4Hentai selected file host requires CAPTCHA "+
                         "verification in an authorized browser session")
                 }
                 val candidates=LinkedHashSet<String>()
                 var nextLanding:String?=null
-                for(anchor in doc.select("a[href]").take(1000)){
+                for(anchor in publicReply.select("a[href]").take(1000)){
                     if(anchor.closest("aside,.related,.recommended,.ads,"+
                             ".advertisement,.sidebar")!=null)continue
                     val label=(anchor.text()+" "+anchor.attr("title"))
