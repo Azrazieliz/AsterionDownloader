@@ -643,14 +643,18 @@ object VideoEngine {
                         verifiedMp4=verifiedFirstPartyMp4)
                     0
                 } else {
-                    // The original standalone VideoFlow used YtDlp.execute
-                    // directly, with real progress callbacks and no metadata
-                    // gate. Restore it as the first transfer path; keep the
-                    // typed-Python extractor as a source-specific fallback.
-                    try {
+                    // Direct publisher-attested HLS/DASH is NOT an ordinary
+                    // webpage. The old Java yt-dlp wrapper drops options and
+                    // sometimes fails before writing a single fragment.
+                    // Run a selected manifest through the typed embedded
+                    // Python API first, with explicit referer, output paths
+                    // and concurrent fragments. Preserve the existing legacy
+                    // route for all non-manifest pages and no-byte fallback.
+                    val manifest=VideoHlsDispatch.isSelectedManifest(link)
+                    fun legacy():Int {
                         VideoTransferJournal.record(context,item.id,"original_engine")
-                        LegacyYtDlpTransfer.download(context,link,referer,selected,
-                            proxy,parent,template,quality){percent->
+                        val exit=LegacyYtDlpTransfer.download(context,link,referer,
+                            selected,proxy,parent,template,quality){percent->
                             if(stopRequests.contains(item.id) ||
                                 Thread.currentThread().isInterrupted ||
                                 !db.ownsClaim(item.id,item.lease))
@@ -662,7 +666,17 @@ object VideoEngine {
                             status(percent)
                         }
                         VideoTransferJournal.record(context,item.id,"original_complete")
-                        0
+                        return exit
+                    }
+                    fun typed():Int {
+                        ensureExtractor(context)
+                        if(manifest)VideoTransferJournal.record(
+                            context,item.id,"selected_manifest_typed")
+                        return EmbeddedYtDlpTransfer.download(
+                            link,referer,selected,proxy,parent,template,quality)
+                    }
+                    try {
+                        if(manifest)typed() else legacy()
                     }catch(primary:Exception){
                         if(stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted)
@@ -681,12 +695,11 @@ object VideoEngine {
                                 "resume_pending",primary.javaClass.simpleName)
                             throw primary
                         }
-                        VideoTransferJournal.record(context,item.id,"python_fallback",
+                        VideoTransferJournal.record(context,item.id,
+                            if(manifest)"legacy_manifest_fallback" else "python_fallback",
                             primary.javaClass.simpleName)
                         try{
-                            ensureExtractor(context)
-                            EmbeddedYtDlpTransfer.download(
-                                link,referer,selected,proxy,parent,template,quality)
+                            if(manifest)legacy() else typed()
                         }catch(secondary:Exception){
                             secondary.addSuppressed(primary)
                             throw secondary
