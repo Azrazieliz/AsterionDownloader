@@ -16,6 +16,7 @@ import java.security.MessageDigest
  */
 class WorkingVideoProviderFreezeTest {
     private val frozen = linkedMapOf(
+        "ArchivebateSelectedMedia.kt" to "7380651fe85ba193c6de3ca891622291a7cca6d8",
         "FullPornerOriginalSource.kt" to "312878511c2b3fbb2be47e571d6cba5de8fbcd67",
         "FullPornerParallelOriginal.kt" to "598c7392829a599093b0bd20b1a46ed63051446b",
         "ThreeDHentaiSignedOriginal.kt" to "9bff43bbdf5d29479e4ac41636b21a2c3b159fa7",
@@ -36,7 +37,7 @@ class WorkingVideoProviderFreezeTest {
         return digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
     }
     @Test fun dedicatedWorkingProviderEnginesRemainFrozen(){
-        assertEquals("Freeze coverage must not silently disappear",6,frozen.size)
+        assertEquals("Freeze coverage must not silently disappear",7,frozen.size)
         frozen.forEach{(name,sha)->
             val source=sourceFile(name)
             assertTrue("Missing frozen provider source: "+name,source.isFile)
