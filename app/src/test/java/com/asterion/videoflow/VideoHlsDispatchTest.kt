@@ -17,6 +17,8 @@ class VideoHlsDispatchTest {
             "https://jav.guru/1077002/doks-695-original-scene/"))
         assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://www.pornhub.com/view_video.php?viewkey=ph1234567"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://m.pornhub.com/view_video.php?viewkey=ph1234567"))
         for(url in listOf(
             "https://jav.guru/",
             "https://jav.guru/category/test/",
