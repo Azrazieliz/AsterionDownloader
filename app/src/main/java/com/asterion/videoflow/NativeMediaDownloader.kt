@@ -90,6 +90,13 @@ internal object NativeMediaDownloader {
         require(directory.isDirectory && directory.canWrite()){
             "Native transfer staging directory is unavailable"
         }
+        // Confirmed 17 Nov on an exact selected 93,610,328-byte original:
+        // one long connection stalled; 8 lanes caused HTTP 503; exactly two
+        // verified 4MiB Range lanes completed in 227.6 seconds. This
+        // provider-only path keeps SHA/overlap ledger receipts on restart.
+        if(verifiedMp4 && FullPornerOriginalSource.verifiedMediaHost(address))
+            return FullPornerParallelOriginal.download(address,referer,directory,
+                filenameStem,proxy,progress,cancelled)
         val ext=if(verifiedMp4)"mp4" else
             URI(address).path.trimEnd('/').substringAfterLast('.')
                 .lowercase(Locale.ROOT)
