@@ -32,7 +32,8 @@ def run():
                 raw=json.loads(m.group(2))["iframe_url"]
                 relay=base64.b64decode(raw,validate=True).decode("utf8")
                 u=urllib.parse.urlsplit(relay)
-                if u.scheme!="https" or u.hostname!="jav.guru" or u.path!="/searcho/" or not u.query.startswith("ed="):
+                if (u.scheme!="https" or u.hostname!="jav.guru" or u.path!="/searcho/" or
+                    not re.fullmatch(r"[a-z]{2}=[a-fA-F0-9]{10,150}(?:&bg=https?%3A%2F%2F[^&]{1,400})?",u.query)):
                     continue
                 publisher.append((controls[key],relay))
             except (KeyError,ValueError,UnicodeError):
