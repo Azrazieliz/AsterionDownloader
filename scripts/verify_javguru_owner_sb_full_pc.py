@@ -63,7 +63,7 @@ def selected_hls(embed,page):
         if not decoded:continue
         packed_count+=1
         for match in re.finditer(
-            r"""(?i)\b(?:hls[234]|file)\s*:\s*['"](https?://[^"'<>\\\s]{12,2500})['"]""",
+            r"""(?i)['"]?\b(?:hls[234]|file)['"]?\s*:\s*['"](https?://[^"'<>\\\s]{12,2500})['"]""",
             decoded):
             link=match.group(1).replace("\\/","/")
             u=urllib.parse.urlsplit(link)
