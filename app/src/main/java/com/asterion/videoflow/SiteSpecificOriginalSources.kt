@@ -129,22 +129,44 @@ internal object SiteSpecificOriginalSources {
             else->false
         }
         require(valid){"Untrusted publisher iframe"}
-        val response=Jsoup.connect(link)
-            .userAgent(NativeMediaDownloader.USER_AGENT)
-            .header("Referer",referer)
-            .header("Accept","text/html,application/xhtml+xml")
-            .ignoreHttpErrors(true).followRedirects(false)
-            .timeout(14_000).maxBodySize(1_800_000)
-            .apply {
-                NetworkRoute.javaProxy(context,referer)?.let{proxy(it)}
-                if(host(link)==host(referer))
-                    SiteSession.cookie(context,referer)?.takeIf{it.isNotBlank()}
+        // The selected iframe is an independent site. Using the watch
+        // publisher's cookie (or none) on nhplayer.com turns an authorized
+        // browser session into HTTP 403 before the player can be examined.
+        // A failed static request must reach the existing, owner-authorized
+        // WebView renderer instead of aborting the whole selected original.
+        val response=runCatching {
+            Jsoup.connect(link)
+                .userAgent(NativeMediaDownloader.USER_AGENT)
+                .header("Referer",referer)
+                .header("Accept","text/html,application/xhtml+xml")
+                .ignoreHttpErrors(true).followRedirects(false)
+                .timeout(14_000).maxBodySize(1_800_000)
+                .apply {
+                    NetworkRoute.javaProxy(context,referer)?.let{proxy(it)}
+                    SiteSession.cookie(context,link)?.takeIf{it.isNotBlank()}
                         ?.let{header("Cookie",it)}
-            }.execute()
-        check(response.statusCode() in 200..299){
-            "Selected "+owner+" player HTTP "+response.statusCode()
+                }.execute()
+        }.getOrNull()
+        if(response!=null && response.statusCode() in 200..299 &&
+            response.contentType().contains("html",ignoreCase=true)) {
+            val page=Jsoup.parse(response.body(),link)
+            if(!SiteSpecificPlayerPolicy.accessGate(page))
+                return page
         }
-        return Jsoup.parse(response.body(),link)
+        // Only render the already-published, verified iframe, never arbitrary
+        // ads, related posts or cross-domain redirect destinations.
+        if(BrowserPageFetch.publicEligible(link) || SiteSession.bound(context,link)){
+            val rendered=runCatching {
+                BrowserPageFetch.html(context,link,playerReferer=referer)
+            }.getOrNull()
+            if(!rendered.isNullOrBlank()){
+                val page=Jsoup.parse(rendered,link)
+                if(!SiteSpecificPlayerPolicy.accessGate(page))
+                    return page
+            }
+        }
+        error("Selected "+owner+" player requires its authorized site session "+
+            "or browser verification; no selected original was exposed")
     }
     /** FullPorner serves original MP4 files at /vid/<id> without an .mp4
      * suffix. Unlike general mediaElements(), this admits ONLY files linked
