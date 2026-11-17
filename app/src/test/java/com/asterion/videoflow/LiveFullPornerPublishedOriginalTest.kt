@@ -38,27 +38,50 @@ class LiveFullPornerPublishedOriginalTest {
                 watch,player,media))
             assertTrue(NativeMediaDownloader.isNativeEligible(
                 watch,media,verifiedMp4=true))
-            val request=(URL(media).openConnection() as HttpURLConnection)
-            request.instanceFollowRedirects=false
-            request.connectTimeout=12_000
-            request.readTimeout=16_000
-            request.setRequestProperty("User-Agent",ua)
-            request.setRequestProperty("Referer",player)
-            request.setRequestProperty("Range","bytes=0-255")
-            request.setRequestProperty("Accept-Encoding","identity")
-            try{
-                assertEquals("Live source did not support real byte ranges",
-                    206,request.responseCode)
-                assertEquals("video/mp4",
-                    request.contentType.substringBefore(';').lowercase())
-                assertTrue(request.getHeaderField("Content-Range")
-                    .orEmpty().startsWith("bytes 0-255/"))
-                val first=request.inputStream.use{it.readNBytes(256)}
-                assertEquals(256,first.size)
-                assertEquals("ftyp",String(first,4,4,Charsets.US_ASCII))
-                println("REAL_FULLPORNER_SELECTED_QUALITY_HOST="+URI(media).host+
-                    " source_bytes=256 range=206 mp4=true")
-            }finally{request.disconnect()}
+            // The official /vid/ URL can redirect to its signed CDN.
+            // Follow exactly the same bounded redirects as the app's
+            // NativeMediaDownloader, retaining the selected-player Referer.
+            // A publisher redirect is not a media failure or a final file.
+            var next=media
+            var verified=false
+            for(hop in 0..5){
+                val request=(URL(next).openConnection() as HttpURLConnection)
+                request.instanceFollowRedirects=false
+                request.connectTimeout=12_000
+                request.readTimeout=16_000
+                request.setRequestProperty("User-Agent",ua)
+                request.setRequestProperty("Referer",player)
+                request.setRequestProperty("Range","bytes=0-255")
+                request.setRequestProperty("Accept-Encoding","identity")
+                try{
+                    val status=request.responseCode
+                    if(status in 300..399){
+                        assertTrue("Selected media exceeded redirect limit",hop<5)
+                        val location=request.getHeaderField("Location")
+                        assertFalse("Media redirect missing destination",
+                            location.isNullOrBlank())
+                        val resolved=URI(next).resolve(location).normalize()
+                        assertEquals("https",resolved.scheme)
+                        assertNull(resolved.userInfo)
+                        next=resolved.toString()
+                        continue
+                    }
+                    assertEquals("Real selected media did not return 206",
+                        206,status)
+                    assertEquals("video/mp4",
+                        request.contentType.substringBefore(';').lowercase())
+                    assertTrue(request.getHeaderField("Content-Range")
+                        .orEmpty().startsWith("bytes 0-255/"))
+                    val first=request.inputStream.use{it.readNBytes(256)}
+                    assertEquals(256,first.size)
+                    assertEquals("ftyp",String(first,4,4,Charsets.US_ASCII))
+                    println("REAL_FULLPORNER_FINAL_MEDIA_HOST="+URI(next).host+
+                        " redirect_hops="+hop+" source_bytes=256 range=206 mp4=true")
+                    verified=true
+                    break
+                }finally{request.disconnect()}
+            }
+            assertTrue("No final MP4 media reached",verified)
         }
     }
 }
