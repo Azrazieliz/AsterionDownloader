@@ -3,6 +3,7 @@ integration. Uses the installed paired client; never prints pairing secrets.
 There is no remote shell, cross-app mutation, credential export or media export.
 """
 import json
+import uuid
 import os
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ from asterion_remote.phone_bridge import request
 package="com.azrael.pixivdumpsync.acceptance"
 for action in ("diagnostics.summary","capabilities"):
     item={"package":package,"action":action,
-          "request_id":"dl20261117readonly"+action.replace(".","")+"j15",
+          "request_id":"dl.readonly."+action.replace(".","-")+"."+uuid.uuid4().hex[:12],
           "payload":{"limit":18}}
     try:
         response=request("/app-bridge/invoke","POST",item,timeout=10).json()
