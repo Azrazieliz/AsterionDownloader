@@ -36,7 +36,7 @@ internal object RoshyPackedOriginalSource {
             playerPath.matches(f.path.orEmpty()) &&
             f.rawQuery.isNullOrBlank() && f.fragment==null
     }
-    private fun unpack(raw:String):String? {
+    internal fun unpack(raw:String):String? {
         if(raw.length !in 100..160_000)return null
         val marker="eval(function(p,a,c,k,e,d)"
         val anchor=raw.indexOf(marker)
