@@ -38,10 +38,16 @@ internal object VideoHlsFragmentProgress {
             it.isFile && it.name.endsWith(".ytdl",ignoreCase=true) &&
                 it.length() in 15L..16_384L
         }
-        // Multiple simultaneous fragment outputs may refer to different
-        // media tracks; do not splice their totals or report false progress.
-        if(records.size!=1)return null
-        return runCatching{parse(records.single().readText(Charsets.UTF_8))}
-            .getOrNull()
+        // RoshyTV and similar HLS publishers may expose distinct video
+        // and audio fragment tracks. Reject missing/invalid checkpoints,
+        // but permit 2-4 complete track counters and report the *slowest*
+        // track's completion percentage. Never sum mismatched fragment totals
+        // or claim that the full video is finished before muxing.
+        if(records.size !in 1..4)return null
+        val samples=records.map { checkpoint ->
+            runCatching{parse(checkpoint.readText(Charsets.UTF_8))}
+                .getOrNull()?:return null
+        }
+        return samples.minByOrNull{it.percent}
     }
 }
