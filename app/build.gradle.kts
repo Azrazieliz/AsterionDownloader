@@ -239,5 +239,9 @@ val verifyFrozenVideoProviders by tasks.registering {
     }
 }
 tasks.matching { it.name == "packageAcceptance" }.configureEach {
+    // Shared selected-media and poster adapters (Hentaibros, Rule34Video,
+    // Archivebate catalog) are also covered by behavioral JVM fixtures.
+    // No future Acceptance APK may bypass those checks.
     dependsOn(verifyFrozenVideoProviders)
+    dependsOn("testAcceptanceUnitTest")
 }
