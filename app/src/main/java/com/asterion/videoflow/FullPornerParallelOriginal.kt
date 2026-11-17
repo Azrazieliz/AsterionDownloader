@@ -134,9 +134,9 @@ internal object FullPornerParallelOriginal {
         run(url,referer.orEmpty(),directory,filenameStem,proxy,progress,cancelled,false)
 
     internal fun loopbackTest(url:String,referer:String,directory:File,
-        cancelled:()->Boolean={false}):File {
+        cancelled:()->Boolean={false},progress:(Int)->Unit={}):File {
         require(URI(url).host in setOf("localhost","127.0.0.1"))
-        return run(url,referer,directory,"unit",null,{},cancelled,true)
+        return run(url,referer,directory,"unit",null,progress,cancelled,true)
     }
 
     private fun run(url:String,ref:String,directory:File,stemRaw:String,
