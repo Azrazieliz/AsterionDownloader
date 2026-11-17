@@ -47,6 +47,9 @@ try:
  status,_,body=get(NH,NH);parser=Links();parser.feed(body)
  print(json.dumps({"provider":"NHPlayer","http":status,
   "servers":[{"len":len(v),"prefix":v[:8],"scheme":urllib.parse.urlsplit(v).scheme,
-   "host":urllib.parse.urlsplit(v).hostname,
+   "host":urllib.parse.urlsplit(urllib.parse.urljoin(NH,v)).hostname,
+   "path":urllib.parse.urlsplit(urllib.parse.urljoin(NH,v)).path,
+   "query_keys":sorted(urllib.parse.parse_qs(
+     urllib.parse.urlsplit(urllib.parse.urljoin(NH,v)).query))[:12],
    "looks_like_url":bool(re.match(r"^https?://",v))} for v in parser.data_ids[:8]]}),flush=True)
 except Exception as e:print(json.dumps({"provider":"NHPlayer","error":type(e).__name__}),flush=True)
