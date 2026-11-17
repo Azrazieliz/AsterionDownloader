@@ -56,8 +56,29 @@ def run():
                 "code_chars":len(js),
                 "declaration_keywords":len(declarations)}
             structures.append(signatures)
+        shape=[]
+        for js in doc.code:
+            if "iframe_url" not in js:continue
+            for m in re.finditer(r"\bvar\s+([A-Za-z_$][\w$]{1,50})\s*=\s*(\{[^}]{20,2500}\})",js,re.S):
+                name=m.group(1)
+                try:
+                    item=json.loads(m.group(2))
+                    raw=item.get("iframe_url","")
+                    decoded=base64.b64decode(raw,validate=True).decode("utf8")
+                    uri=urllib.parse.urlsplit(decoded)
+                    shape.append({"server":controls.get(name,"unmatched"),
+                        "key_matches_button":name in controls,"config_valid":True,
+                        "scheme":uri.scheme,"host":uri.hostname,
+                        "route":uri.path[:35],
+                        "query_keys":sorted(urllib.parse.parse_qs(uri.query)),
+                        "encoded_length":len(raw)})
+                except Exception as error:
+                    shape.append({"server":controls.get(name,"unmatched"),
+                        "key_matches_button":name in controls,"config_valid":False,
+                        "error_type":type(error).__name__})
         print(json.dumps({"stage":"EXACT_STREAM_CONFIG_STRUCTURE",
-            "configs":structures[:5],"redacted_values":True}),flush=True)
+            "configs":structures[:5],"shortcode_shapes":shape[:10],
+            "redacted_values":True}),flush=True)
     print(json.dumps({"stage":"ACTUAL_SELECTED_STREAM_BUTTONS","post":1077276,
         "buttons":list(controls.values()),"shortcode_candidates":list(unique)}),flush=True)
     if not unique:return 3
