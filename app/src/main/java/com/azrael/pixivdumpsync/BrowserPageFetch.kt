@@ -31,7 +31,7 @@ object BrowserPageFetch {
         "voe.sx","kamehaus.net",
         "streamtape.com","streamtape.to","streamtape.net",
         "streamtape.site","sbtape.com",
-        "hqpornerxxx.com","helloporn.com","javideo.net",
+        "hqpornerxxx.com","helloporn.com","javideo.net","play.javideo.net",
         "hentaihaven.xxx","uncensoredhentai.xxx","mp4hentai.com","roshy.tv",
         "mirrored.to","upfiles.com","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
@@ -94,7 +94,7 @@ object BrowserPageFetch {
         val selectedPlayerHost=host in setOf(
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
-            "hqpornerxxx.com","javideo.net","helloporn.com","mp4hentai.com",
+            "hqpornerxxx.com","javideo.net","play.javideo.net","helloporn.com","mp4hentai.com",
             "roshy.tv","rule34video.com","pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com")
@@ -114,6 +114,7 @@ object BrowserPageFetch {
                 "streamtape.site","sbtape.com" ->
                     Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
+                "play.javideo.net" -> Uri.parse(url).path.orEmpty().length in 1..180
                 else -> false
             })
         main.post {
@@ -420,11 +421,15 @@ object BrowserPageFetch {
                                     const wrapper=el.closest('.embed-responsive.player');
                                     if(!wrapper || wrapper.classList.contains('d-none'))
                                         return false;
-                                    return ['streamtape.com','streamtape.to',
+                                    const firstParty=host==='play.javideo.net' &&
+                                        u.pathname.length>=1 && u.pathname.length<=180 &&
+                                        u.search.length<=600;
+                                    return firstParty ||
+                                        (['streamtape.com','streamtape.to',
                                         'streamtape.net','streamtape.site',
                                         'sbtape.com'].includes(host) &&
                                         /^\/(?:e|v|embed)\/[A-Za-z0-9_-]{5,100}\/?$/
-                                            .test(u.pathname);
+                                            .test(u.pathname));
                                 }
                                 if(publisher==='helloporn.com')
                                     return /^\/video-\d{1,10}-[a-z0-9-]+\/?$/i
