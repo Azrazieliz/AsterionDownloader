@@ -32,7 +32,7 @@ object BrowserPageFetch {
         "streamtape.com","streamtape.to","streamtape.net",
         "streamtape.site","sbtape.com",
         "hqpornerxxx.com","helloporn.com","javideo.net",
-        "hentaihaven.xxx","mp4hentai.com","roshy.tv",
+        "hentaihaven.xxx","uncensoredhentai.xxx","mp4hentai.com","roshy.tv",
         "mirrored.to","upfiles.com","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
