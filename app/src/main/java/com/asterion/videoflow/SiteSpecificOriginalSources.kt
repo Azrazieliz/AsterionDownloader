@@ -295,8 +295,11 @@ internal object SiteSpecificOriginalSources {
                     .header("Referer",selected)
                     .ignoreHttpErrors(true).followRedirects(false)
                     .timeout(8_000).maxBodySize(350_000)
-                    .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
-                    .execute()
+                    .apply{
+                        NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                        SiteSession.cookie(context,stream.url)
+                            ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
+                    }.execute()
             }.getOrNull()?:continue
             if(wrapper.statusCode() !in 200..299)continue
             val next=JavGuruOriginalSource.nextIframe(
@@ -307,8 +310,11 @@ internal object SiteSpecificOriginalSources {
                     .header("Referer",stream.url)
                     .ignoreHttpErrors(true).followRedirects(true)
                     .timeout(8_000).maxBodySize(700_000)
-                    .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
-                    .execute()
+                    .apply{
+                        NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                        SiteSession.cookie(context,next)
+                            ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
+                    }.execute()
             }.getOrNull()?:continue
             if(response.statusCode() !in 200..299)continue
             val embed=response.url().toString()
@@ -491,7 +497,10 @@ internal object SiteSpecificOriginalSources {
                         .matches(path)))
             "helloporn.com"->host(player)=="voe.sx" &&
                 Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
-                    .matches(path)
+                    .matches(path) && frame.rawQuery.isNullOrBlank()
+            "uncensoredhentai.xxx"->host(player)=="nhplayer.com" &&
+                Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                    .matches(path) && frame.rawQuery.isNullOrBlank()
             else->false
         }
     }
