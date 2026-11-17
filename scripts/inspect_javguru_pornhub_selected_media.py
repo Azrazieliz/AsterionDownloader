@@ -47,8 +47,8 @@ def guru():
   try:
    obj=json.loads(value); url=base64.b64decode(obj["iframe_url"],validate=True).decode()
    u=urllib.parse.urlsplit(url)
-   if u.scheme=="https" and u.hostname in ("jav.guru","www.jav.guru") and
-       u.path=="/searcho/" and u.query.startswith(("ed=","vd=","sr=","vr=")):
+   if (u.scheme=="https" and u.hostname in ("jav.guru","www.jav.guru") and
+       u.path=="/searcho/" and u.query.startswith(("ed=","vd=","sr=","vr="))):
     variants.append((key,url))
   except Exception:continue
  emit(provider="Jav Guru",stage="selected_wordpress_shortcode",
