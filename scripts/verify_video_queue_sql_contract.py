@@ -60,6 +60,24 @@ def main():
             after[5],after[6])==("queued",0,0,0,"user",None,8)
    else:assert after==before,(state,"retry mutated protected row")
    tested+=1
+ # Requeueing a newly corroborated full original must never silently
+ # promote a website-discovered (non-user-selected) held video into a
+ # user-authorized transfer. Extract and run the real Kotlin SQLite query.
+ source=SOURCE.read_text(encoding="utf-8")
+ method=source.split("fun requeueHeldByTitle(",1)[1].split(
+     "fun requeuePythonStartupFailures",1)[0]
+ query_block=method.split("rawQuery(",1)[1].split("null).use",1)[0]
+ selection="".join(re.findall(r'"([^"]+)"',query_block))
+ assert "request_origin='user'" in selection,selection
+ with sqlite3.connect(":memory:") as db:
+  db.execute("CREATE TABLE videos(id INTEGER,title TEXT,state TEXT,request_origin TEXT)")
+  db.executemany("INSERT INTO videos VALUES(?,?,?,?)",[
+   (1,"Selected scene","full_only_hold","user"),
+   (2,"Discovered scene","full_only_hold","website"),
+   (3,"Already saved","done","user")])
+  actual=[r[0] for r in db.execute(selection).fetchall()]
+  assert actual==[1],("Held websites incorrectly promoted",actual)
+  tested+=1
  # Simulated stale pause/restore after the actual saved receipt. Neither
  # operation may turn a completed selected original into another job.
  with fixture("done") as db:
@@ -71,6 +89,7 @@ def main():
  print(json.dumps({"status":"PASS","sqlite_contracts_checked":tested,
   "pause_allowed":sorted(allowed_pause),"retry_allowed":sorted(allowed_retry),
   "running_retry_rejected":True,"saved_pause_retry_rejected":True,
-  "lease_increment_verified":True}),flush=True)
+  "lease_increment_verified":True,
+  "held_website_discovery_excluded":True}),flush=True)
 
 if __name__=="__main__":main()
