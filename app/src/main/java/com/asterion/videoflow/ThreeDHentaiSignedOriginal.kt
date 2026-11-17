@@ -44,9 +44,17 @@ internal object ThreeDHentaiSignedOriginal {
 
     /** One selected article player with one genuine signed playback config. */
     internal fun publishedConfig(doc:Document,selected:String):Published?{
-        if(!isSelectedArticle(selected) ||
-            doc.select("main .video-player,article .video-player").isEmpty())
-            return null
+        if(!isSelectedArticle(selected))return null
+        // Live selected post 9570: the static HTML already publishes its
+        // exact article ID and signed-player postId+nonce, but JS inserts
+        // .video-player only *after* rendering. Requiring that dynamic
+        // element here discarded a perfectly attributable first-party
+        // original and forced the broken generic page extractor.
+        val selectedPlayers=doc.select(
+            "main .video-player,article .video-player").filter{
+            it.closest("aside,.related,.recommendations,.ads,.sidebar,"+
+                ".suggestions,.recommended-videos") == null
+        }
         val pattern=Regex(
             """(?s)\bwindow\.awpSignedPlayback\s*=\s*(\{[^}]{12,1200}\})\s*;""")
         val configs=doc.select("script:not([src])").asSequence()
@@ -63,11 +71,15 @@ internal object ThreeDHentaiSignedOriginal {
         if(id !in 1L..1_000_000_000L ||
             !nonce.matches(Regex("[A-Za-z0-9_-]{6,64}")))return null
         val other=doc.select("article[id^=post-]").filter{
-            it.closest("aside,.related,.recommendations,.sidebar")==null
+            it.closest("aside,.related,.recommendations,.sidebar,.ads,"+
+                ".suggestions,.recommended-videos")==null
         }.map{it.id()}.distinct()
-        // If the selected article explicitly publishes its DOM post ID,
-        // it must match the configured playback post ID.
-        if(other.isNotEmpty() && "post-$id" !in other)return null
+        // Either the exact publisher article attests this post ID, or
+        // there is one unambiguous selected main player. A generic
+        // recommendation or global playback script is never sufficient.
+        if(other.isNotEmpty()){
+            if(other.size!=1 || other.single()!="post-$id")return null
+        }else if(selectedPlayers.size!=1)return null
         return Published(id,nonce)
     }
 
