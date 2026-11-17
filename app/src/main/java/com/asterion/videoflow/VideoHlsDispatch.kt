@@ -16,8 +16,15 @@ internal object VideoHlsDispatch {
         if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
             uri.fragment!=null)return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
-        return host in setOf("jav.guru","pornhub.com") &&
-            VideoSiteProfiles.isVideoPage(url)
+        if(host=="pornhub.com"){
+            if(uri.path!="/view_video.php")return false
+            val keys=uri.rawQuery.orEmpty().split('&').filter{
+                it.startsWith("viewkey=")
+            }
+            return keys.size==1 && keys.single().removePrefix("viewkey=")
+                .matches(Regex("[A-Za-z0-9_-]{5,50}"))
+        }
+        return host=="jav.guru" && VideoSiteProfiles.isVideoPage(url)
     }
 
     fun isSelectedManifest(url:String):Boolean {
