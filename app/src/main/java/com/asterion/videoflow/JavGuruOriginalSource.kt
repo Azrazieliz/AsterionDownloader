@@ -157,7 +157,7 @@ internal object JavGuruOriginalSource {
                     continue
                 if(uri.rawQuery.isNullOrBlank())continue
                 verified.add(candidate)
-            }
+        }
         // The exact selected publisher may publish quality variants, but
         // different independent packed scripts are ambiguous. Fail closed.
         return verified.singleOrNull()
