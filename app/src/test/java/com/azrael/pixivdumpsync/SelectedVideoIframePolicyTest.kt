@@ -12,6 +12,8 @@ class SelectedVideoIframePolicyTest {
                 "https://mixdrop.ag/e/abC123de",
             "https://javideo.net/en/fc2ppv-4994603" to
                 "https://streamtape.com/e/Ab1cd2ef3G",
+            "https://javideo.net/en/fc2ppv-4994603" to
+                "https://play.javideo.net/player/AbC123456",
             "https://helloporn.com/video-115854-something" to
                 "https://voe.sx/e/wx8walm5hqkj",
             "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/" to
@@ -37,6 +39,9 @@ class SelectedVideoIframePolicyTest {
             "https://voe.sx/e/wx8walm5hqkj#fragment",
             "javascript:alert(1)"
         ))assertFalse(frame,SelectedVideoIframePolicy.allow(source,frame,false))
+        assertFalse(SelectedVideoIframePolicy.allow(
+            "https://javideo.net/en/fc2ppv-4994603",
+            "https://play.javideo.net.evil.example/player/ABCDEF",false))
         assertTrue(SelectedVideoIframePolicy.allow(source,
             "https://helloporn.com/video-115854-something",true))
         assertTrue(SelectedVideoIframePolicy.allow(source,"about:blank",false))
