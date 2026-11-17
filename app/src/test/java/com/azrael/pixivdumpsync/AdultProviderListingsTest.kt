@@ -5,6 +5,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AdultProviderListingsTest {
+    @Test fun archivebateUploaderListingAcceptsOnlyActualWatchIds(){
+        val html="""<main>
+          <a href="/u/watch/16458051"><img alt="Selected uploaded recording" src="/thumb.jpg"></a>
+          <a href="/u/watch/not-a-video">Not a recording</a>
+          <a href="/u/profile/creator">Profile</a></main>"""
+        val records=AdultProviderListings.entries(
+            Jsoup.parse(html,"https://archivebate.com/"),
+            "https://archivebate.com/","ADULT",1L)
+        assertEquals(1,records.size)
+        assertEquals("https://archivebate.com/u/watch/16458051",records.single().url)
+        assertEquals("video",records.single().kind)
+    }
+
     @Test fun javGuruIncludesRealFirstPartyPostsNotCategoriesOrAds() {
         val html="""<main>
           <article><h2><a href="/1076811/mukc-135-genuine-publisher-post/">
