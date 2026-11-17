@@ -14,6 +14,11 @@
 
 - `4f5ee1d24`, `f8b899d82`: HentaiHaven series directory resolution now handles genuine relative `episode-N` anchors even when the selected series URL lacks a trailing slash. Offline regression fixture uses that exact shape.
 
+## Independent source-only CI gate
+
+- Commit `14e2331f3` added the active repair branch to the existing `.github/workflows/downloader-one-build-preflight.yml`. It only runs frozen-provider verification and Pilot/Acceptance unit tests, not APK assembly, signing, Android installation or publisher acceptance.
+- GitHub Actions run [44152377019](https://github.com/Azrazieliz/AsterionDownloader/actions/runs/44152377019) was queued and then in progress for head `14e2331f3` at the last observed check. **No final conclusion obtained at this checkpoint**. Do not claim the full regression suite passed until the completed job reports success.
+
 ## Verification evidence (never inflate)
 
 - Existing Asterion Control private Git bridge was used; owner Windows repair worktree `D:\AsterionDownloaderRepair_20261116` initially at `26d1cab` with only untracked `.kotlin/` and `scripts/__pycache__/`. A fast-forward to `c4c5fed` completed, preserving tracked source, and a subsequent PowerShell `where.exe gradle` missing command caused the wrapper job exit 1 **after** successful fast-forward (not a Git failure).
