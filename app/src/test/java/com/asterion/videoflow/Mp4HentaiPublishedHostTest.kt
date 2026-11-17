@@ -53,6 +53,22 @@ class Mp4HentaiPublishedHostTest {
             "https://upfilesgo.com/"))
     }
 
+    @Test fun realUpfilesPublicCaptchaRequiresBrowserActionNotFakeDownload(){
+        val selectedHost="https://upfilesgo.com/nGfW"
+        val page=Jsoup.parse("""<html><head><title>Free download</title></head>
+          <body><form id="file-captcha" action="/nGfW" method="post">
+          <input name="_token" type="hidden" value="server-issued">
+          <div class="g-recaptcha" data-sitekey="test-public"></div>
+          </form></body></html>""",selectedHost)
+        assertTrue(Mp4HentaiPublishedHost.requiresInteractiveVerification(page))
+        assertEquals(VideoFailurePolicy.Kind.AUTH,
+            VideoFailurePolicy.classify(
+                "MP4Hentai selected file host requires CAPTCHA verification "+
+                "in an authorized browser session"))
+        val plain=Jsoup.parse("""<article><a href="/files/one">Get download links</a></article>""",
+            selectedHost)
+        assertFalse(Mp4HentaiPublishedHost.requiresInteractiveVerification(plain))
+    }
     @Test fun externalHostsAreNeverImplicitTrustedMedia(){
         assertFalse(Mp4HentaiPublishedHost.isPublishedHost(selected,
             "https://mirrored.to.evil.example/files/ABC/file"))
