@@ -24,7 +24,12 @@ internal object VideoHlsDispatch {
             return keys.size==1 && keys.single().removePrefix("viewkey=")
                 .matches(Regex("[A-Za-z0-9_-]{5,50}"))
         }
-        return host=="jav.guru" && VideoSiteProfiles.isVideoPage(url)
+        // The selected HentaiHaven episode also resolves its publisher
+        // HLS only after the page is read. Avoid expiring that manifest
+        // while starting the embedded Python runtime on Android.
+        return (host=="jav.guru" && VideoSiteProfiles.isVideoPage(url)) ||
+            (host=="hentaihaven.xxx" &&
+                HentaiHavenEpisodeSource.isEpisode(url))
     }
 
     fun isSelectedManifest(url:String):Boolean {
