@@ -1407,7 +1407,7 @@ class TransferService: Service() {
     @Volatile private var timedOut=false
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    @Synchronized override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if(timedOut){stopSelf();return START_NOT_STICKY}
         try {
             VideoEngine.makeChannel(this)
@@ -1438,11 +1438,18 @@ class TransferService: Service() {
             try { future.get() }
             catch(_:Exception){ /* Recorded by VideoEngine, persisted in VideoDb. */ }
             finally {
-                if(active===future)active=null
-                // stopSelfResult(old startId) silently failed after a newer
-                // start request, leaving dataSync foreground indefinitely.
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                synchronized(this){
+                    // Old lifecycle waiters must never stop a newer active
+                    // transfer started by another manual selection.
+                    if(active===future){
+                        active=null
+                        // stopSelfResult(old startId) can leave FGS
+                        // indefinitely after a newer start; this guarded
+                        // stopSelf owns only the current active generation.
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
             }
         },"videoflow-primary-lifecycle").start()
         // Never replay a crashed service intent in an Android restart loop.
