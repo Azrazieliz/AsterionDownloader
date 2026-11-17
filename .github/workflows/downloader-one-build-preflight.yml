@@ -8,6 +8,8 @@ on:
       - '.github/workflows/downloader-one-build-preflight.yml'
       - 'app/src/**'
       - 'app/build.gradle.kts'
+      - 'scripts/provider_focus_probe_batch.py'
+      - 'scripts/test_provider_focus_probe_batch.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,5 +26,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Check selected-provider engine batch results without network or APK
+        run: python3 -m unittest discover -s scripts -p 'test_provider_focus_probe_batch.py' -v
       - name: Compile source and run unit tests without assembling an APK
         run: gradle :app:verifyFrozenVideoProviders testPilotUnitTest testAcceptanceUnitTest --stacktrace --console=plain
