@@ -43,3 +43,36 @@ with urllib.request.urlopen(r,timeout=25) as response:
    urllib.parse.urljoin(PAGE,x)).hostname for x in p.scripts}),
   "ajax_likely":len(re.findall(r"fetch\s*\(|XMLHttpRequest|/api/|dl=0|hosting links",doc,re.I))
   }),flush=True)
+ selected_links=[a for a in p.links if a["id"]=="download-link" and
+   "click to view the download links" in a["text"].lower()]
+ if len(selected_links)==1:
+  dest=urllib.parse.urlsplit(urllib.parse.urljoin(PAGE,
+      html.unescape(selected_links[0]["href"])))
+  origin=urllib.parse.urlsplit(PAGE)
+  if (dest.scheme=="https" and dest.hostname in
+      ("mirrored.to","www.mirrored.to") and
+      dest.path==origin.path and
+      urllib.parse.parse_qs(dest.query).get("dl")==["0"]):
+   try:
+    extra=urllib.request.Request(dest.geturl(),headers={
+       "Referer":PAGE,"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36",
+       "Accept-Encoding":"identity"})
+    with urllib.request.urlopen(extra,timeout=25) as res:
+     after=res.read(1_600_000).decode("utf-8","replace")
+     parser=P();parser.feed(after)
+     hosts=[]
+     for a in parser.links:
+      u=urllib.parse.urlsplit(urllib.parse.urljoin(dest.geturl(),a["href"]))
+      if (u.scheme=="https" and u.hostname and
+          u.hostname not in ("mirrored.to","www.mirrored.to") and
+          not re.search("ads|analytics|doubleclick",u.hostname)):
+       hosts.append(u.hostname)
+     print(json.dumps({"stage":"PUBLISHER_SELECTED_DL0",
+        "http":res.status,"html_bytes":len(after),
+        "host_candidates":sorted(set(hosts))[:15],
+        "placeholder":bool(re.search("fetching hosting links",after,re.I)),
+        "anchors":len(parser.links)}),flush=True)
+   except Exception as e:
+    print(json.dumps({"stage":"PUBLISHER_SELECTED_DL0",
+      "error_class":type(e).__name__}),flush=True)
+
