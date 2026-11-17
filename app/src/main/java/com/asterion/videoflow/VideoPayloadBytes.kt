@@ -11,8 +11,13 @@ internal object VideoPayloadBytes {
         "m4a","mp3","flac","opus","aac","ogg","3gp")
     fun isPayload(filename:String):Boolean {
         val name=filename.lowercase(java.util.Locale.ROOT)
-        if(name.endsWith(".part")) {
-            val withoutPart=name.removeSuffix(".part")
+        // yt-dlp's HLS/DASH fragment workers write .part-Frag<integer>
+        // while individual segments are arriving. Previous accounting
+        // ignored those bytes, declaring a live stream stalled at 0 and
+        // cancelling otherwise healthy Jav Guru/Pornhub transfers.
+        val fragment=name.replace(Regex("""(?i)\\.part-frag[0-9]{1,10}$"""),".part")
+        if(fragment.endsWith(".part")) {
+            val withoutPart=fragment.removeSuffix(".part")
             return media.any { withoutPart.endsWith("."+it) } ||
                 media.any { withoutPart.contains("."+it+".") }
         }
