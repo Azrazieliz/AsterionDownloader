@@ -1,6 +1,6 @@
 # Asterion Downloader — current reliability and failure classification
 
-**Updated: 2026-11-16, after live device recheck. This supersedes the earlier stale matrix.**
+**Updated with repair evidence on 2026-11-17.** This classification supersedes earlier stale matrices. See [the 17 November verified code and live-file repair checkpoint](REAL_REPAIR_CHECKPOINT_2026-11-17.md) for newer exact test receipts. Those PC successes do **not** change Android provider classifications without complete phone receipts.
 
 ## Current baseline (observed, not inferred)
 - Asterion Control reports the paired Samsung **SM-S948B, Android 17** reachable; `com.azrael.pixivdumpsync.acceptance` installed and responding to its native diagnostic bridge.
