@@ -112,7 +112,10 @@ def full():
     import yt_dlp
     if yt_dlp.version.__version__!="2026.10.26":
         raise RuntimeError("Wrong production wheel")
-    with tempfile.TemporaryDirectory(prefix="asterion_javguru_sb_full_") as folder:
+    stage=Path("D:/AsterionControlRelease/diagnostics")
+    if not stage.is_dir() or shutil.disk_usage(stage).free < 2000000000:
+        raise RuntimeError("PC_MEDIA_STAGING_CAPACITY_BLOCKED: selected-original full file needs free space on D; do not use C system TEMP")
+    with tempfile.TemporaryDirectory(prefix="asterion_javguru_sb_full_",dir=stage) as folder:
         opts={"quiet":True,"no_warnings":True,
           "format":"bestvideo[height<=480]+bestaudio/best[height<=480]/best",
           "hls_use_mpegts":True,"merge_output_format":"mkv","noplaylist":True,
