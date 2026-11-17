@@ -164,6 +164,28 @@ internal object PublisherOriginalExtractors {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
         val page=WebDiscovery.selectedDocument(selected,context)
+        // Real Pornhub selected watch pages publish their signed original
+        // HLS quality variants in one first-party flashvars_<id> JSON object.
+        // Initial HTML5 video/src is absent; generic CSS only finds previews.
+        if(host=="pornhub.com"){
+            val exact=PornhubOriginalSource.published(selected,page.outerHtml())
+            if(exact.isNotEmpty())return exact.map{
+                Candidate(it.url,selected,host)
+            }
+            // A browser session can legitimately render a selected player
+            // unavailable in bare HTTP. Keep the SAME watch/viewkey and do
+            // not promote any recommendation, preview or advertising source.
+            val rendered=runCatching {
+                if(com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(selected))
+                    com.azrael.pixivdumpsync.BrowserPageFetch
+                        .html(context,selected)
+                else null
+            }.getOrNull()
+            val fallback=rendered?.let {
+                PornhubOriginalSource.published(selected,it)
+            }.orEmpty()
+            return fallback.map {Candidate(it.url,selected,host)}
+        }
         // The selected FreePornVideos video publishes actual full-quality
         // MP4 <source> links under its own /get_file/ endpoint. Dispatch the
         // selected-ID-bound publisher source directly; Python page metadata
