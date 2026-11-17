@@ -38,13 +38,17 @@ class ArchivebateWatchActivity:Activity() {
 
     /** Never enqueue an iframe/advertising URL, only the user's selected
      * original proven on the real publisher player. */
-    private fun enqueueSelected(media:String,title:String) {
-        if(!ArchivebateSelectedMedia.isSelectedMedia(media)) {
+    private fun enqueueSelected(watch:String,media:String,title:String) {
+        if(!ArchivebateSelectedMedia.isSelectedArticle(watch) ||
+            !ArchivebateSelectedMedia.isSelectedMedia(media)) {
             userDownloadPending.set(false)
             return
         }
         val queued=VideoDb(this).use { db ->
-            db.addVideo(media,title,0L,origin="user")
+            // Persist the exact selected WATCH, not its short-lived signed
+            // Mixdrop CDN URL. Retrying must re-resolve this same selected
+            // player with a fresh valid CDN token and correct Referer.
+            db.addVideo(watch,title,0L,origin="user")
         }
         if(queued) {
             ArchivebateDiagnostics.record(this,"queued_original")
@@ -141,7 +145,7 @@ class ArchivebateWatchActivity:Activity() {
                     JSONTokener(response).nextValue() as? String
                 }.getOrNull().orEmpty()
                 if(ArchivebateSelectedMedia.isSelectedMedia(observed)){
-                    enqueueSelected(observed,title)
+                    enqueueSelected(watch,observed,title)
                     return@evaluateJavascript
                 }
                 val exact=selectedEmbed
@@ -164,7 +168,7 @@ class ArchivebateWatchActivity:Activity() {
                     runOnUiThread{
                         if(isFinishing || isDestroyed)return@runOnUiThread
                         verified.onSuccess{source->
-                            enqueueSelected(source,title)
+                            enqueueSelected(watch,source,title)
                         }.onFailure{failure->
                             userDownloadPending.set(false)
                             ArchivebateDiagnostics.record(this,
