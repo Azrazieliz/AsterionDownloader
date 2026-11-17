@@ -72,7 +72,10 @@ def main():
     print(json.dumps({"provider":"pornhub","stage":"ONE_SELECTED_PUBLISHER_HLS",
         "published_qualities":count,"chosen_height":height,
         "android_receipt_verified":False}),flush=True)
-    with tempfile.TemporaryDirectory(prefix="asterion_pornhub_pc_complete_") as folder:
+    stage=Path("D:/AsterionControlRelease/diagnostics")
+    if not stage.is_dir() or shutil.disk_usage(stage).free < 2000000000:
+        raise RuntimeError("PC_MEDIA_STAGING_CAPACITY_BLOCKED: selected-original full file needs free space on D; do not use C system TEMP")
+    with tempfile.TemporaryDirectory(prefix="asterion_pornhub_pc_complete_",dir=stage) as folder:
         opts={"quiet":True,"no_warnings":True,
               "outtmpl":str(Path(folder)/"selected-original.%(ext)s"),
               "noplaylist":True,"format":"bv+ba/b",
