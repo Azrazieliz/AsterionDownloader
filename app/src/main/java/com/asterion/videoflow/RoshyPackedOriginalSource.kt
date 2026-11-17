@@ -25,9 +25,6 @@ internal object RoshyPackedOriginalSource {
     private val firstParty=Regex(
         """^/stream/[A-Za-z0-9_-]{6,80}/[A-Za-z0-9_-]{6,80}/"""+
         """[0-9]{8,12}/[0-9]{5,12}/master\.m3u8$""")
-    private val packer=Regex(
-        """(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\\.|[^'\\])*)'\.split\('\|'\)"""
-    )
     fun selectedEmbed(selected:String,frame:String):Boolean {
         val owner=uri(selected)?:return false
         val f=uri(frame)?:return false
@@ -41,11 +38,74 @@ internal object RoshyPackedOriginalSource {
     }
     private fun unpack(raw:String):String? {
         if(raw.length !in 100..160_000)return null
-        val match=packer.find(raw)?:return null
-        val packed=match.groupValues[1]
-        val radix=match.groupValues[2].toIntOrNull()?:return null
-        val count=match.groupValues[3].toIntOrNull()?:return null
-        val words=match.groupValues[4].split('|')
+        val marker="eval(function(p,a,c,k,e,d)"
+        val anchor=raw.indexOf(marker)
+        if(anchor<0)return null
+        /** Linear JS single-quote literal reader. Regex of the 5,922-byte
+         * packed string triggered a real JVM StackOverflowError. Never use
+         * a repeated capture group over provider-supplied long literals.
+         */
+        fun literal(at:Int):Pair<String,Int>? {
+            if(at>=raw.length || raw[at]!='\'')return null
+            val value=StringBuilder()
+            var i=at+1
+            while(i<raw.length && value.length<=120_000){
+                val ch=raw[i]
+                when(ch){
+                    '\\'->{
+                        if(i+1>=raw.length)return null
+                        value.append(ch).append(raw[i+1])
+                        i+=2
+                    }
+                    '\''->return value.toString() to i+1
+                    else->{value.append(ch);i++}
+                }
+            }
+            return null
+        }
+        fun skip(at:Int):Int {
+            var i=at
+            while(i<raw.length && raw[i].isWhitespace())i++
+            return i
+        }
+        fun number(at:Int):Pair<Int,Int>? {
+            var i=skip(at)
+            val from=i
+            while(i<raw.length && raw[i] in '0'..'9' && i-from<5)i++
+            if(i==from)return null
+            return raw.substring(from,i).toIntOrNull()?.let{it to i}
+        }
+        val end=(anchor+12_500).coerceAtMost(raw.length)
+        var close=anchor+marker.length
+        var structure:Triple<String,Int,Pair<Int,String>>?=null
+        while(close<end){
+            val boundary=raw.indexOf('}',close)
+            if(boundary<0 || boundary>=end)break
+            close=boundary+1
+            var i=skip(close)
+            if(i>=raw.length || raw[i]!='(')continue
+            i=skip(i+1)
+            val packed=literal(i)?:continue
+            i=skip(packed.second)
+            if(i>=raw.length || raw[i]!=',')continue
+            val radix=number(i+1)?:continue
+            i=skip(radix.second)
+            if(i>=raw.length || raw[i]!=',')continue
+            val count=number(i+1)?:continue
+            i=skip(count.second)
+            if(i>=raw.length || raw[i]!=',')continue
+            val dictionary=literal(skip(i+1))?:continue
+            i=skip(dictionary.second)
+            if(!raw.startsWith(".split('|')",i))continue
+            structure=Triple(packed.first,radix.first,
+                count.first to dictionary.first)
+            break
+        }
+        val parsed=structure?:return null
+        val packed=parsed.first
+        val radix=parsed.second
+        val count=parsed.third.first
+        val words=parsed.third.second.split('|')
         if(radix !in 2..36 || count !in 1..850 ||
             packed.length !in 50..120_000 || words.size>900)return null
         val alphabet="0123456789abcdefghijklmnopqrstuvwxyz"
@@ -108,6 +168,9 @@ internal object RoshyPackedOriginalSource {
                 path.startsWith("/hls2/") &&
                 path.endsWith(".m3u8") && !link.rawQuery.isNullOrBlank()
             if(valid)return link.toASCIIString()
+            // A non-empty, unsafe first-choice stream is evidence of a
+            // conflicting player, not permission to choose another scene.
+            if(name=="hls4")return null
         }
         return null
     }
