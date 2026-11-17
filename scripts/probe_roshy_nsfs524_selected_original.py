@@ -68,7 +68,32 @@ def main():
   print(json.dumps({"stage":"SELECTED_KAMEHAUS_PUBLIC_PLAYER",
     "http":code,"player_html_bytes":len(markup),
     "packed_jwplayer_count":markup.count("eval(function(p,a,c,k,e,d)")}),flush=True)
- return 0 if articles else 2
+  import verify_roshy_selected_packed_hls as verifier
+  scripts=verifier.Script();scripts.feed(markup)
+  valid=[verifier.deobfuscate(raw) for raw in scripts.raw
+    if "eval(function(p,a,c,k,e,d)" in raw]
+  if len(valid)!=1 or not valid[0]:return 4
+  decoded=valid[0]
+  selected_id=urllib.parse.urlsplit(frame).path.strip("/").split("/")[-1]
+  if "tt"+selected_id not in decoded:return 5
+  config=re.search(r"\bvar\s+links\s*=\s*",decoded)
+  if not config:return 6
+  tracks,_=json.JSONDecoder().raw_decode(decoded[config.end():].lstrip())
+  hls=urllib.parse.urljoin(frame,tracks.get("hls4",""))
+  u=urllib.parse.urlsplit(hls)
+  if u.scheme!="https" or u.hostname!="kamehaus.net" or not re.fullmatch(
+      r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",u.path):return 7
+  with urllib.request.urlopen(urllib.request.Request(hls,headers={
+    "User-Agent":UA,"Referer":frame,"Accept-Encoding":"identity"}),timeout=23) as response:
+    payload=response.read(25000)
+    valid_hls=response.status==200 and payload.lstrip().startswith(b"#EXTM3U")
+    print(json.dumps({"stage":"EXACT_NSFS524_SIGNED_HLS",
+      "http":response.status,"valid_hls":valid_hls,
+      "master_bytes":len(payload),
+      "variant_count":payload.count(b"#EXT-X-STREAM-INF"),
+      "mime":response.headers.get("Content-Type","").split(";")[0]}),flush=True)
+    return 0 if valid_hls else 8
+ return 2
 if __name__=="__main__":
  try:raise SystemExit(main())
  except Exception as err:
