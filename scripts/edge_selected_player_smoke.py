@@ -11,6 +11,7 @@ TARGETS={
  "FullPorner":"https://fullporner.com/player/9509933/14",
  "HQPorner":"https://myxstudio.top/embed/5d8297e451a0e650ca",
  "UncensoredHentai":"https://nhplayer.com/v/Z2flAXXPucyCbVJ/",
+ "NHPlayerSelected":"https://nhplayer.com/v/Z2flAXXPucyCbVJ/",
  "JAVIDEO":"https://javideo.net/en/fc2ppv-4994603",
  "HentaiBros":"https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
  "3DHentai":"https://3dhentaix.com/ntr-compilation/",
