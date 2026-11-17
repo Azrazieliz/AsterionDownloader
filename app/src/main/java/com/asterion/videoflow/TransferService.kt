@@ -855,6 +855,12 @@ object VideoEngine {
         // No generic fallback is permitted for this provider. If the selected
         // player does not identify one unambiguous source, fail instead.
         val strictArchivebate=ArchivebateSelectedMedia.isSelectedArticle(item.url)
+        // User-reported NSFS-524 failure: after receiving real Roshy bytes,
+        // a failed HLS leg retried the *article* via generic Python yt-dlp.
+        // That fallback is neither the selected playable original nor safe
+        // to mix with an in-progress HLS .part file.
+        val strictRoshy=NetworkRoute.siteKey(item.url)=="roshy.tv" &&
+            VideoSiteProfiles.isVideoPage(item.url)
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         val strictIframe=NetworkRoute.siteKey(item.url) in
@@ -862,6 +868,11 @@ object VideoEngine {
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
+        if(strictRoshy && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Roshy selected original stream was not resolved; "+
+                    "never retry its watch article through generic Python"))
         if(strictArchivebate && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1076,6 +1087,11 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictRoshy && !downloaded)
+                throw (last?:IllegalStateException(
+                    "Roshy exact selected player did not complete; "+
+                    "retain HLS fragments for resume instead of attempting "+
+                    "unrelated Python watch-page extraction"))
             if(strictArchivebate && !downloaded)
                 throw (last?:IllegalStateException(
                     "Archivebate selected Mixdrop player did not expose a "+
