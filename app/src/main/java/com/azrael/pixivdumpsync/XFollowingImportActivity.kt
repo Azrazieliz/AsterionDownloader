@@ -153,6 +153,10 @@ class XFollowingImportActivity:Activity(){
         setContentView(layout)
         browser.loadUrl("https://x.com/home")
     }
+    private data class FollowingScan(
+        val users:List<String>,val position:Int,val extent:Int,
+        val loggedInProfileHref:String
+    )
     private fun acceptScan(raw:String) {
             val batch=runCatching {
                 val obj=JSONObject(raw)
@@ -165,21 +169,34 @@ class XFollowingImportActivity:Activity(){
                             it,evidence.optBoolean("following",false))
                     }
                 }
-                Triple(items,obj.optInt("position",0),obj.optInt("extent",0))
+                FollowingScan(items,obj.optInt("position",0),
+                    obj.optInt("extent",0),obj.optString("profileHref"))
             }.getOrNull()?:return
                 if(!scanning||completed)return
                 val own=getPreferences(MODE_PRIVATE).getString("own_x_handle","")
                     .orEmpty().trim().removePrefix("@")
                 val page=Uri.parse(browser.url.orEmpty()).path.orEmpty()
-                if(!XFollowingImportPolicy.isOwnFollowingPage(page,own))
+                if(!XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
+                        page,own,batch.loggedInProfileHref)){
+                    label.text="X import paused: the signed-in profile could not "+
+                        "be verified as @"+own+". Open your own account's Following list."
                     return
-                val fresh=batch.first.filter{validHandle(it)&&discovered.add(it)}
-                listPosition=batch.second
-                listExtent=batch.third
+                }
+                val fresh=batch.users.filter{validHandle(it)&&discovered.add(it)}
+                listPosition=batch.position
+                listExtent=batch.extent
                 if(fresh.isNotEmpty()){
                     // Never accumulate an entire thousand-user account list in RAM
                     // before committing. Persistence is serial and idempotent.
                     importWorker.execute {
+                        // Serial persistence may lag behind navigation. Never
+                        // commit a former account's scan after the owner
+                        // switched the authenticated profile being imported.
+                        val current=getPreferences(MODE_PRIVATE)
+                            .getString("own_x_handle","").orEmpty()
+                            .trim().removePrefix("@")
+                        if(!current.equals(own,ignoreCase=true))
+                            return@execute
                         val count=XPhotoQueue(applicationContext).use{db->
                             fresh.count{db.addSource("https://x.com/"+it)}
                         }
@@ -263,10 +280,13 @@ class XFollowingImportActivity:Activity(){
                           if(target.scrollTop<=before && cells.length){
                             cells[cells.length-1].scrollIntoView({block:'end'});
                           }
+                          const ownerProfile=document.querySelector(
+                            'a[data-testid="AppTabBar_Profile_Link"]');
                           return JSON.stringify({
                             users:[...found].map(handle=>({handle,following:true})),
                             position:Math.round(target.scrollTop),
-                            extent:Math.round(target.scrollHeight-target.clientHeight)
+                            extent:Math.round(target.scrollHeight-target.clientHeight),
+                            profileHref:ownerProfile?.getAttribute('href')||''
                           });
                         })()
                     """.trimIndent()){ encoded ->
