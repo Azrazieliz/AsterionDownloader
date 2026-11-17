@@ -36,7 +36,7 @@ internal object ArchivebateSelectedMedia {
         return u.scheme=="https" && u.userInfo==null && u.port==-1 &&
             u.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==
                 "archivebate.com" &&
-            Regex("""^/watch/[0-9]{1,16}/?$""").matches(u.path.orEmpty()) &&
+            Regex("""^/(?:u/)?watch/[0-9]{1,16}/?$""").matches(u.path.orEmpty()) &&
             u.rawQuery.isNullOrBlank()
     }
     fun isSelectedEmbed(watch:String,embed:String):Boolean {
@@ -44,7 +44,7 @@ internal object ArchivebateSelectedMedia {
         val player=runCatching{URI(embed)}.getOrNull()?:return false
         return source.scheme=="https" && source.userInfo==null &&
             source.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="archivebate.com" &&
-            Regex("""^/watch/[0-9]{1,16}/?$""").matches(source.path.orEmpty()) &&
+            Regex("""^/(?:u/)?watch/[0-9]{1,16}/?$""").matches(source.path.orEmpty()) &&
             player.scheme=="https" && player.userInfo==null &&
             player.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="mixdrop.ag" &&
             Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(player.path.orEmpty()) &&
