@@ -699,6 +699,7 @@ object VideoEngine {
             var latestBytes=VideoPayloadBytes.count(parent)
             var lastByteTick=start
             var lastLeaseTick=0L
+            var lastHlsFragmentPercent=0
             VideoTransferJournal.record(context,item.id,"transfer")
             try{
                 while(true){
@@ -726,6 +727,25 @@ object VideoEngine {
                         lastByteTick=now
                         VideoTransferJournal.record(
                             context,item.id,"receiving",current.toString())
+                    }
+                    // The shipped yt-dlp stores completed fragment counts in
+                    // a .ytdl checkpoint even when its Java progress callback
+                    // reports 0%. Count only actual complete HLS fragments
+                    // after original media bytes exist on disk. Never infer
+                    // the rate from a predicted bitrate or sparse file.
+                    if(!native && current>0L){
+                        val fragments=VideoHlsFragmentProgress.inspect(parent)
+                        if(fragments!=null &&
+                            fragments.percent>lastHlsFragmentPercent) {
+                            lastHlsFragmentPercent=fragments.percent
+                            if(!db.progressClaim(item.id,item.lease,
+                                    fragments.percent))
+                                throw java.util.concurrent.CancellationException(
+                                    "HLS fragment progress lease superseded")
+                            VideoTransferJournal.record(context,item.id,
+                                "fragments",fragments.description)
+                            status(fragments.percent)
+                        }
                     }
                     val reason=VideoTransferLimits.expired(
                         "transfer",now-start,now-lastByteTick)
