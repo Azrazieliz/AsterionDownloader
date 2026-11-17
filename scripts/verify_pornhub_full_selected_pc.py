@@ -51,7 +51,7 @@ def sources():
     if len(found)!=1:raise RuntimeError("Selected page has no unique publisher media configuration")
     options=[]
     for obj in found[0]["mediaDefinitions"]:
-        if not isinstance(obj,dict) or obj.get("format")!="hls":continue
+        if not isinstance(obj,dict) or obj.get("format") not in ("hls","hls_master"):continue
         link=obj.get("videoUrl","").replace("\\/","/")
         u=urllib.parse.urlsplit(link)
         if (u.scheme!="https" or u.hostname not in ("hm-h.phncdn.com","em-h.phncdn.com")
