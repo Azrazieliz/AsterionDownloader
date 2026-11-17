@@ -41,12 +41,16 @@ internal object HentaiHavenEpisodeSource {
     fun episodes(doc:Document,seriesUrl:String):List<String>{
         if(!isSeries(seriesUrl))return emptyList()
         val prefix=uri(seriesUrl)?.path.orEmpty().trimEnd('/')
+        // URI.resolve treats a slashless series URL as a *file*, turning
+        // relative "episode-N" links into /watch/episode-N (wrong series).
+        // Resolve against the actual series directory instead.
+        val base=uri(seriesUrl.trimEnd('/')+"/")?:return emptyList()
         val found=LinkedHashSet<String>()
         for(link in doc.select("a[href]").take(2000)){
             if(link.closest("aside,.related,.recommendations,.ads,.sidebar")!=null)
                 continue
             val dest=runCatching{
-                uri(seriesUrl)!!.resolve(link.attr("href")).toString()
+                base.resolve(link.attr("href")).toString()
             }.getOrNull()?:continue
             if(!isEpisode(dest))continue
             if(uri(dest)?.path.orEmpty().trimEnd('/')
