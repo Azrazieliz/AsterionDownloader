@@ -408,7 +408,7 @@ object BrowserPageFetch {
                                 if(u.protocol!=='https:')return false;
                                 const host=u.hostname.replace(/^www\./,'');
                                 if(publisher==='archivebate.com')
-                                    return /^\/watch\/\d{1,16}\/?$/.test(currentPath) &&
+                                    return /^\/(?:u\/)?watch\/\d{1,16}\/?$/.test(currentPath) &&
                                         host==='mixdrop.ag' &&
                                         /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
                                 if(publisher==='javideo.net'){
