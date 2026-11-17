@@ -199,3 +199,44 @@ tasks.matching {
 }.configureEach {
     dependsOn(verifyBundledYtDlp)
 }
+
+
+/**
+ * Owner-reported v1.3.72 working video providers are frozen until independently
+ * retested on Android. The seven failing providers are NOT frozen. This fast
+ * source-identity gate runs on every Acceptance APK package, even when a build
+ * is requested without running the broader JVM unit-test suite.
+ * Full behavioral fixtures remain in WorkingVideoProviderFreezeTest.
+ */
+val verifyFrozenVideoProviders by tasks.registering {
+    group = "verification"
+    description = "Prevent regressions to accepted working video provider engines"
+    doLast {
+        val expected = linkedMapOf(
+            "FullPornerOriginalSource.kt" to "312878511c2b3fbb2be47e571d6cba5de8fbcd67",
+            "FullPornerParallelOriginal.kt" to "598c7392829a599093b0bd20b1a46ed63051446b",
+            "ThreeDHentaiSignedOriginal.kt" to "9bff43bbdf5d29479e4ac41636b21a2c3b159fa7",
+            "Rule34VideoOriginalSource.kt" to "02d00276a554a92c685eef249656f9bcaf3e846f",
+            "EpornerOriginalSource.kt" to "c9c4b21720bfbd702d48dea5be6a11dab38bc485",
+            "FreePornVideosOriginalSource.kt" to "184e349e1b97800746578f79aa2bc1c9250fdeaa"
+        )
+        for ((filename, knownGoodSha) in expected) {
+            val source = file("src/main/java/com/asterion/videoflow/$filename")
+            check(source.isFile) { "Frozen video engine source missing: $filename" }
+            // Normalize only checkout line endings (LF in Git, CRLF on Windows).
+            val bytes = source.readText(Charsets.UTF_8)
+                .replace("\r\n", "\n").toByteArray(Charsets.UTF_8)
+            val md = MessageDigest.getInstance("SHA-1")
+            md.update(("blob " + bytes.size + "\u0000").toByteArray(Charsets.US_ASCII))
+            md.update(bytes)
+            val actual = md.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+            check(actual == knownGoodSha) {
+                "FROZEN WORKING PROVIDER CHANGED: $filename. " +
+                    "Revalidate real original/thumbnail delivery before updating its baseline."
+            }
+        }
+    }
+}
+tasks.matching { it.name == "packageAcceptance" }.configureEach {
+    dependsOn(verifyFrozenVideoProviders)
+}
