@@ -296,11 +296,15 @@ object WebDiscovery {
         // are previews of OTHER recordings. Chrome confirmed that the
         // selected player is a separate Mixdrop iframe. Never publish these
         // preview clips as full downloadable originals.
-        val archivebateCatalog=runCatching{
-            URI(root).host.orEmpty().lowercase().removePrefix("www.")==
-                "archivebate.com"
+        // These publishers put playable but UNRELATED recommendation or
+        // advert clips in their watch pages. Only an explicit selected-item
+        // resolver may create a download, never a loose listing <video>.
+        val exactPlayerCatalog=runCatching {
+            URI(root).host.orEmpty().lowercase().removePrefix("www.") in
+                setOf("archivebate.com","helloporn.com","hentaihaven.xxx",
+                    "javideo.net")
         }.getOrDefault(false)
-        for(node in (if(archivebateCatalog)emptyList()
+        for(node in (if(exactPlayerCatalog)emptyList()
             else doc.select("main video[src],main video source[src],"+
                 "article video[src],article video source[src],"+
                 ".post video[src],.post video source[src]"))){
