@@ -189,6 +189,13 @@ def main():
           return {host:location.hostname,pathname:location.pathname,
             ready:document.readyState,videoCount:players.length,
             sources:loaded,frameCount:document.querySelectorAll('iframe').length,
+            playerErrors:[...document.querySelectorAll(
+              '.vjs-error-display,.vjs-modal-dialog,.video-js .error')]
+              .map(e=>(e.textContent||'').trim().slice(0,180))
+              .filter(Boolean).slice(0,3),
+            resourceHosts:[...new Set(performance.getEntriesByType('resource')
+              .map(e=>{try{return new URL(e.name).hostname;}catch(_){return '';}})
+              .filter(Boolean))].slice(0,16),
             challenge:/verify you are human|captcha|access denied/i
               .test(document.body?.innerText?.slice(0,2000)||'')};
         })()""") or {}
@@ -201,6 +208,8 @@ def main():
         "ready":rendered.get("ready"),"video_count":rendered.get("videoCount"),
         "iframe_count":rendered.get("frameCount"),
         "challenge":rendered.get("challenge"),
+        "player_errors":rendered.get("playerErrors",[]),
+        "network_hosts":rendered.get("resourceHosts",[]),
         "sources":[{"host":urllib.parse.urlsplit(x.get("src","")).hostname,
             "scheme":urllib.parse.urlsplit(x.get("src","")).scheme,
             "path_ext":urllib.parse.urlsplit(x.get("src","")).path.rsplit(".",1)[-1][-10:],
