@@ -37,8 +37,12 @@ $finger=(($cert -split 'SHA256:')[-1] -replace '[^A-Fa-f0-9]','').ToLowerInvaria
 if ($finger -ne $expected) { throw "Keystore certificate mismatches installed update fingerprint: $finger" }
 $env:ASTERION_PREVIEW_KEY_ALIAS=$alias
 Write-Output "SIGNER_CERTIFICATE_VERIFIED=$finger"
+# Gradle emits Android warnings on stderr even on success; PowerShell
+# ErrorActionPreference=Stop must not mistake those for fatal script errors.
+$ErrorActionPreference='Continue'
 & $gradle -p $w :app:assembleAcceptance --offline --no-daemon --console=plain *> $log
 $rc=$LASTEXITCODE
+$ErrorActionPreference='Stop'
 Get-Content $log -Tail 45
 if ($rc -ne 0) { throw "Gradle assembleAcceptance failed: $rc" }
 if (-not(Test-Path $apk)) { throw 'APK output missing' }
