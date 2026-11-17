@@ -67,6 +67,12 @@ def main():
   "qualities":[q for q,_ in sources][:12],
   "media_hosts":sorted(set(urllib.parse.urlsplit(s).hostname for _,s in sources))[:5]}),flush=True)
  if not sources:return 2
+ for quality,media in sources:
+  p=urllib.parse.urlsplit(media).path
+  kotlin_shape=bool(re.fullmatch(r"/[A-Za-z0-9_./\\-]{12,700}\\.m3u8",p,re.I))
+  print(json.dumps({"stage":"REAL_SELECTED_HLS_PATH_SHAPE",
+   "quality":quality,"path_length":len(p),"simple_kotlin_shape":kotlin_shape,
+   "non_alphanumeric_path_symbols":sorted(set(re.sub(r"[A-Za-z0-9_/.-]","",p)))}),flush=True)
  for q,source in sorted(sources,reverse=True)[:2]:
   try:
    with urllib.request.urlopen(request(source,selected),timeout=23) as response:
