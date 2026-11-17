@@ -95,6 +95,16 @@ def run():
             js=scripts[0]
             cid=value(js,"cid");base=value(js,"base");rtype=value(js,"rtype")
             m=re.search(r"\bkeys\s*:\s*\[\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\]",js)
+            print(json.dumps({"server":tag,"stage":"ACTUAL_RELAY_JS_SHAPE",
+                "has_cid":bool(cid),"cid_element_exists":cid in w.nodes if cid else False,
+                "base_host":urllib.parse.urlsplit(base or "").hostname,
+                "base_path":urllib.parse.urlsplit(base or "").path,
+                "rtype":rtype,"has_keys":m is not None,
+                "relay_scripts":len(w.code),"inline_config_scripts":len(scripts),
+                "markers":{"window_cfg":wrapper.count("window.cfg"),
+                    "fullToken.rev":wrapper.count("fullToken.rev"),
+                    "activate_real_stream":wrapper.count("activate_real_stream")},
+                "wrapper_status":code}),flush=True)
             if(not cid or cid not in w.nodes or base!="https://jav.guru/searcho/"
                 or rtype not in ("e","v","s") or m is None):
                 raise RuntimeError("first-party relay configuration absent")
