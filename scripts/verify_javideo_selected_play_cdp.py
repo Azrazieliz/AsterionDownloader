@@ -92,8 +92,8 @@ def main():
     exact=[]
     for item in frames:
      uri=urllib.parse.urlsplit(item.get("uri",""))
-     if uri.scheme=="https" and uri.hostname in HOSTS and not item.get("ad") and
-         re.fullmatch(r"/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?",uri.path):
+     if (uri.scheme=="https" and uri.hostname in HOSTS and not item.get("ad") and
+         re.fullmatch(r"/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?",uri.path)):
       exact.append(item["uri"])
     print(json.dumps({"stage":"SELECTED_PLAY_RENDERED",
       "visible_captcha":found.get("visibleGate"),"active_player_containers":found.get("active"),
