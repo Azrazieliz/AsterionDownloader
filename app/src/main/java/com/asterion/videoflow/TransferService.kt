@@ -881,6 +881,13 @@ object VideoEngine {
         // scheduled site sync. The old resolver fetched the same HTML
         // repeatedly through generic discovery and WatchPorn on EVERY site
         // before reaching the relevant provider, stalling parallel slots.
+        // Prewarm the existing extractor BEFORE acquiring a short-lived
+        // signed Jav Guru/Pornhub HLS URL. Avoid a Python/yt-dlp startup
+        // pause between publisher discovery and the first media fragment.
+        if(userRequested && VideoHlsDispatch.needsRuntimeBeforeSource(item.url)){
+            VideoTransferJournal.record(context,item.id,"signed_hls_runtime")
+            inspectPublisher{ensureExtractor(context)}
+        }
         val publisherOriginals=if(canInspectPublisherHtml &&
             PublisherOriginalExtractors.owns(item.url) &&
             VideoSiteProfiles.isVideoPage(item.url))
