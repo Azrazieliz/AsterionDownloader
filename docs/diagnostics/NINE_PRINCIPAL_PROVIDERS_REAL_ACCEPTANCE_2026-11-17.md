@@ -1,4 +1,4 @@
-# Ten priority adult/video providers (original nine + Archivebate) — real selected-original verification (2026-11-17)
+# Eleven priority adult/video providers (original nine + Archivebate + HelloPorn) — real selected-original verification (2026-11-17)
 
 **GOAL:** All nine must retrieve the exact user-selected ORIGINAL fully on the paired Samsung, persist a correct MediaStore/Downloads receipt, play the full file, survive app restart and remain reliable on repeats. **Status: NOT FINISHED.** Do **NOT** call a passing player, metadata, HTTP 206, FFprobe on a partial stream, a PC file, or unit tests a working Android provider.
 
@@ -18,10 +18,11 @@ Repository: private `Azrazieliz/AsterionDownloader`; original implementation bra
 | **UncensoredHentai** | Selected episode → actual `nhplayer.com/v/Z2flAXXPucyCbVJ/` HTTP200; HTML self-ref iframe, no selected source/video/HLS; current browser smoke no playable source | **FAIL (embedded original unresolved)** | **FAIL / not tested** |
 | **MP4Hentai** | Selected `/2026/11/nagi-kannagi-18min50s-v/` HTTP200; two actual selected publisher links `Mirror` and `Upfiles`. Mirrored.to landing HTTP200 "Click to view the download links" intermediate `/files/DF7298C6/`; Upfiles redirects to upfilesgo.com HTML200; neither HTML response is an original video | **FAIL (final host media unresolved)** | **FAIL / not tested** |
 | **Archivebate (added by owner)** | Real selected `https://archivebate.com/watch/16458050` → exact first-party-published `mixdrop.ag/e/...` iframe (observed redirect only to same-player `mxdrop.click/e/...`); `ArchivebateSelectedMedia.kt` admits only selected CDN MP4 from `cdn.freefile.io`, excluding page preview/recommendation videos. Historical owner report: intermittent; current selected complete file not independently verified. | **OPEN (full original not verified)** | **FAIL / selected Android MediaStore receipt not verified** |
+| **HelloPorn (added by owner)** | Real catalog publishes selected `/video-<id>-<slug>` posts. Selected `/video-74763-...` HTTP 200 with one VOE iframe in actual publisher page; 48 other `<video>` elements may be related previews and must be excluded. Existing `helloPornOriginals` uses exact selected VOE player but original-media bytes and whole file not yet verified. | **OPEN (no complete original)** | **FAIL / no installed repair acceptance** |
 
 **PC whole-file count: 3/9 (3DHentaiX, Roshy TV and one genuine FullPorner selection). Paired Samsung accepted whole-file count: 0/9.**
 
-**OWNER UPDATE: Archivebate is the tenth provider, not an optional later module. Expanded strict acceptance 3/10 complete on PC and 0/10 on Samsung.** Code remains uninstalled. No source-quality success is a claim of the requested final outcome.
+**OWNER UPDATE: Archivebate was tenth; HelloPorn is now eleventh. Eleven-priority acceptance: 3/11 completed on PC, 0/11 on Samsung.** Code remains uninstalled. No source-quality success is a claim of the requested final outcome.
 
 ## Reproducible positive evidence — no fabricated receipts
 
@@ -95,3 +96,7 @@ Current exact prioritization: ten principal video providers (original nine + Arc
 
 
 **Post-gate source-only repair, no new APK**: MP4Hentai published UpFiles public free POST demonstrably presents `form#file-captcha` after the normal form submission; the previous resolver could follow the page as if it might contain a verified original. Commits `50f92dcc0b9ee0f00eb6d46c057133c4f0010156` and `041502e75bed41ac4a67ef8cc06d729bb7ddbbf8` now classify that selected host response as requiring authorized CAPTCHA verification rather than consuming HTML as selected MP4 or scheduling pointless retries. Exact `Mp4HentaiPublishedHostTest`, `ArchivebateSelectedMediaTest` and `VideoHlsFragmentProgressTest` pass in **source-only Gradle tests**, `BUILD SUCCESSFUL in 1m11s`, exit0, branch checkout `041502e75bed41ac4a67ef8cc06d729bb7ddbbf8`, command `dl-final-only-source-tests-20261117-1410`. **NO APK BUILD** or transfer during these tests. MP4Hentai file still not a completed download; its legitimate human CAPTCHA remains unresolved. Preserve consolidated-build-only owner instruction.
+
+## 2026-11-17 owner reprioritization — four provider pass
+
+Owner explicitly added **HelloPorn** and requested to continue work on **Jav Guru, JAVIDEO, Pornhub and HelloPorn**; no further APK builds until one consolidated application after all provider fixes. Real first-party PC probe `scripts/four_selected_providers_live_probe.py`, bridge command `dl-four-selected-real-20261117-1511`, exit 0: HelloPorn current catalog serves HTTP200 and has real `/video-<id>-<slug>` pages; selected current `/video-74763-nurumassage-170407privatepracticemassage-s01-ericmasterson-summerday-j` HTTP200 with selected `voe.sx` iframe and 48 other video DOM elements, so the correct iframe/scene identity is critical. Pornhub catalog and selected page HTTP200 and two video DOM elements; 401/403 elsewhere do not justify claiming globally inaccessible or a downloaded original. JAVIDEO exact selected page remains script-driven. Jav Guru exact WordPress article and shortcode/live gate are being tested separately. This is a source-level investigation, not full media success.
