@@ -19,6 +19,8 @@ class VideoHlsDispatchTest {
             "https://www.pornhub.com/view_video.php?viewkey=ph1234567"))
         assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://m.pornhub.com/view_video.php?viewkey=ph1234567"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://hentaihaven.xxx/watch/selected-series/episode-2"))
         for(url in listOf(
             "https://jav.guru/",
             "https://jav.guru/category/test/",
