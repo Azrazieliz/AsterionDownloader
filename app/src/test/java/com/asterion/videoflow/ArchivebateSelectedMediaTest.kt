@@ -47,6 +47,47 @@ class ArchivebateSelectedMediaTest {
             selected,"https://mxdrop.click/e/z1p3lkkjhv17mj?redirect=ad"))
     }
 
+    @Test fun publisherPackedMdCoreWurlIsSelectedOriginalWithExactWatchReferrer(){
+        val watch="https://archivebate.com/watch/16458050"
+        val embed="https://mixdrop.ag/e/z1p3lkkjhv17mj"
+        val canonical="https://mxdrop.click/e/z1p3lkkjhv17mj"
+        val source="//gfve4dog1.mxcontent.net/path/selected-original.mp4?token=publisher"
+        val js="""MDCore.poster="https://example.invalid/poster.jpg";
+            MDCore.furl=" ";MDCore.wurl="$source";
+            MDCore.vfile="selected-original.mp4";MDCore.vserver="gfve4dog1";
+            MDCore.remotesub="";MDCore.referrer="https%3A%2F%2Farchivebate.com%2Fwatch%2F16458050";
+            MDCore.blockAB=true;"""
+        val accepted=ArchivebateSelectedMedia.fromDecoded(
+            watch,embed,canonical,js)
+        assertEquals("https://gfve4dog1.mxcontent.net/path/selected-original.mp4?token=publisher",
+            accepted)
+        assertTrue(ArchivebateSelectedMedia.isSelectedMedia(accepted!!))
+        assertNull(ArchivebateSelectedMedia.fromDecoded(watch,embed,
+            "https://mxdrop.click/e/someother12345",js))
+        assertNull(ArchivebateSelectedMedia.fromDecoded(
+            "https://archivebate.com/watch/999",embed,canonical,js))
+        assertNull(ArchivebateSelectedMedia.fromDecoded(
+            watch,embed,canonical,js.replace("mxcontent.net","ads.invalid")))
+        assertNull(ArchivebateSelectedMedia.fromDecoded(
+            watch,embed,canonical,js.replace("selected-original.mp4?token=publisher",
+                "preview.mp4?token=publisher").replace("gfve4dog1.mxcontent.net",
+                    "archivebate.com")))
+        assertNull(ArchivebateSelectedMedia.fromDecoded(
+            watch,embed,canonical,js.replace(
+                "watch%2F16458050","watch%2F00000")))
+    }
+    @Test fun selectedMxcontentMp4AcceptsGenuineMediaButNotAdOrHttp(){
+        assertTrue(ArchivebateSelectedMedia.isSelectedMedia(
+            "https://gfve4dog1.mxcontent.net/path/movie.mp4?token=private"))
+        assertFalse(ArchivebateSelectedMedia.isSelectedMedia(
+            "https://mxcontent.net/path/movie.mp4"))
+        assertFalse(ArchivebateSelectedMedia.isSelectedMedia(
+            "https://ads.mxcontent.net.evil.example/path/movie.mp4"))
+        assertFalse(ArchivebateSelectedMedia.isSelectedMedia(
+            "http://gfve4dog1.mxcontent.net/path/movie.mp4"))
+        assertFalse(ArchivebateSelectedMedia.isSelectedMedia(
+            "https://archivebate.com/wp-content/preview.mp4"))
+    }
     @Test fun selectedMediaCannotBeAnAdvertisementOrParentPagePreview(){
         assertTrue(ArchivebateSelectedMedia.isSelectedMedia(
             "https://cdn.freefile.io/path/real-original.mp4?token=private"))
