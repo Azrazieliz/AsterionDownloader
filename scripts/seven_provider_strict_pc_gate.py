@@ -51,10 +51,12 @@ def run(name, entry):
                 if full else None),
           "evidence_stage":[str(obj.get("stage") or obj.get("status"))
                     for obj in records[-9:]],
-          "terminal_error":next((str(x.get("error_type") or x.get("type") or "")
-                +":"+str(x.get("error_summary") or x.get("reason") or x.get("message") or "")[:120])
+          "terminal_error":next((
+                str(x.get("error_type") or x.get("type") or "")+":"+
+                str(x.get("error_summary") or x.get("reason") or x.get("message") or "")[:120]
                 for x in reversed(records)
-                if x.get("status") in ("NOT_COMPLETE","NOT_VERIFIED","FAILED_NOT_COMPLETE")),None)}
+                if x.get("status") in ("NOT_COMPLETE","NOT_VERIFIED","FAILED_NOT_COMPLETE")
+                ),None)}
         return result
     except subprocess.TimeoutExpired:
         return {"provider":name,"exit":124,"elapsed_s":round(time.monotonic()-started,1),
