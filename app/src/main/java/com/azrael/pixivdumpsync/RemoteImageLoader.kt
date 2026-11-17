@@ -34,8 +34,17 @@ object RemoteImageLoader {
         referer: String = "https://www.pixiv.net/",
         preserveOriginal: Boolean = false
     ) {
-        if (url.isNullOrBlank()) return
+        if (url.isNullOrBlank()) {
+            // Reused artist cards must never retain a previous artist's image.
+            if (imageView.tag != null) {
+                imageView.tag = null
+                imageView.setImageDrawable(null)
+            }
+            return
+        }
         val imageKey=if(preserveOriginal)"original-card:"+url else url
+        if (imageView.tag != null && imageView.tag != imageKey)
+            imageView.setImageDrawable(null)
         imageView.tag = imageKey
         val app=context.applicationContext
         val target=java.lang.ref.WeakReference(imageView)
@@ -46,7 +55,13 @@ object RemoteImageLoader {
         }
 
         executor.execute {
-            val bitmap = runCatching {
+            // A list refresh can rebind this view to another artist while a
+            // request waits in the executor. Never fetch or paint stale work.
+            if (target.get()?.tag != imageKey) return@execute
+            // The same thumbnail may occur on multiple cards in a refresh.
+            // Coalesce cache writes by URL without serializing all thumbnails.
+            val bitmap = FileSaveLockPolicy.forFilename("thumbnail:"+imageKey) {
+                memory.get(imageKey) ?: runCatching {
                 val dir = File(app.cacheDir, "kuroha_images").apply { mkdirs() }
                 val file = File(dir, sha256(url))
 
@@ -104,16 +119,18 @@ object RemoteImageLoader {
 
                 decodeSampled(file, if(preserveOriginal) 1024 else 256)
                     .also { decoded -> if(decoded==null)file.delete() }
-            }.getOrNull()
+                }.getOrNull()
+            }
 
             if (bitmap != null) {
                 memory.put(imageKey, bitmap)
                 target.get()?.post {
                     val current=target.get()
-                    if(current!=null && current.tag==imageKey &&
-                        current.isAttachedToWindow){
+                    // A request can finish during a layout refresh before
+                    // attachment. Painting the correct tagged view is safe
+                    // and prevents a permanently blank card until next visit.
+                    if(current!=null && current.tag==imageKey)
                         current.setImageBitmap(bitmap)
-                    }
                 }
             }
         }
