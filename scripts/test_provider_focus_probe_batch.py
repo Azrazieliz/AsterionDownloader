@@ -16,6 +16,18 @@ spec.loader.exec_module(engine)
 
 
 class ProviderFocusProbeBatchTest(unittest.TestCase):
+    def test_active_case_set_is_exactly_seven_owner_failures(self):
+        self.assertEqual({
+            "jav_guru", "javideo", "helloporn", "pornhub",
+            "hentaihaven", "mp4hentai", "uncensoredhentai",
+        }, set(engine.CASES))
+        self.assertNotIn("archivebate", engine.CASES)
+        self.assertEqual("verify_haven_selected_episode_hls_20261117.py",
+                         engine.CASES["hentaihaven"][0])
+        self.assertEqual("verify_mp4hentai_upfiles_public_form.py",
+                         engine.CASES["mp4hentai"][0])
+
+
     def test_one_failed_provider_makes_whole_batch_fail(self):
         cases=[
             {"provider":"jav_guru","exit":0},
