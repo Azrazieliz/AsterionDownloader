@@ -129,40 +129,17 @@ internal object JavGuruOriginalSource {
         if(h !in setOf("streamhihi.com","lulustream.com"))return null
         if(html.length !in 250..1_000_000)return null
         val document=Jsoup.parse(html,embed)
-        val packedPattern=Regex(
-            """(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\\.|[^'\\])*)'\.split\('\|'\)"""
-        )
+        // Reuse the bounded linear packed-script parser verified against
+        // a real 5,922-byte JWPlayer source. The previous recursive
+        // packedPattern regex could StackOverflow on provider-controlled JS.
+        // Never execute third-party JavaScript or promote an iframe as media.
+        val verified=LinkedHashSet<String>()
         for(script in document.select("script:not([src])").take(60)){
             val body=script.data().ifBlank{script.html()}
             if(!body.contains("eval(function(p,a,c,k,e,d)"))continue
-            for(match in packedPattern.findAll(body).take(4)){
-                val packed=match.groupValues[1]
-                val radix=match.groupValues[2].toIntOrNull()?:continue
-                val count=match.groupValues[3].toIntOrNull()?:continue
-                val words=match.groupValues[4].split('|')
-                if(radix !in 2..36 || count !in 1..850 ||
-                    packed.length !in 50..120_000 || words.size>900)continue
-                val alphabet="0123456789abcdefghijklmnopqrstuvwxyz"
-                fun baseToken(number:Int):String {
-                    var n=number
-                    if(n==0)return "0"
-                    val result=StringBuilder()
-                    while(n>0){
-                        result.append(alphabet[n%radix])
-                        n/=radix
-                    }
-                    return result.reverse().toString()
-                }
-                var decoded=packed
-                for(index in count-1 downTo 0){
-                    val word=words.getOrNull(index).orEmpty()
-                    if(word.isBlank())continue
-                    decoded=Regex("""\b"""+Regex.escape(baseToken(index))+"""\b""")
-                        .replace(decoded){word}
-                    if(decoded.length>180_000)break
-                }
-                if(decoded.length>180_000 || !decoded.contains("jwplayer") ||
-                    !decoded.contains("sources:"))continue
+            val decoded=RoshyPackedOriginalSource.unpack(body)?:continue
+            if(!decoded.contains("jwplayer") ||
+                !decoded.contains("sources:"))continue
                 val sourceRegex=Regex(
                     """(?is)\bsources\s*:\s*\[\s*\{\s*file\s*:\s*["'](https://[^"'<>\\\s]{12,2500})["']"""
                 )
@@ -179,10 +156,11 @@ internal object JavGuruOriginalSource {
                         Regex("""(?i)^/hls[0-9]*/[a-zA-Z0-9_./-]{5,200}/master\.m3u8$""")))
                     continue
                 if(uri.rawQuery.isNullOrBlank())continue
-                return candidate
+                verified.add(candidate)
             }
-        }
-        return null
+        // The exact selected publisher may publish quality variants, but
+        // different independent packed scripts are ambiguous. Fail closed.
+        return verified.singleOrNull()
     }
 
     /** Selected player redirects must resolve to actual video embeds, not
