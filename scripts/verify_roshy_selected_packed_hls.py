@@ -56,17 +56,22 @@ def main():
   snippet=re.sub(r"https?://[^\s\"'<>]+",lambda k:
    "[HOST:"+str(urllib.parse.urlsplit(k.group(0)).hostname)+"]",snippet)
   print("LINKS_CONTEXT",re.sub(r"\s+"," ",snippet)[:320],flush=True)
- patterns=[
-  r"""\bhls2\s*:\s*['"](https://[^'"]{25,2000})['"]""",
-  r"""\bhls3\s*:\s*['"](https://[^'"]{25,2000})['"]""",
-  r"""\bhls4\s*:\s*['"](https://[^'"]{25,2000})['"]"""]
+ config=re.search(r"\\bvar\\s+links\\s*=\\s*",decoded)
+ if config is None:raise AssertionError("Selected player has no links object")
+ obj,end=json.JSONDecoder().raw_decode(decoded[config.end():].lstrip())
+ assert isinstance(obj,dict) and "hls4" in obj and "hls2" in obj
  media=[]
- for typ,pat in zip(("hls2","hls3","hls4"),patterns):
-  results=list(re.finditer(pat,decoded,re.I))
-  if len(results)!=1:continue
-  address=results[0].group(1).replace("\\/","/")
+ for typ in ("hls4","hls2","hls3"):
+  raw=obj.get(typ,"")
+  if not isinstance(raw,str) or not raw:continue
+  address=urllib.parse.urljoin(URL,raw.replace("\\\\/","/"))
   u=urllib.parse.urlsplit(address)
   if u.scheme!="https" or not u.hostname or u.username or u.password:continue
+  if (u.hostname=="kamehaus.net" and
+      not re.fullmatch(r"/stream/[A-Za-z0-9_/-]{10,250}/master\\.m3u8",u.path)):
+   continue
+  if u.hostname!="kamehaus.net" and not u.path.endswith(".m3u8"):
+   continue
   print(json.dumps({"published_hls":typ,"host":u.hostname,
     "path_ext":u.path.rsplit(".",1)[-1][:8],
     "signed":bool(u.query)}),flush=True)
