@@ -1,0 +1,26 @@
+package com.asterion.videoflow
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class VideoHlsDispatchTest {
+    @Test fun selectedSignedPublisherHlsUsesTypedEngineFirst(){
+        assertTrue(VideoHlsDispatch.isSelectedManifest(
+            "https://tnmr.org/hls4/abc123/master.m3u8?signature=publisher"))
+        assertTrue(VideoHlsDispatch.isSelectedManifest(
+            "https://hm-h.phncdn.com/videos/abc123/index.m3u8?token=selected"))
+        assertTrue(VideoHlsDispatch.isSelectedManifest(
+            "https://media.example/full/manifest.mpd"))
+    }
+    @Test fun watchPagesAndUntrustedManifestShapesAreNotPromoted(){
+        for(url in listOf(
+            "https://www.pornhub.com/view_video.php?viewkey=abc12345",
+            "https://jav.guru/123456/actual-post/",
+            "http://tnmr.org/hls/abc/master.m3u8",
+            "https://user:secret@tnmr.org/hls/abc/master.m3u8",
+            "https://tnmr.org/hls/abc/master.m3u8#fragment",
+            "https://tnmr.org/hls/abc/master.m3u8/preview",
+            "https://tnmr.org/playlist.html?file=master.m3u8"
+        )) assertFalse(url,VideoHlsDispatch.isSelectedManifest(url))
+    }
+}
