@@ -8,10 +8,11 @@ UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobi
 HAVEN="https://hentaihaven.xxx/watch/renseijutsushi-collet-no-h-na-shibo-shirage-monogatari/"
 NH="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
 class Anchors(HTMLParser):
- def __init__(self):super().__init__();self.links=[];self.divs=[];self.inline=[];self.in_script=False;self.script=""
+ def __init__(self):super().__init__();self.links=[];self.divs=[];self.servers=[];self.inline=[];self.in_script=False;self.script=""
  def handle_starttag(self,t,attrs):
   a=dict(attrs)
   if t=="a" and a.get("href"):self.links.append(a["href"])
+  if t=="li" and a.get("data-id"):self.servers.append(a["data-id"])
   if t=="div" and ("play" in a.get("class","") or "player" in a.get("class","")):
    self.divs.append({"class":a.get("class","")[:120],"attrs":list(a)[:14]})
   if t=="script" and not a.get("src"):self.in_script=True;self.script=""
@@ -57,6 +58,9 @@ try:
  code,markup=read(NH,NH);p=Anchors();p.feed(markup)
  print(json.dumps({"site":"nhplayer","http":code,"player_nodes":p.divs[:12],
   "inline_lengths":[len(x) for x in p.inline[:10]],
+  "published_servers":[{"host":urllib.parse.urlsplit(x).hostname,
+      "path_shape":"/"+"/".join(seg if seg in ("e","v","embed","video","play") else "{opaque}" for seg in urllib.parse.urlsplit(x).path.split("/") if seg),
+      "https":urllib.parse.urlsplit(x).scheme=="https"} for x in p.servers[:9]],
   "inline_player_snippets":[scrub(x[:1200]) for x in p.inline if
     "player" in x.lower() or "iframe" in x.lower()][:3],
   "page_play_div_context":scrub(markup[max(0,markup.find("p-pulse")-300):markup.find("p-pulse")+450])
