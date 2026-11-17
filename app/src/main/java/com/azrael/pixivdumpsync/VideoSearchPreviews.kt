@@ -71,7 +71,7 @@ object VideoSearchPreviews {
                     connectTimeout=6000
                     readTimeout=8000
                     setRequestProperty("User-Agent",
-                        "Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36")
+                        com.asterion.videoflow.NativeMediaDownloader.USER_AGENT)
                     setRequestProperty("Accept","image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
                     if(!referer.isNullOrBlank() && SearchRanking.validUrl(referer)) {
                         // A poster CDN often accepts the exact publisher media
