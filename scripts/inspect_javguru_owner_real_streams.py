@@ -38,6 +38,26 @@ def run():
             except (KeyError,ValueError,UnicodeError):
                 continue
     unique={tag:relay for tag,relay in publisher}
+    if not unique:
+        structures=[]
+        for js in doc.code:
+            if "iframe_url" not in js:continue
+            declarations=re.findall(r"\b(?:var|let|const)\s+([A-Za-z_$][\w$]{1,50})\s*=",js)
+            signatures={
+                "inline_decl_types":{keyword:len(re.findall(r"\b"+keyword+r"\s+",js))
+                    for keyword in ("var","let","const")},
+                "inline_declaration_name_lengths":[len(x) for x in declarations[:20]],
+                "button_keys_in_script":sum(str(key) in js for key in controls),
+                "iframe_url_count":js.count("iframe_url"),
+                "json_quoted_key":bool(re.search(r"['\"]iframe_url['\"]\s*:",js)),
+                "bare_key":bool(re.search(r"\biframe_url\s*:",js)),
+                "base64_call":bool(re.search(r"\b(?:atob|btoa)\s*\(",js)),
+                "iframe_url_assignment":bool(re.search(r"\biframe_url\s*=",js)),
+                "code_chars":len(js),
+                "declaration_keywords":len(declarations)}
+            structures.append(signatures)
+        print(json.dumps({"stage":"EXACT_STREAM_CONFIG_STRUCTURE",
+            "configs":structures[:5],"redacted_values":True}),flush=True)
     print(json.dumps({"stage":"ACTUAL_SELECTED_STREAM_BUTTONS","post":1077276,
         "buttons":list(controls.values()),"shortcode_candidates":list(unique)}),flush=True)
     if not unique:return 3
