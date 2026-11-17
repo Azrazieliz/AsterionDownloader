@@ -84,6 +84,18 @@ def main():
     "total_bytes":declared,
     "ftyp":len(sample)>=8 and sample[4:8]==b"ftyp",
     "declared_chunk_length":length}),flush=True)
+  if status==206 and mime=="video/mp4" and sample[4:8]==b"ftyp":
+   try:
+    with urllib.request.urlopen(req(media,frame,"bytes=0-63"),timeout=18) as alternate:
+     alt=alternate.read(64)
+     print(json.dumps({"stage":"SELECTED_ORIGINAL_REFERER_CHECK",
+       "referer_kind":"publisher_attested_mixdrop_ag",
+       "http":alternate.status,"bytes_read":len(alt),
+       "mp4_magic":alt[4:8]==b"ftyp"}),flush=True)
+   except urllib.error.HTTPError as err:
+    print(json.dumps({"stage":"SELECTED_ORIGINAL_REFERER_CHECK",
+      "referer_kind":"publisher_attested_mixdrop_ag",
+      "http":err.code}),flush=True)
   return 0 if status==206 and mime=="video/mp4" and sample[4:8]==b"ftyp" else 3
 if __name__=="__main__":
  try:raise SystemExit(main())
