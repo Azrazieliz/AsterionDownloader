@@ -707,7 +707,9 @@ object VideoEngine {
                         val partial=parent.listFiles()?.any{
                             it.isFile && it.length()>0L &&
                                 (it.name.endsWith(".part",true) ||
-                                 it.name.endsWith(".ytdl",true))
+                                 it.name.endsWith(".ytdl",true) ||
+                                 Regex("""(?i)\.part-frag[0-9]{1,10}$""")
+                                     .containsMatchIn(it.name))
                         }==true
                         if(partial){
                             VideoTransferJournal.record(context,item.id,
