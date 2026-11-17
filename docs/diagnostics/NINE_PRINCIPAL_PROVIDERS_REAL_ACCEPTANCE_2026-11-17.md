@@ -1,4 +1,4 @@
-# Nine principal failing adult/video providers — real selected-original verification (2026-11-17)
+# Ten priority adult/video providers (original nine + Archivebate) — real selected-original verification (2026-11-17)
 
 **GOAL:** All nine must retrieve the exact user-selected ORIGINAL fully on the paired Samsung, persist a correct MediaStore/Downloads receipt, play the full file, survive app restart and remain reliable on repeats. **Status: NOT FINISHED.** Do **NOT** call a passing player, metadata, HTTP 206, FFprobe on a partial stream, a PC file, or unit tests a working Android provider.
 
@@ -17,8 +17,11 @@ Repository: private `Azrazieliz/AsterionDownloader`; original implementation bra
 | **HentaiHaven** | Exact user-selected episode HTTP200 verification shell; real Edge DOM 0 video and 0 source. Authorization/first-party player missing | **FAIL (verification gate)** | **FAIL / not tested** |
 | **UncensoredHentai** | Selected episode → actual `nhplayer.com/v/Z2flAXXPucyCbVJ/` HTTP200; HTML self-ref iframe, no selected source/video/HLS; current browser smoke no playable source | **FAIL (embedded original unresolved)** | **FAIL / not tested** |
 | **MP4Hentai** | Selected `/2026/11/nagi-kannagi-18min50s-v/` HTTP200; two actual selected publisher links `Mirror` and `Upfiles`. Mirrored.to landing HTTP200 "Click to view the download links" intermediate `/files/DF7298C6/`; Upfiles redirects to upfilesgo.com HTML200; neither HTML response is an original video | **FAIL (final host media unresolved)** | **FAIL / not tested** |
+| **Archivebate (added by owner)** | Real selected `https://archivebate.com/watch/16458050` → exact first-party-published `mixdrop.ag/e/...` iframe (observed redirect only to same-player `mxdrop.click/e/...`); `ArchivebateSelectedMedia.kt` admits only selected CDN MP4 from `cdn.freefile.io`, excluding page preview/recommendation videos. Historical owner report: intermittent; current selected complete file not independently verified. | **OPEN (full original not verified)** | **FAIL / selected Android MediaStore receipt not verified** |
 
-**PC whole-file count: 3/9 (3DHentaiX, Roshy TV and one genuine FullPorner selection). Paired Samsung accepted whole-file count: 0/9.** Code remains uninstalled. No source-quality success is a claim of the requested final outcome.
+**PC whole-file count: 3/9 (3DHentaiX, Roshy TV and one genuine FullPorner selection). Paired Samsung accepted whole-file count: 0/9.**
+
+**OWNER UPDATE: Archivebate is the tenth provider, not an optional later module. Expanded strict acceptance 3/10 complete on PC and 0/10 on Samsung.** Code remains uninstalled. No source-quality success is a claim of the requested final outcome.
 
 ## Reproducible positive evidence — no fabricated receipts
 
@@ -57,3 +60,13 @@ For EACH of the nine, require (a) one exact authorized public selected post/play
 - JAVIDEO `https://javideo.net/en/fc2ppv-4994603` static selected player diagnosis `dl-nine-javideo-exact-play-20261117-aa07`: public page readable, but static script has no StreamTape literal and the page includes CAPTCHA-related logic. Existing `BrowserPageFetch.html` already attempts a bounded click on `#clickfakeplayer` and serializes only the selected active `.embed-responsive.player iframe`. A real authoritative StreamTape URL and final original bytes remain unverified; do not replace selector speculatively.
 
 **Current strict outcome:** PC full selected-original video **3/9** (3DHentaiX, Roshy TV, one FullPorner). Signed APK created and SHA256-transferred to phone, **not installed**. Correct saved, playable Android originals **0/9**. Remaining six unverified or gated; source script and external hoster pages are not full media.
+
+## Owner's current NSFS-524 Roshy retry failure (2026-11-17)
+
+Owner screenshot shows a real selected Roshy `NSFS-524` transfer card in `Retry available`, with error text `roshy.tv: Python extractor: DownloadError: ERROR: [generic] nsfs-524...`. Owner independently observed HLS media bytes arriving but no visible completion percentage. This screenshot is **not evidence of a completed file**.
+
+Root cause confirmed in current `TransferService.kt`: a failed exact selected Roshy HLS transfer could fall through to `VideoCandidatePlan.ordered(...)` which includes the original watch *article* URL, then rerun generic Python extraction and mask the actual HLS failure. Repair commit `e08d88d` adds strict Roshy source/failure guards before the generic candidates loop; partial HLS originals remain resumable. This code is a separate branch repair and **not yet verified installed on phone**.
+
+The bundled pinned yt-dlp `fragment.py` writes exact JSON `downloader.current_fragment.index` and `downloader.fragment_count` to a `.ytdl` checkpoint after completed HLS fragments. New `VideoHlsFragmentProgress.kt` reads only those observed counters when original `.part` bytes exist. TransferService publishes an approximate fragment completion rate (max 95%, never saved) alongside actual verified bytes. `UnifiedDownloadsUi.kt` now retains received-byte evidence during paused/retry/error states and displays HLS fragment counts. No synthetic bitrate-based percentage is claimed. Specific owner's NSFS-524 source still requires a successful full download, usable video, Android MediaStore receipt and repeat testing.
+
+The file name is historical (nine); this register now tracks **ten** priority sites with Archivebate added. Other app modules are deferred at owner's request.
