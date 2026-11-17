@@ -36,7 +36,7 @@ internal object VideoHlsFragmentProgress {
             return null
         val records=directory.listFiles().orEmpty().filter {
             it.isFile && it.name.endsWith(".ytdl",ignoreCase=true) &&
-                it.length() in 15..16_384
+                it.length() in 15L..16_384L
         }
         // Multiple simultaneous fragment outputs may refer to different
         // media tracks; do not splice their totals or report false progress.
