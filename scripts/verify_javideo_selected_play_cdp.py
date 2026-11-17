@@ -132,7 +132,20 @@ def main():
          "http":response.status,"bytes":len(html),"iframe_hosts":nested_hosts[:8],
          "video_tags":len(re.findall(r"<video\\b",html,re.I)),
          "hls_literals":len(re.findall(r"\\.m3u8",html,re.I)),
-         "mp4_literals":len(re.findall(r"\\.mp4",html,re.I))}),flush=True)
+         "mp4_literals":len(re.findall(r"\\.mp4",html,re.I)),
+         "script_hosts":sorted(set(urllib.parse.urlsplit(
+            urllib.parse.urljoin(first_party[0],x)).hostname
+            for x in re.findall(r"""<script[^>]+src=["']([^"'<>]+)""",html,re.I)
+            ))[:18],
+         "player_signals":{key:len(re.findall(pattern,html,re.I)) for key,pattern in {
+            "jwplayer":r"jwplayer","videojs":r"videojs|video-js",
+            "dplayer":r"dplayer","plyr":r"plyr","video":r"video",
+            "fetch":r"fetch\\s*\\(","xhr":r"XMLHttpRequest|axios",
+            "atob":r"atob\\s*\\(","base64":r"base64",
+            "eval":r"eval\\s*\\(","packed":r"eval\\(function\\(p,a,c,k,e,d",
+            "playerSetup":r"player\\s*\\.\\s*setup","source":r"source",
+            "csrf":r"csrf|nonce","encryption":r"encrypt|decrypt|CryptoJS"
+         }.items()}}),flush=True)
      except Exception as exc:
       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
        "error_class":type(exc).__name__}),flush=True)
