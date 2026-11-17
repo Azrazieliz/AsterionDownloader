@@ -28,7 +28,7 @@ internal object AdultProviderListings {
             "jav.guru","cums.net" -> VideoSiteProfiles.isVideoPage(candidate)
             "archivebate.com" -> runCatching {
                 val path=URI(candidate).path.orEmpty()
-                Regex("""^/watch/[0-9]{1,16}/?$""").matches(path)
+                Regex("""^/(?:u/)?watch/[0-9]{1,16}/?$""").matches(path)
             }.getOrDefault(false)
             else -> false
         }
