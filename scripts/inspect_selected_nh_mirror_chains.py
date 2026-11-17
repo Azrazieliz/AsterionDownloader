@@ -68,7 +68,7 @@ def mirrored():
     with tempfile.TemporaryDirectory(prefix="asterion_mp4_mirror_safe_") as folder:
         cmd=[str(EDGE),"--headless=new","--disable-gpu","--no-first-run",
             "--no-default-browser-check","--disable-extensions",
-            "--disable-background-networking","--virtual-time-budget=17000",
+            "--virtual-time-budget=18000",
             "--user-data-dir="+folder,"--dump-dom",MIRROR]
         result=subprocess.run(cmd,capture_output=True,timeout=35)
     rendered=result.stdout.decode("utf8","replace")
