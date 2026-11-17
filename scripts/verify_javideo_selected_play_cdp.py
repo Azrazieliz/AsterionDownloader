@@ -62,7 +62,8 @@ def main():
      time.sleep(.4)
     assert isinstance(stats,dict),"Current selected player state unavailable"
     p=urllib.parse.urlsplit(stats.get("page",""))
-    assert p.hostname=="javideo.net" and p.path=="/en/fc2ppv-4994603"
+    assert p.hostname=="javideo.net" and p.path=="/en/fc2ppv-4994603",(
+     "publisher selected watch unexpectedly navigated",p.hostname,p.path)
     print(json.dumps({"stage":"ACTUAL_SELECTED_BROWSER",
       "play_button":stats.get("play"),"active_player":stats.get("activePlayer"),
       "visible_captcha":stats.get("visibleGate")}),flush=True)
@@ -90,7 +91,7 @@ def main():
      if not isinstance(found,dict):break
      if found.get("visibleGate") or found.get("frames"):break
      time.sleep(.9)
-    assert isinstance(found,dict)
+    assert isinstance(found,dict),"selected Play CDP evaluation returned no state"
     frames=found.get("frames",[])
     exact=[]
     for item in frames:
