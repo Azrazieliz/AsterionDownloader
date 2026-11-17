@@ -178,7 +178,7 @@ object AsterionSearchHub {
                     }
                     tile.addView(preview,LinearLayout.LayoutParams(
                         -1,ui.px(a,170)))
-                    VideoSearchPreviews.display(a,preview,hit.thumbnail)
+                    VideoSearchPreviews.display(a,preview,hit.thumbnail,hit.url)
                     tile.addView(ui.text(a,hit.title.take(100),12f,ui.white,true)
                         .apply{
                             maxLines=2
