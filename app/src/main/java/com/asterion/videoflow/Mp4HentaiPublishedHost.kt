@@ -68,6 +68,12 @@ internal object Mp4HentaiPublishedHost {
             .toString().substringBefore('#').takeIf(::safe)
     }.getOrNull()
 
+    internal fun requiresInteractiveVerification(doc:Document):Boolean =
+        doc.select("form#file-captcha,form[action*=captcha],"+
+            "input[name*=captcha],.cf-turnstile,[data-sitekey],"+
+            ".g-recaptcha").isNotEmpty() ||
+            doc.title().contains("Just a moment",ignoreCase=true)
+
     private fun direct(url:String):Boolean =
         safe(url) && NativeMediaDownloader.isDirectMediaUrl(url) &&
             !FullLengthVideoPolicy.isExplicitPreview("",url)
@@ -112,6 +118,14 @@ internal object Mp4HentaiPublishedHost {
                     "MP4Hentai host did not expose a verified HTML download page"
                 }
                 val doc=Jsoup.parse(response.body(),current)
+                // Actual selected UpFiles public flow returns an HTML
+                // file-captcha form after the normal free-download POST.
+                // Never relabel that challenge page as a completed MP4 or
+                // restart generic extraction indefinitely.
+                if(requiresInteractiveVerification(doc)) {
+                    error("MP4Hentai selected file host requires CAPTCHA "+
+                        "verification in an authorized browser session")
+                }
                 val candidates=LinkedHashSet<String>()
                 var nextLanding:String?=null
                 for(anchor in doc.select("a[href]").take(1000)){
