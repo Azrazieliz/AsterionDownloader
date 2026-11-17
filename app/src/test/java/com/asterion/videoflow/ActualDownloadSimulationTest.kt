@@ -97,7 +97,9 @@ class ActualDownloadSimulationTest {
                 assertArrayEquals(payload,saved.readBytes())
                 assertFalse(part.exists())
                 assertEquals(2,calls.get())
-                assertEquals("bytes=55131-",http.requests[1].header("Range"))
+                assertEquals("bytes=55067-",http.requests[1].header("Range"))
+                // A matching ETag alone is not sufficient; the native
+                // downloader also revalidates the last 64 original bytes.
                 assertEquals("\"stable-original\"",http.requests[1].header("If-Range"))
             }finally{dir.deleteRecursively()}
         }
@@ -302,6 +304,56 @@ class ActualDownloadSimulationTest {
                     http.url("/second.mp4"),null,dir)
                 assertArrayEquals(second,repeat.readBytes())
                 assertEquals(2,http.requests.size)
+            }finally{dir.deleteRecursively()}
+        }
+    }
+
+
+    @Test fun changedEtagEvenWithBroken206HostCannotCorruptOrReusePart(){
+        val first=ByteArray(170_000){(it*17%251).toByte()}
+        val updated=ByteArray(170_000){(it*37%241).toByte()}
+        val calls=AtomicInteger()
+        Fixture{req,out->
+            when(calls.incrementAndGet()){
+                1->write(out,"200 OK",first.copyOfRange(0,46_100),
+                    headers=mapOf("ETag" to "\"original-v1\""),
+                    length=first.size.toLong())
+                2->{
+                    val start=req.header("Range").removePrefix("bytes=")
+                        .substringBefore('-').toInt()
+                    // A deliberately misconfigured publisher/CDN returns
+                    // 206 instead of 200 despite a stale If-Range ETag.
+                    write(out,"206 Partial Content",
+                        updated.copyOfRange(start,updated.size),
+                        headers=mapOf("ETag" to "\"changed-v2\"",
+                            "Content-Range" to
+                                "bytes $start-${updated.size-1}/${updated.size}"))
+                }
+                else->write(out,"200 OK",updated,
+                    headers=mapOf("ETag" to "\"changed-v2\""))
+            }
+        }.use{http->
+            val dir=directory()
+            try{
+                assertNotNull(runCatching{
+                    NativeMediaDownloader.download(http.url("/scene.mp4"),null,dir)
+                }.exceptionOrNull())
+                assertEquals(46_100L,
+                    File(dir,"native_original.mp4.part").length())
+                assertEquals("\"original-v1\"",
+                    File(dir,"native_original.mp4.etag").readText())
+                val failure=runCatching{
+                    NativeMediaDownloader.download(http.url("/scene.mp4"),null,dir)
+                }.exceptionOrNull()
+                assertTrue(failure?.message.orEmpty().contains("ETag changed"))
+                assertFalse(File(dir,"native_original.mp4.part").exists())
+                assertFalse(File(dir,"video.mp4").exists())
+                val saved=NativeMediaDownloader.download(
+                    http.url("/scene.mp4"),null,dir)
+                assertArrayEquals(updated,saved.readBytes())
+                assertEquals(3,calls.get())
+                assertEquals("\"original-v1\"",http.requests[1].header("If-Range"))
+                assertEquals("bytes=46036-",http.requests[1].header("Range"))
             }finally{dir.deleteRecursively()}
         }
     }
