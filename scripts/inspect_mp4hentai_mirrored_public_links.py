@@ -72,6 +72,33 @@ with urllib.request.urlopen(r,timeout=25) as response:
         "host_candidates":sorted(set(hosts))[:15],
         "placeholder":bool(re.search("fetching hosting links",after,re.I)),
         "anchors":len(parser.links)}),flush=True)
+     if re.search("fetching hosting links",after,re.I):
+      import subprocess,tempfile
+      EDGE=r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+      with tempfile.TemporaryDirectory(prefix="asterion_mirror_") as temp:
+       try:
+        result=subprocess.run([EDGE,"--headless=new","--disable-gpu",
+          "--no-first-run","--no-default-browser-check","--disable-extensions",
+          "--mute-audio","--user-data-dir="+temp,
+          "--virtual-time-budget=18000","--dump-dom",dest.geturl()],
+          capture_output=True,timeout=32)
+        rendered=result.stdout.decode("utf-8","replace")
+        front=P();front.feed(rendered)
+        names=set()
+        for a in front.links:
+         u=urllib.parse.urlsplit(urllib.parse.urljoin(dest.geturl(),a["href"]))
+         if (u.scheme=="https" and u.hostname not in
+             ("mirrored.to","www.mirrored.to") and u.hostname):
+          names.add(u.hostname)
+        print(json.dumps({"stage":"PUBLISHER_SELECTED_JS_LINKS",
+          "browser_exit":result.returncode,
+          "rendered_bytes":len(rendered),"hosts":sorted(names)[:16],
+          "placeholder":bool(re.search("fetching hosting links",rendered,re.I)),
+          "anchors":len(front.links)}),flush=True)
+       except Exception as error:
+        print(json.dumps({"stage":"PUBLISHER_SELECTED_JS_LINKS",
+          "error_class":type(error).__name__}),flush=True)
+
    except Exception as e:
     print(json.dumps({"stage":"PUBLISHER_SELECTED_DL0",
       "error_class":type(e).__name__}),flush=True)
