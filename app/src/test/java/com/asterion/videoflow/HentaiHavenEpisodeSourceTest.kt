@@ -13,7 +13,7 @@ class HentaiHavenEpisodeSourceTest {
     @Test fun selectedSeriesIsNotAnEpisodeAndOnlyItsOwnEpisodeLinksAreListed(){
         val document=Jsoup.parse("""<main>
             <a href="/watch/sample-selected-series/episode-1">First</a>
-            <a href="/watch/sample-selected-series/episode-2">Second</a>
+            <a href="episode-2">Second</a>
             <a href="/watch/unrelated-series/episode-1">Different series</a>
             <aside class="related"><a href="/watch/sample-selected-series/episode-3">
                 Recommendation</a></aside>
