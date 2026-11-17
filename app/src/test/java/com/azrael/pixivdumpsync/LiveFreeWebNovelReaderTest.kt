@@ -1,6 +1,5 @@
 package com.azrael.pixivdumpsync
 
-import org.jsoup.Jsoup
 import org.junit.Assert.*
 import org.junit.Assume
 import org.junit.Test
@@ -16,9 +15,13 @@ class LiveFreeWebNovelReaderTest {
         Assume.assumeTrue("Not an offline fixture",
             System.getenv("ASTERION_LIVE_NOVELS")=="1")
         val root="https://freewebnovel.com/novel/dual-cultivation-novel"
-        val ua="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
-        fun get(path:String)=Jsoup.connect(path).userAgent(ua).timeout(25_000)
-            .maxBodySize(1_500_000).followRedirects(true).get()
+        // The real JVM Jsoup transport receives HTTP 403 on this
+        // publicly browser-accessible publisher. The existing live
+        // integration helper fetches actual bytes through a browser-
+        // compatible HTTP client when that occurs (Android production
+        // uses BrowserPageFetch, not Python).
+        val transport=ActualProviderIntegrationTest()
+        fun get(path:String)=transport.page(path)
         val index=get(root)
         val chapters=NovelEpubParser.chapters(index,root)
         assertTrue("Actual publisher listing has no discovered chapter",chapters.size>=30)
