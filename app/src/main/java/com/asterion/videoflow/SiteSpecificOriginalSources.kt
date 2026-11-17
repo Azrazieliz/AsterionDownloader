@@ -484,7 +484,15 @@ internal object SiteSpecificOriginalSources {
                 .header("Referer",selected)
                 .ignoreHttpErrors(true).followRedirects(false)
                 .timeout(12_000).maxBodySize(1_800_000)
-                .apply{NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}}
+                .apply{
+                    // The selected iframe is on a different publisher-hosted
+                    // player domain. If the owner connected that exact host,
+                    // reuse ONLY that host's session; never forward the watch
+                    // publisher's cookies to a third-party embed or ad.
+                    SiteSession.cookie(context,frame.url)?.takeIf{it.isNotBlank()}
+                        ?.let{header("Cookie",it)}
+                    NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                }
                 .execute()
         }.getOrNull()
         if(raw!=null && raw.statusCode() in 200..299 &&
