@@ -5,7 +5,7 @@ Uses existing local Edge and CDP only. One exact first-party user-selected
 article, one normal Play click, observes the active selected player. Never
 solves CAPTCHA, intercepts unrelated network traffic or uses ad iframe media.
 """
-import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request
+import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil
 from pathlib import Path
 from websockets.sync.client import connect
 EDGE=Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
@@ -25,7 +25,10 @@ def evaluate(ws,ident,expr):
  raise RuntimeError("CDP response expired")
 def main():
  assert EDGE.is_file(),"Existing Edge executable unavailable"
- with tempfile.TemporaryDirectory(prefix="asterion_javideo_play_") as folder:
+ # Windows Edge may retain locked profile files after taskkill; avoid
+ # TempDirectory cleanup overriding real publisher/CDP diagnostic failures.
+ if True:
+  folder=tempfile.mkdtemp(prefix="asterion_javideo_play_")
   port=freeport()
   browser=subprocess.Popen([str(EDGE),"--headless=new","--disable-gpu",
     "--no-first-run","--no-default-browser-check","--disable-extensions",
@@ -108,6 +111,9 @@ def main():
   finally:
    subprocess.run(["taskkill","/PID",str(browser.pid),"/T","/F"],
                   capture_output=True,timeout=12)
+   try:browser.wait(timeout=4)
+   except Exception:pass
+   shutil.rmtree(folder,ignore_errors=True)
 if __name__=="__main__":
  try:raise SystemExit(main())
  except Exception as e:
