@@ -106,6 +106,12 @@ def main():
     print(json.dumps({"stage":"SELECTED_PLAY_RENDERED",
       "visible_captcha":found.get("visibleGate"),"active_player_containers":found.get("active"),
       "iframe_count":len(frames),"iframe_hosts":sorted(set(urllib.parse.urlsplit(x["uri"]).hostname for x in frames)),
+      "frame_route_shapes":[{
+        "host":urllib.parse.urlsplit(x["uri"]).hostname,
+        "path_segments":[segment if segment in {"e","v","embed","player","video","play","watch"}
+            else "{opaque}" for segment in urllib.parse.urlsplit(x["uri"]).path.split("/") if segment],
+        "has_query":bool(urllib.parse.urlsplit(x["uri"]).query)}
+        for x in frames[:4]],
       "exact_selected_streamtape_count":len(set(exact))}),flush=True)
     if found.get("visibleGate"):return 2
     if len(set(exact))==1:
