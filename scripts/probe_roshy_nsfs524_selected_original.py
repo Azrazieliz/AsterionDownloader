@@ -79,29 +79,44 @@ def main():
   config=re.search(r"\bvar\s+links\s*=\s*",decoded)
   if not config:return 6
   tracks,_=json.JSONDecoder().raw_decode(decoded[config.end():].lstrip())
-  hls=urllib.parse.urljoin(frame,tracks.get("hls4",""))
-  u=urllib.parse.urlsplit(hls)
-  if u.scheme!="https" or u.hostname!="kamehaus.net" or not re.fullmatch(
-      r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",u.path):
-    print(json.dumps({"stage":"NSFS524_HLS4_SHAPE",
-      "host":u.hostname,"path_directory_names":[
-        part if len(part)<9 else "{opaque}" for part in u.path.split("/")[:7]],
-      "path_ext":u.path.split(".")[-1][:10],
-      "signed_query":bool(u.query),
-      "hls4_present":bool(tracks.get("hls4")),
-      "hls2_present":bool(tracks.get("hls2")),
-      "hls3_present":bool(tracks.get("hls3"))}),flush=True)
-    return 7
-  with urllib.request.urlopen(urllib.request.Request(hls,headers={
-    "User-Agent":UA,"Referer":frame,"Accept-Encoding":"identity"}),timeout=23) as response:
-    payload=response.read(25000)
-    valid_hls=response.status==200 and payload.lstrip().startswith(b"#EXTM3U")
-    print(json.dumps({"stage":"EXACT_NSFS524_SIGNED_HLS",
-      "http":response.status,"valid_hls":valid_hls,
-      "master_bytes":len(payload),
-      "variant_count":payload.count(b"#EXT-X-STREAM-INF"),
-      "mime":response.headers.get("Content-Type","").split(";")[0]}),flush=True)
-    return 0 if valid_hls else 8
+  available=[]
+  for quality in ("hls4","hls2","hls3"):
+    value=tracks.get(quality,"")
+    if not isinstance(value,str) or not value:continue
+    link=urllib.parse.urljoin(frame,value)
+    uri=urllib.parse.urlsplit(link)
+    publisher_first_party=(uri.scheme=="https" and uri.hostname=="kamehaus.net" and
+      re.fullmatch(r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",uri.path))
+    publisher_cdn=(uri.scheme=="https" and uri.hostname and
+      uri.hostname.endswith(".premilkyway.com") and
+      uri.path.startswith("/hls2/") and uri.path.endswith(".m3u8") and
+      bool(uri.query))
+    print(json.dumps({"stage":"NSFS524_PUBLISHED_TRACK",
+      "quality":quality,"host":uri.hostname,
+      "path_prefix":uri.path.split("/")[:3],
+      "m3u8":uri.path.endswith(".m3u8"),"signed_query":bool(uri.query),
+      "strict_publisher_attribution":bool(publisher_first_party or publisher_cdn)}),flush=True)
+    if publisher_first_party or publisher_cdn:
+      available.append((quality,link))
+  if not available:return 7
+  for quality,source in available:
+    try:
+      with urllib.request.urlopen(urllib.request.Request(source,headers={
+        "User-Agent":UA,"Referer":frame,
+        "Accept-Encoding":"identity"}),timeout=23) as response:
+        payload=response.read(25000)
+        valid_hls=response.status==200 and payload.lstrip().startswith(b"#EXTM3U")
+        print(json.dumps({"stage":"EXACT_NSFS524_SIGNED_HLS",
+          "quality":quality,"http":response.status,
+          "valid_hls":valid_hls,"master_bytes":len(payload),
+          "variant_count":payload.count(b"#EXT-X-STREAM-INF"),
+          "mime":response.headers.get("Content-Type","").split(";")[0]}),flush=True)
+        if valid_hls:return 0
+    except Exception as error:
+      print(json.dumps({"stage":"EXACT_NSFS524_SIGNED_HLS_ERROR",
+        "quality":quality,"type":type(error).__name__,
+        "reason":str(error)[:80]}),flush=True)
+  return 8
  return 2
 if __name__=="__main__":
  try:raise SystemExit(main())
