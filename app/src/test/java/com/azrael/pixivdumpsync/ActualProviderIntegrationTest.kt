@@ -20,7 +20,7 @@ class ActualProviderIntegrationTest {
         assumeTrue("Live HTTP checks run only in the dedicated provider job",
             System.getenv("ASTERION_LIVE_PROVIDERS")=="1")
     }
-    private fun page(address:String,referer:String?=null):org.jsoup.nodes.Document {
+    internal fun page(address:String,referer:String?=null):org.jsoup.nodes.Document {
         return try{
             Jsoup.connect(address).timeout(20_000).maxBodySize(3_000_000)
                 .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile) "+
@@ -44,8 +44,13 @@ response=urllib.request.urlopen(urllib.request.Request(sys.argv[1],headers=heade
 if response.status!=200:raise RuntimeError('real provider HTTP '+str(response.status))
 sys.stdout.buffer.write(response.read(3000000))
 """.trimIndent()
-            val process=ProcessBuilder(
-                "python3","-c",code,address,referer.orEmpty()).start()
+            // Windows' python3 launcher may be a Microsoft Store stub
+            // (exit 9009). The existing owner PC has the real py -3
+            // launcher. Use a typed argv, no shell, and keep Linux python3.
+            val launcher=if(System.getProperty("os.name").contains("Windows",true))
+                listOf("py","-3") else listOf("python3")
+            val process=ProcessBuilder(launcher+listOf(
+                "-c",code,address,referer.orEmpty())).start()
             val downloaded=process.inputStream.readNBytes(3_000_000)
             val exited=process.waitFor(25,java.util.concurrent.TimeUnit.SECONDS)
             if(!exited)process.destroyForcibly()
@@ -79,10 +84,11 @@ sys.stdout.buffer.write(response.read(3000000))
                 NovelEpubParser.writeEpubStreaming(output,
                     "Dual Cultivation live integration",root,chosen.map{it.title}){i->
                     val chapter=chosen[i]
-                    // Real 2026-11-13 source rejected a 250ms/chap burst with
-                    // HTTP 429 on chapter eight. Match the production slow
-                    // publisher cadence; do not hammer the live website.
-                    Thread.sleep(10_000L)
+                    // Match the actual app's 2.5-second per-host
+                    // FreeWebNovel pacing, rather than 10 seconds per
+                    // test chapter. A 250ms burst previously returned 429.
+                    Thread.sleep(NovelHttpPacing.minimumGapMillis(
+                        "freewebnovel.com"))
                     val document=page(chapter.url,root)
                     val actual=NovelEpubParser.readerChapter(document,chapter.url,chapter)
                     assertEquals(chapter.number,actual.number,0.0)
