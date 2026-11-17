@@ -53,7 +53,7 @@ internal object PornhubOriginalSource {
             !FullLengthVideoPolicy.isExplicitPreview("",url)
     }
     fun published(selected:String,html:String):List<Quality> {
-        if(!selectedWatch(selected) || html.length !in 1000..2_000_000)
+        if(!selectedWatch(selected) || html.length !in 200..2_000_000)
             return emptyList()
         val page=Jsoup.parse(html,selected)
         val configs=ArrayList<JSONObject>()
