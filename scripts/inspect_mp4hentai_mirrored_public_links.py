@@ -90,11 +90,19 @@ with urllib.request.urlopen(r,timeout=25) as response:
          if (u.scheme=="https" and u.hostname not in
              ("mirrored.to","www.mirrored.to") and u.hostname):
           names.add(u.hostname)
+        interesting=[]
+        for a in front.links:
+         label=a["text"].strip()
+         if re.search(r"download|mirror|upfile|file|host|click|direct|go to",label,re.I):
+          interesting.append({"label":label[:55],"id":a["id"][:45],
+             "class":a["class"][:65],"route":shape(a["href"]),
+             "onclick":bool(a["onclick"])})
         print(json.dumps({"stage":"PUBLISHER_SELECTED_JS_LINKS",
           "browser_exit":result.returncode,
           "rendered_bytes":len(rendered),"hosts":sorted(names)[:16],
           "placeholder":bool(re.search("fetching hosting links",rendered,re.I)),
-          "anchors":len(front.links)}),flush=True)
+          "anchors":len(front.links),
+          "download_controls":interesting[:18]}),flush=True)
        except Exception as error:
         print(json.dumps({"stage":"PUBLISHER_SELECTED_JS_LINKS",
           "error_class":type(error).__name__}),flush=True)
