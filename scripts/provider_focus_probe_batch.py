@@ -5,15 +5,17 @@ Use the existing targeted probes rather than replacing the real adapters.
 import concurrent.futures,json,subprocess,sys,time,re
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
+# Exactly the seven currently owner-reported failures. Archivebate is not
+# a newly failing eighth provider; its standalone diagnostics remain available.
+# These are SOURCE/PLAYER probes, not full-file acceptance tests.
 CASES={
-"archivebate":("probe_archivebate_real_selected_watch.py",[]),
 "jav_guru":("verify_javguru_exact_selected_hls.py",[]),
-"pornhub":("verify_pornhub_exact_selected_hls.py",[]),
 "javideo":("verify_javideo_selected_play_cdp.py",[]),
 "helloporn":("verify_helloporn_selected_voe_media.py",[]),
-"uncensoredhentai":("selected_player_contract_probe.py",[]),
-"hentaihaven":("inspect_provider_download_anchors.py",["hentaihaven_selected"]),
-"mp4hentai":("inspect_mp4hentai_actual_hoster_second_stage.py",[]),
+"pornhub":("verify_pornhub_exact_selected_hls.py",[]),
+"hentaihaven":("verify_haven_selected_episode_hls_20261117.py",[]),
+"mp4hentai":("verify_mp4hentai_upfiles_public_form.py",[]),
+"uncensoredhentai":("verify_nhplayer_selected_firstparty_20261117.py",[]),
 }
 def run(kv):
     name,(script,args)=kv
