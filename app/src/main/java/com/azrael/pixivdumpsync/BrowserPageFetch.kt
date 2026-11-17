@@ -287,7 +287,16 @@ object BrowserPageFetch {
                             // the user-selected player's own Play control runs.
                             // Preserve the source identity/duration guards in
                             // SiteSpecificOriginalSources; never inspect ads.
+                            const exactJavideo=
+                                selectedPlayerHost==='play.javideo.net' &&
+                                /^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                    .test(location.pathname);
+                            const exactNHPlayer=
+                                selectedPlayerHost==='nhplayer.com' &&
+                                /^\/v\/[A-Za-z0-9]{8,40}\/?$/
+                                    .test(location.pathname);
                             if(selectedPlayerHost==='3dhentaix.com' ||
+                                exactJavideo || exactNHPlayer ||
                                 (['voe.sx','kamehaus.net',
                                     'streamtape.com','streamtape.to',
                                     'streamtape.net','streamtape.site','sbtape.com']
@@ -299,10 +308,10 @@ object BrowserPageFetch {
                                         'main #player,article #player')]:
                                     (()=>{
                                         const wrappers=[...document.querySelectorAll(
-                                            '#player,.video-player')];
+                                            '#player,.video-player,.vjs-player,.player-container')];
                                         return wrappers.length?wrappers:
                                             [...document.querySelectorAll(
-                                                'video#mainvideo,video#player')];
+                                                'video#mainvideo,video#player,video.video-js')];
                                     })();
                                 const selected=roots.filter(el=>
                                     !el.closest('aside,.related,.recommendations,'+
@@ -313,7 +322,11 @@ object BrowserPageFetch {
                                         'button[aria-label="Play"],'+
                                         'button[title="Play"],.vjs-big-play-button,'+
                                         '.plyr__control[data-plyr="play"],'+
-                                        '.fp-play,button.play-button');
+                                        '.fp-play,button.play-button') ||
+                                         (root.tagName.toLowerCase()==='video'?
+                                             root.parentElement?.querySelector(
+                                                 '.vjs-big-play-button,button[aria-label="Play"]'):
+                                             null);
                                     if(play && !play.dataset.asterionActivated){
                                         play.dataset.asterionActivated='true';
                                         play.click();
