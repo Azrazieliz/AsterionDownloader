@@ -48,6 +48,23 @@ def main():
         "searched_site":"jav.guru"}),flush=True)
     if len(selected)!=1:return 2
     verified.WATCH=next(iter(selected))
+    status,actual,page=verified.get(verified.WATCH,verified.WATCH)
+    observed=verified.Doc()
+    observed.feed(page)
+    print(json.dumps({"provider":"jav_guru","stage":"EXACT_OWNER_WATCH_MARKUP",
+        "publisher_http":status,
+        "same_publisher":urllib.parse.urlsplit(actual).hostname in
+            ("jav.guru","www.jav.guru"),
+        "selected_path":urllib.parse.urlsplit(actual).path[:95],
+        "html_chars":len(page),
+        "shortcode_button_labels":[b["label"].strip()[:36]
+            for b in observed.buttons[:12]],
+        "inline_config_count":sum("iframe_url" in code for code in observed.code),
+        "article_present":bool(re.search(r'<article[^>]+id=["\\\']post-[0-9]+',
+                                   page,re.I)),
+        "access_gate_markers":bool(re.search(
+            r'cf-turnstile|verify you are human|just a moment',page[:15000],re.I))
+        }),flush=True)
     return verified.main()
 
 if __name__=="__main__":
