@@ -498,7 +498,11 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         if(key.length<12)return 0
         val matching=ArrayList<Long>()
         readableDatabase.rawQuery(
-            "SELECT id,title FROM videos WHERE state='full_only_hold' LIMIT 5000",
+            // A newly recognized runtime may retry only an original that
+            // this user had actually selected. Site discovery is not consent
+            // to bulk-download another creator's videos.
+            "SELECT id,title FROM videos WHERE state='full_only_hold' "+
+                "AND request_origin='user' LIMIT 5000",
             null).use{cursor->
             while(cursor.moveToNext()){
                 if(FullLengthVideoPolicy.sceneKey(cursor.getString(1))==key)
