@@ -337,7 +337,7 @@ object BrowserPageFetch {
                                 'main video,article video,.video-player video,video#flvv,'+
                                 '#player video,.video-js video,video source[src],'+
                                 (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net',
-                                    'hentaihaven.xxx','streamtape.com','streamtape.to',
+                                    'hentaihaven.xxx','play.javideo.net','streamtape.com','streamtape.to',
                                     'streamtape.net','streamtape.site','sbtape.com']
                                     .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
                                 .filter(el=>selectedPlayerHost!=='javideo.net')
