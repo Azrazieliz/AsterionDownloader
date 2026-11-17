@@ -116,6 +116,12 @@ class VideoSiteProfilesTest {
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://hentaihaven.xxx/watch/example-series/episode-4/"))
     }
+    @Test fun archivebateUploaderWatchIsVideoButUploaderProfileIsNot(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://archivebate.com/u/watch/16458051"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://archivebate.com/u/profile/test-account"))
+    }
     @Test fun archivebateLegalAndCategoryPagesAreNotVideo(){
         assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/2257"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://archivebate.com/"))
