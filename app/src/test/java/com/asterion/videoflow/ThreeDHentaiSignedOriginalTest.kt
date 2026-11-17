@@ -48,4 +48,25 @@ class ThreeDHentaiSignedOriginalTest {
         assertNull(ThreeDHentaiSignedOriginal.publishedConfig(
             Jsoup.parse(html,page),page))
     }
+    @Test fun staticArticlePostIdSufficesBeforeJavascriptAddsTheVideoPlayer(){
+        // Actual selected 3DHentaiX post 9570 has its selected post
+        // article and inline signed configuration in initial HTML, but
+        // injects .video-player later. Rejecting it forced an unsupported
+        // generic extractor instead of the selected original.
+        val selected="https://3dhentaix.com/ntr-compilation/"
+        val raw="""<main><article id="post-9570"><h1>Selected post</h1>
+            </article></main>
+            <script>window.awpSignedPlayback =
+            {"postId":9570,"nonce":"abc_def012345"};</script>"""
+        assertEquals(ThreeDHentaiSignedOriginal.Published(
+            9570,"abc_def012345"),
+            ThreeDHentaiSignedOriginal.publishedConfig(
+                Jsoup.parse(raw,selected),selected))
+        assertNull(ThreeDHentaiSignedOriginal.publishedConfig(
+            Jsoup.parse(raw.replace("post-9570","post-1111"),selected),selected))
+        assertNull(ThreeDHentaiSignedOriginal.publishedConfig(
+            Jsoup.parse(raw.replace("id=\"post-9570\"",""),selected),selected))
+    }
+
+
 }
