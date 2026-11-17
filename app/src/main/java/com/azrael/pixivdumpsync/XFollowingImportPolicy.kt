@@ -17,6 +17,21 @@ internal object XFollowingImportPolicy {
     /** Import only the owner's actual account list, never another user's
      * following page or a Home/For You/recommendations timeline.
      */
+    /** The URL /alice/following is not proof that Alice is the signed-in
+     * account: anybody can browse another user's list. Before importing,
+     * cross-check X's own authenticated Profile navigation target. Failing
+     * closed here prevents another account's "Following" buttons or suggested
+     * cells from polluting the owner's subscriptions.
+     */
+    fun isAuthenticatedOwnFollowingPage(
+        path:String,ownHandle:String,profileHref:String
+    ):Boolean {
+        if(!isOwnFollowingPage(path,ownHandle))return false
+        val owner=profileHref.trim().substringBefore('?').trimEnd('/')
+        if(!owner.matches(Regex("^/[A-Za-z0-9_]{1,15}$")))return false
+        return owner.substring(1).equals(ownHandle,ignoreCase=true)
+    }
+
     fun isOwnFollowingPage(path:String,ownHandle:String):Boolean {
         if(!handlePattern.matches(ownHandle))return false
         return followingPath.matchEntire(path)?.groupValues?.get(1)
