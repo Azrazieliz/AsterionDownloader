@@ -48,7 +48,10 @@ def main():
  print(json.dumps({"stage":"EXACT_SELECTED_FLASHVARS","http":status,
   "first_party_selected":True,"count":len(configs),
   "config_video_ids":[bool(o.get("video_id") or o.get("videoId")) for o in configs],
-  "media_definition_counts":[len(o.get("mediaDefinitions",[])) for o in configs]}),flush=True)
+  "media_definition_counts":[len(o.get("mediaDefinitions",[])) for o in configs],
+  "unavailable_flags":[str(o.get("video_unavailable","false"))[:12] for o in configs],
+  "published_format_names":[sorted(set(str(v.get("format","")) for v in
+    o.get("mediaDefinitions",[]) if isinstance(v,dict))) for o in configs]}),flush=True)
  assert len(configs)==1,("Not one selected watch config",len(configs))
  cfg=configs[0]
  sources=[]
@@ -72,7 +75,8 @@ def main():
   kotlin_shape=bool(re.fullmatch(r"/[A-Za-z0-9_./-]{12,700}\.m3u8",p,re.I))
   print(json.dumps({"stage":"REAL_SELECTED_HLS_PATH_SHAPE",
    "quality":quality,"path_length":len(p),"simple_kotlin_shape":kotlin_shape,
-   "non_alphanumeric_path_symbols":sorted(set(re.sub(r"[A-Za-z0-9_/.-]","",p)))}),flush=True)
+   "non_alphanumeric_path_symbols":sorted(set(re.sub(r"[A-Za-z0-9_/.-]","",p))),
+   "contains_preview_keyword":bool(re.search(r"(?:^|[^A-Za-z0-9])(?:trailer|teaser|preview|sample|promo|excerpt)(?:$|[^A-Za-z0-9])",p,re.I))}),flush=True)
  for q,source in sorted(sources,reverse=True)[:2]:
   try:
    with urllib.request.urlopen(request(source,selected),timeout=23) as response:
