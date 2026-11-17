@@ -453,11 +453,19 @@ internal object SiteSpecificOriginalSources {
             !WebDiscovery.isUrl(player))return false
         val path=frame.path.orEmpty()
         return when(host(selected)){
-            "javideo.net" -> host(player) in setOf("streamtape.com",
-                "streamtape.to","streamtape.net","streamtape.site",
-                "sbtape.com") &&
-                Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
-                    .matches(path)
+            "javideo.net" -> (
+                // Live Play-click evidence: the selected publisher now
+                // injects play.javideo.net inside its active player. The
+                // former Streamtape-only rule rejected the REAL iframe.
+                (host(player)=="play.javideo.net" &&
+                    path.length in 1..180 &&
+                    frame.rawQuery.orEmpty().length<=600 &&
+                    frame.rawFragment==null) ||
+                (host(player) in setOf("streamtape.com",
+                    "streamtape.to","streamtape.net","streamtape.site",
+                    "sbtape.com") &&
+                    Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
+                        .matches(path)))
             "helloporn.com"->host(player)=="voe.sx" &&
                 Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                     .matches(path)
@@ -598,10 +606,7 @@ internal object SiteSpecificOriginalSources {
             ".embed-responsive.player:not(.d-none) iframe[src]").take(10)){
             val link=https(frame.attr("src"),selected)?:continue
             val h=host(link)
-            if(h !in setOf("streamtape.com","streamtape.to","streamtape.net",
-                    "streamtape.site","sbtape.com"))continue
-            if(!Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
-                    .matches(URI(link).path.orEmpty()))continue
+            if(!selectedExtractorFrame(selected,link))continue
             out.putIfAbsent(link,Source(link,selected))
         }
         // Never substitute a related card, an advert, or a different server
