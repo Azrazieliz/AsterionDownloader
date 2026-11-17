@@ -134,12 +134,21 @@ object UnifiedDownloadsUi {
             }
             for(item in tracked.values){
                 val present=readable(a,item.savedUri)
-                val journal=if(item.status=="running")
+                // A failed HLS extraction must not make received original
+                // bytes disappear from the UI. The durable stage journal
+                // survives both retry_wait and user pause.
+                val journal=if(item.status in setOf(
+                    "running","paused","retry_wait","error","full_only_hold"))
                     VideoTransferJournal.current(a,item.id) else null
                 val bytes=journal?.verifiedBytes?.coerceAtLeast(0L)?:0L
                 val received=if(bytes>0)
                     String.format(java.util.Locale.US,"%.1f MiB",
                         bytes.toDouble()/1_048_576.0) else ""
+                val hlsFragments=journal?.takeIf{it.stage=="fragments"}
+                    ?.detail?.takeIf{
+                        Regex("""[1-9][0-9]{0,6}/[1-9][0-9]{0,6} fragments""")
+                            .matches(it)
+                    }
                 val state=when{
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
@@ -152,16 +161,27 @@ object UnifiedDownloadsUi {
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
-                    State.HELD->if(item.status=="retry_wait")
-                        "Video · Retry scheduled: "+item.error.orEmpty().take(110)
-                        else "Video · "+item.error.orEmpty()
-                            .ifBlank{"Previous source verification was inconclusive; manual retry available"}
-                            .take(110)
+                    State.HELD->{
+                        val reason=if(item.status=="retry_wait")
+                            "Retry scheduled: "+item.error.orEmpty().take(95)
+                        else item.error.orEmpty().ifBlank{
+                            "Previous source verification inconclusive; retry available"
+                        }.take(95)
+                        "Video · "+reason+
+                            if(bytes>0L)" · $received retained" else ""
+                    }
                     State.PAUSED->if(retired)"Video · Source retired"
-                        else "Video · Paused by user; original and progress retained"
+                        else "Video · Paused by user; "+
+                            if(bytes>0L)"$received original retained"
+                            else "progress retained"
                     State.QUEUED->"Video · Waiting for transfer worker"
                     State.ACTIVE->"Video · "+when {
-                        bytes>0L->"Receiving original · "+received
+                        bytes>0L && hlsFragments!=null->
+                            "Receiving original · "+received+" · "+hlsFragments
+                        bytes>0L && item.progress>0->
+                            "Receiving original · "+received+" · engine "+item.progress+"%"
+                        bytes>0L->"Receiving original · "+received+
+                            " · measuring HLS completion"
                         item.progress>0->"Engine reports "+item.progress+
                             "% · checking written bytes"
                         journal?.stage=="transfer"->"Connecting to original"
@@ -685,7 +705,7 @@ object UnifiedDownloadsUi {
                 State.QUEUED->"Queued"
                 State.ACTIVE->when {
                     item.receivedBytes>0L && item.percent!=null && item.percent>0->
-                        "Transferring · "+item.percent+"%"
+                        "Transferring · ~"+item.percent+"% (media/fragment progress)"
                     item.receivedBytes>0L->"Receiving original bytes"
                     item.percent!=null && item.percent>0->
                         "Engine progress · "+item.percent+"%"
