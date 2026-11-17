@@ -249,6 +249,15 @@ object WebDiscovery {
             first.copy(preview=later.preview)
         else first
 
+    /** These sites embed unrelated media in page cards; only their verified
+     * selected-item adapter may expose an original download. */
+    internal fun requiresSelectedPlayerForListing(source:String):Boolean =
+        runCatching {
+            URI(source).host.orEmpty().lowercase().removePrefix("www.") in
+                setOf("archivebate.com","helloporn.com","hentaihaven.xxx",
+                    "javideo.net")
+        }.getOrDefault(false)
+
     /** One bounded source-page traversal. Caller saves 'next' before marking the page done. */
     fun page(address:String,root:String,context:Context?=null):VideoPage {
         require(isUrl(address)&&isUrl(root)){"Invalid source URL"}
@@ -299,11 +308,7 @@ object WebDiscovery {
         // These publishers put playable but UNRELATED recommendation or
         // advert clips in their watch pages. Only an explicit selected-item
         // resolver may create a download, never a loose listing <video>.
-        val exactPlayerCatalog=runCatching {
-            URI(root).host.orEmpty().lowercase().removePrefix("www.") in
-                setOf("archivebate.com","helloporn.com","hentaihaven.xxx",
-                    "javideo.net")
-        }.getOrDefault(false)
+        val exactPlayerCatalog=requiresSelectedPlayerForListing(root)
         for(node in (if(exactPlayerCatalog)emptyList()
             else doc.select("main video[src],main video source[src],"+
                 "article video[src],article video source[src],"+
