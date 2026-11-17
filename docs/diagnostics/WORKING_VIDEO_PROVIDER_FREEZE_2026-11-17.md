@@ -2,7 +2,7 @@
 
 ## Owner acceptance baseline
 
-Owner reports all video providers except **Jav Guru, JAVIDEO, HelloPorn, Pornhub, HentaiHaven, MP4Hentai and UncensoredHentai** currently working or not failing. RoshyTV is **not** counted as verified: it does not display recognizable transferring/progress, so completion and attribution remain unproven. Existing v1.3.72 APK is preserved; freeze changes are currently **source/test-only**.
+Owner reports all video providers except **Jav Guru, JAVIDEO, HelloPorn, Pornhub, HentaiHaven, MP4Hentai and UncensoredHentai** currently working or not failing. RoshyTV is classified as working by the owner based on active reception of original bytes; percentage display is a separate fix and complete-file playback has not been independently rechecked.
 
 ## Strict frozen native provider implementations
 
@@ -11,6 +11,7 @@ The following source files are SHA-1 Git blob pinned at the owner-reported v1.3.
 | Provider | Frozen dedicated code | Git blob SHA-1 |
 | --- | --- | --- |
 | Archivebate | `ArchivebateSelectedMedia.kt` | `7380651fe85ba193c6de3ca891622291a7cca6d8` |
+| RoshyTV | `RoshyPackedOriginalSource.kt` | `a63a72b58f0ed1c3d0c78790e9e9f5b49dab8e83` |
 | FullPorner | `FullPornerOriginalSource.kt` | `312878511c2b3fbb2be47e571d6cba5de8fbcd67` |
 | FullPorner two-range native transfer | `FullPornerParallelOriginal.kt` | `598c7392829a599093b0bd20b1a46ed63051446b` |
 | 3DHentaiX | `ThreeDHentaiSignedOriginal.kt` | `9bff43bbdf5d29479e4ac41636b21a2c3b159fa7` |
@@ -32,8 +33,8 @@ Source freeze is checked in both `WorkingVideoProviderFreezeTest` and the fast G
 
 Every future `packageAcceptance` task is configured to depend on **both** `:app:verifyFrozenVideoProviders` and `:app:testAcceptanceUnitTest`. This protects shared implementation when repairing the seven failures, rather than freezing entire shared files that must still be changed.
 
-## Pending phone evidence
+## Remaining phone evidence
 
-RoshyTV: source attribution, queue appearance, measured verified-byte delta, final file/receipt and playback. The screenshot shows two active video transfers, **but it does not establish that either belongs to RoshyTV**.
+RoshyTV: user confirmed the running job belongs to RoshyTV. Full saved-file receipt remains to be checked; the fragment-denominator-based percentage fix is currently source-level.
 
 Do not mark any of the seven current failing providers as repaired without a complete selected original verified on Android. No additional APK is created by this freeze.
