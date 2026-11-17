@@ -114,7 +114,9 @@ object BrowserPageFetch {
                 "streamtape.site","sbtape.com" ->
                     Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
-                "play.javideo.net" -> Uri.parse(url).path.orEmpty().length in 1..180
+                "play.javideo.net" ->
+                    Regex("""^/embed/[A-Za-z0-9_-]{5,100}/?$""")
+                        .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
         main.post {
@@ -433,8 +435,8 @@ object BrowserPageFetch {
                                     if(!wrapper || wrapper.classList.contains('d-none'))
                                         return false;
                                     const firstParty=host==='play.javideo.net' &&
-                                        u.pathname.length>=1 && u.pathname.length<=180 &&
-                                        u.search.length<=600;
+                                        /^\/embed\/[A-Za-z0-9_-]{5,100}\/?$/.test(u.pathname) &&
+                                        u.search.length===0;
                                     return firstParty ||
                                         (['streamtape.com','streamtape.to',
                                         'streamtape.net','streamtape.site',
