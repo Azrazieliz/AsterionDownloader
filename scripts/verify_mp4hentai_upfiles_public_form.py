@@ -68,8 +68,8 @@ def main():
   with session.open(request(target,final,data),timeout=27) as response:
    typ=response.headers.get("Content-Type","").split(";")[0]
    sample=response.read(48)
-   media=typ.lower() in ("video/mp4","application/octet-stream") and
-    sample[4:8]==b"ftyp"
+   media=(typ.lower() in ("video/mp4","application/octet-stream") and
+    sample[4:8]==b"ftyp")
    print(json.dumps({"publisher":"mp4hentai","stage":"PUBLIC_FREE_FORM_RESPONSE",
     "status":response.status,"host":urllib.parse.urlsplit(response.url).hostname,
     "mime":typ,"declared":response.headers.get("Content-Length",""),
