@@ -88,7 +88,10 @@ def main():
         "publisher_episodes":count,"selected_episode_path":
         urllib.parse.urlsplit(episode).path.rsplit("/",2)[-2:],
         "source_host":"octopusmanifest.org"}),flush=True)
-    with tempfile.TemporaryDirectory(prefix="asterion_haven_pc_complete_") as directory:
+    stage=Path("D:/AsterionControlRelease/diagnostics")
+    if not stage.is_dir() or shutil.disk_usage(stage).free < 1000000000:
+        raise RuntimeError("PC_MEDIA_STAGING_CAPACITY_BLOCKED: selected-original full file needs free space on D; do not use C system TEMP")
+    with tempfile.TemporaryDirectory(prefix="asterion_haven_pc_complete_",dir=stage) as directory:
         destination=Path(directory)
         opts={"quiet":True,"no_warnings":True,
             "noplaylist":True,"outtmpl":str(destination/"selected-original.%(ext)s"),
