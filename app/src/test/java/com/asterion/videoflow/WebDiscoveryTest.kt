@@ -56,12 +56,12 @@ class WebDiscoveryTest {
         listOf("archivebate.com","helloporn.com","hentaihaven.xxx",
             "javideo.net").forEach { host ->
             assertTrue(host,WebDiscovery.requiresSelectedPlayerForListing(
-                "https://$"+"host/watch/selected-item"))
+                "https://$host/watch/selected-item"))
         }
         listOf("rule34video.com","hentaibros.net","fullporner.com",
             "freepornvideos.xxx").forEach { host ->
             assertFalse(host,WebDiscovery.requiresSelectedPlayerForListing(
-                "https://$"+"host/watch/selected-item"))
+                "https://$host/watch/selected-item"))
         }
         assertFalse(WebDiscovery.requiresSelectedPlayerForListing(
             "https://helloporn.com.evil.example/preview"))
