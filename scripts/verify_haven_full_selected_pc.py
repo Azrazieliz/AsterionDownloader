@@ -92,12 +92,24 @@ def main():
         destination=Path(directory)
         opts={"quiet":True,"no_warnings":True,
             "noplaylist":True,"outtmpl":str(destination/"selected-original.%(ext)s"),
-            "format":"worst[height<=480]/worst",
+            "format":"best","ignore_no_formats_error":True,
             "http_headers":{"User-Agent":UA,"Referer":episode},
             "socket_timeout":22,"retries":1,"fragment_retries":1,
             "skip_unavailable_fragments":False,"concurrent_fragment_downloads":2,
             "nopart":False,"overwrites":False}
         with yt_dlp.YoutubeDL(opts) as downloader:
+            metadata=downloader.extract_info(hls,download=False)
+            available=metadata.get("formats",[]) if isinstance(metadata,dict) else []
+            print(json.dumps({"provider":"hentaihaven","stage":"ACTUAL_HLS_FORMATS",
+                "result_type":metadata.get("_type") if isinstance(metadata,dict) else None,
+                "format_count":len(available),
+                "entries_count":len(metadata.get("entries") or [])
+                    if isinstance(metadata,dict) else 0,
+                "variants":[{"id":f.get("format_id"),"height":f.get("height"),
+                    "protocol":f.get("protocol"),"ext":f.get("ext")}
+                    for f in available[:8] if isinstance(f,dict)]}),flush=True)
+            if not available:
+                raise RuntimeError("Selected episode HLS exposes no downloadable formats")
             downloader.extract_info(hls,download=True)
         files=[f for f in destination.iterdir()
             if f.is_file() and f.suffix.lower() in (".mp4",".mkv",".ts",".webm")]
