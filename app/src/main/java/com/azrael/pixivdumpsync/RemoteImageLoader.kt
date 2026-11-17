@@ -119,11 +119,14 @@ object RemoteImageLoader {
 
                 decodeSampled(file, if(preserveOriginal) 1024 else 256)
                     .also { decoded -> if(decoded==null)file.delete() }
-                }.getOrNull()
+                }.getOrNull().also { ready ->
+                    // Publish the successful bitmap before releasing the
+                    // per-URL lock so other cards never redownload it.
+                    if (ready != null) memory.put(imageKey, ready)
+                }
             }
 
             if (bitmap != null) {
-                memory.put(imageKey, bitmap)
                 target.get()?.post {
                     val current=target.get()
                     // A request can finish during a layout refresh before
