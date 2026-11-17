@@ -19,6 +19,13 @@
 - Commit `14e2331f3` added the active repair branch to the existing `.github/workflows/downloader-one-build-preflight.yml`. It only runs frozen-provider verification and Pilot/Acceptance unit tests, not APK assembly, signing, Android installation or publisher acceptance.
 - GitHub Actions run [44152377019](https://github.com/Azrazieliz/AsterionDownloader/actions/runs/44152377019) was queued and then in progress for head `14e2331f3` at the last observed check. **No final conclusion obtained at this checkpoint**. Do not claim the full regression suite passed until the completed job reports success.
 
+## Regression gate root cause and correction
+
+- Source-only CI run [44152377019](https://github.com/Azrazieliz/AsterionDownloader/actions/runs/44152377019) on `14e2331f3`: **FAIL**, with `668 tests completed, 1 failed, 13 skipped`. The only failure was `SyncJobServiceAndroid17RegressionTest.scheduledGallerySyncNeverLaunchesForbiddenForegroundService`; the Kotlin production source compiled and `:app:verifyFrozenVideoProviders` executed.
+- Root cause is a **false-positive source-string check**, not proof of an Android 17 foreground-service crash. `SyncJobService.kt` has historical KDoc text containing `startForegroundService()`, while the actual `onStartJob` executes `executor.submit` within JobScheduler and calls `jobFinished(params,false)` after completion.
+- Commit `5ffb471354389991373169ef3c182d897ee67c17` updates **only the regression test** to ignore block/line comments before checking for forbidden API calls. The actual JobService and all frozen provider implementations are unchanged.
+- Source-only CI rerun [44153155251](https://github.com/Azrazieliz/AsterionDownloader/actions/runs/44153155251) launched for `5ffb471`; final result should be read directly before marking green. This test is not a Samsung runtime acceptance.
+
 ## Verification evidence (never inflate)
 
 - Existing Asterion Control private Git bridge was used; owner Windows repair worktree `D:\AsterionDownloaderRepair_20261116` initially at `26d1cab` with only untracked `.kotlin/` and `scripts/__pycache__/`. A fast-forward to `c4c5fed` completed, preserving tracked source, and a subsequent PowerShell `where.exe gradle` missing command caused the wrapper job exit 1 **after** successful fast-forward (not a Git failure).
