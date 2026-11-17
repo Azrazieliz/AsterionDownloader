@@ -140,10 +140,10 @@ def main():
          "player_signals":{key:len(re.findall(pattern,html,re.I)) for key,pattern in {
             "jwplayer":r"jwplayer","videojs":r"videojs|video-js",
             "dplayer":r"dplayer","plyr":r"plyr","video":r"video",
-            "fetch":r"fetch\\s*\\(","xhr":r"XMLHttpRequest|axios",
-            "atob":r"atob\\s*\\(","base64":r"base64",
-            "eval":r"eval\\s*\\(","packed":r"eval\\(function\\(p,a,c,k,e,d",
-            "playerSetup":r"player\\s*\\.\\s*setup","source":r"source",
+            "fetch":r"fetch\s*\(","xhr":r"XMLHttpRequest|axios",
+            "atob":r"atob\s*\(","base64":r"base64",
+            "eval":r"eval\s*\(","packed":r"eval\(function\(p,a,c,k,e,d",
+            "playerSetup":r"player\s*\.\s*setup","source":r"source",
             "csrf":r"csrf|nonce","encryption":r"encrypt|decrypt|CryptoJS"
          }.items()}}),flush=True)
      except Exception as exc:
