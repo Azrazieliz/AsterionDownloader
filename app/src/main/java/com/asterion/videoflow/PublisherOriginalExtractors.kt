@@ -141,6 +141,11 @@ internal object PublisherOriginalExtractors {
             for(raw in structured(doc))add(raw)
         }
         for(element in doc.select(site.selectors).take(25)){
+            // A related panel can contain a perfectly playable full-length
+            // MP4. Proven duration alone never makes it the selected item.
+            if(element.closest("aside,.related,.recommended,.recommendations,"+
+                    ".ads,.advertisement,.sidebar,.more-videos,[data-ad]")!=null)
+                continue
             val tag=element.tagName()
             val isFrame=tag=="iframe"
             val duration=element.attr("data-duration").toLongOrNull()
@@ -230,8 +235,13 @@ internal object PublisherOriginalExtractors {
             // 3DHentaiX can expose unrelated playable recommendations.
             // Only its unique, selected main player may supply media; do not
             // reintroduce broad CSS or metadata candidates on this provider.
-            if(host in setOf("3dhentaix.com","javideo.net",
-                    "helloporn.com","jav.guru"))
+            // All providers with exact selected-player adapters must not
+            // append unrelated article/metadata media when the exact player
+            // transfer fails. Such fallbacks caused wrong-scene downloads.
+            if(host in setOf("3dhentaix.com","javideo.net","helloporn.com",
+                    "jav.guru","hentaibros.net","fullporner.com",
+                    "hqpornerxxx.com","uncensoredhentai.xxx","mp4hentai.com",
+                    "roshy.tv","hentaihaven.xxx"))
                 return resolved.distinctBy{it.url}
             return (resolved+fromHtml(selected,page.outerHtml()))
                 .distinctBy{it.url}
