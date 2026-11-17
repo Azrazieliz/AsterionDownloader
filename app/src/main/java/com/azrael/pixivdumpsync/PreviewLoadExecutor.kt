@@ -11,7 +11,10 @@ import java.util.concurrent.TimeUnit
  */
 internal object PreviewLoadExecutor {
     const val MAX_VISIBLE_VIDEO_CARDS=120
-    const val CAPACITY=256
+    // A following list can render far more than one 120-card source strip.
+    // A bounded 2048 pending-image window avoids silent rejection of later
+    // artist cards while older source images occupy the network workers.
+    const val CAPACITY=2048
 
     fun create(workers:Int):ThreadPoolExecutor {
         require(workers in 1..8)
