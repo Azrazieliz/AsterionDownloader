@@ -106,7 +106,7 @@ def run():
                     "activate_real_stream":wrapper.count("activate_real_stream")},
                 "wrapper_status":code}),flush=True)
             if(not cid or cid not in w.nodes or base!="https://jav.guru/searcho/"
-                or rtype not in ("e","v","s") or m is None):
+                or rtype not in ("e","v","s","x","t","h","o") or m is None):
                 raise RuntimeError("first-party relay configuration absent")
             node=w.nodes[cid]
             parts=[node.get(key) for key in m.groups()]
