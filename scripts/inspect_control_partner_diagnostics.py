@@ -14,9 +14,9 @@ sys.path.insert(0,str(control_root))
 from asterion_remote.phone_bridge import request
 
 package="com.azrael.pixivdumpsync.acceptance"
-for action in ("diagnostics.snapshot","diagnostics.events"):
+for action in ("diagnostics.summary","capabilities"):
     item={"package":package,"action":action,
-          "request_id":"dl20261117readonly"+action.replace(".","")+"i11",
+          "request_id":"dl20261117readonly"+action.replace(".","")+"j15",
           "payload":{"limit":18}}
     try:
         response=request("/app-bridge/invoke","POST",item,timeout=10).json()
