@@ -155,7 +155,6 @@ object VideoEngine {
         // Python original concurrently: process-global yt-dlp CWD, Python
         // modules and native library state are NOT shared with agent one.
         // Under actual low-memory pressure it falls back to native-only.
-        val nativeOnly=VideoAgentAdmission.nativeOnly(context)
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         try {
             val db=VideoDb(context)
@@ -175,6 +174,10 @@ object VideoEngine {
                 while(com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                       !Thread.currentThread().isInterrupted && transferred<maxItems &&
                       android.os.SystemClock.elapsedRealtime()<deadline) {
+                // The admission decision changes as other downloads release
+                // memory. A single snapshot on worker startup could lock agent
+                // two into native-only mode for the entire six-minute drain.
+                val nativeOnly=VideoAgentAdmission.nativeOnly(context)
                 val next=db.claimNext(nativeOnly=nativeOnly)
                 if(next==null){
                     // Queued rows with no eligible claim are blocked or held,
@@ -406,7 +409,7 @@ object VideoEngine {
             busy.set(false)
             if(com.azrael.pixivdumpsync.AppPower.enabled(context)) {
                 val pending=runCatching { VideoDb(context).use{
-                    it.next(nativeOnly=nativeOnly)!=null
+                    it.next(nativeOnly=VideoAgentAdmission.nativeOnly(context))!=null
                 } }
                     .getOrDefault(false)
                 if(pending)Scheduling.requestImmediate(context,false)
