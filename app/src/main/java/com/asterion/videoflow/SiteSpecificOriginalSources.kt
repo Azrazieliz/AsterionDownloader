@@ -778,16 +778,10 @@ internal object SiteSpecificOriginalSources {
                 }.getOrDefault(emptyList())
             }
             "helloporn.com"->{
-                val exact=helloPornOriginals(context,doc,selected)
-                if(exact.isNotEmpty())exact
-                else selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
-                    runCatching {
-                        if(!BrowserPageFetch.publicEligible(selected) &&
-                            !SiteSession.bound(context,selected))emptyList()
-                        else selectedStatic(
-                            Jsoup.parse(BrowserPageFetch.html(context,selected),
-                                selected),selected,owner)
-                    }.getOrDefault(emptyList())
+                // The publisher page includes dozens of unrelated preview
+                // videos. Only its one selected VOE iframe may authorize a
+                // transfer; generic static video fallback risks wrong files.
+                helloPornOriginals(context,doc,selected)
             }
             "javideo.net"->javideoOriginals(context,doc,selected)
             "3dhentaix.com"->{
@@ -826,20 +820,27 @@ internal object SiteSpecificOriginalSources {
                 // points to one octopusmanifest.org HLS master, HTTP 200
                 // #EXTM3U with two variants. Other MP4 strings in Next.js
                 // are previewUrl recommendations, NOT this selected episode.
-                val manifest=HentaiHavenEpisodeSource.publishedHls(doc,selected)
-                if(manifest!=null)listOf(Source(manifest,selected))
-                else selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
-                    runCatching {
+                if(!HentaiHavenEpisodeSource.isEpisode(selected))
+                    emptyList()
+                else {
+                    val manifest=HentaiHavenEpisodeSource.publishedHls(
+                        doc,selected)
+                    if(manifest!=null)listOf(Source(manifest,selected))
+                    else runCatching {
                         if(!BrowserPageFetch.publicEligible(selected) &&
                             !SiteSession.bound(context,selected))emptyList()
                         else {
                             val rendered=Jsoup.parse(
                                 BrowserPageFetch.html(context,selected),selected)
-                            HentaiHavenEpisodeSource.publishedHls(rendered,selected)
+                            HentaiHavenEpisodeSource.publishedHls(
+                                rendered,selected)
                                 ?.let{listOf(Source(it,selected))}
-                                ?:selectedStatic(rendered,selected,owner)
+                                .orEmpty()
                         }
                     }.getOrDefault(emptyList())
+                    // No generic article/video fallback: the Next.js page
+                    // publishes unrelated recommendation preview MP4s.
+                }
             }
             else->emptyList()
         }
