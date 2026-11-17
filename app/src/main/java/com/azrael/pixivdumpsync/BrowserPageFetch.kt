@@ -148,8 +148,9 @@ object BrowserPageFetch {
                         main.postDelayed({
                             if(latch.count==0L)return@postDelayed
                             v.evaluateJavascript("""(function(){
-                                if(location.hostname.replace(/^www\\./,'')!=='archivebate.com' ||
-                                   location.pathname.replace(/\\/+/g,'')!=='')return false;
+                                if(!['archivebate.com','www.archivebate.com']
+                                    .includes(location.hostname.toLowerCase()) ||
+                                   !['/',''].includes(location.pathname))return false;
                                 const action=[...document.querySelectorAll(
                                     'button,a,[role="button"]')]
                                     .filter(el=>!el.closest(
