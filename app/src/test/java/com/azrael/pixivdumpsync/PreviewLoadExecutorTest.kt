@@ -29,6 +29,26 @@ class PreviewLoadExecutorTest {
             executor.shutdownNow()
         }
     }
+    @Test fun burstAcrossMultipleArtistCardsIsNotDiscarded() {
+        val gate=CountDownLatch(1)
+        val started=CountDownLatch(4)
+        val burst=600
+        val complete=CountDownLatch(burst)
+        val executor=PreviewLoadExecutor.create(4)
+        try {
+            repeat(4) {
+                executor.execute { started.countDown();gate.await(4,TimeUnit.SECONDS) }
+            }
+            assertTrue(started.await(2,TimeUnit.SECONDS))
+            repeat(burst) { executor.execute { complete.countDown() } }
+            gate.countDown()
+            assertTrue("Visible artist thumbnails must not be silently discarded",
+                complete.await(10,TimeUnit.SECONDS))
+        } finally {
+            gate.countDown()
+            executor.shutdownNow()
+        }
+    }
     @Test fun boundedCapacityExceedsFullFirstPage(){
         assertTrue(PreviewLoadExecutor.CAPACITY>
             PreviewLoadExecutor.MAX_VISIBLE_VIDEO_CARDS)
