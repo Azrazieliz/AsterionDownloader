@@ -31,8 +31,8 @@ def inspect(p):
   players=[]
   for raw in q.frames:
    u=urllib.parse.urlsplit(urllib.parse.urljoin(p,html.unescape(raw)))
-   if u.scheme=="https" and u.hostname in ("fullporner.com","www.fullporner.com") and
-      re.fullmatch(r"/player/[0-9]{1,12}/[0-9]{1,4}/?",u.path):
+   if (u.scheme=="https" and u.hostname in ("fullporner.com","www.fullporner.com") and
+      re.fullmatch(r"/player/[0-9]{1,12}/[0-9]{1,4}/?",u.path)):
     players.append(u.geturl())
   players=list(dict.fromkeys(players))
   if len(players)!=1:return {"selected":urllib.parse.urlsplit(p).path,"error":"ambiguous_player"}
