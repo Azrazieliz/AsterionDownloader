@@ -54,31 +54,45 @@ def selected_player():
     return embed,page
 
 def selected_hls(embed,page):
+    """Actual owner-selected SB JWPlayer links object, never generic URLs.
+
+    Its published hls3 points to a .txt endpoint and its hls2 is a signed
+    *.premilkyway.com HLS manifest. Only the exact selected packed script
+    may authorize the CDN media, not ads elsewhere in the embedding page.
+    """
     p=Script();p.feed(page)
     valid=set()
-    packed_count=0
-    for text in p.raw:
-        if "eval(function(p,a,c,k,e,d)" not in text:continue
-        decoded=deobfuscate(text)
-        if not decoded:continue
-        packed_count+=1
-        for match in re.finditer(
-            r"""(?i)['"]?\b(?:hls[234]|file)['"]?\s*:\s*['"](https?://[^"'<>\\\s]{12,2500})['"]""",
-            decoded):
-            link=match.group(1).replace("\\/","/")
-            u=urllib.parse.urlsplit(link)
-            if (u.scheme=="https" and u.hostname in ("javclan.com","www.javclan.com")
-                and u.path.startswith("/stream/") and
-                u.path.endswith(".m3u8") and not u.username and not u.password
-                and not re.search(r"preview|teaser|sample|trailer",u.path,re.I)):
-                valid.add(link)
+    decoded_count=0
+    for packed in p.raw:
+        if "eval(function(p,a,c,k,e,d)" not in packed:continue
+        source=deobfuscate(packed)
+        if not source:continue
+        decoded_count+=1
+        if not re.search(r"""jwplayer\(["']vplayer["']\)\.setup\(""",source) or not re.search(
+            r"file\s*:\s*links\.hls4\s*\|\|\s*links\.hls3\s*\|\|\s*links\.hls2",source):
+            continue
+        matches=list(re.finditer(r"\bvar\s+links\s*=\s*",source))
+        if len(matches)!=1:continue
+        try:
+            obj,_=json.JSONDecoder().raw_decode(
+                source[matches[0].end():].lstrip())
+        except (TypeError,ValueError):continue
+        if not isinstance(obj,dict):continue
+        hls=obj.get("hls2","")
+        if not isinstance(hls,str):continue
+        hls=hls.replace("\\/","/")
+        uri=urllib.parse.urlsplit(hls)
+        if(uri.scheme!="https" or not uri.hostname or
+           not uri.hostname.endswith(".premilkyway.com") or
+           not re.fullmatch(r"/hls2/[A-Za-z0-9_,./-]{20,650}/master\.m3u8",uri.path,re.I)
+           or not uri.query or uri.username or uri.password or ".." in uri.path or
+           re.search(r"preview|teaser|sample|trailer",uri.path,re.I)):
+            continue
+        valid.add(hls)
     print(json.dumps({"provider":"jav_guru","stage":"OWNER_SB_PACKED_HLS",
-        "selected_embed_host":"javclan.com","decoded_scripts":packed_count,
+        "selected_embed_host":"javclan.com","decoded_scripts":decoded_count,
         "selected_hls_count":len(valid),"full_original_verified":False}),flush=True)
-    if not valid:return None
-    # Priority hls4/quality differences are irrelevant to identity: all
-    # must originate in the single selected JWPlayer packed configuration.
-    return sorted(valid)[0]
+    return next(iter(valid)) if len(valid)==1 else None
 
 def full():
     embed,page=selected_player()
