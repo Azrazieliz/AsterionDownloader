@@ -147,8 +147,10 @@ internal object NativeMediaDownloader {
             val ifRange=runCatching {
                 if(validator.isFile)validator.readText().trim() else ""
             }.getOrDefault("")
-            val overlap=if(offset>0L && ifRange.isBlank())
-                minOf(offset,64L).toInt() else 0
+            // Even an ETag cannot prove that a buggy CDN honored If-Range.
+            // Compare the final 64 saved bytes for EVERY resume, including
+            // ETag responses, so a changed source never becomes a mixed MP4.
+            val overlap=if(offset>0L) minOf(offset,64L).toInt() else 0
             val requestStart=offset-overlap
             val conn=(if(proxy==null)URL(current).openConnection()
                 else URL(current).openConnection(proxy)) as HttpURLConnection
@@ -207,6 +209,18 @@ internal object NativeMediaDownloader {
                 if(!append){partial.delete();validator.delete()}
                 origin.writeText(originHash)
                 val etag=conn.getHeaderField("ETag")?.trim().orEmpty()
+                // Misconfigured hosters sometimes reply 206 even though the
+                // If-Range validator no longer matches. Fail closed and
+                // preserve the ability to restart instead of corrupting
+                // downloaded bytes (the entire payload may have changed).
+                if(append && ifRange.isNotBlank() &&
+                    etag.isNotBlank() && etag!=ifRange){
+                    partial.delete()
+                    validator.delete()
+                    origin.delete()
+                    throw IOException(
+                        "Media resume ETag changed; discarded mismatched partial")
+                }
                 if(etag.isNotBlank())validator.writeText(etag)
                 else validator.delete()
                 val expected=fullRange?.let{it.end-it.start+1L}
