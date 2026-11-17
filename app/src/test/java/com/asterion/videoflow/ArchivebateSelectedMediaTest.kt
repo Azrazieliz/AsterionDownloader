@@ -4,6 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ArchivebateSelectedMediaTest {
+    @Test fun uploaderWatchRoutePreservesSameSelectedMixdropProvenance(){
+        val watch="https://archivebate.com/u/watch/16458050"
+        val embed="https://mixdrop.ag/e/z1p3lkkjhv17mj"
+        assertTrue(ArchivebateSelectedMedia.isSelectedArticle(watch))
+        assertTrue(ArchivebateSelectedMedia.isSelectedEmbed(watch,embed))
+        assertFalse(ArchivebateSelectedMedia.isSelectedArticle(
+            "https://archivebate.com/u/watch/16458050/other"))
+        assertFalse(ArchivebateSelectedMedia.isSelectedEmbed(
+            "https://archivebate.com/u/watch/not-a-number",embed))
+    }
+
     @Test fun selectedWatchPageFindsPublishedMixdropIframeWithoutGenericPlayerCss(){
         val page="https://archivebate.com/watch/16458050"
         val player="https://mixdrop.ag/e/z1p3lkkjhv17mj"
