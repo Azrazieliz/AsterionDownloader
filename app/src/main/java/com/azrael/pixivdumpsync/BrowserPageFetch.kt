@@ -501,7 +501,7 @@ object BrowserPageFetch {
                             }else if(host=="archivebate.com" &&
                                 SiteSession.bound(context,url) &&
                                 Uri.parse(url).path.orEmpty().trim('/')=="" &&
-                                !page.contains("href=\"/watch/") &&
+                                !ArchivebateListingPresence.hasSelectedWatch(page) &&
                                 archivebateWaits++<6){
                                 // The public Continue step sometimes populates
                                 // its real /watch/ listing asynchronously.
