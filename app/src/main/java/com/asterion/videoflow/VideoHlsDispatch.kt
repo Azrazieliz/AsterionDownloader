@@ -7,6 +7,19 @@ import java.net.URI
  * are never promoted to downloaded originals by this dispatch check.
  */
 internal object VideoHlsDispatch {
+    /** Resolve short-lived selected signed HLS links only AFTER the Python
+     * runtime is ready. Starting Chaquopy and validating yt-dlp after
+     * receiving a signed manifest can expire that very media URL on Android.
+     */
+    fun needsRuntimeBeforeSource(url:String):Boolean {
+        val uri=runCatching{URI(url)}.getOrNull()?:return false
+        if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
+            uri.fragment!=null)return false
+        val host=uri.host.orEmpty().lowercase().removePrefix("www.")
+        return host in setOf("jav.guru","pornhub.com") &&
+            VideoSiteProfiles.isVideoPage(url)
+    }
+
     fun isSelectedManifest(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull() ?: return false
         return uri.scheme=="https" && !uri.host.isNullOrBlank() &&
