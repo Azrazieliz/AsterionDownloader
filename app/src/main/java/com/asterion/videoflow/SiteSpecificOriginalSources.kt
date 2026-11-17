@@ -669,12 +669,36 @@ internal object SiteSpecificOriginalSources {
             "roshy.tv"->{
                 val initial=roshy(doc,selected)
                 val frames=initial.filter{host(it.url)=="kamehaus.net"}
-                // The Kamehaus /e/<id> URL is a webpage, not original media.
-                // Its selected HTML5 currentSrc/HLS must be resolved before
-                // transfer; an unverified iframe cannot masquerade as MP4.
-                val verifiedStream=if(frames.size==1)
-                    selectedIframeMedia(context,selected,frames.single())
-                else emptyList()
+                // Roshy's actual selected Kamehaus /e/<id> exposes HLS4 in
+                // packed JWPlayer text. yt-dlp does NOT support the HTML
+                // player URL, so obtain the manifest from that exact player
+                // instead. This is text deobfuscation, NEVER JS execution.
+                val officialHls=if(frames.size==1 &&
+                    RoshyPackedOriginalSource.selectedEmbed(
+                        selected,frames.single().url))
+                    runCatching {
+                        val frame=frames.single()
+                        val response=Jsoup.connect(frame.url)
+                            .userAgent(NativeMediaDownloader.USER_AGENT)
+                            .header("Referer",selected)
+                            .ignoreHttpErrors(true).followRedirects(false)
+                            .timeout(14_000).maxBodySize(1_500_000)
+                            .apply { NetworkRoute.javaProxy(context,selected)
+                                ?.let{proxy(it)} }.execute()
+                        if(response.statusCode() !in 200..299)null
+                        else RoshyPackedOriginalSource.selectedPlaylist(
+                            selected,frame.url,response.body())?.let {
+                            Source(it,frame.url)
+                        }
+                    }.getOrNull()
+                else null
+                // An iframe HTML response is never an original. If a
+                // publisher-attested HLS manifest exists, avoid a redundant
+                // expensive WebView and generic iframe extractor.
+                val verifiedStream=if(officialHls!=null)listOf(officialHls)
+                    else if(frames.size==1)
+                        selectedIframeMedia(context,selected,frames.single())
+                    else emptyList()
                 val jsStream=if(frames.isEmpty() && initial.none{isMedia(it.url)})
                     runCatching{
                         val rendered=BrowserPageFetch.html(context,selected)
