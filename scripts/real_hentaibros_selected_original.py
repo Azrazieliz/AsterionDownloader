@@ -18,13 +18,17 @@ class Players(HTMLParser):
         super().__init__();self.stack=[];self.selected=[]
     def handle_starttag(self,tag,attrs):
         d=dict(attrs)
-        is_related=tag in ("aside",) or any(k in (d.get("class","").lower())
-            for k in ("related","recommended","sidebar","advertisement","ads"))
-        excluded=bool(any(r[1] for r in self.stack)) or is_related
-        if re.fullmatch(r"wpfp_\d{1,10}",d.get("id","")) and d.get("data-item") and not excluded:
+        cls=d.get("class","")
+        is_related=tag=="aside" or bool(set(cls.lower().split()) &
+            {"related","recommended","recommendations","sidebar",
+             "advertisement","ads","more-videos"})
+        excluded=any(r[1] for r in self.stack) or is_related
+        inside=any("video-player" in r[2].split() for r in self.stack)
+        if (inside and re.fullmatch(r"wpfp_\d{1,10}",d.get("id",""))
+                and d.get("data-item") and not excluded):
             self.selected.append(d["data-item"])
         if tag not in ("source","img","br","input","hr","meta","link","wbr","area"):
-            self.stack.append((tag,excluded))
+            self.stack.append((tag,excluded,cls))
     def handle_endtag(self,tag):
         for i in range(len(self.stack)-1,-1,-1):
             if self.stack[i][0]==tag:
@@ -41,7 +45,18 @@ def main():
         code=page.status;body=page.read(2_000_000).decode("utf-8","replace")
     p=Players();p.feed(body)
     print("selected_article_http",code,"html_bytes",len(body),
-        "candidate_wordpress_players",len(p.selected),flush=True)
+        "static_wordpress_players",len(p.selected),flush=True)
+    if len(p.selected)!=1:
+        edge=r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        with tempfile.TemporaryDirectory(prefix="asterion_hentaibros_selected_") as temp:
+            process=subprocess.run([edge,"--headless=new","--disable-gpu",
+                "--mute-audio","--disable-extensions","--no-first-run",
+                "--user-data-dir="+temp,"--virtual-time-budget=9000",
+                "--dump-dom",POST],capture_output=True,timeout=35)
+            rendered=process.stdout.decode("utf-8","replace")
+        p=Players();p.feed(rendered)
+        print("rendered_dom_bytes",len(rendered),
+            "selected_wordpress_players",len(p.selected),flush=True)
     if len(p.selected)!=1:
         for tag,pattern in (
             ("wpfp_ids",r"wpfp_\\d+"),
