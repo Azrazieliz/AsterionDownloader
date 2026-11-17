@@ -81,7 +81,7 @@ def main():
     })()""")
     assert clicked is True,"Selected player Play control could not be activated"
     found={}
-    for step in range(14):
+    for step in range(30):
      found=evaluate(ws,50+step,r"""(() => ({
        page:location.href,frames:[...document.querySelectorAll(
        '.embed-responsive.player:not(.d-none) iframe[src]')].map(x=>({
