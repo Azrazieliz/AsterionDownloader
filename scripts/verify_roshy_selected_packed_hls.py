@@ -24,7 +24,7 @@ def request(url,referer):
   "User-Agent":UA,"Referer":referer,"Accept-Encoding":"identity",
   "Accept":"application/vnd.apple.mpegurl,application/x-mpegURL,*/*"}),timeout=25)
 def deobfuscate(script):
- pattern=r"""(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\.|[^'\\])*)'\.split\('\|'\)"""
+ pattern=r"""(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\\.|[^'\\])*)'\.split\('\|'\)"""
  m=re.search(pattern,script)
  if not m:return ""
  packed,radix,count,words=m.groups();radix=int(radix);count=int(count)
