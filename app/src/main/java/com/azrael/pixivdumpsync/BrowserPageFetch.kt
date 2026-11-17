@@ -129,7 +129,12 @@ object BrowserPageFetch {
             CookieManager.getInstance().setAcceptCookie(true)
             web.webViewClient=object:WebViewClient(){
                 override fun shouldOverrideUrlLoading(v:WebView,request:WebResourceRequest):Boolean {
-                    return request.url.host.orEmpty().lowercase().removePrefix("www.")!=host
+                    // Cross-site iframe navigation was being blocked even for
+                    // the exact player already attested by the selected post.
+                    // Keep main-frame navigation on the publisher, but admit
+                    // only approved selected player subframes (not ad popups).
+                    return !SelectedVideoIframePolicy.allow(
+                        url,request.url.toString(),request.isForMainFrame)
                 }
                 override fun onPageFinished(v:WebView,finished:String){
                     if(host=="archivebate.com" &&
