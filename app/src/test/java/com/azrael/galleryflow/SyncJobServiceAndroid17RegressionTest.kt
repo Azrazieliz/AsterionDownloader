@@ -15,7 +15,12 @@ class SyncJobServiceAndroid17RegressionTest {
         val file=File(module,
             "src/main/java/com/azrael/galleryflow/SyncJobService.kt")
         assertTrue("Gallery JobService source missing",file.isFile)
+        // Inspect executable source, not prose: the JobService's KDoc
+        // describes the old startForegroundService() crash. That historical
+        // mention must not fail a source regression test.
         val source=file.readText()
+            .replace(Regex("""(?s)/\*.*?\*/"""), "")
+            .replace(Regex("""(?m)//[^\r\n]*$"""), "")
         assertFalse("Android background JobService must never start an FGS",
             source.contains("startForegroundService("))
         assertFalse("Scheduled job must not call startService either",
