@@ -69,6 +69,33 @@ class Mp4HentaiPublishedHostTest {
             selectedHost)
         assertFalse(Mp4HentaiPublishedHost.requiresInteractiveVerification(plain))
     }
+    @Test fun publicUpfilesFreeFormUsesOnlyServerIssuedSameHostToken() {
+        val host="https://upfilesgo.com/nGfW"
+        val page=Jsoup.parse("""<form id="free-download-form" method="post"
+            action="/nGfW"><input type="hidden" name="_token"
+            value="gFDcxkjUQnK5qVZ9xAB24FtJ"/>
+            <input type="hidden" name="download_type" value="free"/>
+            </form>""",host)
+        val free=Mp4HentaiPublishedHost.publicFreeDownloadForm(page,host)
+        assertNotNull(free)
+        assertEquals(host,free!!.action)
+        assertEquals("gFDcxkjUQnK5qVZ9xAB24FtJ",free.csrf)
+        assertNull(Mp4HentaiPublishedHost.publicFreeDownloadForm(page,
+            "https://upfilesgo.com/other"))
+    }
+    @Test fun publicUpfilesFreeFormRejectsCaptchaPaidTierAndExternalPosts() {
+        val host="https://upfilesgo.com/nGfW"
+        val forms=listOf(
+            """<form id="free-download-form" method="post" action="https://evil.test/upload"><input type="hidden" name="_token" value="abcdefghijklmnop"/><input type="hidden" name="download_type" value="free"/></form>""",
+            """<form id="free-download-form" method="post" action="/nGfW"><input type="hidden" name="_token" value="abcdefghijklmnop"/><input type="hidden" name="download_type" value="premium"/></form>""",
+            """<form id="free-download-form" method="get" action="/nGfW"><input type="hidden" name="_token" value="abcdefghijklmnop"/><input type="hidden" name="download_type" value="free"/></form>""",
+            """<form id="free-download-form" method="post" action="/nGfW"><input type="hidden" name="_token" value="abcdefghijklmnop"/><input type="hidden" name="download_type" value="free"/><input name="captcha" type="hidden"/></form>""",
+            """<div class="cf-turnstile"></div><form id="free-download-form" method="post" action="/nGfW"><input type="hidden" name="_token" value="abcdefghijklmnop"/><input type="hidden" name="download_type" value="free"/></form>"""
+        )
+        for(html in forms)
+            assertNull(html,Mp4HentaiPublishedHost.publicFreeDownloadForm(
+                Jsoup.parse(html,host),host))
+    }
     @Test fun externalHostsAreNeverImplicitTrustedMedia(){
         assertFalse(Mp4HentaiPublishedHost.isPublishedHost(selected,
             "https://mirrored.to.evil.example/files/ABC/file"))
