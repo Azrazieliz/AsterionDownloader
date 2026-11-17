@@ -76,6 +76,17 @@ class XFollowingImportActivity:Activity(){
         layout.addView(ui.action(this,"OPEN MY FOLLOWING ACCOUNT LIST",true){
             val handle=ownHandle.text.toString().trim().removePrefix("@")
             if(validHandle(handle)){
+                val previousOwner=getPreferences(MODE_PRIVATE)
+                    .getString("own_x_handle","").orEmpty().trim().removePrefix("@")
+                if(!previousOwner.equals(handle,ignoreCase=true)){
+                    // A user switching their own X account must not inherit
+                    // the previous account's in-memory scan or progress
+                    // counters. Persisted originals are not touched.
+                    discovered.clear()
+                    scanCycles=0
+                    totalNew=0
+                    previousCount=0
+                }
                 getPreferences(MODE_PRIVATE).edit().putString("own_x_handle",handle).apply()
                 completed=false; scanning=true;idleAtBottom=0;previousCount=discovered.size
                 handler.removeCallbacks(scanner);handler.post(scanner)
