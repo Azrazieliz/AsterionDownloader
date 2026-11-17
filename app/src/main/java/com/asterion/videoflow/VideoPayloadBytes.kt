@@ -15,7 +15,7 @@ internal object VideoPayloadBytes {
         // while individual segments are arriving. Previous accounting
         // ignored those bytes, declaring a live stream stalled at 0 and
         // cancelling otherwise healthy Jav Guru/Pornhub transfers.
-        val fragment=name.replace(Regex("""(?i)\\.part-frag[0-9]{1,10}$"""),".part")
+        val fragment=name.replace(Regex("""(?i)\.part-frag[0-9]{1,10}$"""),".part")
         if(fragment.endsWith(".part")) {
             val withoutPart=fragment.removeSuffix(".part")
             return media.any { withoutPart.endsWith("."+it) } ||
