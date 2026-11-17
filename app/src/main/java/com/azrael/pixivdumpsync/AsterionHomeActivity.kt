@@ -1081,7 +1081,7 @@ class AsterionHomeActivity:Activity(){
                     layoutParams=LinearLayout.LayoutParams(-1,dp(160))
                 }
                 put(c,thumbnail,0)
-                VideoSearchPreviews.display(this,thumbnail,hit.thumbnail)
+                VideoSearchPreviews.display(this,thumbnail,hit.thumbnail,hit.url)
                 put(c,text(hit.title,16f,theme.white,true),8)
                 val isIndex=SearchRanking.isIndexPage(hit.url)
                 put(c,text(hit.source+" · "+(if(isIndex)"Indexed source page" else "Video result"),
