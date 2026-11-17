@@ -13,9 +13,14 @@ ARTICLE="https://mp4hentai.com/2026/11/nagi-kannagi-18min50s-v/"
 LINK="https://upfiles.com/nGfW"
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
 class Forms(HTMLParser):
- def __init__(self):super().__init__();self.current=None;self.forms=[]
+ def __init__(self):
+  super().__init__();self.current=None;self.forms=[]
+  self.links=[];self.active=None
  def handle_starttag(self,tag,attrs):
   a=dict(attrs)
+  if tag=="a" and a.get("href"):
+   self.active={"href":a["href"],"text":"","class":a.get("class","")}
+   self.links.append(self.active)
   if tag=="form":
    self.current={"id":a.get("id",""),"method":a.get("method","GET"),
     "action":a.get("action",""),"fields":{}}
@@ -24,8 +29,11 @@ class Forms(HTMLParser):
    name=a.get("name","")
    if name and a.get("type","hidden")=="hidden":
     self.current["fields"][name]=a.get("value","")
+ def handle_data(self,data):
+  if self.active and len(self.active["text"])<100:self.active["text"]+=data[:100]
  def handle_endtag(self,tag):
   if tag=="form":self.current=None
+  if tag=="a":self.active=None
 def request(url,ref="",data=None):
  h={"User-Agent":UA,"Accept-Encoding":"identity","Accept":"*/*"}
  if ref:h["Referer"]=ref
@@ -38,7 +46,7 @@ def main():
  with urllib.request.urlopen(request(ARTICLE),timeout=23) as source:
   article=source.read(2000000).decode("utf-8","replace")
  assert ("upfiles.com/nGfW" in article or
-  "upfiles.com\/nGfW" in article or
+  r"upfiles.com\/nGfW" in article or
   "https://upfiles.com/nGfW" in html.unescape(article)),(
   "This file host is not tied to exact selected publisher article")
  jar=http.cookiejar.CookieJar()
@@ -67,14 +75,35 @@ def main():
  try:
   with session.open(request(target,final,data),timeout=27) as response:
    typ=response.headers.get("Content-Type","").split(";")[0]
-   sample=response.read(48)
+   sample=response.read(400000)
    media=(typ.lower() in ("video/mp4","application/octet-stream") and
     sample[4:8]==b"ftyp")
+   detail={}
+   if typ.lower().startswith("text/html"):
+    parser=Forms();parser.feed(sample.decode("utf8","replace"))
+    candidates=[]
+    for anchor in parser.links:
+     label=anchor["text"].strip()
+     if not re.search(r"download|direct|file link|continue|get link",label,re.I):
+      continue
+     uri=urllib.parse.urlsplit(urllib.parse.urljoin(response.url,
+       html.unescape(anchor["href"])))
+     if uri.scheme!="https" or not uri.hostname:continue
+     candidates.append({"text":label[:45],"host":uri.hostname,
+       "path":re.sub(r"/[A-Za-z0-9_-]{12,}","/{opaque}",uri.path[:95])})
+    detail={"html_bytes":len(sample),"candidate_links":candidates[:20],
+      "form_ids":[x["id"] for x in parser.forms[:12]],
+      "gate_mentions":bool(re.search(
+        r"captcha|turnstile|verify you are human|premium",
+        sample.decode("utf8","replace")[:10000],re.I)),
+      "waiting_mentions":len(re.findall(
+        r"countdown|please wait|wait [0-9]+ seconds",
+        sample.decode("utf8","replace"),re.I))}
    print(json.dumps({"publisher":"mp4hentai","stage":"PUBLIC_FREE_FORM_RESPONSE",
     "status":response.status,"host":urllib.parse.urlsplit(response.url).hostname,
     "mime":typ,"declared":response.headers.get("Content-Length",""),
     "sample_bytes":len(sample),"ftyp_mp4":sample[4:8]==b"ftyp",
-    "actual_media":bool(media)}),flush=True)
+    "actual_media":bool(media),**detail}),flush=True)
    return 0 if media else 2
  except urllib.error.HTTPError as exc:
   print(json.dumps({"publisher":"mp4hentai","stage":"PUBLIC_FREE_FORM_DENIED",
