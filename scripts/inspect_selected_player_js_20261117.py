@@ -38,11 +38,11 @@ def sanitize(text):
  text=re.sub(r"https?://[^\\s\\\"'<>]+","[url]",text)
  text=re.sub(r"[A-Za-z0-9_-]{24,}","[opaque]",text)
  return text[:480]
-KEYS={"m3u8":r"\\.m3u8","mp4":r"\\.mp4","iframe":r"iframe",
+KEYS={"m3u8":r"\.m3u8","mp4":r"\.mp4","iframe":r"iframe",
  "videojs":r"videojs|video-js","player":r"player","source":r"source",
- "ajax":r"fetch\\s*\\(|XMLHttpRequest|ajax\\s*\\(",
- "embed":r"embed","json":r"application/json|JSON\\.parse",
- "wp":r"wp-embed|wp-block","atob":r"atob\\("}
+ "ajax":r"fetch\s*\(|XMLHttpRequest|ajax\s*\(",
+ "embed":r"embed","json":r"application/json|JSON\.parse",
+ "wp":r"wp-embed|wp-block","atob":r"atob\("}
 for name,url in PAGES.items():
  try:
   status,body=req(url,url);doc=Page();doc.feed(body)
