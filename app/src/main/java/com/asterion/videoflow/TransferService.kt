@@ -960,9 +960,11 @@ object VideoEngine {
                     "Rule34Video selected page exposed no verified download quality links; "+
                     "the player page and unrelated previews are not transferable"))
         if(strictJavGuru && publishedOriginals.isEmpty())
-            throw IllegalStateException(
-                "Jav Guru did not expose a selected STREAM player. "+
-                "The unsupported page and advertising iframe will not be retried.")
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "Jav Guru selected article exposed no publisher-attested "+
+                    "STREAM controls or valid player relay; connect the "+
+                    "site if its normal page requires verification."))
         if(strictThreeD && publishedOriginals.size!=1)
             throw IllegalStateException(
                 "3DHentaiX original identity unverified: selected player "+
