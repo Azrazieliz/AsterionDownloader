@@ -20,14 +20,14 @@ internal object Rule34PosterEvidence {
         val doc=Jsoup.parse(html,page)
         for(script in doc.select("script:not([src])").take(65)){
             val source=script.data().ifBlank{script.html()}
-            val start=Regex("""\\b(?:var|let)\\s+flashvars\\s*=\\s*\\{""")
+            val start=Regex("""\b(?:var|let)\s+flashvars\s*=\s*\{""")
                 .find(source)?.range?.first?:continue
             val player=source.substring(start).take(40_000)
                 .substringBefore("kt_player(")
-            val declared=Regex("""\\bvideo_id\\s*:\\s*['"]([0-9]{1,12})['"]""")
+            val declared=Regex("""\bvideo_id\s*:\s*['"]([0-9]{1,12})['"]""")
                 .find(player)?.groupValues?.get(1)
             if(declared!=selectedId)continue
-            val raw=Regex("""\\bpreview_url\\s*:\\s*['"]([^'"]{12,1000})['"]""")
+            val raw=Regex("""\bpreview_url\s*:\s*['"]([^'"]{12,1000})['"]""")
                 .find(player)?.groupValues?.get(1)?:continue
             val candidate=runCatching{
                 URI(page).resolve(raw.replace("&amp;","&").trim())
@@ -38,7 +38,7 @@ internal object Rule34PosterEvidence {
                     "rule34video.com")continue
             val path=Regex(
                 """^/contents/videos_screenshots/[0-9]{1,12}/$selectedId/"""+
-                """[A-Za-z0-9_.-]{3,180}\\.(?:jpe?g|png|webp)$""",
+                """[A-Za-z0-9_.-]{3,180}\.(?:jpe?g|png|webp)$""",
                 RegexOption.IGNORE_CASE)
             if(path.matches(candidate.path.orEmpty()))
                 return candidate.toASCIIString()
