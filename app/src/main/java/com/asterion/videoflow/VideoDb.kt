@@ -204,7 +204,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                 // A manually selected video (watch_id=0) is independent of
                 // other selections, even when their titles share a series.
                 // Episode ordering applies to automatic watched-site jobs.
-                if(scan.getLong(2)==0L)continue
+                if(!VideoQueueClaimPolicy.enforceEpisodeOrder(scan.getLong(2)))continue
                 val title=scan.getString(1)
                 val series=com.azrael.pixivdumpsync.SequenceOrder
                     .episodeSeries(title)?:continue
@@ -246,7 +246,7 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                         continue
                 }
                 val name=c.getString(2)
-                val series=if(watchId==0L)null else
+                val series=if(!VideoQueueClaimPolicy.enforceEpisodeOrder(watchId))null else
                     com.azrael.pixivdumpsync.SequenceOrder.episodeSeries(name)
                 if(series!=null){
                     val number=com.azrael.pixivdumpsync.SequenceOrder.index(
