@@ -34,6 +34,33 @@ class ArchivebateWatchActivity:Activity() {
     private var player:WebView?=null
     // Never accept a navigation to a different recording or advertising player.
     private var selectedEmbed:String?=null
+    private val userDownloadPending=java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Never enqueue an iframe/advertising URL, only the user's selected
+     * original proven on the real publisher player. */
+    private fun enqueueSelected(media:String,title:String) {
+        if(!ArchivebateSelectedMedia.isSelectedMedia(media)) {
+            userDownloadPending.set(false)
+            return
+        }
+        val queued=VideoDb(this).use { db ->
+            db.addVideo(media,title,0L,origin="user")
+        }
+        if(queued) {
+            ArchivebateDiagnostics.record(this,"queued_original")
+            VideoEngine.launch(applicationContext,false)
+            Toast.makeText(this,
+                "Selected original queued. Verify its transfer in Downloads.",
+                Toast.LENGTH_LONG).show()
+            finish()
+        }else{
+            userDownloadPending.set(false)
+            ArchivebateDiagnostics.record(this,"already_present")
+            Toast.makeText(this,"This original is already queued or saved",
+                Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(state:Bundle?){
         super.onCreate(state)
         val watch=intent.getStringExtra(WATCH_URL).orEmpty()
@@ -96,8 +123,15 @@ class ArchivebateWatchActivity:Activity() {
             finish()
         },LinearLayout.LayoutParams(0,-2,1f))
         actions.addView(ui.action(this,"DOWNLOAD PLAYING ORIGINAL",true){
+            // One explicit user tap authorizes ONLY this selected recording.
+            // An empty WebView currentSrc no longer rejects a real public
+            // MDCore.wurl which the player publishes in a packed script.
+            if(!userDownloadPending.compareAndSet(false,true))return@action
             val web=player
-            if(web==null)return@action
+            if(web==null){
+                userDownloadPending.set(false)
+                return@action
+            }
             web.evaluateJavascript("""(function(){
                 const v=document.querySelector('video');
                 return v?.currentSrc||v?.src||
@@ -106,29 +140,45 @@ class ArchivebateWatchActivity:Activity() {
                 val observed=runCatching{
                     JSONTokener(response).nextValue() as? String
                 }.getOrNull().orEmpty()
-                if(!ArchivebateSelectedMedia.isSelectedMedia(observed)){
-                    ArchivebateDiagnostics.record(this,"no_selected_media",
-                        "Player has no verified original MP4 after user playback")
-                    Toast.makeText(this,
-                        "The selected player has not exposed an original MP4. "+
-                        "Play the recording first; protected or unavailable media "+
-                        "cannot be downloaded.",Toast.LENGTH_LONG).show()
+                if(ArchivebateSelectedMedia.isSelectedMedia(observed)){
+                    enqueueSelected(observed,title)
                     return@evaluateJavascript
                 }
-                val queued=VideoDb(this).use{db->
-                    db.addVideo(observed,title,0L,origin="user")
-                }
-                if(queued){
-                    ArchivebateDiagnostics.record(this,"queued_original")
-                    VideoEngine.launch(applicationContext,false)
+                val exact=selectedEmbed
+                if(exact==null ||
+                    !ArchivebateSelectedMedia.isSelectedEmbed(watch,exact)){
+                    userDownloadPending.set(false)
+                    ArchivebateDiagnostics.record(this,"no_selected_player")
                     Toast.makeText(this,
-                        "Selected original queued. Verify its transfer in Downloads.",
+                        "Selected recording player is unavailable; reconnect or retry.",
                         Toast.LENGTH_LONG).show()
-                    finish()
-                }else{
-                    ArchivebateDiagnostics.record(this,"already_present")
-                    Toast.makeText(this,"This original is already queued or saved",
-                        Toast.LENGTH_LONG).show()
+                    return@evaluateJavascript
+                }
+                ArchivebateDiagnostics.record(this,"published_media_lookup")
+                info.text="Resolving this exact recording's published original…"
+                thread(name="asterion-archivebate-exact-selected"){
+                    val verified=runCatching {
+                        ArchivebateSelectedMedia.resolve(
+                            applicationContext,watch,exact)
+                    }
+                    runOnUiThread{
+                        if(isFinishing || isDestroyed)return@runOnUiThread
+                        verified.onSuccess{source->
+                            enqueueSelected(source,title)
+                        }.onFailure{failure->
+                            userDownloadPending.set(false)
+                            ArchivebateDiagnostics.record(this,
+                                "selected_original_unavailable",
+                                failure.javaClass.simpleName+": "+
+                                    failure.message.orEmpty().take(110))
+                            info.text="Selected original unavailable: "+
+                                failure.message.orEmpty().take(140)
+                            Toast.makeText(this,
+                                "The selected original could not be resolved. "+
+                                    "Its preview and advertisements were excluded.",
+                                Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
             }
         },LinearLayout.LayoutParams(0,-2,2f))
