@@ -228,6 +228,26 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(player,SiteSpecificOriginalSources.playerLink(
             Jsoup.parse(html,page),"hqpornerxxx.com"))
     }
+    @Test fun selectedPlayerFallbacksNeverConsumeUnrelatedFrameOrQuery(){
+        val nh="https://uncensoredhentai.xxx/watch/episode-3/"
+        val voe="https://helloporn.com/video-28699-selected-clip"
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            nh,"https://nhplayer.com/v/Z2flAXXPucyCbVJ/"))
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            voe,"https://voe.sx/e/wx8walm5hqkj"))
+        for(bad in listOf(
+            "https://nhplayer.com/v/Z2flAXXPucyCbVJ/?advert=1",
+            "https://nhplayer.com.evil.example/v/Z2flAXXPucyCbVJ/",
+            "http://nhplayer.com/v/Z2flAXXPucyCbVJ/",
+            "https://nhplayer.com/watch/Z2flAXXPucyCbVJ/",
+            "https://nhplayer.com/v/../../ads"
+        ))assertFalse(bad,SiteSpecificOriginalSources.selectedExtractorFrame(nh,bad))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            nh,"https://voe.sx/e/wx8walm5hqkj"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            "https://rule34video.com/video/4727779/",
+            "https://nhplayer.com/v/Z2flAXXPucyCbVJ/"))
+    }
     @Test fun uncensoredHentaiResolvesOnlyItsExactNhplayerIframe(){
         val page="https://uncensoredhentai.xxx/watch/episode-3/"
         val player="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
