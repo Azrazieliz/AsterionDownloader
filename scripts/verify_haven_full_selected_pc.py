@@ -110,7 +110,24 @@ def main():
                     for f in available[:8] if isinstance(f,dict)]}),flush=True)
             if not available:
                 raise RuntimeError("Selected episode HLS exposes no downloadable formats")
-            downloader.extract_info(hls,download=True)
+            videos=sorted((f for f in available if isinstance(f,dict) and
+                isinstance(f.get("height"),int) and f["height"]>=240 and
+                f.get("protocol")=="m3u8_native"),
+                key=lambda f:f["height"])
+            audios=[f for f in available if isinstance(f,dict) and
+                str(f.get("format_id","")).startswith("audio-") and
+                f.get("protocol")=="m3u8_native"]
+            if not videos or len(audios)!=1:
+                raise RuntimeError("Cannot select one video and its published audio track")
+            chosen=next((f for f in videos if f["height"]<=480),videos[0])
+            format_id=str(chosen["format_id"])+"+"+str(audios[0]["format_id"])
+            print(json.dumps({"provider":"hentaihaven","stage":"SELECTED_HLS_RENDITION",
+                "video_height":chosen["height"],
+                "audio_track_count":len(audios),
+                "format_id_is_publisher_listed":True}),flush=True)
+        with yt_dlp.YoutubeDL({**opts,"format":format_id,
+                "ignore_no_formats_error":False}) as transfer:
+            transfer.extract_info(hls,download=True)
         files=[f for f in destination.iterdir()
             if f.is_file() and f.suffix.lower() in (".mp4",".mkv",".ts",".webm")]
         if len(files)!=1:raise RuntimeError("Selected original did not yield exactly one final media")
