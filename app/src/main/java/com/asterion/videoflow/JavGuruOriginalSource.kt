@@ -123,43 +123,66 @@ internal object JavGuruOriginalSource {
      * The HLS URL is short-lived: resolve it anew on every selected request.
      * A media link from another script, a recommendation or an ad is rejected.
      */
+    /** Selected original HLS from exactly the publisher-selected external player.
+     * LU uses Lulu's packed JWPlayer source. The owner's actual MXGS-1452 post
+     * has SB/VO/DD/JK only; its selected SB embed resolves to javclan.com's
+     * packed, explicitly keyed HLS URLs. Do not require non-existent LU.
+     */
     fun selectedHls(embed:String,html:String):String? {
-        if(!selectedEmbed("LU",embed))return null
         val h=safe(embed)?.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
-        if(h !in setOf("streamhihi.com","lulustream.com"))return null
+        val lulu=h in setOf("streamhihi.com","lulustream.com") &&
+            selectedEmbed("LU",embed)
+        val sb=h=="javclan.com" && selectedEmbed("SB",embed)
+        if(!lulu && !sb)return null
         if(html.length !in 250..1_000_000)return null
         val document=Jsoup.parse(html,embed)
-        // Reuse the bounded linear packed-script parser verified against
-        // a real 5,922-byte JWPlayer source. The previous recursive
-        // packedPattern regex could StackOverflow on provider-controlled JS.
-        // Never execute third-party JavaScript or promote an iframe as media.
         val verified=LinkedHashSet<String>()
         for(script in document.select("script:not([src])").take(60)){
             val body=script.data().ifBlank{script.html()}
             if(!body.contains("eval(function(p,a,c,k,e,d)"))continue
+            // The existing linear P.A.C.K.E.R parser is bounded and never
+            // evaluates publisher JavaScript or downloads adjacent ads.
             val decoded=RoshyPackedOriginalSource.unpack(body)?:continue
-            if(!decoded.contains("jwplayer") ||
-                !decoded.contains("sources:"))continue
-                val sourceRegex=Regex(
-                    """(?is)\bsources\s*:\s*\[\s*\{\s*file\s*:\s*["'](https://[^"'<>\\\s]{12,2500})["']"""
-                )
-                val candidates=sourceRegex.findAll(decoded)
-                    .map{it.groupValues[1].replace("\\/","/")}
-                    .distinct().take(3).toList()
-                if(candidates.size!=1)continue
-                val candidate=candidates.single()
-                val uri=safe(candidate)?:continue
-                val host=uri.host.orEmpty().lowercase(Locale.ROOT)
-                if(!(host=="tnmr.org" || host.endsWith(".tnmr.org") ||
-                    host=="lulucdn.com" || host.endsWith(".lulucdn.com")))continue
-                if(!uri.path.orEmpty().matches(
-                        Regex("""(?i)^/hls[0-9]*/[a-zA-Z0-9_./-]{5,200}/master\.m3u8$""")))
+            if(decoded.length>180_000)continue
+            val candidates=if(sb){
+                // The selected SB hoster's own packed source names hls2/3/4
+                // with either quoted or bare object-property names.
+                Regex("""(?i)(?:["']?\bhls[234]\b["']?|\bfile\b)\s*:\s*["'](https://[^"'<>\\\s]{12,2500})["']""")
+                    .findAll(decoded).map{it.groupValues[1].replace("\\/","/")}
+                    .distinct().take(12).toList()
+            }else{
+                if(!decoded.contains("jwplayer") || !decoded.contains("sources:"))
                     continue
-                if(uri.rawQuery.isNullOrBlank())continue
-                verified.add(candidate)
+                Regex("""(?is)\bsources\s*:\s*\[\s*\{\s*file\s*:\s*["'](https://[^"'<>\\\s]{12,2500})["']""")
+                    .findAll(decoded).map{it.groupValues[1].replace("\\/","/")}
+                    .distinct().take(3).toList()
+            }
+            if(candidates.isEmpty())continue
+            for(candidate in candidates){
+                val uri=safe(candidate)?:continue
+                if(uri.fragment!=null || uri.path.orEmpty().contains(".."))
+                    continue
+                val host=uri.host.orEmpty().lowercase(Locale.ROOT)
+                if(sb){
+                    if(host!="javclan.com" && host!="www.javclan.com")continue
+                    if(!uri.path.orEmpty().matches(
+                            Regex("""(?i)^/stream/[A-Za-z0-9_./-]{8,550}\.m3u8$""")))
+                        continue
+                }else{
+                    if(!(host=="tnmr.org" || host.endsWith(".tnmr.org") ||
+                        host=="lulucdn.com" || host.endsWith(".lulucdn.com")))
+                        continue
+                    if(!uri.path.orEmpty().matches(
+                            Regex("""(?i)^/hls[0-9]*/[a-zA-Z0-9_./-]{5,200}/master\.m3u8$""")) ||
+                        uri.rawQuery.isNullOrBlank())continue
+                }
+                if(FullLengthVideoPolicy.isExplicitPreview("",candidate))continue
+                verified+=candidate
+            }
         }
-        // The exact selected publisher may publish quality variants, but
-        // different independent packed scripts are ambiguous. Fail closed.
+        // A selected hoster can expose multiple HLS qualities. Prefer only
+        // a single exact manifest; never arbitrarily choose an unrelated
+        // alternate source or advertising player.
         return verified.singleOrNull()
     }
 
