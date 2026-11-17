@@ -458,7 +458,7 @@ internal object SiteSpecificOriginalSources {
                 // injects play.javideo.net inside its active player. The
                 // former Streamtape-only rule rejected the REAL iframe.
                 (host(player)=="play.javideo.net" &&
-                    Regex("""^/embed/[A-Za-z0-9_-]{5,100}/?$""")
+                    Regex("""^/(?:embed|player)/[A-Za-z0-9_-]{5,100}/?$""")
                         .matches(path) &&
                     frame.rawQuery.isNullOrBlank() &&
                     frame.rawFragment==null) ||
