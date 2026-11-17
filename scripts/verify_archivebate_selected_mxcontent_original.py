@@ -58,6 +58,8 @@ def main():
  media=extract(decoded,"wurl")
  vfile=extract(decoded,"vfile")
  assert media and vfile and vfile.endswith(".mp4")
+ # Mixdrop's selected MDCore.wurl is protocol-relative on its HTTPS player.
+ media=urllib.parse.urljoin(effective,media)
  u=urllib.parse.urlsplit(media)
  assert u.scheme=="https" and u.hostname and re.fullmatch(
   r"[a-z0-9]{6,32}\.mxcontent\.net",u.hostname)
