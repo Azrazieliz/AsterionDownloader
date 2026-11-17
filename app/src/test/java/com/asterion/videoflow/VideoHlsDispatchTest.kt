@@ -12,6 +12,23 @@ class VideoHlsDispatchTest {
         assertTrue(VideoHlsDispatch.isSelectedManifest(
             "https://media.example/full/manifest.mpd"))
     }
+    @Test fun signedPublisherRuntimeIsPrimedBeforeFetchingExpiringHls() {
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://jav.guru/1077002/doks-695-original-scene/"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://www.pornhub.com/view_video.php?viewkey=ph1234567"))
+        for(url in listOf(
+            "https://jav.guru/",
+            "https://jav.guru/category/test/",
+            "https://www.pornhub.com/",
+            "https://www.pornhub.com/view_video.php?viewkey=bad%00",
+            "https://jav.guru.evil.example/123456/scene/",
+            "https://jav.guru/123456/scene/#fragment",
+            "http://jav.guru/123456/scene/",
+            "https://www.pornhub.com/view_video.php?viewkey=ph1234&viewkey=ph5678"
+        ))assertFalse(url,VideoHlsDispatch.needsRuntimeBeforeSource(url))
+    }
+
     @Test fun watchPagesAndUntrustedManifestShapesAreNotPromoted(){
         for(url in listOf(
             "https://www.pornhub.com/view_video.php?viewkey=abc12345",
