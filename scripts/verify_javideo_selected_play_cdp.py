@@ -50,7 +50,7 @@ def main():
    with connect(target["webSocketDebuggerUrl"],open_timeout=7,close_timeout=2,
                 max_size=1_000_000) as ws:
     stats=None
-    for step in range(12):
+    for step in range(40):
      stats=evaluate(ws,10+step,r"""(() => ({
        ready:document.readyState,page:location.href,
        play:!!document.querySelector('#clickfakeplayer'),
@@ -58,8 +58,12 @@ def main():
        visibleGate:[...document.querySelectorAll('.cf-turnstile,.g-recaptcha,.h-captcha')]
         .some(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0)
      }))()""")
-     if isinstance(stats,dict) and stats.get("ready")!="loading":break
-     time.sleep(.4)
+     # Edge initially exposes a fully loaded about:blank document before
+     # the publisher navigation commits. That is NOT a site redirect.
+     if isinstance(stats,dict) and stats.get("page","").startswith(SELECTED) and (
+             stats.get("play") or stats.get("visibleGate")):
+      break
+     time.sleep(.5)
     assert isinstance(stats,dict),"Current selected player state unavailable"
     p=urllib.parse.urlsplit(stats.get("page",""))
     assert p.hostname=="javideo.net" and p.path=="/en/fc2ppv-4994603",(
