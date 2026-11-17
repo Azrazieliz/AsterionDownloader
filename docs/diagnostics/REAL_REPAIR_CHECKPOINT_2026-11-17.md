@@ -77,3 +77,29 @@ Nine mandatory selected-original transfers still lack a complete correct video s
 - The **newest** compiled source, including those final user-agent changes, passed targeted offline `Rule34PosterEvidenceTest` and `XFollowingImportPolicyTest` after compilation: `BUILD SUCCESSFUL in 45s`, exit `0`, job `dl-final-compiled-preview-20261117-79916e`. Source repair was not installed on the phone.
 - **Phone release gate remains closed:** The installed `1.3.70-acceptance` build predates this repair branch. An on-device full-file retrieval/MediaStore receipt, correct source identity, repeated result and no-crash test are still required. No new APK made during this continuation.
 
+## Owner's 18:53 Android 17 diagnostics and current delivery gate — 17 November (follow-up)
+
+This captures the owner's **actual** production acceptance-package defects at local Tue Nov 17 2026 18:53:38 GMT+01:00. Package `com.azrael.pixivdumpsync.acceptance`, Android 17, system available RAM **3,535,151,104 bytes**, `low-memory=false`; secondary extractor lane native-only. The report **does not specify installed versionCode/versionName**, so never infer it is the signed 1.3.73 APK merely because the latter was transferred to Downloads.
+
+### Exact failed job identities from owner diagnostics
+
+| Selected video | Record | Stage and observed failure | Interpretation / release proof still missing |
+|---|---:|---|---|
+| UncensoredHentai | #5 | `running / transfer / verified_bytes=0`, 80-second zero-byte timeout later displayed | Real selected NHPlayer media segments and nonzero verified first bytes; complete file not proven |
+| MP4Hentai | #25 | `preparing / OTHER`: host not exposing a verified download in five steps; repeated historical same result | Selected publisher/hoster -> first-party attributable actual file, or explicit verification gate, not HTML saved as MP4 |
+| HentaiHaven | #40 | `preparing / UNSUPPORTED`: selected article has no attributable original | Newly implemented series→episode + episode JSON-LD HLS must be exercised against this **exact selection** on Android |
+| Pornhub | #48 | `preparing / AUTH`: requires real remote VPN exit or authorized HTTP/SOCKS5 proxy | Selected page with legitimate reachable network route; code must not claim it can bypass an unavailable network path |
+| JAVIDEO | #46 | `transfer→python_fallback / UNSUPPORTED`: bundled yt-dlp Unsupported URL | Selected Play iframe and genuine player bytes; no generic parent-page fallback or unrelated ad |
+| Jav Guru | #36 | `signed_hls_runtime / UNSUPPORTED`: selected STREAM player absent | Selected WordPress STREAM controls or session-gated reason; neither fake advert nor unsupported page retried |
+
+Additional owner-visible failures: **HelloPorn** remains on the seven-provider failure list. **Rule34Video poster**: twenty-plus `selected_page_did_not_publish_poster` events and three current `SocketTimeoutException: timeout` events; new selected-video `flashvars.preview_url` fix only source-tested, not Samsung-tested. UI screenshot shows failed jobs with Retry/Clear and no completed download receipt.
+
+### Crash classification (important correction to historical exit count)
+
+The owner supplied **five Android-recorded Java-crash exits** (18:23:04, twice at 18:23:31, 18:35:59, 18:38:55 CET). **One actual per-process Java stack trace** is included, at 18:35:59: `SyncJobService.onStartJob(SyncJobService.kt:10)` calls `startForegroundService` on Android 17 and throws `ForegroundServiceStartNotAllowedException`. The current repair branch eliminates the forbidden scheduled-job FGS call; `SyncJobServiceAndroid17RegressionTest` source check passed in CI run https://github.com/Azrazieliz/AsterionDownloader/actions/runs/44153155251 at commit `5ffb47135438`. **One trace does not prove all five crashes had the same cause; phone validation remains open.** Do not conflate these fresh Java-crash records with the eight earlier historical exits (mostly user-requested) from a different check.
+
+### Prebuild/testing and delivery verification, current turn
+
+- The active repair branch at `47d24ad4f814` is **newer than** the previously built/signed v1.3.73 APK (`cdf6cf1`). Existing work and frozen original-provider files remain preserved. CI `source-tests-only` at `5ffb47135438` passed. Subsequent `47d24ad` is documentation only. None of this establishes Android runtime success for six named failed job IDs or HelloPorn.
+- GitHub Asterion Control bridge still exists. To test using the established PC engine, submitted `commands/active/dl-owner-eight-live-verify-20261117-gpt6-1909-a1.json` plus read-only PC and phone health commands `dl-owner-gate-pc-health-20261117-gpt6-1910-a1` and `dl-owner-gate-phone-health-20261117-gpt6-1910-a1`. **No corresponding completion receipt is available at this checkpoint.** Older 18:47 UTC health commands were also unacknowledged, and the most recent observed bridge result commit was at approximately 18:40 UTC. This supports a stalled/unreachable worker route, **not** proof the phone is offline; do not mark commands executed.
+- **No new APK compiled, installed or transferred in this turn.** Release gate stays closed: do not publish a supposedly fixed signed update without current real-engine tests followed by selected-original Android saved-file/MediaStore verification and crash regression. Reuse the existing Windows DPAPI-protected signing key and app package; never use ephemeral CI debug signing, uninstall, reset the user's data, or modify the eight frozen provider implementations by accident.
