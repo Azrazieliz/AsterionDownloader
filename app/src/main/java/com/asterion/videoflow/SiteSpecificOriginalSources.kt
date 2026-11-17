@@ -799,7 +799,7 @@ internal object SiteSpecificOriginalSources {
                 listOf(Source(ThreeDHentaiSignedOriginal.resolve(
                     context,selected,doc),selected))
             }
-            "hentaibros.net","hentaihaven.xxx"->{
+            "hentaibros.net"->{
                 selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
                     runCatching {
                         if(!BrowserPageFetch.publicEligible(selected) &&
@@ -807,6 +807,38 @@ internal object SiteSpecificOriginalSources {
                         else selectedStatic(
                             Jsoup.parse(BrowserPageFetch.html(context,selected),
                                 selected),selected,owner)
+                    }.getOrDefault(emptyList())
+            }
+            "hentaihaven.xxx"->{
+                // HentaiHaven now serves a Next.js SERIES page with links to
+                // independently downloadable /episode-N pages. Treating
+                // /watch/<series> as a video (often titled "4.0 69K")
+                // always returned 0 original bytes. Do not silently choose
+                // episode one out of a multi-episode collection.
+                if(HentaiHavenEpisodeSource.isSeries(selected)){
+                    val episodes=HentaiHavenEpisodeSource.episodes(doc,selected)
+                    throw IllegalStateException(
+                        "HentaiHaven selected a series with "+
+                        episodes.size+" episode(s), not a video; choose "+
+                        "the exact episode from the series card.")
+                }
+                // Confirmed live: selected episode's VideoObject contentUrl
+                // points to one octopusmanifest.org HLS master, HTTP 200
+                // #EXTM3U with two variants. Other MP4 strings in Next.js
+                // are previewUrl recommendations, NOT this selected episode.
+                val manifest=HentaiHavenEpisodeSource.publishedHls(doc,selected)
+                if(manifest!=null)listOf(Source(manifest,selected))
+                else selectedStatic(doc,selected,owner).takeIf{it.isNotEmpty()}?:
+                    runCatching {
+                        if(!BrowserPageFetch.publicEligible(selected) &&
+                            !SiteSession.bound(context,selected))emptyList()
+                        else {
+                            val rendered=Jsoup.parse(
+                                BrowserPageFetch.html(context,selected),selected)
+                            HentaiHavenEpisodeSource.publishedHls(rendered,selected)
+                                ?.let{listOf(Source(it,selected))}
+                                ?:selectedStatic(rendered,selected,owner)
+                        }
                     }.getOrDefault(emptyList())
             }
             else->emptyList()
