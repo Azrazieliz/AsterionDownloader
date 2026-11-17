@@ -929,7 +929,7 @@ object VideoEngine {
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         val strictIframe=NetworkRoute.siteKey(item.url) in
-            setOf("javideo.net","helloporn.com")
+            setOf("javideo.net","helloporn.com","uncensoredhentai.xxx")
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
@@ -1077,7 +1077,7 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
-                }else if(strictIframe && userRequested &&
+                }else if(strictIframe &&
                     source.referer==item.url &&
                     SiteSpecificOriginalSources.selectedExtractorFrame(
                         item.url,source.url)){
