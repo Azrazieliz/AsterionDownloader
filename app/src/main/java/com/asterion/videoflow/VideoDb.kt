@@ -379,10 +379,22 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             ContentValues().apply { put("progress", percent.coerceIn(0,99)) },
             "id=? AND state='running'", arrayOf(id.toString()))
     }
-    fun pause(id:Long){
-        update(id,"paused",error="Paused by user; resume to continue")
-        writableDatabase.execSQL("UPDATE videos SET retry_after=0 WHERE id=?",
-            arrayOf(id))
+    /** Pause is an atomic lease-revocation, not a blind state rewrite.
+     * An in-flight success, dismissed row or saved original must not be
+     * converted to Paused by a delayed UI event from an older screen.
+     */
+    fun pause(id:Long):Boolean {
+        val statement=writableDatabase.compileStatement(
+            """UPDATE videos SET state='paused',retry_after=0,
+               error='Paused by user; resume to continue',
+               lease=lease+1,updated=?
+               WHERE id=? AND state IN
+               ('queued','running','retry_wait','error','full_only_hold')""")
+        statement.use {
+            it.bindLong(1,System.currentTimeMillis())
+            it.bindLong(2,id)
+            return it.executeUpdateDelete()==1
+        }
     }
     /** A playable file can belong to the wrong selected video. A user
      * rejection invalidates the database receipt without erasing the media
@@ -425,17 +437,28 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             arrayOf(id.toString(),lease.toString()))==1
     }
 
-    fun retry(id: Long) {
+    /** Resume/retry may only reactivate terminal or user-paused work.
+     * The prior unconditional state='queued' could steal a live download
+     * or a completed file, then let two workers stream into the same stage.
+     */
+    fun retry(id:Long):Boolean {
         val target=readableDatabase.rawQuery(
             "SELECT url FROM videos WHERE id=?",arrayOf(id.toString())).use{
             if(it.moveToFirst())it.getString(0) else null
+        }?:return false
+        if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(target))
+            return false
+        val statement=writableDatabase.compileStatement(
+            """UPDATE videos SET state='queued',progress=0,attempts=0,
+               retry_after=0,request_origin='user',error=NULL,
+               lease=lease+1,updated=?
+               WHERE id=? AND state IN
+               ('paused','retry_wait','error','full_only_hold','dismissed')""")
+        statement.use {
+            it.bindLong(1,System.currentTimeMillis())
+            it.bindLong(2,id)
+            return it.executeUpdateDelete()==1
         }
-        if(target!=null && com.azrael.pixivdumpsync.ProviderRetirement.isRetired(target))
-            return
-        update(id,"queued")
-        writableDatabase.execSQL(
-            "UPDATE videos SET attempts=0,retry_after=0,request_origin='user' WHERE id=?",
-            arrayOf(id))
     }
     /** One-time migration for rows held by the superseded runtime policy.
      * Requeue only user-designated full-video providers; old untrusted rows
