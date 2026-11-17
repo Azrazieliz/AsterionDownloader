@@ -47,8 +47,9 @@ for name,url in PAGES.items():
     for x in p.frames if x.get("src")][:10],
    "videos":[{"has_src":bool(x.get("src")),"has_data_src":bool(x.get("data-src"))}
     for x in p.videos[:8]],
-   "article_ids":["post-numeric" if re.match(r"post-\\d+$",x) else
-     "other" for x in p.article_ids[:4]],
+   "article_ids":[{"post_numeric":bool(re.fullmatch(r"post-\d+",x)),
+      "matches_selected_path":x=="post-"+urllib.parse.urlsplit(url).path.strip("/").split("/")[0]}
+      for x in p.article_ids[:4]],
    "stream_control_count":len(p.buttons),
    "stream_key_lengths":[x["keylen"] for x in p.buttons[:8]],
    "script_hosts":sorted({shaped(final,x)["host"] for x in p.scripts}),
