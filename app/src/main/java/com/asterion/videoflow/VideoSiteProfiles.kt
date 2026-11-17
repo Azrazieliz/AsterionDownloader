@@ -24,7 +24,7 @@ internal object VideoSiteProfiles {
         // /2257 is Archivebate's USC 2257 LEGAL statement, not a video.
         // Admit media only on verified descriptive media routes; a public
         // homepage without content is not proof of available originals.
-        Route("archivebate.com",Regex("""(?i)^/(?:videos?|watch|recordings?|v)/[^/?#]+""")),
+        Route("archivebate.com",Regex("""(?i)^/(?:(?:u/)?watch|videos?|recordings?|v)/[^/?#]+""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         // Real HelloPorn selected videos are /video-<id>-<slug>, NOT
         // /video/<slug>. The former route dropped every live catalog card.
