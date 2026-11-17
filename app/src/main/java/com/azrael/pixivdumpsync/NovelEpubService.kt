@@ -32,6 +32,29 @@ object NovelEpubService {
     private const val JOB=49874
     private const val PERIODIC=49875
     private val busy=AtomicBoolean(false)
+    // Live selected FreeWebNovel pages return HTTP 200 to a real browser
+    // but 403 to the app's Jsoup/JVM transport. After the FIRST successful
+    // authorized browser fallback, do not make 1,147 redundant denied Java
+    // requests while walking the rest of the same novel. This is scoped to
+    // this worker process; a restart can independently revalidate access.
+    private val browserOnlyHosts=java.util.concurrent.ConcurrentHashMap
+        .newKeySet<String>()
+    private fun renderedReader(context:Context,address:String):Document {
+        // Browser requests must honor the SAME per-host 429 cooldown and
+        // serialization as Jsoup, including concurrent EPUB workers.
+        val html=NovelHttpPacing.serializedRequest(context,address){
+            BrowserPageFetch.html(context,address)
+        }
+        val document=Jsoup.parse(html,address)
+        require(document.selectFirst(
+            "h1,#article,#chapter-content,.chapter-content,"+
+                ".chapter-list,#chapter-list,.reader-page-title")!=null){
+            "Novel publisher browser returned no recognizable chapter/index content"
+        }
+        val host=URI(address).host.orEmpty().lowercase()
+        if(host.isNotBlank())browserOnlyHosts.add(host)
+        return document
+    }
     fun enqueue(context:Context,url:String,title:String):Boolean {
         val fresh=NovelEpubQueue(context).use{it.enqueue(url,title)}
         ensure(context)
@@ -62,6 +85,12 @@ object NovelEpubService {
             require(SourceIndexParser.safe(url) &&
                 SourceIndexParser.sameSite(source,url)){
                 "A novel source tried to fetch an untrusted address"
+            }
+            val host=URI(url).host.orEmpty().lowercase()
+            if(host in browserOnlyHosts &&
+                (BrowserPageFetch.publicEligible(url) ||
+                    SiteSession.bound(context,url))){
+                return renderedReader(context,url)
             }
             // Serialize requests for the same novel host across both EPUB
             // workers. A server's 429 Retry-After survives subsequent jobs.
@@ -96,19 +125,16 @@ object NovelEpubService {
                     // login or silently discard already-cached chapters.
                     if(BrowserPageFetch.publicEligible(url) ||
                         SiteSession.bound(context,url)){
-                        val html=runCatching{BrowserPageFetch.html(context,url)}
+                        return runCatching{renderedReader(context,url)}
                             .getOrElse{browserError->
+                                // A blocked publisher session is NOT
+                                // successfully downloaded novel content.
+                                if(browserError is NovelRateLimited)
+                                    throw browserError
                                 error("Novel HTTP "+response.statusCode()+
                                     "; browser could not load source: "+
                                     browserError.message.orEmpty().take(150))
                             }
-                        val document=Jsoup.parse(html,url)
-                        require(document.selectFirst(
-                            "h1,#article,#chapter-content,.chapter-content,"+
-                                ".chapter-list,#chapter-list")!=null){
-                            "Novel browser returned no recognizable chapter/index content"
-                        }
-                        return document
                     }
                     error("Novel source HTTP "+response.statusCode()+
                         ": connect your eligible website account in the browser")
@@ -121,14 +147,7 @@ object NovelEpubService {
                     result.title().contains("Access denied",true)){
                     if(BrowserPageFetch.publicEligible(url) ||
                         SiteSession.bound(context,url)){
-                        val html=BrowserPageFetch.html(context,url)
-                        val rendered=Jsoup.parse(html,url)
-                        require(rendered.selectFirst(
-                            "h1,#article,#chapter-content,.chapter-content,"+
-                                ".chapter-list,#chapter-list")!=null){
-                            "Novel publisher browser returned no readable chapters"
-                        }
-                        return rendered
+                        return renderedReader(context,url)
                     }
                     error("Novel source requires interactive browser verification")
                 }
