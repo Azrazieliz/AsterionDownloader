@@ -24,7 +24,7 @@ def request(url,referer):
   "User-Agent":UA,"Referer":referer,"Accept-Encoding":"identity",
   "Accept":"application/vnd.apple.mpegurl,application/x-mpegURL,*/*"}),timeout=25)
 def deobfuscate(script):
- pattern=r"""(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\\.|[^'\\])*)'\.split\('\|'\)"""
+ pattern=r"""(?s)eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\).*?\}\s*\(\s*'((?:\.|[^'\\])*)'\s*,\s*(\d{1,2})\s*,\s*(\d{1,4})\s*,\s*'((?:\.|[^'\\])*)'\.split\('\|'\)"""
  m=re.search(pattern,script)
  if not m:return ""
  packed,radix,count,words=m.groups();radix=int(radix);count=int(count)
@@ -56,7 +56,7 @@ def main():
   snippet=re.sub(r"https?://[^\s\"'<>]+",lambda k:
    "[HOST:"+str(urllib.parse.urlsplit(k.group(0)).hostname)+"]",snippet)
   print("LINKS_CONTEXT",re.sub(r"\s+"," ",snippet)[:320],flush=True)
- config=re.search(r"\\bvar\\s+links\\s*=\\s*",decoded)
+ config=re.search(r"\bvar\s+links\s*=\s*",decoded)
  if config is None:raise AssertionError("Selected player has no links object")
  obj,end=json.JSONDecoder().raw_decode(decoded[config.end():].lstrip())
  assert isinstance(obj,dict) and "hls4" in obj and "hls2" in obj
@@ -68,7 +68,7 @@ def main():
   u=urllib.parse.urlsplit(address)
   if u.scheme!="https" or not u.hostname or u.username or u.password:continue
   if (u.hostname=="kamehaus.net" and
-      not re.fullmatch(r"/stream/[A-Za-z0-9_/-]{10,250}/master\\.m3u8",u.path)):
+      not re.fullmatch(r"/stream/[A-Za-z0-9_/-]{10,250}/master\.m3u8",u.path)):
    continue
   if u.hostname!="kamehaus.net" and not u.path.endswith(".m3u8"):
    continue
