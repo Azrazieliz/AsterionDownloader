@@ -159,7 +159,7 @@ internal object Mp4HentaiPublishedHost {
                 // not a CAPTCHA, paid tier, unrelated button or guessed MP4.
                 // Only same-hoster session cookies are sent to this form.
                 val free=publicFreeDownloadForm(doc,current)
-                val publicReply=if(free!=null) {
+                var publicReply=if(free!=null) {
                     val posted=Jsoup.connect(free.action)
                         .userAgent(NativeMediaDownloader.USER_AGENT)
                         .referrer(current)
@@ -200,6 +200,21 @@ internal object Mp4HentaiPublishedHost {
                 // The provider may require a genuinely interactive CAPTCHA
                 // AFTER its public free form. Surface that requirement;
                 // neither guess its answer nor mislabel HTML as a download.
+                if(requiresInteractiveVerification(publicReply) &&
+                    SiteSession.bound(context,current)) {
+                    // Reuse the ordinary user-completed hoster verification
+                    // from Connect Site. Do not synthesize a CAPTCHA token
+                    // or interpret the verification page as a video.
+                    val authorized=runCatching {
+                        com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                            context,current,playerReferer=referer)
+                    }.getOrNull()
+                    if(!authorized.isNullOrBlank()){
+                        val rendered=Jsoup.parse(authorized,current)
+                        if(!requiresInteractiveVerification(rendered))
+                            publicReply=rendered
+                    }
+                }
                 if(requiresInteractiveVerification(publicReply)) {
                     error("MP4Hentai selected file host requires CAPTCHA "+
                         "verification in an authorized browser session")
