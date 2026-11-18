@@ -87,6 +87,21 @@ object BrowserPageFetch {
         var archivebateContinued=false
         var archivebateWaits=0
         var mirroredHostWaits=0
+        var mirrorSelectedClickAttempts=0
+        // Mirrored.to exposes official file-host choices only AFTER its
+        // selected /files/<id>/ 'View download links' control is clicked.
+        // Restrict that ordinary first-party action to a user-selected
+        // MP4Hentai article; never click unrelated Mirror listings or ads.
+        val approvedMp4Mirror=host=="mirrored.to" &&
+            Regex("""^/files/[A-Fa-f0-9]{8}/?$""")
+                .matches(Uri.parse(url).path.orEmpty()) &&
+            playerReferer?.let{origin->
+                val site=Uri.parse(origin)
+                site.scheme=="https" &&
+                    site.host.orEmpty().removePrefix("www.")=="mp4hentai.com" &&
+                    Regex("""^/20[0-9]{2}/(?:0[1-9]|1[0-2])/[^/?#]{3,300}/?$""")
+                        .matches(site.path.orEmpty())
+            }==true
         // Only the explicitly selected publishers with JS-loaded players.
         // This waits for the actual HTML5 media and metadata to appear;
         // it does not intercept arbitrary network requests or browse pages.
@@ -149,6 +164,40 @@ object BrowserPageFetch {
                         url,request.url.toString(),request.isForMainFrame)
                 }
                 override fun onPageFinished(v:WebView,finished:String){
+                    if(approvedMp4Mirror && mirrorSelectedClickAttempts<7){
+                        mirrorSelectedClickAttempts++
+                        main.postDelayed({
+                            if(latch.count==0L)return@postDelayed
+                            v.evaluateJavascript("""(function(){
+                                if(!['mirrored.to','www.mirrored.to']
+                                    .includes(location.hostname.toLowerCase()) ||
+                                    !/^\/files\/[A-Fa-f0-9]{8}\/?$/
+                                        .test(location.pathname))return false;
+                                const control=document.querySelector('a#download-link');
+                                if(!control || control.dataset.asterionClicked)
+                                    return false;
+                                try{
+                                    const chosen=new URL(control.href);
+                                    if(!['mirrored.to','www.mirrored.to']
+                                            .includes(chosen.hostname.toLowerCase()) ||
+                                        chosen.pathname!==location.pathname ||
+                                        [...chosen.searchParams.keys()].join(',')!=='dl' ||
+                                        chosen.searchParams.get('dl')!=='0')
+                                        return false;
+                                    control.dataset.asterionClicked='1';
+                                    control.click();
+                                    return true;
+                                }catch(_){return false;}
+                            })()"""){clicked->
+                                if(clicked=="true")
+                                    mirrorSelectedClickAttempts=7
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },if(clicked=="true")1400L else 550L)
+                            }
+                        },350L)
+                        return
+                    }
                     if(host=="archivebate.com" &&
                         Uri.parse(url).path.orEmpty().trim('/')=="" &&
                         (SiteSession.bound(context,url) || publicEligible(url)) &&
