@@ -1,5 +1,37 @@
 # Seven-provider final-build gate — 18 November 2026
 
+## LATEST — tested alternative routes, form integration, and real browser input
+
+**Current gate: 4/7 full selected PC originals verified; no final APK authorized or assembled.** Earlier PC verified originals are Pornhub, HentaiHaven, Jav Guru JK, and UncensoredHentai. JAVIDEO, HelloPorn and MP4Hentai still fail real complete-file acceptance, with separate verified causes. Treat this as the latest handoff section, superseding older source-only repair status.
+
+### MP4Hentai: actual missing Android interaction implemented, source tests passed
+
+- `b8bf26b02a61` created `app/src/main/java/com/asterion/videoflow/FreedlSelectedOriginal.kt`: bound to the original selected MP4Hentai article's real Mirrored.to -> Freedl.ink -> frdl.io -> frdl.hk redirect chain, validates exact public `form#DownloadForm`, POST to same selected file path, exact eight server-published hidden fields (`op,id,hash,rand,referer,download_free,adblock_detected,hls_direct`). The server's `hash` may legitimately be EMPTY; preserve it instead of fabricating a value (`3a7ea95`). No synthesized CAPTCHA, session/token/ID, alternate video, ad or arbitrary redirect.
+- `43335b897fdd` integrated the selected normal free POST in `Mp4HentaiPublishedHost.resolve`; POST uses same-host selected response cookies plus existing user-authorized Connect Site session, normal source proxy if already configured. It accepts a redirect ONLY to a real direct original-media route, or an HTML response for further same-file user verification. A second CAPTCHA after the public form remains AUTH, never an accepted download.
+- `c6ed9ed6934d` added `FreedlSelectedOriginalTest.kt` for exact selected form, blank hash, distinct separate CAPTCHA form, hostile URL rejection. This patch is specifically for the site that was demonstrably missing its legitimate public free form. No changes to frozen working provider code.
+- **Verified PC source-only:** `dl-final3-frdl-gradle-source-only-20261118-2243-v01` ran exact source SHA `c6ed9ed6934db97f3396775ab8a411f6f376ec81` with `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest` — exit **0**, **BUILD SUCCESSFUL in 2m56s**, 24 Gradle tasks (6 executed, 18 up-to-date). Original test log `D:\AsterionControlRelease\diagnostics\downloader_frdl_source_only_20261118.log`. GitHub source-only CI for `b8bf26b` run 44402547702, `3a7ea95` 44402715952, `43335b8` 44402811390 and `c6ed9ed` 44402883718 all completed SUCCESS. **These are source/JVM checks, not full video or APK acceptance.**
+- Owner's real PC selected `frdl.hk` normal public POST **still** returned HTTP 200 `text/html` with visible CAPTCHA, no media. A legitimate human-completed hoster verification in a connected browser session, or a different *same-file officially published* accessible host, is needed for full PC file proof. Do not bypass CAPTCHA or mark its HTML as a file.
+
+### JAVIDEO: verified genuine mouse input, still no selected video
+
+- Diagnostic commit `3adda2db626e` replaced JavaScript `HTMLElement.click()` with **normal Chromium CDP `Input.dispatchMouseEvent` mouseMoved/Pressed/Released**, only on the confirmed non-ad `#clickfakeplayer` within the owner's exact `https://javideo.net/en/fc2ppv-4994603` article. This tests a genuinely user-activated player without altering website source or clicking adverts.
+- Corrected isolated PC test `dl-final3-javideo-trusted-input-pc-20261118-2310-v06` executed the GitHub script via temporary diagnostics file (no worktree mutation) and exited 4. Exact first-party `play.javideo.net/embed/<opaque>` loaded (HTTP 200 HTML, first-party npm JS/CSS/assets HTTP200) but video `readyState=0`, no `currentSrc`, no duration, zero actual playable media, no first-party `/api` media in this run. Genuine mouse input therefore **did not repair** the selected player. Do not pretend this stream exists; require a first-party, attributable working video source from the publisher/player.
+
+### HelloPorn: first-party alternate inventory confirms only VOE
+
+- `a6526c98b1d4` and `e2b308ce58bd` added read-only PC source inspectors of owner's exact 169,161-byte first-party selected HelloPorn article. Actual PC receipts `dl-final3-helloporn-alternate-selected-20261118-2330-v07`, `dl-final3-helloporn-mp4-contexts-20261118-2340-v08` both exited 0. The selected player contains **one verified `voe.sx/e/<id>` iframe**, no alternative selected player, zero direct media host references, no HLS/DASH. The 27 textual `.mp4` occurrences resolve to site `/assets` metadata or unrelated span text, **not a selected original file**.
+- `voe.sx` DNS works but owner's PC both IPv4 and IPv6 HTTPS TCP 443 refuse connection, curl exit 7. VOE's own representative explicitly reported `voe.sx` inaccessible in France and supported publisher-controlled custom domains (VOE WJunction November 29 2024; court records document French blocking). **This local failure may be regional/network-level; do not claim global VOE outage or modify network configuration.** A genuine publisher-linked alternative VOE host for this **same selected file** or an authorized reachable ordinary exit would have to be demonstrated before full original proof.
+- Neither guessing VOE aliases, substituting unrelated adult videos, nor treating website metadata as a file is an acceptable release fix.
+
+### Required next work / single-build safeguard
+
+- **JAVIDEO:** first-party selected player must actually publish a playable URL or a verified publisher-controlled alternative for the same original.
+- **HelloPorn:** selected VOE must be reachable by normal authorized route, or publisher must publish a genuine linked equivalent for this exact owner-selected article.
+- **MP4Hentai:** user-completed actual file hoster CAPTCHA (through the app's existing Connect Site / normal browser session), or a verified publisher-linked selected alternative host, followed by complete real file transfer. Avoid automation or CAPTCHA token guessing.
+- **Do not consume single final build:** all 7 need selected complete-byte PC receipts, FFprobe video/audio/duration, SHA, source-frozen/JVM acceptance, verified correct app signature and one Asterion Control phone transfer. No APK has yet been built, signed or transferred for this seven-provider task. Existing Windows worker, Android Control pairing and previously protected source blobs are unchanged.
+
+
+
 ## CURRENT IMPLEMENTATION — JK native AES-HLS validated, 3 blocked external sources
 
 **Read this section first; it supersedes chronological lower sections.** Four complete selected PC originals have real FFprobe/SHA receipts: Pornhub, HentaiHaven, Jav Guru JK, UncensoredHentai. Three owner-selected providers still cannot provide real complete PC originals: JAVIDEO, HelloPorn, MP4Hentai. **Strict final release gate 4/7, CLOSED. No final owner-authorized APK has been assembled, signed, transferred or installed.**
