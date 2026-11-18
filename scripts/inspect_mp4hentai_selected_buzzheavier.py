@@ -74,6 +74,16 @@ def main():
 
 if __name__=="__main__":
     try:sys.exit(main())
+    except urllib.error.HTTPError as ex:
+        print(json.dumps({"provider":"mp4hentai",
+           "status":"SELECTED_BUZZHEAVIER_HTTP_BLOCKED",
+           "http":ex.code,
+           "selected_host":urllib.parse.urlsplit(ex.url).hostname,
+           "mime":ex.headers.get("Content-Type","").split(";")[0],
+           "redirect_host":urllib.parse.urlsplit(
+               ex.headers.get("Location","")).hostname,
+           "complete_original_verified":False}),flush=True)
+        sys.exit(4)
     except Exception as ex:
         print(json.dumps({"provider":"mp4hentai",
            "status":"SELECTED_BUZZHEAVIER_NOT_VERIFIED",
