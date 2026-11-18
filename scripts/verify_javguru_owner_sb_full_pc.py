@@ -169,7 +169,20 @@ def full():
           "skip_unavailable_fragments":False,"concurrent_fragment_downloads":8,
           "progress_hooks":[on_progress]}
         with yt_dlp.YoutubeDL(opts) as dl:
-            dl.extract_info(hls,download=True)
+            info=dl.extract_info(hls,download=True)
+        selected_formats=(info or {}).get("requested_formats") or []
+        print(json.dumps({"provider":"jav_guru","stage":"EXACT_SELECTED_HLS_FORMATS",
+            "resolved_format_id":(info or {}).get("format_id"),
+            "requested_format_count":len(selected_formats),
+            "selected_formats":[{
+                "format_id":item.get("format_id"),
+                "height":item.get("height"),
+                "vcodec":item.get("vcodec"),
+                "acodec":item.get("acodec"),
+                "protocol":item.get("protocol"),
+                "duration":item.get("duration")}
+                for item in selected_formats[:5]],
+            "full_file_verified":False}),flush=True)
         movies=[x for x in Path(folder).iterdir()
                 if x.is_file() and x.suffix.lower() in (".mkv",".mp4",".ts",".webm")]
         if len(movies)!=1:raise RuntimeError("No unique complete selected movie")
@@ -179,12 +192,27 @@ def full():
         probe=shutil.which("ffprobe")
         if not probe:raise RuntimeError("FFprobe unavailable")
         receipt=subprocess.run([probe,"-v","error",
-            "-show_entries","format=duration:stream=codec_type",
+            "-show_entries",
+            "format=duration,format_name,start_time:stream=codec_type,codec_name,duration,start_time,width,height,nb_frames",
             "-of","json",str(movie)],capture_output=True,text=True,timeout=40)
         if receipt.returncode!=0:raise RuntimeError("Media did not pass FFprobe")
         info=json.loads(receipt.stdout)
         duration=float(info.get("format",{}).get("duration") or 0)
         tracks=[s.get("codec_type") for s in info.get("streams",[])]
+        print(json.dumps({"provider":"jav_guru","stage":"FFPROBE_ACTUAL_STREAM_TIMELINE",
+            "final_container":info.get("format",{}).get("format_name"),
+            "file_extension":movie.suffix.lower(),
+            "format_start_s":info.get("format",{}).get("start_time"),
+            "format_duration_s":info.get("format",{}).get("duration"),
+            "streams":[{
+                "kind":stream.get("codec_type"),
+                "codec":stream.get("codec_name"),
+                "duration_s":stream.get("duration"),
+                "start_time_s":stream.get("start_time"),
+                "width":stream.get("width"),"height":stream.get("height"),
+                "frames":stream.get("nb_frames")}
+                for stream in info.get("streams",[])[:8]],
+            "full_original_verified":False}),flush=True)
         print(json.dumps({"provider":"jav_guru",
             "stage":"WHOLE_FILE_FFPROBE_BEFORE_ACCEPTANCE",
             "file_bytes":size,"duration_s":round(duration,3),
