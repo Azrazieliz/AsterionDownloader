@@ -365,7 +365,19 @@ internal object SiteSpecificOriginalSources {
             }.getOrDefault(emptyList())
         }
         val found=LinkedHashMap<String,Source>()
-        for(stream in streams.take(3)){
+        // The owner's MXGS-1452 post publishes VO, SB, DD and JK.
+        // Previous take(3) *never even attempted* its final, stable JK
+        // original. Preserve LU preference when available, then try JK
+        // before unstable SB/other hosters; stay bounded to six official
+        // same-post STREAM controls. No unrelated result fallback.
+        val order=streams.sortedBy { stream ->
+            when(stream.server) {
+                "LU" -> 0
+                "JK" -> 1
+                else -> 2
+            }
+        }
+        for(stream in order.take(6)){
             val wrapper=runCatching{
                 Jsoup.connect(stream.url)
                     .userAgent(NativeMediaDownloader.USER_AGENT)
