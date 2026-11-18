@@ -1,5 +1,35 @@
 # Seven-provider final-build gate — 18 November 2026
 
+
+## LATEST CONTINUATION — selected Mirror multi-hoster workaround, no substituted media
+
+**Actual seven-provider PC complete-file gate remains 4/7; final APK remains forbidden.**
+This section records executable changes and live diagnostics, not fabricated full-video acceptance.
+
+### MP4Hentai — source route corrections and same-file hoster failover
+
+- Verified again through the actual selected MP4Hentai -> Mirrored.to file (the owner's `/files/DF7298C6/`): first-party *View download links* publishes separate same-file `/getlink?hid=...&tid=...` choices, including real Freedl, BuzzHeavier and Rapidgator destinations. No file-ID, CAPTCHA response, signed URL or alternate item was synthesized.
+- The real selected Rapidgator link has an official 32-character file ID followed by a 43-character `.html` filename containing literal parentheses and square brackets. Previous `selectedMirrorHandoff` wrongly rejected it. `Mp4HentaiPublishedHost.kt` now validates the raw percent-encoded filename path, rejecting spoofed hosts, query parameters and encoded slash/backslash/control routes.
+- NEW: `selectedMirrorDownloadRoutes` selects up to eight distinct first-party `/getlink` anchors **from this exact selected Mirror's browser-rendered DOM only**. `resolve` tries each official same-file hoster in order, rather than giving up after the first Freedl CAPTCHA. Working other providers and their source blobs are unchanged. A saved user-authorized file-hoster browser session is now eligible for the existing JavaScript link-reading fallback after ordinary human verification, without solving challenges or treating HTML as media.
+- New acceptance JVM tests cover same-file Mirror alternatives, ad rejection, filename brackets/parentheses, hostile query/path and host rejection.
+- **Live PC Rapidgator result is NOT a file pass.** Its exact selected link was obtained via published Mirror controls, but the Windows Python request yielded `URLError`; genuine Edge navigation showed `chrome-error://chromewebdata` rather than a Rapidgator response. The selected file was not transferred, so keep MP4Hentai failing the strict full-original gate. Freedl still leads to an interactive human CAPTCHA.
+
+### JAVIDEO — test a genuine inner player gesture, still no media
+
+- The exact selected JAVIDEO publisher's Play control still yields `play.javideo.net/embed/<opaque>` with first-party JS assets, but no selected `currentSrc`, metadata, HLS, MP4, duration or actual media transport.
+- Added a real Chromium `Input.dispatchMouseEvent` inner-player test (never ad clicks or synthetic source substitution). Owner PC result `dl-three-javideo-inner-trusted-input-pc-20261118-gpt6-01` exited 4: selected inner Play target **not rendered**, video remains `readyState=0` with no source. This is NOT an original-file pass; no Android source change is justified without the publisher furnishing media.
+
+### HelloPorn — no verified alternative
+
+- Prior exact publisher page inspection exposed only a single selected `voe.sx/e/<opaque>` iframe. Owner PC IPv4 and IPv6 attempts refused TCP 443. No first-party matching alternate source was published in the checked article. This may be a regional/network access restriction, not proof of worldwide VOE downtime. Never guess aliases or substitute unrelated videos.
+
+### Source-test and release truth
+
+- Initial targeted route fix passed owner's actual Windows Gradle `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest` at `dl-three-selected-rapidgator-source-tests-20261118-gpt6-01`: exit 0, BUILD SUCCESSFUL in 2m10s. This result predates the later multi-hoster and saved-session changes.
+- The separate full source regression for the new multi-hoster logic was submitted under `dl-three-mirror-multihost-source-tests-20261118-gpt6-02`; report its **final** receipt before marking this newer code source-tested. No APK build, signing, transfer or phone-side playback was done.
+- Preserve exactly one final owner-signed acceptance build/Control transfer only after all seven same-selected complete-byte PC originals and protected-source tests pass. Do not loosen the owner's seven-provider release gate.
+
+
 ## LATEST — tested alternative routes, form integration, and real browser input
 
 **Current gate: 4/7 full selected PC originals verified; no final APK authorized or assembled.** Earlier PC verified originals are Pornhub, HentaiHaven, Jav Guru JK, and UncensoredHentai. JAVIDEO, HelloPorn and MP4Hentai still fail real complete-file acceptance, with separate verified causes. Treat this as the latest handoff section, superseding older source-only repair status.
