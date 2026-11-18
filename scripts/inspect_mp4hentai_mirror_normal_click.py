@@ -9,7 +9,23 @@ or unrelated listing/advertisement extraction.
 """
 import json,os,re,socket,subprocess,sys,tempfile,time,urllib.parse,urllib.request,urllib.error,shutil
 from pathlib import Path
+from html.parser import HTMLParser
 from cdp_stdlib_socket import connect
+class PublicLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links=[]
+        self.active=None
+    def handle_starttag(self,tag,attributes):
+        a=dict(attributes)
+        if tag=="a" and a.get("href"):
+            self.active={"href":a["href"],"text":"","class":a.get("class","")}
+            self.links.append(self.active)
+    def handle_data(self,s):
+        if self.active and len(self.active["text"])<180:
+            self.active["text"]+=s[:180]
+    def handle_endtag(self,tag):
+        if tag=="a":self.active=None
 EDGE=Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 BASE="https://www.mirrored.to/files/DF7298C6/"
 ALLOWED={"www.mirrored.to","mirrored.to"}
@@ -167,8 +183,32 @@ def main():
                     "Accept-Encoding":"identity"})
                 try:
                     with opener.open(req,timeout=20) as response:
+                        body=response.read(600000).decode("utf8","replace")
+                        dom=PublicLinks()
+                        dom.feed(body)
+                        actual=[]
+                        for candidate in dom.links:
+                            text_label=(candidate["text"]+" "+candidate["class"]).lower()
+                            if not re.search(
+                                r"download|get file|link|continue|file host",text_label):
+                                continue
+                            dest=urllib.parse.urlsplit(urllib.parse.urljoin(
+                                u.geturl(),candidate["href"]))
+                            if dest.scheme!="https" or not dest.hostname:continue
+                            if re.search(r"ads|doubleclick|analytics",dest.hostname):
+                                continue
+                            actual.append({"host":dest.hostname,
+                                "first_route":dest.path.strip("/").split("/")[0][:35],
+                                "query_keys":sorted(urllib.parse.parse_qs(
+                                    dest.query).keys())[:8],
+                                "direct_media":dest.path.lower().endswith(
+                                    (".mp4",".webm",".mkv"))})
                         redirects.append({"http":response.status,
                             "mime":response.headers.get("Content-Type","").split(";")[0],
+                            "html_bytes":len(body),
+                            "selected_labeled_link_shapes":actual[:8],
+                            "captcha_present":bool(re.search(
+                                r"cf-turnstile|g-recaptcha|h-captcha|file-captcha",body,re.I)),
                             "direct_file":False})
                 except urllib.error.HTTPError as error:
                     location=error.headers.get("Location") or ""
