@@ -71,13 +71,31 @@ def main():
               "noplaylist":True,"format":"best",
               "hls_use_mpegts":True,
               "outtmpl":str(folder/"selected-original.%(ext)s"),
-              "http_headers":{"User-Agent":UA,"Referer":embed},
+              "http_headers":{"User-Agent":UA,"Referer":master,
+                  "Accept-Encoding":"identity"},
               "socket_timeout":25,"retries":1,"fragment_retries":2,
               "skip_unavailable_fragments":False,
               "concurrent_fragment_downloads":8,
               "progress_hooks":[progress]}
+        # yt-dlp generic webpage identification is not a media transfer
+        # proof: its HEAD/page preflight returns HTTP 403 for the owner's
+        # signed JK HLS despite normal exact-publisher GET HTTP 200 and
+        # genuine first-fragment HTTP 206. Give the *verified selected HLS*
+        # directly to yt-dlp's production native HLS downloader instead.
+        # This is NOT an extractor fallback for arbitrary pages or embeds.
+        selected_media={
+            "_type":"video",
+            "id":"mxgs-1452-jk-publisher-selected",
+            "title":"MXGS-1452 selected original JK",
+            "url":media,
+            "format_id":"published-jk-hls-720",
+            "protocol":"m3u8_native",
+            "ext":"mp4",
+            "http_headers":{"User-Agent":UA,"Referer":master,
+                "Accept-Encoding":"identity"}
+        }
         with yt_dlp.YoutubeDL(opts) as client:
-            client.download([media])
+            client.process_ie_result(selected_media,download=True)
         files=[f for f in folder.iterdir() if f.is_file() and
                f.suffix.lower() in (".ts",".mp4",".mkv",".webm")]
         if len(files)!=1:raise RuntimeError("exact selected HLS yielded no unique final media")
