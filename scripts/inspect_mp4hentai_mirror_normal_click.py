@@ -7,7 +7,7 @@ waits for ordinary site JavaScript, then reports non-ad, publisher-selected
 actual file-host link shapes. No CAPTCHA solving, token/URL export, media save
 or unrelated listing/advertisement extraction.
 """
-import json,os,re,socket,subprocess,sys,tempfile,time,urllib.parse,urllib.request,shutil
+import json,os,re,socket,subprocess,sys,tempfile,time,urllib.parse,urllib.request,urllib.error,shutil
 from pathlib import Path
 from cdp_stdlib_socket import connect
 EDGE=Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
@@ -130,6 +130,52 @@ def main():
                 "challenge_detected":result.get("gates"),
                 "published_link_count":len(shapes),
                 "link_shapes":shapes[:25],
+                "complete_original_verified":False}),flush=True)
+            # Clicked owner file #DF7298C6 now publishes four real
+            # same-site /getlink download buttons. Inspect each legitimate
+            # server redirect without following unknown hosts or treating
+            # another file/advertisement as selected media.
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self,req,fp,code,msg,headers,url):
+                    return None
+            opener=urllib.request.build_opener(NoRedirect)
+            redirects=[]
+            for link in links:
+                u=urllib.parse.urlsplit("https://www.mirrored.to"+
+                    (link.get("path") or "")+(link.get("query") or ""))
+                keys=urllib.parse.parse_qs(u.query.lstrip("?"))
+                if(u.scheme!="https" or u.hostname not in ALLOWED or
+                   u.path!="/getlink/" or set(keys)!={"hid","tid"} or
+                   any(len(values)!=1 for values in keys.values())):
+                    continue
+                req=urllib.request.Request(u.geturl(),headers={
+                    "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) "+
+                        "AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36",
+                    "Referer":"https://www.mirrored.to/files/DF7298C6/?dl=0",
+                    "Accept-Encoding":"identity"})
+                try:
+                    with opener.open(req,timeout=20) as response:
+                        redirects.append({"http":response.status,
+                            "mime":response.headers.get("Content-Type","").split(";")[0],
+                            "direct_file":False})
+                except urllib.error.HTTPError as error:
+                    location=error.headers.get("Location") or ""
+                    redirected=urllib.parse.urlsplit(
+                        urllib.parse.urljoin(u.geturl(),location))
+                    redirects.append({"http":error.code,
+                        "redirect_host":redirected.hostname,
+                        "redirect_first_route":
+                            redirected.path.strip("/").split("/")[0][:30],
+                        "direct_media_extension":
+                            redirected.path.lower().endswith(
+                                (".mp4",".mkv",".webm",".m3u8")),
+                        "https":redirected.scheme=="https"})
+                except Exception as error:
+                    redirects.append({"error_class":type(error).__name__})
+            print(json.dumps({"provider":"mp4hentai",
+                "stage":"FOUR_CLICKED_OFFICIAL_GETLINK_REDIRECTS",
+                "checked":len(redirects),
+                "redirect_shapes":redirects,
                 "complete_original_verified":False}),flush=True)
             return 0 if result.get("host") in ALLOWED else 3
     finally:
