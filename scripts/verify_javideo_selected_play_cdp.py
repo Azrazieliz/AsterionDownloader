@@ -180,6 +180,51 @@ def main():
                 "user_action_handlers":r"addEventListener\s*\(|\.on\s*\(",
             }.items()},
          "all_values_redacted":True}),flush=True)
+       # Chrome's cross-origin selected iframe may be an independent
+       # out-of-process renderer. Observe that ACTUAL frame in place,
+       # retaining its original publisher referrer/session, instead of
+       # relying only on a new top-level navigation to the embed.
+       targets=request(port)
+       frame_targets=[x for x in targets if x.get("type")=="iframe" and
+           x.get("url","").split("?")[0].rstrip("/")==
+               first_party[0].split("?")[0].rstrip("/")]
+       print(json.dumps({"stage":"ACTUAL_SELECTED_IFRAME_TARGETS",
+           "frame_target_count":len(frame_targets),
+           "target_types":sorted(set(x.get("type","") for x in targets)),
+           "first_party_target":len(frame_targets)==1}),flush=True)
+       if len(frame_targets)==1 and frame_targets[0].get("webSocketDebuggerUrl"):
+        try:
+         with connect(frame_targets[0]["webSocketDebuggerUrl"],
+             open_timeout=7,close_timeout=2,max_size=1_000_000) as frame_ws:
+          frame_state={}
+          for iteration in range(26):
+           frame_state=evaluate(frame_ws,500+iteration,r"""(() => ({
+             ready:document.readyState,host:location.hostname,
+             videoCount:document.querySelectorAll('video').length,
+             sources:[...document.querySelectorAll('video')].map(v=>({
+               src:v.currentSrc||v.src||
+                 v.querySelector('source[src]')?.src||'',
+               ready:v.readyState,
+               duration:Number.isFinite(v.duration)?Math.round(v.duration):null
+             })).slice(0,4)
+           }))()""") or {}
+           if any(v.get("src") for v in frame_state.get("sources",[])):
+            break
+           time.sleep(.7)
+          print(json.dumps({"stage":"ACTUAL_SELECTED_EMBEDDED_FRAME_RUNTIME",
+            "frame_host":frame_state.get("host"),
+            "ready":frame_state.get("ready"),
+            "video_count":frame_state.get("videoCount"),
+            "source_shapes":[{
+              "host":urllib.parse.urlsplit(v.get("src","")).hostname,
+              "extension":urllib.parse.urlsplit(v.get("src","")).path.rsplit(".",1)[-1][-10:],
+              "scheme":urllib.parse.urlsplit(v.get("src","")).scheme,
+              "ready":v.get("ready"),"duration_s":v.get("duration")}
+              for v in frame_state.get("sources",[])],
+            "media_file_verified":False}),flush=True)
+        except Exception as exc:
+         print(json.dumps({"stage":"ACTUAL_SELECTED_EMBEDDED_FRAME_RUNTIME",
+           "error_class":type(exc).__name__}),flush=True)
        # Inspect ONLY the exact first-party player selected by the
        # publisher's actual Play control, after its JS initializes.
        ws.send(json.dumps({"id":170,"method":"Page.navigate",
