@@ -72,6 +72,15 @@ def main():
    assert target,"No current selected publisher browser tab"
    with connect(target["webSocketDebuggerUrl"],open_timeout=7,close_timeout=2,
                 max_size=1_000_000) as ws:
+    # Enable first-party network observation BEFORE the real selected Play
+    # click loads its publisher iframe. Previously enabled too late and
+    # reported zero response statuses even when a selected frame existed.
+    ws.send(json.dumps({"id":9,"method":"Network.enable","params":{}}))
+    for _ in range(25):
+     ready=json.loads(ws.recv(timeout=7))
+     if ready.get("method")=="Network.responseReceived":
+      selected_network(ready.get("params",{}).get("response",{}))
+     if ready.get("id")==9:break
     stats=None
     for step in range(40):
      stats=evaluate(ws,10+step,r"""(() => ({
@@ -324,8 +333,11 @@ def main():
             "ready":x.get("ready"),"duration_s":x.get("duration")}
             for x in sources[:4]]}),flush=True)
      except Exception as exc:
+      reason=getattr(exc,"reason",None)
       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
-       "error_class":type(exc).__name__}),flush=True)
+       "error_class":type(exc).__name__,
+       "network_cause":type(reason).__name__ if reason is not None else None,
+       "connection_error_code":getattr(reason,"winerror",None)}),flush=True)
     grouped={}
     for observed in SELECTED_NETWORK:
      label=(observed.get("host"),observed.get("first_route_segment"),
