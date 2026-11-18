@@ -39,13 +39,20 @@ def selected_network(response):
 def evaluate(ws,ident,expr):
  ws.send(json.dumps({"id":ident,"method":"Runtime.evaluate",
    "params":{"expression":expr,"returnByValue":True,"awaitPromise":True}}))
- for _ in range(100):
-  reply=json.loads(ws.recv(timeout=7))
+ deadline=time.monotonic()+18
+ # Network.enable before Play is necessary, but first-party page resources
+ # can emit hundreds of CDP events before Runtime.evaluate replies.
+ # Do not misclassify that traffic as a publisher player failure.
+ while time.monotonic()<deadline:
+  try:
+   reply=json.loads(ws.recv(timeout=min(5,max(.1,deadline-time.monotonic()))))
+  except TimeoutError:
+   continue
   if reply.get("method")=="Network.responseReceived":
    selected_network(reply.get("params",{}).get("response",{}))
   if reply.get("id")!=ident:continue
   return reply.get("result",{}).get("result",{}).get("value")
- raise RuntimeError("CDP response expired")
+ raise RuntimeError("CDP selected player evaluation timed out after 18s")
 def main():
  assert EDGE.is_file(),"Existing Edge executable unavailable"
  # Windows Edge may retain locked profile files after taskkill; avoid
