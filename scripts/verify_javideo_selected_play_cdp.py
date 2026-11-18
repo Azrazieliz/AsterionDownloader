@@ -61,6 +61,45 @@ def evaluate(ws,ident,expr):
   if reply.get("id")!=ident:continue
   return reply.get("result",{}).get("result",{}).get("value")
  raise RuntimeError("CDP selected player evaluation timed out after 18s")
+def trusted_selected_play(ws,base_id=930):
+ """Send normal Chromium mouse input ONLY to selected JAVIDEO Play widget."""
+ location=evaluate(ws,base_id,r"""(() => {
+   const chosen=document.querySelector(
+      '.embed-responsive.player:not(.d-none) iframe[src]');
+   const btn=document.querySelector('#clickfakeplayer');
+   if(chosen||!btn||btn.closest(
+     'aside,.ads,.advertisement,.related,.recommendations,.sidebar,[data-ad]'))
+     return null;
+   btn.scrollIntoView({block:'center',inline:'center'});
+   const rect=btn.getBoundingClientRect();
+   const x=Math.round(rect.left+rect.width/2);
+   const y=Math.round(rect.top+rect.height/2);
+   if(rect.width<5||rect.height<5||x<0||y<0||
+      x>=innerWidth||y>=innerHeight)return null;
+   return {x,y,host:location.hostname};
+ })()""")
+ if not isinstance(location,dict) or location.get("host")!="javideo.net":
+  return False
+ x,y=location["x"],location["y"]
+ for index,(typ,extra) in enumerate((
+    ("mouseMoved",{}),
+    ("mousePressed",{"button":"left","clickCount":1}),
+    ("mouseReleased",{"button":"left","clickCount":1}))):
+  ident=base_id+1+index
+  ws.send(json.dumps({"id":ident,"method":"Input.dispatchMouseEvent",
+    "params":{"type":typ,"x":x,"y":y,**extra}}))
+  until=time.monotonic()+9
+  while time.monotonic()<until:
+   resp=json.loads(ws.recv(timeout=min(5,max(.1,until-time.monotonic()))))
+   if resp.get("method")=="Network.responseReceived":
+    selected_network(resp.get("params",{}).get("response",{}),
+        resp.get("params",{}).get("requestId"))
+   if resp.get("id")==ident:
+    if "error" in resp:raise RuntimeError("Selected browser input refused")
+    break
+  else:raise RuntimeError("Selected browser input timed out")
+ return True
+
 def main():
  assert EDGE.is_file(),"Existing Edge executable unavailable"
  # Windows Edge may retain locked profile files after taskkill; avoid
@@ -121,11 +160,10 @@ def main():
     if stats.get("visibleGate"):
      print(json.dumps({"status":"PUBLISHER_CAPTCHA_REQUIRED_NO_BYPASS"}),flush=True);return 2
     if not stats.get("play"):return 3
-    clicked=evaluate(ws,40,r"""(() => {
-      const btn=document.querySelector('#clickfakeplayer');
-      if(!btn||btn.dataset.asterionClicked)return false;
-      btn.dataset.asterionClicked='1';btn.click();return true;
-    })()""")
+    clicked=trusted_selected_play(ws,930)
+    print(json.dumps({"stage":"EXACT_SELECTED_TRUSTED_PLAY",
+      "browser_input_accepted":clicked,
+      "synthetic_click_used":False}),flush=True)
     assert clicked is True,"Selected player Play control could not be activated"
     found={}
     for step in range(30):
@@ -145,13 +183,7 @@ def main():
      # JavaScript handler wasn't installed at initial load. Never press
      # adverts, recommendations or extra provider navigation.
      if step in (5,13):
-      evaluate(ws,100+step,r"""(() => {
-        const selected=document.querySelector(
-            '.embed-responsive.player:not(.d-none) iframe[src]');
-        const play=document.querySelector('#clickfakeplayer');
-        if(!selected && play){play.click();return true;}
-        return false;
-      })()""")
+      trusted_selected_play(ws,1000+step*6)
      time.sleep(.9)
     assert isinstance(found,dict),"selected Play CDP evaluation returned no state"
     frames=found.get("frames",[])
