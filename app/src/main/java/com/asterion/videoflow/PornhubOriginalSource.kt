@@ -80,7 +80,11 @@ internal object PornhubOriginalSource {
         val ordered=LinkedHashMap<String,Quality>()
         for(i in 0 until minOf(media.length(),24)) {
             val entry=media.optJSONObject(i)?:continue
-            if(entry.optString("format").lowercase(Locale.ROOT)!="hls")continue
+            // The selected publisher now labels some authentic master HLS entries
+            // hls_master instead of hls. These still require the exact
+            // selected flashvars player and the same tightly allowed CDN.
+            if(entry.optString("format").lowercase(Locale.ROOT)
+                    !in setOf("hls","hls_master"))continue
             val height=entry.optString("quality").toIntOrNull()?:continue
             if(height !in 240..2160)continue
             val url=entry.optString("videoUrl").trim()
