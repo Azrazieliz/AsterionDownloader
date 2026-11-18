@@ -30,7 +30,7 @@ class DownloadAnchors(HTMLParser):
   if self.current and len(self.current["text"])<120:self.current["text"]+=s
  def handle_endtag(self,tag):
   if tag=="a":self.current=None
-def main():
+def main(return_selected_terminal=False):
  items=selected(return_selected_freedlink=True)
  if not isinstance(items,list) or len(items)!=1:
   raise RuntimeError("Exact owner-selected file host not unique")
@@ -97,6 +97,9 @@ def main():
      "visible_captcha":bool(re.search(r"captcha|turnstile|verify you are human",
        content,re.I)),
      "complete_original_verified":False}),flush=True)
+  if return_selected_terminal:
+   return {"selected_url":current,"referer":referer,"mime":mime,
+           "http":code,"html":content}
   return 0 if code in (200,206) else 4
  return 5
 if __name__=="__main__":
