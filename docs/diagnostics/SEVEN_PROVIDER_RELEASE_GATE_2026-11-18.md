@@ -12,7 +12,7 @@ The seven and only seven currently failing providers: Jav Guru, JAVIDEO, HelloPo
 - Strict command ID: `dl7-final-strict-gate-pc-20261118-1633-a02`, tested repository `95c2621ddb6c8babd82dc584f90f709b28a9466b`. **Final exit 1; no APK authorized.**
 - Complete actual first-party Pornhub original: **161,248,728 bytes**, FFprobe duration **2,551.033 s**, video validated, SHA-256 prefix `e071e52328dc0cf99bd51544`, script exit 0.
 - Complete selected HentaiHaven episode: **111,592,685 bytes**, FFprobe duration **991.936 s**, audio+video validated, SHA-256 prefix `a0e3623439dbba11b517fbac`, script exit 0. The separately completed earlier test had the same size/duration with a different mux SHA prefix.
-- **Jav Guru:** exact selected MXGS-1452 signed STREAM SB original partial transfer timed out after 600 s (exit 124); not complete. A new small bounded selected HLS transport diagnostic is in `scripts/inspect_javguru_owner_sb_hls_transport.py`.
+- **Jav Guru:** exact selected MXGS-1452 signed STREAM SB original partial transfer timed out after 600 s (exit 124); not complete. Bounded PC probe `dl7-final-javguru-segment-proof-20261118-1721-a10` **exit 0** verified the exact signed master HTTP 200 (1,829 B, three variants), one selected variant HTTP 200 (399 segments; about 3,994 seconds), and first true MPEG-TS segment HTTP **206**, 4,096 bytes. This is source identity and bytes, **not a complete selected movie**, and does not open the build gate.
 - **JAVIDEO:** actual selected Play->`play.javideo.net/embed/...` displays no resolved currentSrc/media, exit 4. The diagnostic now outputs only redacted JS structure, not ad sources.
 - **HelloPorn:** exact selected VOE iframe connection refused (`voe.sx:443`); no video bytes.
 - **MP4Hentai:** selected UpFiles free form returns interactive file-captcha/HTML, not actual media (exit 2).
@@ -33,7 +33,7 @@ The seven and only seven currently failing providers: Jav Guru, JAVIDEO, HelloPo
 
 ## Verification pending and next actions
 
-- Source-only PC regression command `dl7-final-source-regressions-20261118-1655-a06` requested `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest`, no APK; **the completion receipt was pending when this checkpoint was written**. Reconcile result before reporting success.
+- Source-only PC regression command `dl7-final-source-regressions-20261118-1655-a06`: **exit 0, BUILD SUCCESSFUL in 7m 7s**, 24 actionable tasks (6 executed, 18 up-to-date), ran `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest` on source `55a46b44ec2141d4c88d87cc82fafbdf456955bb`. Kotlin emitted one non-fatal nullable receiver warning in `ActualProviderIntegrationTest.kt:50`; no APK built/signed.
 - When source tests complete, run the new Jav Guru bounded transport probe and fix only observed publisher-source defects. The other four sites require an actual eligible selected original or ordinary authorized site verification/network access; do not invent media URLs, bypass CAPTCHA/DRM/region restrictions or pretend iframe resolution is a download.
 - **Do not build or transfer anything while only 2/7 PC originals are verified.** If and only if all seven complete files and frozen-provider+JVM tests later pass, perform exactly one owner-signed in-place APK build with retained key/certificate; transfer via existing Asterion Control, verify SHA/package and Android 17 crash behavior.
 
