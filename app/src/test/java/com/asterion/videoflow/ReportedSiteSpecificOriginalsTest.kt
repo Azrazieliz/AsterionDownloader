@@ -438,4 +438,23 @@ class ReportedSiteSpecificOriginalsTest {
     }
 
 
+
+    @Test fun mp4HentaiSelectedRapidgatorFilenamePunctuationIsNotDropped() {
+        val clicked="https://www.mirrored.to/getlink?hid=selectedMirror01&tid=selectedHost02"
+        val published="https://rapidgator.net/file/12345678901234567890123456789012/" +
+            "Example (Full) [2026].mp4.html"
+        val normalized=Mp4HentaiPublishedHost.publishedHref(clicked,published)
+        assertNotNull(normalized)
+        assertTrue(normalized!!.contains("%5B2026%5D"))
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorHandoff(clicked,normalized))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(
+            "https://unverified.example/getlink?hid=selectedMirror01&tid=selectedHost02",
+            normalized))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(clicked,
+            "https://rapidgator.net.evil.example/file/12345678901234567890123456789012/Example.mp4.html"))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(clicked,
+            "https://rapidgator.net/file/12345678901234567890123456789012/Example%2Fother.mp4.html"))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(clicked,
+            "https://rapidgator.net/file/12345678901234567890123456789012/Example.mp4.html?ad=1"))
+    }
 }
