@@ -105,8 +105,17 @@ object BrowserPageFetch {
                     .matches(Uri.parse(url).path.orEmpty())
                 "mydaddy.cc" -> Regex("""^/video/[A-Za-z0-9_-]{8,160}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
-                "nhplayer.com" -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
-                    .matches(Uri.parse(url).path.orEmpty())
+                "nhplayer.com" ->
+                    Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                        .matches(Uri.parse(url).path.orEmpty()) ||
+                    (Uri.parse(url).path=="/player.php" &&
+                        runCatching {
+                            Uri.parse(url).queryParameterNames==
+                                setOf("i","s","vid") &&
+                                listOf("i","s","vid").all {
+                                    !Uri.parse(url).getQueryParameter(it).isNullOrBlank()
+                                }
+                        }.getOrDefault(false))
                 "voe.sx","kamehaus.net" ->
                     Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                         .matches(Uri.parse(url).path.orEmpty())
@@ -260,6 +269,38 @@ object BrowserPageFetch {
                             // the selected element's normal HTML5 source,
                             // never intercept unrelated browser requests.
                             const selectedPlayerHost=location.hostname.replace(/^www\./,'');
+                            // The owner-selected UncensoredHentai NHPlayer
+                            // /v/ page publishes exactly one /player.php
+                            // server (keys i,s,vid). The ordinary first-party
+                            // AJAX get-video-url-v2.php HTTP 200 publishes
+                            // window.videoReady before any HTML video tag.
+                            // Serialize that verified selected JS source
+                            // ONLY for its exact server and observed MP4 CDN.
+                            // Never infer, solve or inject any challenge token.
+                            const nhAjaxMedia=(()=>{
+                                if(selectedPlayerHost!=='nhplayer.com' ||
+                                    location.pathname!=='/player.php')return '';
+                                const keys=[...new URLSearchParams(
+                                    location.search).keys()].sort();
+                                if(keys.join(',')!=='i,s,vid')return '';
+                                const value=typeof window.videoReady==='string'
+                                    ?window.videoReady:'';
+                                try{
+                                    const selected=new URL(value);
+                                    if(selected.protocol!=='https:' ||
+                                        selected.hostname!=='r2.1hanime.com' ||
+                                        !selected.pathname.toLowerCase().endsWith('.mp4') ||
+                                        [...selected.searchParams.keys()].sort()
+                                            .join(',')!=='verify' ||
+                                        /preview|teaser|sample|trailer/i
+                                            .test(selected.pathname))
+                                        return '';
+                                    return selected.href;
+                                }catch(_){return '';}
+                            })();
+                            const nhAjaxVideo=nhAjaxMedia?
+                                '<video src="'+esc(nhAjaxMedia)+
+                                '" data-duration="0"></video>':'';
                             // JAVIDEO's visible Play control activates the
                             // selected StreamTape iframe. The initial page's
                             // only HTML5 video is an unrelated muted ad; never
@@ -533,7 +574,7 @@ object BrowserPageFetch {
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+
                                 hentaibrosPlayerConfig+players+
-                                embeds+'</div><div id="reader">'+images+
+                                nhAjaxVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
