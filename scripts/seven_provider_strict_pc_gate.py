@@ -17,7 +17,7 @@ CASES={
  "pornhub":("verify_pornhub_full_selected_pc.py",600,True),
  "hentaihaven":("verify_haven_full_selected_pc.py",600,True),
  "mp4hentai":("verify_mp4hentai_upfiles_public_form.py",100,False),
- "uncensoredhentai":("verify_nhplayer_selected_firstparty_20261117.py",100,False),
+ "uncensoredhentai":("verify_uncensoredhentai_selected_full_pc.py",600,True),
 }
 def run(name, entry):
     script,timeout,expects_full=entry
