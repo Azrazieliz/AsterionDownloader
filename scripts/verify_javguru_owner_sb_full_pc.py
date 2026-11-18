@@ -130,7 +130,7 @@ def full():
         if response.status!=200 or not published.startswith("#EXTM3U"):
             raise RuntimeError("Selected signed owner variant did not publish HLS")
     expected_seconds=sum(float(v) for v in re.findall(
-        r"#EXTINF:([0-9]+(?:\\.[0-9]+)?)",published))
+        r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",published))
     if expected_seconds<300 or expected_seconds>15000:
         raise RuntimeError("Selected publisher's full-length runtime is unavailable")
     print(json.dumps({"provider":"jav_guru","stage":"EXPECTED_SELECTED_FULL_RUNTIME",
