@@ -172,6 +172,44 @@ internal object JavGuruOriginalSource {
         return found.singleOrNull()
     }
 
+    /** The owner's MXGS-1452 STREAM JK first-party shortcode resolves to
+     * one Maxstream embed. Its P.A.C.K.E.R has exactly one published
+     * `file: https://s4.maxstream.org/...m3u8?...` HLS source. This is
+     * unrelated to the prematurely changing SB playlist and must remain
+     * tied to the exact selected JK embed, never ad or recommendation JS.
+     * This parser does not claim whole-file completion; the subsequent
+     * transfer must verify all VOD fragments and duration.
+     */
+    private fun selectedJkHls(embed:String,html:String):String? {
+        if(!selectedEmbed("JK",embed) ||
+            safe(embed)?.host.orEmpty().lowercase(Locale.ROOT)
+                .removePrefix("www.")!="maxstream.org")return null
+        if(html.length !in 200..1_000_000)return null
+        val page=Jsoup.parse(html,embed)
+        val found=LinkedHashSet<String>()
+        for(script in page.select("script:not([src])").take(60)){
+            val raw=script.data().ifBlank{script.html()}
+            if(!raw.contains("eval(function(p,a,c,k,e,d)"))continue
+            val decoded=RoshyPackedOriginalSource.unpack(raw)?:continue
+            val sources=Regex(
+                """(?i)\bfile\s*:\s*["'](https://[^"'<>\\\s]{12,2200})["']"""
+            ).findAll(decoded).map{it.groupValues[1].replace("\\/","/")}
+                .distinct().take(4).toList()
+            for(source in sources){
+                val uri=safe(source)?:continue
+                if(uri.host.orEmpty().lowercase(Locale.ROOT)!="s4.maxstream.org" ||
+                    uri.fragment!=null || uri.path.isNullOrBlank() ||
+                    uri.path!!.length !in 12..900 ||
+                    !uri.path!!.endsWith(".m3u8",ignoreCase=true) ||
+                    uri.path!!.contains("..") ||
+                    uri.rawQuery.isNullOrBlank() ||
+                    FullLengthVideoPolicy.isExplicitPreview("",source))continue
+                found.add(source)
+            }
+        }
+        return found.singleOrNull()
+    }
+
     /** Selected original HLS from the exact publisher-selected external player.
      * LU uses the original LuluStream contract. The owner's actual selected SB
      * source is handled independently without weakening LU's source identity.
@@ -179,6 +217,7 @@ internal object JavGuruOriginalSource {
     fun selectedHls(embed:String,html:String):String? {
         val h=safe(embed)?.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
         if(h=="javclan.com")return selectedSbHls(embed,html)
+        if(h=="maxstream.org")return selectedJkHls(embed,html)
         if(!selectedEmbed("LU",embed) ||
             h !in setOf("streamhihi.com","lulustream.com"))return null
         if(html.length !in 250..1_000_000)return null
