@@ -100,6 +100,61 @@ def trusted_selected_play(ws,base_id=930):
   else:raise RuntimeError("Selected browser input timed out")
  return True
 
+
+def trusted_selected_first_party_player(ws):
+ """Perform actual Chromium mouse input on the exact selected first-party embed.
+
+ Outer article Play may create play.javideo.net/embed/<id> but the video
+ element can remain readyState=0 until a separate inner user gesture.
+ No advertisements, external websites, opaque IDs or source URLs are touched.
+ """
+ target=None
+ for retry in range(26):
+  target=evaluate(ws,1100+retry,r"""(() => {
+    if(location.hostname!=='play.javideo.net' ||
+       !/^\\/(?:embed|player)\\/[A-Za-z0-9_-]{5,100}\\/?$/.test(location.pathname))
+       return null;
+    const root=document.querySelector(
+      '#player,.video-player,.vjs-player,.player-container,video.video-js');
+    const button=root?.querySelector(
+      '.vjs-big-play-button,button[aria-label="Play"],button[title="Play"],'+
+      '.plyr__control[data-plyr="play"],button.play-button') ||
+      document.querySelector('.video-js .vjs-big-play-button');
+    const control=button || root?.querySelector('video') ||
+      (root?.tagName?.toLowerCase()==='video'?root:null) ||
+      document.querySelector('video');
+    if(!control || control.closest('aside,.ads,.advertisement,'+
+       '.related,.recommendations,.sidebar,[data-ad]'))return null;
+    control.scrollIntoView({block:'center',inline:'center'});
+    const r=control.getBoundingClientRect(),x=Math.round(r.left+r.width/2),
+      y=Math.round(r.top+r.height/2);
+    if(r.width<5 || r.height<5 || x<0 || y<0 ||
+       x>=innerWidth || y>=innerHeight)return null;
+    return {x,y,kind:button?'play-control':'selected-video'};
+  })()""")
+  if isinstance(target,dict) and isinstance(target.get("x"),int):break
+  time.sleep(.5)
+ if not isinstance(target,dict) or not isinstance(target.get("x"),int):
+  return {"activated":False,"target":"not-rendered"}
+ for index,(typ,extra) in enumerate((
+    ("mouseMoved",{}),
+    ("mousePressed",{"button":"left","clickCount":1}),
+    ("mouseReleased",{"button":"left","clickCount":1}))):
+  ident=1500+index
+  ws.send(json.dumps({"id":ident,"method":"Input.dispatchMouseEvent",
+      "params":{"type":typ,"x":target["x"],"y":target["y"],**extra}}))
+  until=time.monotonic()+12
+  while time.monotonic()<until:
+   reply=json.loads(ws.recv(timeout=min(4,max(.1,until-time.monotonic()))))
+   if reply.get("method")=="Network.responseReceived":
+    selected_network(reply.get("params",{}).get("response",{}),
+                     reply.get("params",{}).get("requestId"))
+   if reply.get("id")==ident:
+    if "error" in reply:return {"activated":False,"target":target["kind"]}
+    break
+  else:return {"activated":False,"target":target["kind"]}
+ return {"activated":True,"target":target["kind"]}
+
 def main():
  assert EDGE.is_file(),"Existing Edge executable unavailable"
  # Windows Edge may retain locked profile files after taskkill; avoid
@@ -344,6 +399,9 @@ def main():
        for _ in range(12):
         msg=json.loads(ws.recv(timeout=6))
         if msg.get("id")==170:break
+       inner=trusted_selected_first_party_player(ws)
+       print(json.dumps({"stage":"TRUSTED_SELECTED_INNER_PLAYER_INPUT",
+          "real_chromium_mouse":True,**inner}),flush=True)
        rendered={}
        for iteration in range(24):
         rendered=evaluate(ws,220+iteration,r"""(() => {
