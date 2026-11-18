@@ -51,7 +51,7 @@ def main():
         link=urllib.parse.urlsplit(urllib.parse.urljoin(selected,html.unescape(item["url"])))
         if(link.scheme!="https" or not link.hostname or link.username or link.password):
             continue
-        if(link.hostname not in ("buzzheavier.com","www.buzzheavier.com"):
+        if link.hostname not in ("buzzheavier.com","www.buzzheavier.com"):
             continue
         if not link.path.startswith(url.path.rstrip("/")+"/"):
             continue
