@@ -71,6 +71,30 @@ internal object Mp4HentaiPublishedHost {
         }
     }
 
+    /** The actual selected Freedl file redirects 302 to frdl.io and then
+     * 301 to frdl.hk. These are server-issued HTTP Location headers from
+     * the SAME file the owner selected through Mirrored.to, not additional
+     * publisher links, ad iframes or inferred media URLs. Neither HTML nor
+     * CAPTCHA is ever promoted to a file.
+     */
+    internal fun selectedFreedlRedirect(from:String,to:String):Boolean {
+        if(!safe(from) || !safe(to) ||
+            uri(from)?.rawFragment!=null ||
+            uri(to)?.rawFragment!=null ||
+            !uri(from)?.rawQuery.isNullOrBlank() ||
+            !uri(to)?.rawQuery.isNullOrBlank())return false
+        val source=uri(from)?.path.orEmpty()
+        val dest=uri(to)?.path.orEmpty()
+        val file=Regex("""^/[A-Za-z0-9_-]{6,100}/?$""")
+        if(!file.matches(source) || !file.matches(dest))return false
+        return when(hostname(from) to hostname(to)){
+            "freedl.ink" to "frdl.io" -> true
+            "frdl.io" to "frdl.hk" ->
+                source.trimEnd('/')==dest.trimEnd('/')
+            else -> false
+        }
+    }
+
     private fun isHosterPage(url:String):Boolean {
         if(!safe(url) || hostname(url) !in hosters)return false
         val path=uri(url)?.path.orEmpty()
@@ -188,7 +212,8 @@ internal object Mp4HentaiPublishedHost {
                 if(direct(next))return next
                 check(isHosterPage(next) ||
                     selectedMirrorGetlink(current,next) ||
-                    selectedMirrorHandoff(current,next)){
+                    selectedMirrorHandoff(current,next) ||
+                    selectedFreedlRedirect(current,next)){
                     "MP4Hentai host redirected to an unverified download page"
                 }
                 referer=current
