@@ -53,6 +53,36 @@ class Mp4HentaiPublishedHostTest {
             "https://upfilesgo.com/"))
     }
 
+    @Test fun onlyClickedSelectedMirroredGetlinkCanNamePublicFileHosters(){
+        val chosen="https://www.mirrored.to/files/DF7298C6/?dl=0"
+        val link="https://www.mirrored.to/getlink?hid=ABC123&tid=DEF456"
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorGetlink(chosen,link))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorGetlink(
+            "https://evil.example/files/DF7298C6/",link))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorGetlink(chosen,
+            "https://www.mirrored.to/getlink?hid=ABC123"))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorGetlink(chosen,
+            "https://www.mirrored.to/getlink?hid=ABC123&tid=DEF456&advert=1"))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorGetlink(chosen,
+            "https://www.mirrored.to.evil.example/getlink?hid=ABC123&tid=DEF456"))
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorHandoff(link,
+            "https://freedl.ink/syad3zdsqir0"))
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorHandoff(link,
+            "https://buzzheavier.com/tfa4kl9o9uo2"))
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorHandoff(link,
+            "https://rapidgator.net/file/abcdef123/download-name.mp4"))
+        for(bad in listOf(
+            "https://freedl.ink.evil.example/syad3zdsqir0",
+            "https://buzzheavier.com/premium/OTHER",
+            "https://rapidgator.net/file/OTHER/../ads",
+            "https://ads.example/episode.mp4",
+            "http://freedl.ink/syad3zdsqir0",
+            "https://freedl.ink/syad3zdsqir0?download=other"
+        )) assertFalse(bad,Mp4HentaiPublishedHost.selectedMirrorHandoff(link,bad))
+        assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(
+            chosen,"https://freedl.ink/syad3zdsqir0"))
+    }
+
     @Test fun realUpfilesPublicCaptchaRequiresBrowserActionNotFakeDownload(){
         val selectedHost="https://upfilesgo.com/nGfW"
         val page=Jsoup.parse("""<html><head><title>Free download</title></head>
