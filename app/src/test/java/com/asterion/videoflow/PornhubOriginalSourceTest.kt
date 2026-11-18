@@ -47,6 +47,17 @@ class PornhubOriginalSourceTest {
         assertEquals(1,PornhubOriginalSource.published(
             selected,published(unverified)).size)
     }
+    @Test fun publisherSelectedHlsMasterIsAcceptedWithoutRelaxingHostValidation(){
+        val master="https://hm-h.phncdn.com/videos/abc123/original_480.m3u8?token=selected"
+        val page=published(extra="")
+            .replace("\"format\":\"hls\",\"quality\":\"720\"",
+                "\"format\":\"hls_master\",\"quality\":\"720\"")
+            .replace(hls,master)
+        val results=PornhubOriginalSource.published(selected,page)
+        assertEquals(2,results.size)
+        assertEquals(master,results.first().url)
+        assertEquals(720,results.first().height)
+    }
     @Test fun invalidWatchRouteAndUnrelatedAdOrHostAreRejected(){
         assertTrue(PornhubOriginalSource.published(
             "https://www.pornhub.com/",published()).isEmpty())
