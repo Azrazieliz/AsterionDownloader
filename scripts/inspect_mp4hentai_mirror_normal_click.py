@@ -140,12 +140,23 @@ def main():
                     return None
             opener=urllib.request.build_opener(NoRedirect)
             redirects=[]
+            published_shapes=[]
+            for link in links:
+                raw_path=link.get("path") or ""
+                if raw_path.rstrip("/")!="/getlink":continue
+                raw_query=(link.get("query") or "").lstrip("?")
+                published_shapes.append({"path":raw_path,
+                    "query_keys":sorted(urllib.parse.parse_qs(raw_query).keys())})
+            print(json.dumps({"provider":"mp4hentai",
+                "stage":"SELECTED_GETLINK_ROUTE_SHAPES",
+                "controls":len(published_shapes),
+                "shapes":published_shapes[:8]}),flush=True)
             for link in links:
                 u=urllib.parse.urlsplit("https://www.mirrored.to"+
                     (link.get("path") or "")+(link.get("query") or ""))
                 keys=urllib.parse.parse_qs(u.query.lstrip("?"))
                 if(u.scheme!="https" or u.hostname not in ALLOWED or
-                   u.path!="/getlink/" or set(keys)!={"hid","tid"} or
+                   u.path.rstrip("/")!="/getlink" or set(keys)!={"hid","tid"} or
                    any(len(values)!=1 for values in keys.values())):
                     continue
                 req=urllib.request.Request(u.geturl(),headers={
