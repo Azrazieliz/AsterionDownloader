@@ -192,8 +192,57 @@ internal object Mp4HentaiPublishedHost {
      * verification or captchas. A concrete MP4 link is handed to the normal
      * native transfer, where MIME and complete byte ranges are validated.
      */
+    /**
+     * A selected Mirrored.to file publishes several official /getlink entries
+     * after its own View download links control is activated. The old resolver
+     * selected only the first one, so a CAPTCHA on Freedl prevented trying
+     * the very same selected file's other legitimate hosters.
+     *
+     * Never browse unrelated mirror listings, synthesize IDs or select files
+     * by name. Candidates must be present in this exact selected Mirror DOM
+     * and pass the bounded /getlink?hid=<opaque>&tid=<opaque> validator.
+     */
+    internal fun selectedMirrorDownloadRoutes(doc:Document,landing:String):List<String> {
+        if(hostname(landing)!="mirrored.to" ||
+            !Regex("""^/files/[A-Fa-f0-9]{8}/?$""")
+                .matches(uri(landing)?.path.orEmpty()))return emptyList()
+        val found=LinkedHashSet<String>()
+        for(anchor in doc.select("a[href]").take(1000)){
+            if(anchor.closest("aside,.related,.recommended,.recommendations,"+
+                ".ads,.advertisement,.sidebar,[data-ad]")!=null)continue
+            val link=publishedHref(landing,anchor.attr("href"))?:continue
+            if(selectedMirrorGetlink(landing,link))found+=link
+            if(found.size>=8)break
+        }
+        return found.toList()
+    }
+
     fun resolve(context:Context,selected:String,landing:String):String {
         require(isPublishedHost(selected,landing)){"Untrusted MP4Hentai file host"}
+        if(hostname(landing)=="mirrored.to"){
+            val selectedHtml=runCatching {
+                com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                    context,landing,playerReferer=selected)
+            }.getOrNull()
+            val alternatives=selectedHtml?.let {
+                selectedMirrorDownloadRoutes(Jsoup.parse(it,landing),landing)
+            }.orEmpty()
+            if(alternatives.isNotEmpty()){
+                var last:Exception?=null
+                for(link in alternatives){
+                    try{
+                        return resolveSelectedRoute(context,selected,link)
+                    }catch(t:Exception){last=t}
+                }
+                throw (last?:IllegalStateException(
+                    "MP4Hentai selected Mirror hosts exposed no verified media"))
+            }
+        }
+        return resolveSelectedRoute(context,selected,landing)
+    }
+
+    /** Follow only one selected Mirror-getlink or publisher hoster branch. */
+    private fun resolveSelectedRoute(context:Context,selected:String,landing:String):String {
         var current=landing
         var referer=selected
         val visited=HashSet<String>()
