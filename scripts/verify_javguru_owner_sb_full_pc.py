@@ -185,6 +185,16 @@ def full():
         info=json.loads(receipt.stdout)
         duration=float(info.get("format",{}).get("duration") or 0)
         tracks=[s.get("codec_type") for s in info.get("streams",[])]
+        print(json.dumps({"provider":"jav_guru",
+            "stage":"WHOLE_FILE_FFPROBE_BEFORE_ACCEPTANCE",
+            "file_bytes":size,"duration_s":round(duration,3),
+            "publisher_playlist_duration_s":round(expected_seconds,3),
+            "stream_kinds":tracks,
+            "duration_match":bool(
+                0.975*expected_seconds<=duration<=1.025*expected_seconds),
+            "video_present":"video" in tracks,
+            "audio_present":"audio" in tracks,
+            "complete_original_verified":False}),flush=True)
         if "video" not in tracks or "audio" not in tracks or (
                 not 0.975*expected_seconds<=duration<=1.025*expected_seconds):
             raise RuntimeError("Not the publisher's full selected movie with audio")
