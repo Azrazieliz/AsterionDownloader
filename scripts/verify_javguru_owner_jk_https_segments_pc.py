@@ -13,6 +13,8 @@ import urllib.parse,urllib.request,urllib.error
 from pathlib import Path
 from verify_javguru_owner_jk_full_pc import selected_final
 from inspect_javguru_jk_hls_finality import manifest,UA
+from inspect_javguru_jk_standard_hls_aes import extract as published_hls_key, get as selected_key_get
+from cryptography.hazmat.primitives.ciphers import Cipher,algorithms,modes
 
 HOST="s4.maxstream.org"
 MAX_FRAGMENT_BYTES=15_000_000
@@ -21,8 +23,8 @@ MIN_FREE_BYTES=5_000_000_000
 
 def selected_segments(media,master,expected):
     raw=manifest(media,master)
-    if raw.count("#EXT-X-ENDLIST")!=1 or "#EXT-X-KEY:" in raw:
-        raise RuntimeError("selected HLS not finalized or encrypted")
+    if raw.count("#EXT-X-ENDLIST")!=1:
+        raise RuntimeError("selected HLS not finalized")
     if any(tag in raw for tag in ("#EXT-X-MAP:","#EXT-X-BYTERANGE:")):
         raise RuntimeError("selected HLS requires unsupported bounded segment assembly")
     listed=[v.strip() for v in raw.splitlines() if v.strip() and not v.startswith("#")]
@@ -44,10 +46,19 @@ def selected_segments(media,master,expected):
         result.append(link.geturl())
     if len(set(result))!=len(result):
         raise RuntimeError("media segment URL duplicated")
-    return result,duration
+    # Standard HLS AES-128 decryption uses the publisher's own published
+    # 16-byte key, plus the RFC HLS IV from the segment media-sequence.
+    # No challenge bypass, guessed key, authentication manipulation, or
+    # unrelated host. First segment was separately verified as MPEG-TS.
+    key_url,first,first_iv,_,explicit_iv=published_hls_key(media,master)
+    if first!=result[0]:
+        raise RuntimeError("publisher selected first segment does not match key declaration")
+    key_bytes=selected_key_get(key_url,media)
+    if len(key_bytes)!=16:raise RuntimeError("selected authorized AES key invalid")
+    return result,duration,key_bytes,first_iv,explicit_iv
 
 def get_segment(item):
-    index,link,target,referer=item
+    index,link,target,referer,key_bytes,first_iv,explicit_iv=item
     head={"User-Agent":UA,"Referer":referer,"Accept-Encoding":"identity"}
     last=None
     for attempt in range(3):
@@ -73,11 +84,22 @@ def get_segment(item):
                         f.write(data)
                 if size<1500:
                     raise RuntimeError("publisher segment returned no playable media bytes")
-                with target.open("rb") as f:
-                    header=f.read(1024)
-                if not (header[0:1]==b"\x47" or header[188:189]==b"\x47"):
-                    raise RuntimeError("publisher segment has no MPEG-TS sync byte")
-                return index,size,sha.hexdigest()
+                if size%16:
+                    raise RuntimeError("standard HLS AES-128 ciphertext truncated")
+                encrypted=target.read_bytes()
+                iv=(first_iv if explicit_iv else
+                    (int.from_bytes(first_iv,"big")+index).to_bytes(16,"big"))
+                decryptor=Cipher(algorithms.AES(key_bytes),modes.CBC(iv)).decryptor()
+                plaintext=decryptor.update(encrypted)+decryptor.finalize()
+                padding=plaintext[-1]
+                if 1<=padding<=16 and plaintext[-padding:]==bytes([padding])*padding:
+                    plaintext=plaintext[:-padding]
+                if len(plaintext)%188 or not all(
+                    plaintext[pos:pos+1]==b"\x47"
+                    for pos in (0,188,376,564) if pos<len(plaintext)):
+                    raise RuntimeError("standard HLS AES segment did not decrypt to MPEG-TS")
+                target.write_bytes(plaintext)
+                return index,len(plaintext),hashlib.sha256(plaintext).hexdigest()
         except Exception as exc:
             last=type(exc).__name__
             target.unlink(missing_ok=True)
@@ -86,11 +108,13 @@ def get_segment(item):
 
 def main():
     embed,master,media,stats=selected_final()
-    urls,published_duration=selected_segments(media,master,stats)
+    urls,published_duration,key_bytes,first_iv,explicit_iv=selected_segments(media,master,stats)
     print(json.dumps({"provider":"jav_guru","selected_server":"JK",
         "stage":"FINAL_SELECTED_NATIVE_HTTPS_SEGMENTS",
         "published_duration_s":round(published_duration,3),
         "segments":len(urls),"endlist":True,
+        "hls_cipher":"publisher-declared AES-128",
+        "key_is_publisher_published":True,
         "full_original_verified":False}),flush=True)
     stage=Path("D:/AsterionControlRelease/diagnostics")
     if not stage.is_dir() or shutil.disk_usage(stage).free<MIN_FREE_BYTES:
@@ -103,8 +127,8 @@ def main():
         completed=0
         last_update=now
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            futures=[pool.submit(get_segment,(i,url,paths[i],media))
-                     for i,url in enumerate(urls)]
+            futures=[pool.submit(get_segment,(i,url,paths[i],media,
+                key_bytes,first_iv,explicit_iv)) for i,url in enumerate(urls)]
             for future in concurrent.futures.as_completed(futures):
                 index,size,digest=future.result()
                 bytes_done+=size
