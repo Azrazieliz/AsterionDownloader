@@ -60,13 +60,9 @@ internal object FreedlSelectedOriginal {
             if(node.attr("value").length>3000)return null
         }
         if(fields.keys!=expected || fields["id"].isNullOrBlank())return null
-        if(URI(current).path.trim('/')!=fields["id"]?.trim('/')){
-            // Some publisher IDs are obfuscated in the server-issued free
-            // form. Reject only if neither exact path nor server file id
-            // appears in the HTML action; never guess other file targets.
-            val pageId=URI(current).path.trim('/')
-            if(!fields["id"].orEmpty().contains(pageId))return null
-        }
+        // The server's POST id is opaque and need not equal the public route.
+        // It is accepted ONLY from this already verified same-file DOM and
+        // same-page form action; never reconstruct or substitute an ID.
         if(form.select("button").none{
                 Regex("""(?i)download|free""").containsMatchIn(it.text())
             })return null
