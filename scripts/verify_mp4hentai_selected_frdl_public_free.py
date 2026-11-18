@@ -45,6 +45,11 @@ def main():
  for form in doc.forms:
   if form["id"]!="DownloadForm" or form["method"]!="POST":continue
   action=urllib.parse.urlsplit(urllib.parse.urljoin(base,form["action"]))
+  print(json.dumps({"provider":"mp4hentai",
+   "stage":"EXACT_FRDL_FREE_FORM_ACTION_SCOPE",
+   "same_hostname":action.hostname==p.hostname,
+   "same_path":action.path==p.path,"has_query":bool(action.query),
+   "complete_original_verified":False}),flush=True)
   if (action.scheme!="https" or action.hostname!=p.hostname or
       action.path!=p.path or action.query or action.fragment or action.username or
       action.password):
@@ -54,6 +59,16 @@ def main():
   original_names=[i.get("name") for i in form["inputs"] if i.get("name")]
   wanted={"op","id","hash","rand","referer","download_free",
           "adblock_detected","hls_direct"}
+  print(json.dumps({"provider":"mp4hentai",
+   "stage":"EXACT_FRDL_FREE_FORM_FIELD_SCOPE",
+   "field_names_match":set(original_names)==wanted,
+   "hidden_fields_match":set(fields)==wanted,
+   "id_nonempty":bool(fields.get("id")),
+   "hash_nonempty":bool(fields.get("hash")),
+   "has_download_button":any(re.search("download|free",x["text"],re.I)
+      for x in form["buttons"]),
+   "captcha_field":any("captcha" in str(x).lower() for x in original_names),
+   "complete_original_verified":False}),flush=True)
   if (set(original_names)!=wanted or set(fields)!=wanted or
       any(len(value)>3000 for value in fields.values()) or
       not fields["id"] or not fields["hash"] or
