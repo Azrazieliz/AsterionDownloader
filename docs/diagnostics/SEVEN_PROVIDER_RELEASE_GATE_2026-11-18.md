@@ -38,3 +38,38 @@ The seven and only seven currently failing providers: Jav Guru, JAVIDEO, HelloPo
 - **Do not build or transfer anything while only 2/7 PC originals are verified.** If and only if all seven complete files and frozen-provider+JVM tests later pass, perform exactly one owner-signed in-place APK build with retained key/certificate; transfer via existing Asterion Control, verify SHA/package and Android 17 crash behavior.
 
 Canonical source: `repair/downloads-nine-providers-backfill-diagnostics-20261116`; source and validation are separate evidence.
+
+## Final authorized-build continuation — 18 November (second pass)
+
+The owner repeated: **this is one single final authorized APK build**. Complete seven real selected-origin Windows PC downloads, run frozen-provider and Android source tests, then and only then assemble and owner-sign exactly one in-place acceptance APK; verify matching package/cert/SHA and transfer it through the existing Asterion Control bridge. **No final APK has been built or transferred in this pass. Do not weaken this gate.** Do not rename packages or alter Kuroha, queues, archives, other working providers or signing key.
+
+### Fresh confirmed evidence and source changes
+
+- Reconciled repository head with exact last known full-file strict PC run: **2/7** verified, Pornhub 161,248,728 B / 2,551.033 s, HentaiHaven 111,592,685 B / 991.936 s. Five remain Jav Guru, JAVIDEO, HelloPorn, MP4Hentai, UncensoredHentai.
+- Existing Windows source-only regression `dl7-final-source-regressions-20261118-1655-a06` completed exit 0: `verifyFrozenVideoProviders` and `testAcceptanceUnitTest` **BUILD SUCCESSFUL**, tested earlier `55a46b4`. This is not an APK or device runtime verification.
+- Publisher-selected Jav Guru MXGS-1452 SOURCE: the correct signed SB master lists **480p/617332 bps, 720p/1327368 bps, 1080p/3076469 bps**; all are **6161.2 seconds, 616 fragments**. Read-only PC probe `dl7-final-four-player-deep-probes-safe-20261118-1800-f12` returned exit 0; this is only evidence of a publisher-selected full-length source, not downloaded completion.
+- `584f5e6` and `3054a9b`: specifically fix MP4Hentai repeated `host did not expose a verified download in five steps` classification from `OTHER` (retry loop) to terminal `UNSUPPORTED`, with regression; its actual CAPTCHA continues to classify as `AUTH`. **Not a completed MP4Hentai media transfer.**
+- `8fd6f87`: exact Jav Guru owner SB rendition/length diagnostics with no guessed media.
+- `8cf354e` and `7dcc3d2`: Jav Guru PC-only complete-file verifier now uses bounded 8-lane fragments, temporary guarded D: staging, redacted periodic progress, **strict playlist-duration correspondence and audio+video FFprobe and SHA**. Specifically checks 480p original full-length rendition, not trailer or preview. This does **not** lower selected Android quality or change any frozen implementation.
+
+### Active PC commands whose final receipts MUST be retrieved, not guessed
+
+- `dl7-javguru-480p-eight-lane-full-20261118-1818-f14`: source `7dcc3d26547ddc1ae8432a8ff6463cc0ff8bc032`, selected MXGS-1452 480p 6161-second original FFprobe/SHA full-file test. Log `D:\AsterionControlRelease\diagnostics\javguru_selected_480p_eight_lane_full_20261118.log`. `accepted`/running is pending; ONLY a final `COMPLETE_SELECTED_PC_FILE` plus verified duration/bytes allows counting this as a Jav Guru pass. If it finishes or errors, inspect actual output, avoid duplicate simultaneous long downloads.
+- `dl7-current-nhplayer-javideo-structured-20261118-1823-f15`: read-only live selected source diagnostics for UncensoredHentai NHPlayer and JAVIDEO actual Play -> first-party embed. Inspect their final JSON structure; do not infer media from a player shell.
+- Source-only GitHub Actions runs **44353314423** (`3054a9b`) and **44353306258** (`584f5e6`) were last observed `in_progress`; check their final conclusions for new MP4Hentai regression. Workflow is explicitly **no APK**.
+
+### Other still-blocked providers
+
+- JAVIDEO: selected first-party player exists but browser `video.currentSrc` has no verified playable media; cannot treat parent autoplay video/advert as selected.
+- HelloPorn: real selected VOE `voe.sx` connection refused; headless Edge rendered **0 DOM bytes**, not evidence of a working player.
+- MP4Hentai: selected UpFiles free form leads to genuine CAPTCHA; Mirrored.to has only public JS link controls with no verified complete media. No automated CAPTCHA bypass or guessed link is permitted.
+- UncensoredHentai: selected NHPlayer first server and JavaScript/AJAX observed but no complete attributable original. Honor ordinary legitimate site verification if required.
+- Jav Guru: previous 600-second full-file test timed out; new bounded 8-lane full-file check is pending. Its small 206 MPEG-TS fragment was real, but not sufficient for pass.
+
+### Next conversation execution instructions
+
+1. Fetch latest repair branch Git SHA and this exact checkpoint before doing anything; do not start over.
+2. Retrieve the two Control results above, classify complete vs partial for each; retrieve the two source-only CI conclusions.
+3. If Jav Guru new full file passes, record complete byte/duration/SHA receipt and verify exact Android-selected manifest transfer settings. If it fails, use exact progress log and selected publisher route diagnosis, not another speculative APK.
+4. Work only on the five unresolved provider specifics; replay strict **seven complete-file PC** test and exact protected-provider regressions after repairs; no unrelated provider/UI/DB changes or substitutions.
+5. **One final owner-signed build and phone transfer only when all seven pass**, same package/signature, existing Control native bridge. If even one cannot furnish a complete selected original without owner-completed access challenge or network availability, leave final build blocked and report the exact external dependency rather than claiming a working release.
