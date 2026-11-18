@@ -248,6 +248,29 @@ class ReportedSiteSpecificOriginalsTest {
             "https://rule34video.com/video/4727779/",
             "https://nhplayer.com/v/Z2flAXXPucyCbVJ/"))
     }
+    @Test fun selectedNhplayerServerMustBeUniquelyPublishedByThatIframe(){
+        val selected="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
+        val accepted="https://nhplayer.com/player.php?data=selected_opaque_token"
+        val html="""<div class="servers"><ul>
+            <li data-id="/player.php?data=selected_opaque_token">Server 1</li>
+            </ul></div><aside class="ads"><iframe src="https://ads.example/video.mp4">
+            </iframe></aside>"""
+        assertEquals(accepted,
+            SiteSpecificOriginalSources.selectedNhPlayerServer(selected,html))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            "https://nhplayer.com/v/OTHER999/?advert=1",html))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,html.replace("nhplayer.com/player.php",
+                "ads.example/player.php").replace(
+                "/player.php?data=selected_opaque_token",
+                "https://ads.example/player.php?data=selected_opaque_token")))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,html.replace("</ul>",
+                "<li data-id='/player.php?data=different'>Server 2</li></ul>")))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,"<div class='servers'><ul><li data-id='/watch/other'>"+
+                "Recommended</li></ul></div>"))
+    }
     @Test fun uncensoredHentaiResolvesOnlyItsExactNhplayerIframe(){
         val page="https://uncensoredhentai.xxx/watch/episode-3/"
         val player="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
