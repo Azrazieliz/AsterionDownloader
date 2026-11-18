@@ -633,10 +633,34 @@ object VideoEngine {
             // Page URLs and HLS/DASH still use yt-dlp for authorized extraction.
             // Android's system VPN is honored by the native HTTPS client.
             // Never depend on the removed legacy Tor/hidden-mode flag.
-            val native=NativeMediaDownloader.isNativeEligible(
+            val jkNative=JavGuruJkNativeHls.eligible(item.url,link,referer)
+            val native=jkNative || NativeMediaDownloader.isNativeEligible(
                 item.url,link,verifiedFirstPartyMp4)
             val future=(if(native)nativeExecutor else transferExecutor).submit<Int>{
-                if(native) {
+                if(jkNative) {
+                    // Strictly the selected Jav Guru JK finalized AES-128 HLS.
+                    // The legacy yt-dlp transport returned 403 on these same
+                    // publisher-selected fragments; do not route other
+                    // providers or unknown manifests through this native lane.
+                    VideoTransferJournal.record(
+                        context,item.id,"selected_jk_native_hls")
+                    JavGuruJkNativeHls.download(
+                        item.url,link,referer,parent,
+                        item.title+" ["+item.id+"]",
+                        NetworkRoute.javaProxy(context,item.url),
+                        progress={percent->
+                            if(!db.progressClaim(item.id,item.lease,percent))
+                                throw java.util.concurrent.CancellationException(
+                                    "Selected JK native transfer lease superseded")
+                            status(percent)
+                        },
+                        cancelled={
+                            stopRequests.contains(item.id) ||
+                            Thread.currentThread().isInterrupted ||
+                            !db.ownsClaim(item.id,item.lease)
+                        })
+                    0
+                }else if(native) {
                     val sameHost=runCatching{
                         java.net.URI(item.url).host.equals(
                             java.net.URI(link).host,ignoreCase=true)
