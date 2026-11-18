@@ -72,9 +72,7 @@ internal object Mp4HentaiPublishedHost {
                 // Retain the exact /file/<id>/<filename> route, allowing
                 // ordinary RFC 3986 filename punctuation on RAW path only.
                 val rawPath=target.rawPath.orEmpty()
-                Regex("""^/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._~!"rapidgator.net" ->
-                Regex("""^/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._-]{1,210})?/?$""")
-                    .matches(target.path.orEmpty())'()*+,;=:@-]{1,210})?/?$""")
+                Regex("""^/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._~!$&'()*+,;=:@-]{1,210})?/?$""")
                     .matches(rawPath) &&
                     !Regex("""(?i)%(?:2f|5c|00|0[ad])""")
                         .containsMatchIn(rawPath)
