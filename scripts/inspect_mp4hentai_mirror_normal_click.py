@@ -44,7 +44,7 @@ def eval(ws,i,js):
             return {"eval_error":True}
         return resp.get("result",{}).get("result",{}).get("value")
     raise RuntimeError("ordinary selected mirror browser timed out")
-def main():
+def main(return_selected_buzzheavier=False):
     if not EDGE.is_file():raise RuntimeError("existing Windows Edge missing")
     folder=tempfile.mkdtemp(prefix="asterion_owner_mp4hentai_mirror_")
     port=freeport()
@@ -156,6 +156,7 @@ def main():
                     return None
             opener=urllib.request.build_opener(NoRedirect)
             redirects=[]
+            selected_buzzheavier=[]
             published_shapes=[]
             for link in links:
                 raw_path=link.get("path") or ""
@@ -203,6 +204,14 @@ def main():
                                     dest.query).keys())[:8],
                                 "direct_media":dest.path.lower().endswith(
                                     (".mp4",".webm",".mkv"))})
+                            # Reuse ONLY the real user-selected file hoster
+                            # listed by the four clicked Mirror download
+                            # controls. Do not discover or guess adjacent
+                            # BuzzHeavier file identifiers.
+                            if(dest.hostname in ("buzzheavier.com",
+                                    "www.buzzheavier.com") and
+                               dest.path and len(dest.path.strip("/").split("/"))==1):
+                                selected_buzzheavier.append(dest.geturl())
                         redirects.append({"http":response.status,
                             "mime":response.headers.get("Content-Type","").split(";")[0],
                             "html_bytes":len(body),
@@ -229,6 +238,8 @@ def main():
                 "checked":len(redirects),
                 "redirect_shapes":redirects,
                 "complete_original_verified":False}),flush=True)
+            if return_selected_buzzheavier:
+                return list(dict.fromkeys(selected_buzzheavier))
             return 0 if result.get("host") in ALLOWED else 3
     finally:
         subprocess.run(["taskkill","/PID",str(proc.pid),"/T","/F"],
