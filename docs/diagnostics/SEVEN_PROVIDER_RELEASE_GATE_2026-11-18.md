@@ -1,5 +1,27 @@
 # Seven-provider final-build gate — 18 November 2026
 
+## CURRENT IMPLEMENTATION — JK native AES-HLS validated, 3 blocked external sources
+
+**Read this section first; it supersedes chronological lower sections.** Four complete selected PC originals have real FFprobe/SHA receipts: Pornhub, HentaiHaven, Jav Guru JK, UncensoredHentai. Three owner-selected providers still cannot provide real complete PC originals: JAVIDEO, HelloPorn, MP4Hentai. **Strict final release gate 4/7, CLOSED. No final owner-authorized APK has been assembled, signed, transferred or installed.**
+
+### Verified implementation in this continuation
+
+- `2c78655e8e65b442cfb30dd55aa6aba2989b20fb`: created `app/src/main/java/com/asterion/videoflow/JavGuruJkNativeHls.kt`, a **JK-only** native HTTPS HLS transfer path for the selected `jav.guru` article -> exact `maxstream.org/e` player -> `s4.maxstream.org` signed finalized 720p HLS. Validates selected source URI, a single 720p rendition, `#EXT-X-ENDLIST` finalized VOD, exactly one publisher-declared standard AES-128 key, media-sequence/IV, same-publisher `.ts` fragments, concurrent 4-lane bounded HTTP, AES/CBC/NoPadding decryption and MPEG-TS packet sync, complete per-fragment byte ledger, ordered full-media assembly, SHA-256 digest, Android MediaMetadataRetriever video/audio/duration match, isolated scratch cleanup, progress and cancellation. Requires >=2GB free and does not modify unrelated providers' transfer policy. This is HLS playback with the file publisher's own declared key—not challenge circumvention or guessed key data.
+- `da0fffcbdb27e9386a3a5f1905eeeeecbc68cf10`: integrated exact JK-only native lane in `TransferService.kt`, retaining existing downstream MediaStore copy and original lease/progress controls. Other HLS and direct media remain unchanged; the previous bundled yt-dlp transport returned HTTP403 on the selected JK CDN.
+- `29936cdffe3ebf1b1a3679f0642bfec59ebf6c17`: `JavGuruJkNativeHlsTest.kt` synthetic JVM tests reject ads/cross-host/media substitutions, incomplete/duplicate/non-720p playlists and invalid AES ciphertext, and verify standard AES-128 fragment decoding. `49f325f683613d11cf754dbd376d593100ece76b`: unambiguous HLS key URI regular-expression syntax repair.
+- **Actual PC source-only result**: Control receipt `dl-three-jk-native-source-regression-20261118-2350-v01`: checkout source SHA `49f325f683613d11cf754dbd376d593100ece76b`; `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest` **BUILD SUCCESSFUL in 2m25s**, 24 actionable tasks (6 executed, 18 up-to-date), exit **0**. Output: `D:\AsterionControlRelease\diagnostics\downloader_jk_native_source_only_20261118.log`. **No APK or Android runtime test was performed**, so do not overstate this as phone playback acceptance.
+- The older PC full-original Jav Guru JK validation remains **1,415,615,560 B / 7,503.262 s / video+audio / SHA prefix e485746ff844454a543d48c0** using the *same first-party finalized 720p AES-128 transport protocol*. Android code is source-validated only; final phone behavior remains to be tested when the owner's full 7/7 gate permits the single APK.
+
+### Remaining required external originals
+
+- **JAVIDEO** selected `javideo.net/en/fc2ppv-4994603`: the actual first-party `play.javideo.net/embed` sometimes initializes but has no `currentSrc`, duration or declared selected full media. First-party `/api` returned only JSON key `t` and no HLS/MP4; another selected Play run produced no iframe. Its publisher must supply an attributable playable original before a source fix or 7/7 claim can be validated.
+- **HelloPorn** selected article's single `voe.sx/e/<id>` player: `voe.sx` DNS resolves on owner's Windows PC but TCP 443 connection refused (`WinError 10061`). Other public third-party monitoring appears to see the general host online, so **do not claim global VOE downtime**; this is the owner's actual tested PC exit. Need reachable **ordinary authorized** selected player or a first-party publisher-attested alternate; no fabricated media.
+- **MP4Hentai** selected original via Mirrored.to file `DF7298C6`: the actual owner-selected file leads to BuzzHeavier 403/404, Rapidgator network failure, and Freedl.ink -> frdl.io -> frdl.hk public free form. The exact ordinary server-issued POST returned 200 HTML CAPTCHA, no selected video. Kotlin redirect-source guard and source-only CI **passed**. File-host verification must complete normally; never synthesize CAPTCHA answers, mark HTML original or pick an unrelated scene.
+
+**Single final authorized build remains unused**. All seven must have real independent PC selected-original byte+duration+SHA receipts and frozen regression results before signing and transferring once via the existing Asterion Control bridge. Do not rebuild or replace its worker/phone pairing, alter signatures or frozen working providers. Preserve this checkpoint for future chats.
+
+
+
 ## FINAL THREE-PROVIDER SOURCE EVIDENCE — latest PC checks
 
 **PC full-file acceptance remains 4/7.** The remaining JAVIDEO, HelloPorn and MP4Hentai have NO complete original-file receipts, so the owner's one-time final APK build is **NOT authorized and NOT performed**. No APK signing, installation or phone transfer occurred.
