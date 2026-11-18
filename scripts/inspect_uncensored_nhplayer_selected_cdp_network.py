@@ -67,8 +67,8 @@ def main():
      if name=="Network.responseReceived":
       response=data.get("response") or {}
       src=urllib.parse.urlsplit(response.get("url") or "")
-      if src.hostname in ("nhplayer.com","cdn.htstreaming.com") and
-         len(events)<1000:
+      if (src.hostname in ("nhplayer.com","cdn.htstreaming.com") and
+          len(events)<1000):
        events.append({"host":src.hostname,
          "first_route":src.path.strip("/").split("/")[0][:30],
          "method":data.get("type"),
