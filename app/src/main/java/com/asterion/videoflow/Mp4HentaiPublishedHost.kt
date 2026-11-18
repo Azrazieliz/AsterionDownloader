@@ -231,8 +231,51 @@ internal object Mp4HentaiPublishedHost {
                 // action, obtained with the server's own CSRF token. It is
                 // not a CAPTCHA, paid tier, unrelated button or guessed MP4.
                 // Only same-hoster session cookies are sent to this form.
+                val freedlFree=FreedlSelectedOriginal.publicFreeForm(doc,current)
                 val free=publicFreeDownloadForm(doc,current)
-                var publicReply=if(free!=null) {
+                var publicReply=if(freedlFree!=null) {
+                    // The exact selected Mirrored.to file's normal free
+                    // action lives at the end of verified Freedl.ink ->
+                    // frdl.io -> frdl.hk redirects. Submit ONLY that one
+                    // server-issued POST form and hoster cookies. Never
+                    // synthesize an hCaptcha response or infer a CDN URL.
+                    val posted=Jsoup.connect(freedlFree.action)
+                        .userAgent(NativeMediaDownloader.USER_AGENT)
+                        .referrer(current)
+                        .header("Origin",URI(current).let{
+                            it.scheme+"://"+it.host
+                        })
+                        .cookies(response.cookies())
+                        .method(org.jsoup.Connection.Method.POST)
+                        .ignoreHttpErrors(true).ignoreContentType(true)
+                        .followRedirects(false).timeout(14_000)
+                        .maxBodySize(1_500_000)
+                        .apply {
+                            for((name,value) in freedlFree.fields)
+                                data(name,value)
+                            // Already-authorized Connect Site session, if
+                            // user completed the genuine hoster verification.
+                            SiteSession.cookie(context,current)
+                                ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
+                            NetworkRoute.javaProxy(context,selected)
+                                ?.let{proxy(it)}
+                        }.execute()
+                    if(posted.statusCode() in 300..399) {
+                        val forwarded=posted.header("Location")
+                            ?.let{publishedHref(current,it)}
+                            ?:error("Selected Freedl free form omitted redirect")
+                        if(FreedlSelectedOriginal.selectedMediaRedirect(
+                                current,forwarded))return forwarded
+                        error("Selected Freedl normal free form redirected "+
+                            "outside its verified original-media route")
+                    }
+                    check(posted.statusCode() in 200..299 &&
+                        posted.contentType().orEmpty().contains("html",true)){
+                        "Selected Freedl public free form did not yield "+
+                        "a verified media link or HTML challenge"
+                    }
+                    Jsoup.parse(posted.body(),current)
+                }else if(free!=null) {
                     val posted=Jsoup.connect(free.action)
                         .userAgent(NativeMediaDownloader.USER_AGENT)
                         .referrer(current)
