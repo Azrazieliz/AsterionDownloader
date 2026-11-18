@@ -44,7 +44,7 @@ def eval(ws,i,js):
             return {"eval_error":True}
         return resp.get("result",{}).get("result",{}).get("value")
     raise RuntimeError("ordinary selected mirror browser timed out")
-def main(return_selected_buzzheavier=False,return_selected_rapidgator=False):
+def main(return_selected_buzzheavier=False,return_selected_rapidgator=False,return_selected_freedlink=False):
     if not EDGE.is_file():raise RuntimeError("existing Windows Edge missing")
     folder=tempfile.mkdtemp(prefix="asterion_owner_mp4hentai_mirror_")
     port=freeport()
@@ -158,6 +158,7 @@ def main(return_selected_buzzheavier=False,return_selected_rapidgator=False):
             redirects=[]
             selected_buzzheavier=[]
             selected_rapidgator=[]
+            selected_freedlink=[]
             published_shapes=[]
             for link in links:
                 raw_path=link.get("path") or ""
@@ -219,6 +220,13 @@ def main(return_selected_buzzheavier=False,return_selected_rapidgator=False):
                                len(dest.path)<240 and
                                not dest.username and not dest.password):
                                 selected_rapidgator.append(dest.geturl())
+                            if(dest.hostname in ("freedl.ink",
+                                    "www.freedl.ink") and
+                               re.fullmatch(r"/[A-Za-z0-9_-]{6,80}/?",
+                                    dest.path) and
+                               not dest.query and
+                               not dest.username and not dest.password):
+                                selected_freedlink.append(dest.geturl())
                         redirects.append({"http":response.status,
                             "mime":response.headers.get("Content-Type","").split(";")[0],
                             "html_bytes":len(body),
@@ -249,6 +257,8 @@ def main(return_selected_buzzheavier=False,return_selected_rapidgator=False):
                 return list(dict.fromkeys(selected_buzzheavier))
             if return_selected_rapidgator:
                 return list(dict.fromkeys(selected_rapidgator))
+            if return_selected_freedlink:
+                return list(dict.fromkeys(selected_freedlink))
             return 0 if result.get("host") in ALLOWED else 3
     finally:
         subprocess.run(["taskkill","/PID",str(proc.pid),"/T","/F"],
