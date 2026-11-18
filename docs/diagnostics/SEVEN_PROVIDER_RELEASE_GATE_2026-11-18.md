@@ -26,7 +26,7 @@ This section records executable changes and live diagnostics, not fabricated ful
 ### Source-test and release truth
 
 - Initial targeted route fix passed owner's actual Windows Gradle `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest` at `dl-three-selected-rapidgator-source-tests-20261118-gpt6-01`: exit 0, BUILD SUCCESSFUL in 2m10s. This result predates the later multi-hoster and saved-session changes.
-- The separate full source regression for the new multi-hoster logic was submitted under `dl-three-mirror-multihost-source-tests-20261118-gpt6-02`; report its **final** receipt before marking this newer code source-tested. No APK build, signing, transfer or phone-side playback was done.
+- **Source/JVM final verification PASSED:** `dl-three-mirror-multihost-source-tests-20261118-gpt6-02` completed with exit 0, BUILD SUCCESSFUL in 1m43s for the multi-hoster changes. After the saved-session patch, `dl-three-final-source-only-20261118-gpt6-03` tested exact source SHA `6490da9bfcd1292aa54a3fa3b98bfc082d15717b` with `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest`; final receipt `status=complete`, `ok=true`, `exit_code=0`, **BUILD SUCCESSFUL in 1m49s**, 24 Gradle tasks (6 executed, 18 up-to-date). Kotlin compile daemon restarted once and recovered; final build result was successful. Log: `D:\\AsterionControlRelease\\diagnostics\\downloader_three_final_source_gpt6_20261118.log`. **No APK built, signed, transferred or phone-side verified.**
 - Preserve exactly one final owner-signed acceptance build/Control transfer only after all seven same-selected complete-byte PC originals and protected-source tests pass. Do not loosen the owner's seven-provider release gate.
 
 
