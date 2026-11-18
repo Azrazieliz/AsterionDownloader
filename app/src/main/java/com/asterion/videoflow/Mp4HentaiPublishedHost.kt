@@ -423,7 +423,8 @@ internal object Mp4HentaiPublishedHost {
                 // page in the existing browser facility, without scraping
                 // unrelated video pages or forwarding publisher cookies.
                 if(nextLanding==null &&
-                    com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current)){
+                    (com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current) ||
+                        SiteSession.bound(context,current))){
                     val rendered=runCatching{
                         com.azrael.pixivdumpsync.BrowserPageFetch
                             .html(context,current,playerReferer=referer)
