@@ -11,7 +11,10 @@ import html,json,re,sys,urllib.parse,urllib.request,urllib.error
 from html.parser import HTMLParser
 from inspect_mp4hentai_mirror_normal_click import main as selected
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
-ALLOWED={"freedl.ink","www.freedl.ink","frdl.io","www.frdl.io"}
+# Official selected Freedl.ink now HTTP 302 -> frdl.io -> HTTP 301 frdl.hk.
+# These are actual observed redirect hops, not guessed file mirrors.
+ALLOWED={"freedl.ink","www.freedl.ink","frdl.io","www.frdl.io",
+         "frdl.hk","www.frdl.hk"}
 REFERER="https://www.mirrored.to/files/DF7298C6/?dl=0"
 class NoRedirect(urllib.request.HTTPRedirectHandler):
  def redirect_request(self,req,fp,code,msg,headers,url):return None
@@ -61,6 +64,9 @@ def main():
      "destination_scheme":dest.scheme,
      "location_has_query":bool(dest.query),
      "trusted_firstparty_transition":dest.hostname in ALLOWED,
+     "same_file_path":dest.path==p.path,
+     "source_path_segments":len([x for x in p.path.split("/") if x]),
+     "destination_path_segments":len([x for x in dest.path.split("/") if x]),
      "complete_original_verified":False}),flush=True)
    if(dest.scheme!="https" or dest.hostname not in ALLOWED or
      dest.port or dest.username or dest.password or dest.fragment):
