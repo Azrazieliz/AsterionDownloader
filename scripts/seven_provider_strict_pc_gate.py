@@ -11,7 +11,7 @@ import json, re, subprocess, sys, time
 
 ROOT=Path(__file__).resolve().parent
 CASES={
- "jav_guru":("verify_javguru_owner_sb_full_pc.py",600,True),
+ "jav_guru":("verify_javguru_owner_jk_https_segments_pc.py",1200,True),
  "javideo":("verify_javideo_selected_play_cdp.py",100,False),
  "helloporn":("verify_helloporn_selected_voe_media.py",100,False),
  "pornhub":("verify_pornhub_full_selected_pc.py",600,True),
