@@ -55,6 +55,7 @@ def main():
                           "has_query":bool(parsed.query),
                           "query_keys":sorted(urllib.parse.parse_qs(parsed.query).keys()),
                           "path_final_suffix":parsed.path.rsplit(".",1)[-1][-8:] if "." in parsed.path else None,
+                          "filename_punctuation":sorted(set(ch for ch in parsed.path.rsplit("/",1)[-1] if not re.fullmatch(r"[A-Za-z0-9%._-]",ch))),
                           "complete_file_verified":False}),flush=True)
         return 5
     opener = urllib.request.build_opener(NoRedirect)
