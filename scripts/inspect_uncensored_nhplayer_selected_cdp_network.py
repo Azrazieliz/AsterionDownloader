@@ -34,7 +34,7 @@ def localport():
 def targets(port):
  with urllib.request.urlopen(f"http://127.0.0.1:{port}/json",timeout=3) as r:
   return json.load(r)
-def main():
+def main(verified_source_callback=None):
  if not EDGE.is_file():raise RuntimeError("Existing Edge not installed")
  ref,url=selected()
  port=localport();profile=tempfile.mkdtemp(prefix="asterion_nh_observer_")
@@ -124,6 +124,19 @@ def main():
      "network_failure_count":len(failures),
      "network_failure_shapes":failures[:12],
      "complete_original_verified":False}),flush=True)
+   # The actual normal browser AJAX response publishes window.videoReady.
+   # Only a caller explicitly proving the original may inspect it in-process.
+   # NEVER print the signed selected URL, dump cookies or synthesize tokens.
+   if verified_source_callback is not None:
+    picked=command(500,"Runtime.evaluate",{
+      "expression":"typeof window.videoReady==='string'?window.videoReady:''",
+      "returnByValue":True})
+    live=((picked or {}).get("result") or {}).get("value") or ""
+    parsed=urllib.parse.urlsplit(live)
+    if(parsed.scheme!="https" or parsed.hostname!="r2.1hanime.com" or
+        parsed.username or parsed.password or parsed.fragment or not parsed.path):
+     raise RuntimeError("Normal selected NHPlayer did not publish trusted HTTPS media")
+    return verified_source_callback(live,url,ref)
    return 0
  finally:
   subprocess.run(["taskkill","/PID",str(proc.pid),"/T","/F"],
