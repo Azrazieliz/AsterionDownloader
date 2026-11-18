@@ -271,6 +271,27 @@ class ReportedSiteSpecificOriginalsTest {
             selected,"<div class='servers'><ul><li data-id='/watch/other'>"+
                 "Recommended</li></ul></div>"))
     }
+    @Test fun firstPartyNhPlayerAjaxAcceptsOnlyExactSignedSelectedOriginal(){
+        val iframe="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
+        val server="https://nhplayer.com/player.php?i=token1&s=2&vid=scene3"
+        val original="https://r2.1hanime.com/selected/episode-3.mp4?verify=opaque-token"
+        assertTrue(SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            iframe,server,original))
+        for(bad in listOf(
+            "https://ads.example.com/selected/episode-3.mp4?verify=opaque-token",
+            "https://r2.1hanime.com.evil.example/selected/episode-3.mp4?verify=opaque-token",
+            "https://r2.1hanime.com/selected/trailer.mp4?verify=opaque-token",
+            "https://r2.1hanime.com/selected/episode-3.mp4",
+            "https://r2.1hanime.com/selected/episode-3.mp4?verify=opaque-token&ad=1",
+            "http://r2.1hanime.com/selected/episode-3.mp4?verify=opaque-token"
+        )) assertFalse(bad,SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            iframe,server,bad))
+        assertFalse(SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            iframe,"https://nhplayer.com/player.php?i=token1&vid=scene3",original))
+        assertFalse(SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            "https://nhplayer.com/v/Z2flAXXPucyCbVJ/?ad=1",server,original))
+    }
+
     @Test fun uncensoredHentaiResolvesOnlyItsExactNhplayerIframe(){
         val page="https://uncensoredhentai.xxx/watch/episode-3/"
         val player="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
