@@ -222,6 +222,41 @@ internal object SiteSpecificOriginalSources {
         return published.singleOrNull()
     }
 
+    /** The exact selected NHPlayer normal AJAX flow publishes one MP4 via
+     * window.videoReady from the publisher's own /player.php?i&s&vid page.
+     * This is not a general player/advert detector: source, server and signed
+     * CDN must each match the observed first-party selected owner chain.
+     */
+    internal fun selectedNhPlayerAjaxOriginal(
+        iframe:String,server:String,media:String
+    ):Boolean {
+        val first=runCatching{URI(iframe)}.getOrNull()?:return false
+        val page=runCatching{URI(server)}.getOrNull()?:return false
+        val file=runCatching{URI(media)}.getOrNull()?:return false
+        if(first.scheme!="https" || first.host!="nhplayer.com" ||
+            first.port!=-1 || first.userInfo!=null ||
+            !Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                .matches(first.path.orEmpty()) ||
+            !first.rawQuery.isNullOrBlank() ||
+            page.scheme!="https" || page.host!="nhplayer.com" ||
+            page.port!=-1 || page.userInfo!=null ||
+            page.path!="/player.php" || page.rawFragment!=null)return false
+        val params=page.rawQuery?.split('&').orEmpty()
+        if(params.size!=3 ||
+            params.map{it.substringBefore('=')}.toSet()!=
+                setOf("i","s","vid") ||
+            params.any{!it.contains('=') ||
+                it.substringAfter('=',"").isBlank()})return false
+        return file.scheme=="https" &&
+            file.host=="r2.1hanime.com" &&
+            file.port==-1 && file.userInfo==null &&
+            file.rawFragment==null &&
+            file.path.orEmpty().endsWith(".mp4",ignoreCase=true) &&
+            file.rawQuery?.matches(
+                Regex("""^verify=[A-Za-z0-9_+%./=-]{4,2000}$"""))==true &&
+            !FullLengthVideoPolicy.isExplicitPreview("",media)
+    }
+
     private fun fromPlayer(context:Context,doc:Document,selected:String,
                            owner:String):List<Source>{
         // A publisher may insert its selected iframe only after the watch
@@ -301,7 +336,11 @@ internal object SiteSpecificOriginalSources {
         val selectedMedia=(mediaElements(player,playerPage,
             "video[src],video source[src],source[type^=video][src],"+
                 "meta[itemprop=contentUrl][content]")+
-            jsSources(player,playerPage)).distinctBy{it.url}
+            jsSources(player,playerPage)).distinctBy{it.url}.filter{
+                owner!="uncensoredhentai.xxx" ||
+                    URI(playerPage).path!="/player.php" ||
+                    selectedNhPlayerAjaxOriginal(link,playerPage,it.url)
+            }
         if(selectedMedia.isNotEmpty())return selectedMedia
         // This exact site's own iframe may create the HTML5 player only
         // after JavaScript initialization. Inspect that known iframe, not
@@ -319,7 +358,11 @@ internal object SiteSpecificOriginalSources {
                     ".jwplayer video[src],.jwplayer video source[src]"
                 else "")
             val media=(mediaElements(rendered,playerPage,css)+
-                jsSources(rendered,playerPage)).distinctBy{it.url}
+                jsSources(rendered,playerPage)).distinctBy{it.url}.filter{
+                    owner!="uncensoredhentai.xxx" ||
+                        URI(playerPage).path!="/player.php" ||
+                        selectedNhPlayerAjaxOriginal(link,playerPage,it.url)
+                }
             if(media.isNotEmpty())return media
         }
         // The FullPorner player advertises THREE real quality variants
