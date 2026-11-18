@@ -25,6 +25,52 @@ internal object Mp4HentaiPublishedHost {
         return u.scheme=="https" && u.userInfo==null && u.port==-1 &&
             WebDiscovery.isUrl(address)
     }
+    /** A /getlink entry must be obtained from the selected Mirror page
+     * AFTER its genuine first-party download-links click, never synthesized
+     * from a different file's host ID. These helpers validate shape only;
+     * call sites must retain the selected-Mirror DOM provenance.
+     */
+    internal fun selectedMirrorGetlink(mirror:String,link:String):Boolean {
+        if(!safe(mirror) || hostname(mirror)!="mirrored.to" ||
+            !Regex("""^/files/[A-Fa-f0-9]{8}/(?:[^?#]*)?$""")
+                .matches(uri(mirror)?.path.orEmpty()))return false
+        return officialMirrorGetlink(link)
+    }
+
+    private fun officialMirrorGetlink(link:String):Boolean {
+        if(!safe(link) || hostname(link)!="mirrored.to" ||
+            !Regex("""^/getlink/?$""").matches(uri(link)?.path.orEmpty()) ||
+            uri(link)?.rawFragment!=null)return false
+        val fields=uri(link)?.rawQuery?.split('&').orEmpty()
+        return fields.size==2 &&
+            fields.map{it.substringBefore('=')}.toSet()==setOf("hid","tid") &&
+            fields.all{
+                it.contains('=') &&
+                    it.substringAfter('=')
+                        .matches(Regex("""[A-Za-z0-9_-]{1,128}"""))
+            }
+    }
+
+    /** Never promote one of these hosting *pages* to media. Their sole
+     * provenance is the exact selected file's official /getlink HTML.
+     * A 403/404 or login/captcha remains a real failure, not success.
+     */
+    internal fun selectedMirrorHandoff(from:String,to:String):Boolean {
+        if(!officialMirrorGetlink(from) || !safe(to))return false
+        val target=uri(to)?:return false
+        if(target.rawFragment!=null ||
+            !target.rawQuery.isNullOrBlank())return false
+        return when(hostname(to)){
+            "freedl.ink","buzzheavier.com" ->
+                Regex("""^/[A-Za-z0-9_-]{6,100}/?$""")
+                    .matches(target.path.orEmpty())
+            "rapidgator.net" ->
+                Regex("""^/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._-]{1,210})?/?$""")
+                    .matches(target.path.orEmpty())
+            else->false
+        }
+    }
+
     private fun isHosterPage(url:String):Boolean {
         if(!safe(url) || hostname(url) !in hosters)return false
         val path=uri(url)?.path.orEmpty()
@@ -140,7 +186,9 @@ internal object Mp4HentaiPublishedHost {
                     ?.let{publishedHref(current,it)}
                     ?:error("MP4Hentai host redirect missing destination")
                 if(direct(next))return next
-                check(isHosterPage(next)){
+                check(isHosterPage(next) ||
+                    selectedMirrorGetlink(current,next) ||
+                    selectedMirrorHandoff(current,next)){
                     "MP4Hentai host redirected to an unverified download page"
                 }
                 referer=current
@@ -233,8 +281,11 @@ internal object Mp4HentaiPublishedHost {
                     val link=publishedHref(current,anchor.attr("href"))
                         ?:continue
                     if(direct(link))candidates+=link
-                    else if(nextLanding==null && isHosterPage(link) &&
-                        link!=current)nextLanding=link
+                    else if(nextLanding==null && link!=current &&
+                        (isHosterPage(link) ||
+                            selectedMirrorGetlink(current,link) ||
+                            selectedMirrorHandoff(current,link)))
+                        nextLanding=link
                 }
                 if(candidates.size==1)return candidates.single()
                 check(candidates.isEmpty()){
@@ -262,8 +313,11 @@ internal object Mp4HentaiPublishedHost {
                             val link=publishedHref(current,anchor.attr("href"))
                                 ?:continue
                             if(direct(link))browserDirect+=link
-                            else if(nextLanding==null && isHosterPage(link) &&
-                                link!=current)nextLanding=link
+                            else if(nextLanding==null && link!=current &&
+                                (isHosterPage(link) ||
+                                    selectedMirrorGetlink(current,link) ||
+                                    selectedMirrorHandoff(current,link)))
+                                nextLanding=link
                         }
                         if(browserDirect.size==1)return browserDirect.single()
                         check(browserDirect.isEmpty()){
