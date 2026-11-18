@@ -83,6 +83,27 @@ class Mp4HentaiPublishedHostTest {
             chosen,"https://freedl.ink/syad3zdsqir0"))
     }
 
+    @Test fun onlyPublisherSelectedFreedlRedirectChainIsAccepted(){
+        val original="https://freedl.ink/syad3zdsqir0"
+        val io="https://frdl.io/officialSelectedFile12"
+        val hk="https://frdl.hk/officialSelectedFile12"
+        assertTrue(Mp4HentaiPublishedHost.selectedFreedlRedirect(original,io))
+        assertTrue(Mp4HentaiPublishedHost.selectedFreedlRedirect(io,hk))
+        for(bad in listOf(
+            "https://frdl.hk/OTHER_selected_file",
+            "https://frdl.hk.evil.example/officialSelectedFile12",
+            "http://frdl.hk/officialSelectedFile12",
+            "https://frdl.hk/officialSelectedFile12?download=another",
+            "https://ads.example/officialSelectedFile12"
+        )) assertFalse(Mp4HentaiPublishedHost.selectedFreedlRedirect(io,bad))
+        assertFalse(Mp4HentaiPublishedHost.selectedFreedlRedirect(
+            "https://ads.example/aabbccdd",io))
+        assertFalse(Mp4HentaiPublishedHost.selectedFreedlRedirect(
+            original,hk))
+        assertFalse(Mp4HentaiPublishedHost.selectedFreedlRedirect(
+            io,"https://frdl.io/officialSelectedFile12"))
+    }
+
     @Test fun realUpfilesPublicCaptchaRequiresBrowserActionNotFakeDownload(){
         val selectedHost="https://upfilesgo.com/nGfW"
         val page=Jsoup.parse("""<html><head><title>Free download</title></head>
