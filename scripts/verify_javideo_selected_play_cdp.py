@@ -112,7 +112,7 @@ def trusted_selected_first_party_player(ws):
  for retry in range(26):
   target=evaluate(ws,1100+retry,r"""(() => {
     if(location.hostname!=='play.javideo.net' ||
-       !/^\\/(?:embed|player)\\/[A-Za-z0-9_-]{5,100}\\/?$/.test(location.pathname))
+       !/^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/.test(location.pathname))
        return null;
     const root=document.querySelector(
       '#player,.video-player,.vjs-player,.player-container,video.video-js');
