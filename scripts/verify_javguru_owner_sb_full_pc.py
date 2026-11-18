@@ -7,7 +7,7 @@ javclan.com embed, decodes that embed's P.A.C.K.E.R TEXT only, then verifies
 publisher-declared HLS and optionally a full FFprobe-checked temporary file.
 No APK/phone mutation. No signed media URLs in receipts.
 """
-import base64,hashlib,html,json,re,shutil,subprocess,sys,tempfile,urllib.parse,urllib.request
+import base64,hashlib,html,json,re,shutil,subprocess,sys,tempfile,urllib.parse,urllib.request,time
 from pathlib import Path
 from verify_javguru_exact_selected_hls import Doc,get,value,UA
 from verify_roshy_selected_packed_hls import Script,deobfuscate
@@ -107,6 +107,36 @@ def full():
             "http":response.status,"manifest_bytes":len(header),
             "has_extm3u":success}),flush=True)
         if not success:return 2
+    # The selected owner post publishes a 480p full-length rendition, not a
+    # short advertisement. Its #EXTINF playlist duration is the authoritative
+    # baseline for a completed-file receipt, never just a 60-second minimum.
+    base=urllib.parse.urlsplit(hls)
+    lines=header.decode("utf8","replace").splitlines()
+    variants=[]
+    for index,entry in enumerate(lines[:-1]):
+        if "#EXT-X-STREAM-INF" not in entry:continue
+        quality=re.search(r"RESOLUTION=[0-9]+x([0-9]+)",entry)
+        if not quality or int(quality.group(1))!=480:continue
+        dest=urllib.parse.urlsplit(urllib.parse.urljoin(hls,lines[index+1].strip()))
+        if dest.scheme!="https" or dest.hostname!=base.hostname or not dest.path.endswith(".m3u8"):
+            continue
+        variants.append(dest.geturl())
+    if len(variants)!=1:
+        raise RuntimeError("Selected owner full-length 480p HLS variant ambiguous")
+    child_req=urllib.request.Request(variants[0],headers={
+        "User-Agent":UA,"Referer":hls,"Accept-Encoding":"identity"})
+    with urllib.request.urlopen(child_req,timeout=25) as response:
+        published=response.read(190000).decode("utf8","replace")
+        if response.status!=200 or not published.startswith("#EXTM3U"):
+            raise RuntimeError("Selected signed owner variant did not publish HLS")
+    expected_seconds=sum(float(v) for v in re.findall(
+        r"#EXTINF:([0-9]+(?:\\.[0-9]+)?)",published))
+    if expected_seconds<300 or expected_seconds>15000:
+        raise RuntimeError("Selected publisher's full-length runtime is unavailable")
+    print(json.dumps({"provider":"jav_guru","stage":"EXPECTED_SELECTED_FULL_RUNTIME",
+        "selected_quality_height":480,
+        "published_playlist_duration_s":round(expected_seconds,2),
+        "published_segment_count":published.count("#EXTINF:")}),flush=True)
     if not WHEEL.is_file():raise RuntimeError("Bundled extractor wheel missing")
     sys.path.insert(0,str(WHEEL))
     import yt_dlp
@@ -115,6 +145,20 @@ def full():
     stage=Path("D:/AsterionControlRelease/diagnostics")
     if not stage.is_dir() or shutil.disk_usage(stage).free < 2000000000:
         raise RuntimeError("PC_MEDIA_STAGING_CAPACITY_BLOCKED: selected-original full file needs free space on D; do not use C system TEMP")
+    started=time.monotonic()
+    last_progress=[started]
+    def on_progress(item):
+        if item.get("status") not in ("downloading","finished"):return
+        now=time.monotonic()
+        if item.get("status")!="finished" and now-last_progress[0]<90:return
+        last_progress[0]=now
+        print(json.dumps({"provider":"jav_guru","stage":"SELECTED_FULL_PC_PROGRESS",
+            "status":item.get("status"),
+            "bytes_received":int(item.get("downloaded_bytes") or 0),
+            "estimated_total_bytes":int(item.get("total_bytes_estimate") or
+                item.get("total_bytes") or 0),
+            "elapsed_s":round(now-started,1),
+            "full_original_verified":False}),flush=True)
     with tempfile.TemporaryDirectory(prefix="asterion_javguru_sb_full_",dir=stage) as folder:
         opts={"quiet":True,"no_warnings":True,
           "format":"bestvideo[height<=480]+bestaudio/best[height<=480]/best",
@@ -122,7 +166,8 @@ def full():
           "outtmpl":str(Path(folder)/"owner-selected.%(ext)s"),
           "http_headers":{"User-Agent":UA,"Referer":embed},
           "socket_timeout":23,"retries":1,"fragment_retries":1,
-          "skip_unavailable_fragments":False,"concurrent_fragment_downloads":2}
+          "skip_unavailable_fragments":False,"concurrent_fragment_downloads":8,
+          "progress_hooks":[on_progress]}
         with yt_dlp.YoutubeDL(opts) as dl:
             dl.extract_info(hls,download=True)
         movies=[x for x in Path(folder).iterdir()
@@ -140,8 +185,9 @@ def full():
         info=json.loads(receipt.stdout)
         duration=float(info.get("format",{}).get("duration") or 0)
         tracks=[s.get("codec_type") for s in info.get("streams",[])]
-        if "video" not in tracks or duration<60:
-            raise RuntimeError("Not a verified complete playable selected original")
+        if "video" not in tracks or "audio" not in tracks or (
+                not 0.975*expected_seconds<=duration<=1.025*expected_seconds):
+            raise RuntimeError("Not the publisher's full selected movie with audio")
         digest=hashlib.sha256()
         with movie.open("rb") as stream:
             while chunk:=stream.read(1024*1024):digest.update(chunk)
@@ -150,6 +196,8 @@ def full():
             "duration_s":round(duration,3),
             "sha256_prefix":digest.hexdigest()[:24],
             "video":True,"audio":"audio" in tracks,
+            "selected_rendition_height":480,
+            "published_playlist_duration_s":round(expected_seconds,2),
             "android_receipt_verified":False,"temp_media_retained":False}),flush=True)
     return 0
 
