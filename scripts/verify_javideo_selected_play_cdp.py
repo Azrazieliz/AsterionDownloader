@@ -30,6 +30,10 @@ def selected_network(response,request_id=None):
  SELECTED_NETWORK.append({
   "host":host,
   "first_route_segment":path[1][:36] if len(path)>1 else "",
+  "second_route_kind":(
+     path[2] if len(path)>2 and path[2] in
+       {"time","token","stream","video","source","config","player",
+        "auth","play","media","manifest","status","embed"} else "{opaque}"),
   "path_extension":u.path.rsplit(".",1)[-1][-10:] if "." in u.path else "",
   "http_status":response.get("status"),
   "mime":response.get("mimeType","")[:70],
@@ -411,9 +415,15 @@ def main():
          media.append({"host":u.hostname,
            "extension":u.path.rsplit(".",1)[-1][:8],"signed":bool(u.query)})
       inspect(obj)
+      observed_t=obj.get("t") if isinstance(obj,dict) else None
       api_receipts.append({"valid_json":True,
         "root_kind":type(obj).__name__,"fields":sorted(set(fields))[:50],
-        "status_flags":status,"media_shapes":media[:8],
+        "status_flags":status,
+        "published_t_type":type(observed_t).__name__,
+        "published_t_length":len(str(observed_t)) if observed_t is not None else 0,
+        "published_t_is_url":isinstance(observed_t,str) and
+            observed_t.startswith("https://"),
+        "media_shapes":media[:8],
         "complete_original_verified":False})
      except Exception as exc:
       api_receipts.append({"valid_json":False,
