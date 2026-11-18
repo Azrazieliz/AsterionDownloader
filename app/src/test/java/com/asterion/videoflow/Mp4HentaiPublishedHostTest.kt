@@ -69,6 +69,14 @@ class Mp4HentaiPublishedHostTest {
             selectedHost)
         assertFalse(Mp4HentaiPublishedHost.requiresInteractiveVerification(plain))
     }
+    @Test fun repeatedNoVerifiedFileIsPermanentUnsupportedNotOther() {
+        val kind=VideoFailurePolicy.classify(
+            "mp4hentai.com: Video transfer: MP4Hentai host did not expose a verified download in five steps")
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,kind)
+        assertEquals(0,VideoFailurePolicy.maxRetries(kind))
+        assertEquals(VideoFailurePolicy.Kind.AUTH,VideoFailurePolicy.classify(
+            "MP4Hentai selected file host requires CAPTCHA verification in an authorized browser session"))
+    }
     @Test fun publicUpfilesFreeFormUsesOnlyServerIssuedSameHostToken() {
         val host="https://upfilesgo.com/nGfW"
         val page=Jsoup.parse("""<form id="free-download-form" method="post"
