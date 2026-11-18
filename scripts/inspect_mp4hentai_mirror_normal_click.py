@@ -143,9 +143,10 @@ def main():
             published_shapes=[]
             for link in links:
                 raw_path=link.get("path") or ""
-                if raw_path.rstrip("/")!="/getlink":continue
+                if not raw_path.startswith("/getlink"):continue
                 raw_query=(link.get("query") or "").lstrip("?")
-                published_shapes.append({"path":raw_path,
+                published_shapes.append({"first_segment":raw_path.strip("/").split("/")[0][:45],
+                    "route_segment_count":len([x for x in raw_path.split("/") if x]),
                     "query_keys":sorted(urllib.parse.parse_qs(raw_query).keys())})
             print(json.dumps({"provider":"mp4hentai",
                 "stage":"SELECTED_GETLINK_ROUTE_SHAPES",
@@ -156,7 +157,7 @@ def main():
                     (link.get("path") or "")+(link.get("query") or ""))
                 keys=urllib.parse.parse_qs(u.query.lstrip("?"))
                 if(u.scheme!="https" or u.hostname not in ALLOWED or
-                   u.path.rstrip("/")!="/getlink" or set(keys)!={"hid","tid"} or
+                   not u.path.startswith("/getlink") or set(keys)!={"hid","tid"} or
                    any(len(values)!=1 for values in keys.values())):
                     continue
                 req=urllib.request.Request(u.geturl(),headers={
