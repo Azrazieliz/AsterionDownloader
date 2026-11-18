@@ -252,8 +252,12 @@ internal object SiteSpecificOriginalSources {
             file.port==-1 && file.userInfo==null &&
             file.rawFragment==null &&
             file.path.orEmpty().endsWith(".mp4",ignoreCase=true) &&
-            file.rawQuery?.matches(
-                Regex("""^verify=[A-Za-z0-9_+%./=-]{4,2000}$"""))==true &&
+            file.rawQuery?.let{
+                it.length in 8..2000 &&
+                    it.startsWith("verify=") &&
+                    it.substringAfter('=',"").isNotBlank() &&
+                    !it.contains('&')
+            }==true &&
             !FullLengthVideoPolicy.isExplicitPreview("",media)
     }
 
