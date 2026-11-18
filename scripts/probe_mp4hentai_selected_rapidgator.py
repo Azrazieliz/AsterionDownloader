@@ -42,11 +42,17 @@ def main():
                           "same_file_link_count":len(set(raw)) if isinstance(raw,list) else 0,
                           "verified":False}), flush=True)
         return 3
-    target = raw[0]
+    # Percent-encode publisher filename brackets/spaces, preserving this
+    # exact selected Mirror URL and its opaque file ID without rewriting ID.
+    original = urllib.parse.urlsplit(raw[0])
+    safe_path = urllib.parse.quote(original.path, safe="/-_.~!    target = raw[0]
+    parsed = urllib.parse.urlsplit(target)'()*+,;=:@%")
+    target = urllib.parse.urlunsplit((original.scheme, original.netloc,
+                                     safe_path, original.query, original.fragment))
     parsed = urllib.parse.urlsplit(target)
     if (parsed.scheme != "https" or parsed.hostname not in ("rapidgator.net","www.rapidgator.net")
             or parsed.username or parsed.password or parsed.port or
-            not re.fullmatch(r"/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._-]{1,210})?/?",
+            not re.fullmatch(r"/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._~!not re.fullmatch(r"/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._-]{1,210})?/?",'()*+,;=:@-]{1,210})?/?",
                              parsed.path) or parsed.fragment):
         print(json.dumps({"stage":"SELECTED_RAPIDGATOR_URL_SHAPE_REJECTED",
                           "host":parsed.hostname,"https":parsed.scheme=="https",
