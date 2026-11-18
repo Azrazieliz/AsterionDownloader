@@ -48,7 +48,15 @@ def main():
             or parsed.username or parsed.password or parsed.port or
             not re.fullmatch(r"/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._-]{1,210})?/?",
                              parsed.path) or parsed.fragment):
-        raise RuntimeError("Selected Rapidgator handoff is outside the trusted shape")
+        print(json.dumps({"stage":"SELECTED_RAPIDGATOR_URL_SHAPE_REJECTED",
+                          "host":parsed.hostname,"https":parsed.scheme=="https",
+                          "route_segments":len([x for x in parsed.path.split("/") if x]),
+                          "segment_lengths":[len(x) for x in parsed.path.split("/") if x],
+                          "has_query":bool(parsed.query),
+                          "query_keys":sorted(urllib.parse.parse_qs(parsed.query).keys()),
+                          "path_final_suffix":parsed.path.rsplit(".",1)[-1][-8:] if "." in parsed.path else None,
+                          "complete_file_verified":False}),flush=True)
+        return 5
     opener = urllib.request.build_opener(NoRedirect)
     request = urllib.request.Request(target, headers={
         "User-Agent":UA, "Referer":REF, "Accept-Encoding":"identity",
