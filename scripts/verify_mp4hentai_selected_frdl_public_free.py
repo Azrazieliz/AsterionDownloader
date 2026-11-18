@@ -71,7 +71,9 @@ def main():
    "complete_original_verified":False}),flush=True)
   if (set(original_names)!=wanted or set(fields)!=wanted or
       any(len(value)>3000 for value in fields.values()) or
-      not fields["id"] or not fields["hash"] or
+      # The site's own public free form publishes hash as an empty
+      # hidden field; send exactly that value rather than forging it.
+      not fields["id"] or
       "captcha" in "".join(original_names).lower() or
       not any(re.search("download|free",b["text"],re.I)
               for b in form["buttons"])):
