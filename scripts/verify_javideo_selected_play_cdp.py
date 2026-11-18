@@ -188,10 +188,23 @@ def main():
        frame_targets=[x for x in targets if x.get("type")=="iframe" and
            x.get("url","").split("?")[0].rstrip("/")==
                first_party[0].split("?")[0].rstrip("/")]
+       active_iframes=[x for x in targets if x.get("type")=="iframe"]
        print(json.dumps({"stage":"ACTUAL_SELECTED_IFRAME_TARGETS",
            "frame_target_count":len(frame_targets),
            "target_types":sorted(set(x.get("type","") for x in targets)),
-           "first_party_target":len(frame_targets)==1}),flush=True)
+           "first_party_target":len(frame_targets)==1,
+           "iframe_target_shapes":[{
+               "host":urllib.parse.urlsplit(x.get("url","")).hostname,
+               "scheme":urllib.parse.urlsplit(x.get("url","")).scheme,
+               "first_path_segment":(
+                  urllib.parse.urlsplit(x.get("url","")).path.split("/")[1]
+                  if "/" in urllib.parse.urlsplit(x.get("url","")).path else ""),
+               "same_publisher_embed_path":(
+                   urllib.parse.urlsplit(x.get("url","")).path.rstrip("/")==
+                   urllib.parse.urlsplit(first_party[0]).path.rstrip("/")),
+               "query_keys":sorted(urllib.parse.parse_qs(
+                   urllib.parse.urlsplit(x.get("url","")).query))[:8]}
+               for x in active_iframes[:8]]}),flush=True)
        if len(frame_targets)==1 and frame_targets[0].get("webSocketDebuggerUrl"):
         try:
          with connect(frame_targets[0]["webSocketDebuggerUrl"],
