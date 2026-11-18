@@ -5,7 +5,7 @@ Uses existing local Edge and CDP only. One exact first-party user-selected
 article, one normal Play click, observes the active selected player. Never
 solves CAPTCHA, intercepts unrelated network traffic or uses ad iframe media.
 """
-import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil
+import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil,contextlib
 from pathlib import Path
 try:
     from websockets.sync.client import connect
@@ -173,7 +173,23 @@ def main():
       req=urllib.request.Request(first_party[0],headers={
        "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36",
        "Referer":SELECTED,"Accept-Encoding":"identity"})
-      with urllib.request.urlopen(req,timeout=12) as response:
+      # An OS proxy/TLS failure in urllib is NOT evidence that the
+      # publisher-selected iframe did not load inside Chromium.
+      # Preserve strict selection, but continue the real in-place frame
+      # observation rather than aborting all CDP work.
+      try:
+       page_response=urllib.request.urlopen(req,timeout=12)
+      except Exception as exc:
+       cause=getattr(exc,"reason",None)
+       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_DIRECT_HTTP",
+         "http":0,"error_class":type(exc).__name__,
+         "network_cause":type(cause).__name__ if cause is not None else None,
+         "winerror":getattr(cause,"winerror",None)}),flush=True)
+       class _NotFetched:
+        status=0
+        def read(self,size):return b""
+       page_response=contextlib.nullcontext(_NotFetched())
+      with page_response as response:
        html=response.read(850000).decode("utf8","replace")
        nested=re.findall(r"""<iframe[^>]+src=["']([^"'<>]{5,2000})""",html,re.I)
        nested_hosts=sorted(set(urllib.parse.urlsplit(
