@@ -35,7 +35,7 @@ def selected_network(response):
   "resource_type":response.get("resourceType"),
   "has_query":bool(u.query)
  })
- if len(SELECTED_NETWORK)>65:SELECTED_NETWORK.pop(0)
+ if len(SELECTED_NETWORK)>450:SELECTED_NETWORK.pop(0)
 def evaluate(ws,ident,expr):
  ws.send(json.dumps({"id":ident,"method":"Runtime.evaluate",
    "params":{"expression":expr,"returnByValue":True,"awaitPromise":True}}))
@@ -326,9 +326,20 @@ def main():
      except Exception as exc:
       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
        "error_class":type(exc).__name__}),flush=True)
+    grouped={}
+    for observed in SELECTED_NETWORK:
+     label=(observed.get("host"),observed.get("first_route_segment"),
+          observed.get("http_status"),observed.get("mime"))
+     grouped[label]=grouped.get(label,0)+1
+    counts=[{"host":label[0],"first_route_segment":label[1],
+             "http":label[2],"mime":label[3],"count":count}
+            for label,count in grouped.items()]
     print(json.dumps({"stage":"SELECTED_FIRST_PARTY_VIDEO_NETWORK_STATUS",
       "observed":len(SELECTED_NETWORK),
-      "status_shapes":SELECTED_NETWORK[-20:],
+      "by_source_and_http":counts[:65],
+      "non_success":[x for x in counts if
+        not isinstance(x["http"],(int,float)) or
+        x["http"]<200 or x["http"]>=300][:30],
       "completed_original_verified":False}),flush=True)
     if len(set(exact))==1:
      print(json.dumps({"status":"EXACT_STREAMTAPE_IFRAME_FOUND_NOT_FULL_MEDIA"}),flush=True)
