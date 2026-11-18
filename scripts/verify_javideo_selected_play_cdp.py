@@ -160,6 +160,26 @@ def main():
             "playerSetup":r"player\s*\.\s*setup","source":r"source",
             "csrf":r"csrf|nonce","encryption":r"encrypt|decrypt|CryptoJS"
          }.items()}}),flush=True)
+       # Structural diagnostics only: this is the SAME first-party embed
+       # obtained from the actual Play click, never any unrelated ad player.
+       # Do not print opaque media URLs, session tokens, or JS source text.
+       inline=re.findall(r"""(?is)<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>""",html)
+       active=[script for script in inline if re.search(
+         r"fetch\\s*\\(|videojs\\s*\\(|\\.src\\s*\\(|source\\s*:",script,re.I)]
+       print(json.dumps({"stage":"SELECTED_PLAYER_SCRIPT_STRUCTURE",
+         "inline_script_count":len(inline),
+         "relevant_script_count":len(active),
+         "patterns":{needle:sum(len(re.findall(pattern,js,re.I)) for js in active)
+            for needle,pattern in {
+                "fetch_calls":r"\\bfetch\\s*\\(",
+                "videojs_initializers":r"\\bvideojs\\s*\\(",
+                "source_assignments":r"\\.src\\s*\\(|\\bsources\\s*:",
+                "media_html":r"\\.m3u8|\\.mp4",
+                "network_errors":r"\\b(?:not found|failed to fetch|access denied|forbidden)\\b",
+                "csrf_or_challenge":r"csrf|captcha|challenge|turnstile",
+                "user_action_handlers":r"addEventListener\\s*\\(|\\.on\\s*\\(",
+            }.items()},
+         "all_values_redacted":True}),flush=True)
        # Inspect ONLY the exact first-party player selected by the
        # publisher's actual Play control, after its JS initializes.
        ws.send(json.dumps({"id":170,"method":"Page.navigate",
