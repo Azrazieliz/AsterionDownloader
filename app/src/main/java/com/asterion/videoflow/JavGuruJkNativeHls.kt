@@ -156,7 +156,7 @@ internal object JavGuruJkNativeHls {
         if(keyLines.size!=1 || !keyLines.single().contains("METHOD=AES-128"))
             throw IOException("Selected JK did not publish one AES-128 key")
         val spec=keyLines.single().substringAfter(":")
-        val keyRaw=Regex("""(?:^|,)URI="([^"]{1,2200})"""")
+        val keyRaw=Regex("(?:^|,)URI=\\\"([^\\\"]{1,2200})\\\"")
             .find(spec)?.groupValues?.get(1)
             ?:throw IOException("Selected JK AES key URL is missing")
         val keyUrl=child(variant,keyRaw)
