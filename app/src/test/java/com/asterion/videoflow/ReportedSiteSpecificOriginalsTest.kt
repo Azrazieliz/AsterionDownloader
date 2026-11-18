@@ -457,4 +457,29 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(Mp4HentaiPublishedHost.selectedMirrorHandoff(clicked,
             "https://rapidgator.net/file/12345678901234567890123456789012/Example.mp4.html?ad=1"))
     }
+
+    @Test fun mp4HentaiSelectedMirrorUsesAllOfficialSameFileHostersOnly() {
+        val mirror="https://www.mirrored.to/files/DF7298C6/"
+        val first="https://www.mirrored.to/getlink?hid=one01&tid=host01"
+        val second="https://www.mirrored.to/getlink?hid=two02&tid=host02"
+        val html="""
+          <article>
+            <a href="/getlink?hid=one01&tid=host01">Freedl file host</a>
+            <a href="/getlink?hid=two02&tid=host02">Rapidgator file host</a>
+            <a href="/getlink?hid=one01&tid=host01">Duplicate</a>
+            <aside class="ads"><a href="/getlink?hid=ad123&tid=ad234">Ad</a></aside>
+            <a href="https://evil.example/getlink?hid=one01&tid=host01">Untrusted host</a>
+            <a href="/getlink?hid=one01&tid=host01&extra=ad">Untrusted query</a>
+            <a href="https://rapidgator.net/file/aaaaaaaaaa/Other.mp4.html">
+              Unattributed direct link
+            </a>
+          </article>
+        """.trimIndent()
+        assertEquals(listOf(first,second),
+            Mp4HentaiPublishedHost.selectedMirrorDownloadRoutes(
+                Jsoup.parse(html,mirror),mirror))
+        assertTrue(Mp4HentaiPublishedHost.selectedMirrorDownloadRoutes(
+            Jsoup.parse(html,mirror),
+            "https://www.mirrored.to/files/WRONG_ID/").isEmpty())
+    }
 }
