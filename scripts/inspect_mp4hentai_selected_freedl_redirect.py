@@ -7,7 +7,7 @@ Inspect first-party Freedl.link HTTP redirects and HTML download controls;
 do not automatically follow or download unknown off-site content. Print no
 signed URLs, cookies, file IDs, or challenge tokens. Not acceptance by itself.
 """
-import html,json,re,sys,urllib.parse,urllib.request,urllib.error
+import html,json,re,sys,urllib.parse,urllib.request,urllib.error,http.cookiejar
 from html.parser import HTMLParser
 from inspect_mp4hentai_mirror_normal_click import main as selected
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
@@ -34,7 +34,9 @@ def main(return_selected_terminal=False):
  items=selected(return_selected_freedlink=True)
  if not isinstance(items,list) or len(items)!=1:
   raise RuntimeError("Exact owner-selected file host not unique")
- current=items[0];seen=set();opener=urllib.request.build_opener(NoRedirect)
+ current=items[0];seen=set();cookies=http.cookiejar.CookieJar()
+ opener=urllib.request.build_opener(NoRedirect,
+      urllib.request.HTTPCookieProcessor(cookies))
  referer=REFERER
  for hop in range(5):
   p=urllib.parse.urlsplit(current)
@@ -99,7 +101,7 @@ def main(return_selected_terminal=False):
      "complete_original_verified":False}),flush=True)
   if return_selected_terminal:
    return {"selected_url":current,"referer":referer,"mime":mime,
-           "http":code,"html":content}
+           "http":code,"html":content,"cookies":cookies}
   return 0 if code in (200,206) else 4
  return 5
 if __name__=="__main__":
