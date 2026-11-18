@@ -52,6 +52,12 @@ internal object PornhubOriginalSource {
             Regex("""(?i)^/[A-Za-z0-9_./\-]{12,700}\.m3u8$""")) &&
             !FullLengthVideoPolicy.isExplicitPreview("",url)
     }
+    /** The same exact selected watch/CDN conditions that authorize real
+     * publisher HLS also scope its proven PC video+audio mux settings.
+     * Never apply this transfer policy to unrelated pages or CDNs. */
+    fun selectedHlsTransfer(selectedWatchUrl:String,manifestUrl:String):Boolean =
+        selectedWatch(selectedWatchUrl) && approvedHls(manifestUrl)
+
     fun published(selected:String,html:String):List<Quality> {
         if(!selectedWatch(selected) || html.length !in 200..2_000_000)
             return emptyList()
