@@ -21,7 +21,7 @@ class Videos(HTMLParser):
                 "has_src":bool(a.get("src")),"preload":a.get("preload","")[:20],
                 "autoplay":"autoplay" in a,"controls":"controls" in a,
                 "poster_present":bool(a.get("poster"))})
-def go(label):
+def go(label,return_selected=False):
     http,final,page=get(WATCH,WATCH)
     if http!=200 or urllib.parse.urlsplit(final).hostname!="jav.guru":
         raise RuntimeError("exact post not accessible")
@@ -107,6 +107,10 @@ def go(label):
             print(json.dumps({"selected_server":label,
                 "stage":"SELECTED_SOURCE_REQUEST_FAILED",
                 "error_type":type(err).__name__}),flush=True)
+    # Return only source data derived from this exact publisher-selected
+    # shortcode to an independent whole-file PC verifier. Never log URLs.
+    if return_selected:
+        return embed,candidates
 def main():
     for label in ("DD","JK"):
         try:go(label)
