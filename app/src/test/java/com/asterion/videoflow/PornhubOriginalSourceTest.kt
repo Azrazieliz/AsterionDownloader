@@ -58,6 +58,15 @@ class PornhubOriginalSourceTest {
         assertEquals(master,results.first().url)
         assertEquals(720,results.first().height)
     }
+    @Test fun combinedVideoAudioHlsSettingsAreScopedToVerifiedSelection(){
+        assertTrue(PornhubOriginalSource.selectedHlsTransfer(selected,hls))
+        assertFalse(PornhubOriginalSource.selectedHlsTransfer(
+            "https://www.pornhub.com/",hls))
+        assertFalse(PornhubOriginalSource.selectedHlsTransfer(
+            selected,"https://attacker.example/videos/abc123/source.m3u8"))
+        assertFalse(PornhubOriginalSource.selectedHlsTransfer(
+            selected,"https://hm-h.phncdn.com.evil.example/videos/abc123/source.m3u8"))
+    }
     @Test fun invalidWatchRouteAndUnrelatedAdOrHostAreRejected(){
         assertTrue(PornhubOriginalSource.published(
             "https://www.pornhub.com/",published()).isEmpty())
