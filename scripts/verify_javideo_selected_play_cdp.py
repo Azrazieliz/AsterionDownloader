@@ -5,7 +5,7 @@ Uses existing local Edge and CDP only. One exact first-party user-selected
 article, one normal Play click, observes the active selected player. Never
 solves CAPTCHA, intercepts unrelated network traffic or uses ad iframe media.
 """
-import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil,contextlib
+import json,os,re,socket,subprocess,tempfile,time,urllib.parse,urllib.request,shutil,contextlib,base64
 from pathlib import Path
 try:
     from websockets.sync.client import connect
@@ -19,7 +19,8 @@ def freeport():
 def request(port):
  with urllib.request.urlopen("http://127.0.0.1:"+str(port)+"/json",timeout=2) as r:return json.load(r)
 SELECTED_NETWORK=[]
-def selected_network(response):
+SELECTED_API_REQUESTS=[]
+def selected_network(response,request_id=None):
  url=response.get("url","")
  u=urllib.parse.urlsplit(url)
  host=u.hostname or ""
@@ -36,6 +37,9 @@ def selected_network(response):
   "has_query":bool(u.query)
  })
  if len(SELECTED_NETWORK)>450:SELECTED_NETWORK.pop(0)
+ if(host=="play.javideo.net" and u.path.startswith("/api") and
+    "json" in (response.get("mimeType") or "").lower() and request_id):
+  SELECTED_API_REQUESTS.append(request_id)
 def evaluate(ws,ident,expr):
  ws.send(json.dumps({"id":ident,"method":"Runtime.evaluate",
    "params":{"expression":expr,"returnByValue":True,"awaitPromise":True}}))
@@ -49,7 +53,7 @@ def evaluate(ws,ident,expr):
   except TimeoutError:
    continue
   if reply.get("method")=="Network.responseReceived":
-   selected_network(reply.get("params",{}).get("response",{}))
+   selected_network(reply.get("params",{}).get("response",{}),reply.get("params",{}).get("requestId"))
   if reply.get("id")!=ident:continue
   return reply.get("result",{}).get("result",{}).get("value")
  raise RuntimeError("CDP selected player evaluation timed out after 18s")
@@ -86,7 +90,7 @@ def main():
     for _ in range(25):
      ready=json.loads(ws.recv(timeout=7))
      if ready.get("method")=="Network.responseReceived":
-      selected_network(ready.get("params",{}).get("response",{}))
+      selected_network(ready.get("params",{}).get("response",{}),ready.get("params",{}).get("requestId"))
      if ready.get("id")==9:break
     stats=None
     for step in range(40):
@@ -361,6 +365,64 @@ def main():
        "error_class":type(exc).__name__,
        "network_cause":type(reason).__name__ if reason is not None else None,
        "connection_error_code":getattr(reason,"winerror",None)}),flush=True)
+    # Only inspect HTTP 200 application/json responses from the selected
+    # publisher's own player /api requests captured in this exact browser
+    # session. Output field names and media-host shapes, never signed values.
+    api_receipts=[]
+    for index,request_id in enumerate(list(dict.fromkeys(
+            SELECTED_API_REQUESTS))[:5]):
+     try:
+      ident=801+index
+      ws.send(json.dumps({"id":ident,"method":"Network.getResponseBody",
+        "params":{"requestId":request_id}}))
+      found_body=None
+      limit=time.monotonic()+12
+      while time.monotonic()<limit:
+       reply=json.loads(ws.recv(timeout=min(4,max(.1,limit-time.monotonic()))))
+       if reply.get("method")=="Network.responseReceived":
+        selected_network(reply.get("params",{}).get("response",{}),
+                         reply.get("params",{}).get("requestId"))
+       if reply.get("id")==ident:
+        found_body=reply.get("result") or {}
+        break
+      if not found_body:raise RuntimeError("CDP JSON response unavailable")
+      body=found_body.get("body") or ""
+      if found_body.get("base64Encoded"):
+       body=base64.b64decode(body).decode("utf8","replace")
+      if len(body)>800000:raise ValueError("Selected API response too large")
+      obj=json.loads(body)
+      fields=[];media=[];status={}
+      def inspect(item,depth=0):
+       if depth>6:return
+       if isinstance(item,dict):
+        for name,value in list(item.items())[:80]:
+         if(re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,35}",str(name)) and
+            not re.search(r"secret|token|cookie|key|password",name,re.I)):
+          fields.append(name)
+         if name.lower() in ("success","ok","status","code","error") and (
+              isinstance(value,(int,bool)) or value is None):
+          status[name]=value
+         inspect(value,depth+1)
+       elif isinstance(item,list):
+        for value in item[:40]:inspect(value,depth+1)
+       elif isinstance(item,str) and item.startswith("https://"):
+        u=urllib.parse.urlsplit(item)
+        if u.hostname and u.path.lower().endswith((".mp4",".m3u8",".webm",".mpd")):
+         media.append({"host":u.hostname,
+           "extension":u.path.rsplit(".",1)[-1][:8],"signed":bool(u.query)})
+      inspect(obj)
+      api_receipts.append({"valid_json":True,
+        "root_kind":type(obj).__name__,"fields":sorted(set(fields))[:50],
+        "status_flags":status,"media_shapes":media[:8],
+        "complete_original_verified":False})
+     except Exception as exc:
+      api_receipts.append({"valid_json":False,
+         "inspection_error":type(exc).__name__,
+         "complete_original_verified":False})
+    print(json.dumps({"stage":"EXACT_SELECTED_JAVIDEO_JSON_API",
+      "captured_requests":len(SELECTED_API_REQUESTS),
+      "responses":api_receipts,
+      "complete_original_verified":False}),flush=True)
     grouped={}
     for observed in SELECTED_NETWORK:
      label=(observed.get("host"),observed.get("first_route_segment"),
