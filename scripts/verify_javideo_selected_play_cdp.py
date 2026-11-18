@@ -18,11 +18,31 @@ def freeport():
  with socket.socket() as s:s.bind(("127.0.0.1",0));return s.getsockname()[1]
 def request(port):
  with urllib.request.urlopen("http://127.0.0.1:"+str(port)+"/json",timeout=2) as r:return json.load(r)
+SELECTED_NETWORK=[]
+def selected_network(response):
+ url=response.get("url","")
+ u=urllib.parse.urlsplit(url)
+ host=u.hostname or ""
+ if not (host=="play.javideo.net" or host.endswith(".vid-snap-player.com")):
+  return
+ path=u.path.split("/")
+ SELECTED_NETWORK.append({
+  "host":host,
+  "first_route_segment":path[1][:36] if len(path)>1 else "",
+  "path_extension":u.path.rsplit(".",1)[-1][-10:] if "." in u.path else "",
+  "http_status":response.get("status"),
+  "mime":response.get("mimeType","")[:70],
+  "resource_type":response.get("resourceType"),
+  "has_query":bool(u.query)
+ })
+ if len(SELECTED_NETWORK)>65:SELECTED_NETWORK.pop(0)
 def evaluate(ws,ident,expr):
  ws.send(json.dumps({"id":ident,"method":"Runtime.evaluate",
    "params":{"expression":expr,"returnByValue":True,"awaitPromise":True}}))
- for _ in range(30):
+ for _ in range(100):
   reply=json.loads(ws.recv(timeout=7))
+  if reply.get("method")=="Network.responseReceived":
+   selected_network(reply.get("params",{}).get("response",{}))
   if reply.get("id")!=ident:continue
   return reply.get("result",{}).get("result",{}).get("value")
  raise RuntimeError("CDP response expired")
@@ -238,6 +258,13 @@ def main():
         except Exception as exc:
          print(json.dumps({"stage":"ACTUAL_SELECTED_EMBEDDED_FRAME_RUNTIME",
            "error_class":type(exc).__name__}),flush=True)
+       # Observe HTTP statuses for ONLY the original first-party
+       # player and its already-observed video delivery host. No cookies,
+       # media identifiers or signed URL values are logged.
+       ws.send(json.dumps({"id":169,"method":"Network.enable","params":{}}))
+       for _ in range(16):
+        reply=json.loads(ws.recv(timeout=6))
+        if reply.get("id")==169:break
        # Inspect ONLY the exact first-party player selected by the
        # publisher's actual Play control, after its JS initializes.
        ws.send(json.dumps({"id":170,"method":"Page.navigate",
@@ -299,6 +326,10 @@ def main():
      except Exception as exc:
       print(json.dumps({"stage":"FIRST_PARTY_JAVIDEO_PLAYER",
        "error_class":type(exc).__name__}),flush=True)
+    print(json.dumps({"stage":"SELECTED_FIRST_PARTY_VIDEO_NETWORK_STATUS",
+      "observed":len(SELECTED_NETWORK),
+      "status_shapes":SELECTED_NETWORK[-20:],
+      "completed_original_verified":False}),flush=True)
     if len(set(exact))==1:
      print(json.dumps({"status":"EXACT_STREAMTAPE_IFRAME_FOUND_NOT_FULL_MEDIA"}),flush=True)
      return 0
