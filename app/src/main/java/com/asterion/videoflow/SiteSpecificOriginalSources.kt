@@ -192,6 +192,36 @@ internal object SiteSpecificOriginalSources {
         return (scriptQualities+out.values).distinctBy{it.url}
     }
 
+    /** The owner's selected NHPlayer /v/id publishes its ONLY first-party
+     * server in .servers li[data-id]. The /v/ page is merely a selector,
+     * not a media file; its first server is /player.php?<publisher-token>.
+     * Never infer a second server, reuse unrelated iframe media, or invent a
+     * signed URL. HTML verification/CAPTCHA remains user-authorized only.
+     */
+    internal fun selectedNhPlayerServer(iframe:String,html:String):String? {
+        val page=runCatching{URI(iframe)}.getOrNull()?:return null
+        if(page.scheme!="https" || page.host!="nhplayer.com" ||
+            page.userInfo!=null || page.port!=-1 ||
+            !page.rawQuery.isNullOrBlank() || page.rawFragment!=null ||
+            !Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                .matches(page.path.orEmpty()))return null
+        val document=Jsoup.parse(html,iframe)
+        val published=LinkedHashSet<String>()
+        for(item in document.select(".servers li[data-id],"+
+                "ul.servers li[data-id],#servers li[data-id]").take(12)){
+            val raw=item.attr("data-id").trim()
+            if(raw.isBlank() || raw.length>2200)continue
+            val dest=runCatching{page.resolve(raw)}.getOrNull()?:continue
+            if(dest.scheme!="https" || dest.host!="nhplayer.com" ||
+                dest.userInfo!=null || dest.port!=-1 ||
+                dest.path!="/player.php" || dest.rawFragment!=null ||
+                dest.rawQuery.isNullOrBlank() ||
+                dest.rawQuery.length>1500)continue
+            published.add(dest.toString())
+        }
+        return published.singleOrNull()
+    }
+
     private fun fromPlayer(context:Context,doc:Document,selected:String,
                            owner:String):List<Source>{
         // A publisher may insert its selected iframe only after the watch
@@ -234,6 +264,36 @@ internal object SiteSpecificOriginalSources {
                 }
             }
         }
+        if(owner=="uncensoredhentai.xxx"){
+            val exactServer=selectedNhPlayerServer(playerPage,player.outerHtml())
+            if(exactServer!=null){
+                // The publisher-declared selected NHPlayer server is
+                // independent of the watch-page cookies. Normal user/site
+                // verification must complete; never forge challenge tokens.
+                val response=runCatching {
+                    Jsoup.connect(exactServer)
+                        .userAgent(NativeMediaDownloader.USER_AGENT)
+                        .header("Referer",playerPage)
+                        .ignoreHttpErrors(true).followRedirects(false)
+                        .timeout(14_000).maxBodySize(1_600_000)
+                        .apply {
+                            NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                            SiteSession.cookie(context,exactServer)
+                                ?.takeIf{it.isNotBlank()}
+                                ?.let{header("Cookie",it)}
+                        }.execute()
+                }.getOrNull()
+                if(response!=null && response.statusCode() in 200..299 &&
+                    response.contentType().orEmpty()
+                        .contains("html",ignoreCase=true)){
+                    val parsed=Jsoup.parse(response.body(),exactServer)
+                    if(!SiteSpecificPlayerPolicy.accessGate(parsed)){
+                        player=parsed
+                        playerPage=exactServer
+                    }
+                }
+            }
+        }
         if(owner=="fullporner.com"){
             val originals=fullPornerSelectedPlayer(player,selected,playerPage)
             if(originals.isNotEmpty())return originals
@@ -253,8 +313,12 @@ internal object SiteSpecificOriginalSources {
         else null
         if(!html.isNullOrBlank()){
             val rendered=Jsoup.parse(html,playerPage)
-            val media=(mediaElements(rendered,playerPage,
-                "main .video-player video[src],video[src][data-duration]")+
+            val css="main .video-player video[src],video[src][data-duration]"+
+                (if(owner=="uncensoredhentai.xxx")
+                    ",#player video[src],#player video source[src],"+
+                    ".jwplayer video[src],.jwplayer video source[src]"
+                else "")
+            val media=(mediaElements(rendered,playerPage,css)+
                 jsSources(rendered,playerPage)).distinctBy{it.url}
             if(media.isNotEmpty())return media
         }
