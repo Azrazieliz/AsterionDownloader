@@ -40,9 +40,17 @@ internal object EmbeddedYtDlpTransfer {
         val havenEpisodeHls=!referer.isNullOrBlank() &&
             HentaiHavenEpisodeSource.isEpisode(referer) &&
             HentaiHavenEpisodeSource.isApprovedHls(url)
-        put("format",if(havenEpisodeHls)
-            "bv[height<=480]+ba/bv+ba" else format)
-        if(havenEpisodeHls){
+        // PC complete-file verification succeeded using separate HLS video
+        // and audio with MPEG-TS fragments and final Matroska mux. Scope
+        // identically to the exact selected Pornhub watch + publisher CDN.
+        val pornhubSelectedHls=!referer.isNullOrBlank() &&
+            PornhubOriginalSource.selectedHlsTransfer(referer,url)
+        put("format",when {
+            havenEpisodeHls -> "bv[height<=480]+ba/bv+ba"
+            pornhubSelectedHls -> "bv+ba/b"
+            else -> format
+        })
+        if(havenEpisodeHls || pornhubSelectedHls){
             put("hls_use_mpegts",true)
             put("merge_output_format","mkv")
         }
