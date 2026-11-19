@@ -59,6 +59,8 @@ object TorrentSearchUi {
         }
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         val records=ArrayList<CatalogHit>()
+        val searchGeneration=java.util.concurrent.atomic.AtomicLong()
+        var searchWorker:Thread?=null
         fun draw(){
             results.removeAllViews()
             for(hit in records.take(80)){
@@ -79,8 +81,8 @@ object TorrentSearchUi {
                         ellipsize=android.text.TextUtils.TruncateAt.END
                     },ui.lp(a,4))
                 item.addView(details,LinearLayout.LayoutParams(0,-2,1f))
-                item.addView(ui.action(a,"FILES",false){
-                    status.text="Retrieving torrent metadata; select files before transfer"
+                item.addView(ui.action(a,"CHECK FILES",false){
+                    status.text="Checking this release's real torrent file tree"
                     ResourceDownloads.route(a,hit.url,when(area){
                         TorrentArea.GAMES->"Games"
                         TorrentArea.BOOKS->"Books"
@@ -96,17 +98,29 @@ object TorrentSearchUi {
             val term=field.text.toString().trim()
             if(term.length<2){Toast.makeText(a,"Enter a title",Toast.LENGTH_LONG).show();return@action}
             pref.edit().putString(area.name+"_query",term).apply()
-            status.text="Searching multiple torrent libraries…"
+            status.text="Searching available torrent libraries…"
+            val ticket=searchGeneration.incrementAndGet()
+            searchWorker?.interrupt()
             records.clear();draw()
-            thread(name="asterion-torrent-query"){
+            searchWorker=thread(name="asterion-torrent-query"){
                 val response=runCatching{MultiTorrentSearch.search(term,area)}
                 a.runOnUiThread{
+                    if(a.isDestroyed || a.isFinishing ||
+                        ticket!=searchGeneration.get() ||
+                        !results.isAttachedToWindow)return@runOnUiThread
                     response.onSuccess{(hits,errors)->
-                        records+=hits.filter{CatalogDiscovery.relevance(term,it.title)>0}.take(80)
+                        records+=hits.filter{
+                            CatalogDiscovery.relevance(term,it.title)>0
+                        }.take(80)
                         status.text=records.size.toString()+" results"+
-                            if(errors.isEmpty())"" else "\nUnavailable: "+errors.take(3).joinToString(" | ").take(220)
+                            if(errors.isEmpty())"" else
+                                "\nUnavailable: "+
+                                    errors.take(2).joinToString(" | ").take(160)
                         draw()
-                    }.onFailure{status.text="Torrent search failed: "+it.message}
+                    }.onFailure{
+                        status.text="Torrent search unavailable: "+
+                            (it.message?:"Network error").take(180)
+                    }
                 }
             }
         },ui.lp(a,9))
