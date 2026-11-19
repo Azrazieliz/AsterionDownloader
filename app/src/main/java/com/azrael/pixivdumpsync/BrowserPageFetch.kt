@@ -359,7 +359,7 @@ object BrowserPageFetch {
                             const onlyHentaiVideo=(()=>{
                                 if(selectedPlayerHost!=='onlyhentaistuff.com')
                                     return '';
-                                const match=/^\\/videos\\/([0-9]{1,12})\\/[A-Za-z0-9_-]{3,250}\\/?$/
+                                const match=/^\/videos\/([0-9]{1,12})\/[A-Za-z0-9_-]{3,250}\/?$/
                                     .exec(location.pathname);
                                 const config=typeof window.flashvars==='object'
                                     ?window.flashvars:null;
@@ -384,7 +384,7 @@ object BrowserPageFetch {
                                 try{
                                     const u=new URL(source);
                                     if(u.protocol!=='https:' ||
-                                        !/\\.(mp4|webm|m4v|m3u8|mpd)$/i
+                                        !/\.(mp4|webm|m4v|m3u8|mpd)$/i
                                             .test(u.pathname) ||
                                         /preview|teaser|sample|trailer/i
                                             .test(u.pathname))return '';
