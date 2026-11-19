@@ -51,9 +51,21 @@ def main():
       "encoded":value.startswith(("function/","enc:","base64:"))}
   p=urllib.parse.urlsplit(url)
   parts=[x for x in p.path.split("/") if x]
+  selected_id=parts[1] if len(parts)==3 else ""
+  declared_ids=set(re.findall(r"""(?i)(?:['"]?video_id['"]?\\s*:\\s*|\\bvideo_id\\s*=\\s*)['"]?([0-9]{1,12})""",
+      active[0])) if len(active)==1 else set()
+  js=active[0] if len(active)==1 else ""
+  script_scope=("global_var" if re.search(r"\\bvar\\s+flashvars\\s*=",js)
+      else "window_member" if "window.flashvars" in js
+      else "local_lexical" if re.search(r"\\b(?:let|const)\\s+flashvars\\s*=",js)
+      else "unknown")
   print(json.dumps({"probe":"ONLYHENTAI_SELECTED_KVS",
     "selected_path_depth":len(parts),"second_path_segment_numeric":parts[1].isdigit(),
     "script_count":len(page.scripts),"kvs_script_count":len(active),
     "kvs_script_lengths":[len(x) for x in active[:4]],
-    "player_keys":sourceNames,"publisher_original_verified":False}),flush=True)
+    "player_keys":sourceNames,
+    "selected_publisher_id_matches":declared_ids=={selected_id},
+    "kvs_script_scope":script_scope,
+    "selected_player_element_exists":bool(re.search(r"""id=['"]kt_player['"]""",html)),
+    "publisher_original_verified":False}),flush=True)
 if __name__=="__main__":main()
