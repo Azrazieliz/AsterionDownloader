@@ -8,6 +8,16 @@ import java.util.Locale
  * Image artwork/backfill activity remains visible in per-module counters.
  */
 internal object DownloadOverviewPolicy {
+    /** Historical done state is inventory, not a valid saved-file receipt.
+     * Missing MediaStore videos move from saved to needs-attention without
+     * changing the original transfer row or deleting any media. */
+    data class VideoCounts(val saved:Int,val failed:Int)
+    fun reconciledVideoCounts(done:Int,failed:Int,
+                              missingOriginals:Int):VideoCounts {
+        require(done>=0 && failed>=0 && missingOriginals in 0..done)
+        return VideoCounts(done-missingOriginals,failed+missingOriginals)
+    }
+
     private val imageExtensions=setOf("jpg","jpeg","png","gif","webp",
         "bmp","avif","heic","heif","tif","tiff","svg","jxl")
     private val nonImageExtensions=setOf("mp4","mkv","webm","mov","avi",
