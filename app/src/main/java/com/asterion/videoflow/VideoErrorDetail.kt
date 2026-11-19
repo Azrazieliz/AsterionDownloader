@@ -15,6 +15,23 @@ internal object VideoErrorDetail {
             .replace(Regex("[\\r\\n\\t]+")," ")
             .trim().take(320)
     }
+    /** Future.get() and Chaquopy may wrap InterruptedException, whose
+     * interrupt flag is usually CLEARED when thrown. Treat a real
+     * cancellation as scheduler interruption rather than exhausting the
+     * selected original's site-retry budget or discarding its partial bytes.
+     * Exact runtime class text covers JNI wrappers that cannot preserve an
+     * actual java.lang.InterruptedException instance.
+     */
+    fun workerInterrupted(t:Throwable):Boolean {
+        val chain=generateSequence(t){it.cause}.take(12).toList()
+        return chain.any{it is InterruptedException ||
+            it is java.util.concurrent.CancellationException} ||
+            chain.any{
+                it.javaClass.simpleName=="InterruptedException" ||
+                it.message?.trim() in setOf(
+                    "InterruptedException","java.lang.InterruptedException")
+            }
+    }
     fun summary(throwable:Throwable):String {
         val chain=generateSequence(throwable){it.cause}
             .take(9).toList()
