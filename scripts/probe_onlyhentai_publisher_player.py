@@ -53,7 +53,7 @@ def main():
    u=urlsplit(url)
    if (u.scheme=="https" and u.hostname in
       ("onlyhentaistuff.com","www.onlyhentaistuff.com") and
-      re.fullmatch(r"/(?:videos|video|watch)/[^/?#]+/?",u.path,re.I)
+      re.fullmatch(r"/(?:videos/[^/]+|video|watch)/[^/?#]+/?",u.path,re.I)
       and not u.query):
     if url not in links:links.append(url)
   print(json.dumps({"probe":"ONLYHENTAI_HOME",**structure(ROOT,code,mime,raw),
