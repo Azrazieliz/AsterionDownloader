@@ -396,7 +396,8 @@ internal object SiteSpecificOriginalSources {
      * the publisher-attested shortcode and its first-party /searcho/ relay
      * to the final real embed. Never give the watch page or ad to Python.
      */
-    internal fun javGuru(context:Context,doc:Document,selected:String):List<Source>{
+    internal fun javGuru(context:Context,doc:Document,selected:String,
+                         nativeJkOnly:Boolean=false):List<Source>{
         val initial=JavGuruOriginalSource.published(selected,doc.outerHtml())
         // Some Android HTTP responses provide a 200 shell without the real
         // selected WordPress STREAM shortcode/inline iframe_url config. The
@@ -404,6 +405,7 @@ internal object SiteSpecificOriginalSources {
         // authorized session. Inspect it only when static parsing found zero
         // actual selected controls; never use the advertising iframe.
         val streams=initial.ifEmpty {
+            if(nativeJkOnly)return@ifEmpty emptyList()
             if(!BrowserPageFetch.publicEligible(selected) &&
                 !SiteSession.bound(context,selected))emptyList()
             else runCatching {
@@ -418,7 +420,8 @@ internal object SiteSpecificOriginalSources {
         // window or failed with HTTP 403. Prefer that verified JK contract
         // before other buttons published by the SAME selected article.
         // Unavailable JK falls through to LU/SB/VO/DD without substitution.
-        val order=streams.sortedBy { stream ->
+        val order=(if(nativeJkOnly)streams.filter{it.server=="JK"}
+            else streams).sortedBy { stream ->
             when(stream.server) {
                 "JK" -> 0
                 "LU" -> 1
