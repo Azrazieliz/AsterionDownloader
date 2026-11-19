@@ -30,13 +30,14 @@ internal object EmbeddedYtDlpTransfer {
         paths.asMap()[PyObject.fromJava("temp")]=
             PyObject.fromJava(directory.absolutePath)
         opts.asMap()[PyObject.fromJava("paths")]=paths
-        // Verified on the owner's PC against one selected HentaiHaven
-        // episode's REAL octopusmanifest HLS: separate 360p video "800"
-        // and audio-English. The generic best/mp4-only selector chooses
-        // no valid combined format; MPEG-TS then preserves downloaded
-        // fragments until FFmpeg merges video and audio to Matroska.
-        // This policy is strictly limited to the publisher-attributed
-        // HentaiHaven episode HLS, never generic manifests or other sites.
+        // Selected HentaiHaven publishes separate audio and video.
+        // Its current manifest labels its only audio "audio-English" (en),
+        // and has English subtitles, but declares NO Japanese audio.
+        // That does not certify VOSTA: never silently select English-
+        // labelled audio or claim that subtitles change a dub to original.
+        // Japanese-original voice + English subtitles is required, with
+        // any unverified/English-only episode held until actual evidence.
+        // This restriction applies solely to the exact selected episode.
         val havenEpisodeHls=!referer.isNullOrBlank() &&
             HentaiHavenEpisodeSource.isEpisode(referer) &&
             HentaiHavenEpisodeSource.isApprovedHls(url)
@@ -46,13 +47,31 @@ internal object EmbeddedYtDlpTransfer {
         val pornhubSelectedHls=!referer.isNullOrBlank() &&
             PornhubOriginalSource.selectedHlsTransfer(referer,url)
         put("format",when {
-            havenEpisodeHls -> "bv[height<=480]+ba/bv+ba"
+            havenEpisodeHls -> HentaiVostaPolicy.selectedAudioFormat
             pornhubSelectedHls -> "bv+ba/b"
             else -> format
         })
         if(havenEpisodeHls || pornhubSelectedHls){
             put("hls_use_mpegts",true)
             put("merge_output_format","mkv")
+        }
+        if(havenEpisodeHls){
+            // Subtitles belong in the playable MKV, not a lost VTT sidecar
+            // from the temporary staging directory. Require the exact
+            // English subtitle stream from the selected episode; a missing
+            // caption or original-language audio must never be a receipt.
+            put("writesubtitles",true)
+            put("subtitlesformat","best")
+            val languages=builtins.callAttr("list")
+            languages.callAttr("append",
+                HentaiVostaPolicy.englishSubtitleLanguage)
+            opts.asMap()[PyObject.fromJava("subtitleslangs")]=languages
+            val postprocessors=builtins.callAttr("list")
+            val embed=builtins.callAttr("dict")
+            embed.asMap()[PyObject.fromJava("key")]=
+                PyObject.fromJava("FFmpegEmbedSubtitle")
+            postprocessors.callAttr("append",embed)
+            opts.asMap()[PyObject.fromJava("postprocessors")]=postprocessors
         }
         put("noplaylist",true)
         put("continuedl",true)
