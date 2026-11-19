@@ -113,10 +113,26 @@ object MultiTorrentSearch {
     }
     private fun searchGGBases(q:String):List<CatalogHit>{
         val url="https://www.ggbases.com/search.so?p=0&title="+enc(q)
-        val response=Jsoup.connect(url).timeout(20000)
+        val response=Jsoup.connect(url).timeout(16000)
             .userAgent("Mozilla/5.0 (Linux; Android 17) Chrome/131.0")
-            .maxBodySize(3_000_000).get()
-        return ggbasesListing(response.outerHtml(),q)
+            .ignoreHttpErrors(true).followRedirects(false)
+            .maxBodySize(3_000_000).execute()
+        if(response.statusCode() in 300..399){
+            val location=response.header("Location").orEmpty()
+            require(location.startsWith("https://www.ggbases.com/")){
+                "Provider redirects away from HTTPS; not followed"
+            }
+            val next=Jsoup.connect(location).timeout(14000)
+                .userAgent("Mozilla/5.0 (Linux; Android 17) Chrome/131.0")
+                .ignoreHttpErrors(true).followRedirects(false)
+                .maxBodySize(3_000_000).execute()
+            require(next.statusCode() in 200..299){"Provider HTTPS "+next.statusCode()}
+            return ggbasesListing(next.body(),q)
+        }
+        require(response.statusCode() in 200..299){
+            "Provider HTTPS "+response.statusCode()
+        }
+        return ggbasesListing(response.body(),q)
     }
 
     fun search(q:String):Pair<List<CatalogHit>,List<String>> = search(q,TorrentArea.GAMES)
@@ -124,16 +140,18 @@ object MultiTorrentSearch {
     fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
         val hits=ArrayList<CatalogHit>()
         val errors=ArrayList<String>()
+        val providers=ArrayList<Pair<String,()->List<CatalogHit>>>()
         val bit=when(area){
             TorrentArea.GAMES->6;TorrentArea.BOOKS->9;TorrentArea.ADULT->10
         }
         val bay=when(area){
             TorrentArea.GAMES->400;TorrentArea.BOOKS->600;TorrentArea.ADULT->500
         }
+        // Register independently bounded existing providers. Earlier
+        // sequential 14–20s network timeouts multiplied across six sites,
+        // leaving the entire search looking stuck for more than a minute.
         fun provider(name:String,run:()->List<CatalogHit>){
-            runCatching{run()}.onSuccess{hits+=it}.onFailure{
-                errors+=name+": "+(it.message?:"Unavailable")
-            }
+            providers+=name to run
         }
         provider("Bitsearch"){
             bitsearch(request("https://bitsearch.eu/api/v1/search?q="+enc(q)+
@@ -182,6 +200,37 @@ object MultiTorrentSearch {
                     .userAgent("Mozilla/5.0").timeout(14000).execute().body()
                 CatalogDiscovery.torrentRss(data,url,"Nyaa")
             }
+        }
+        val pool=java.util.concurrent.Executors.newFixedThreadPool(
+            minOf(4,providers.size.coerceAtLeast(1)))
+        val completion=java.util.concurrent.ExecutorCompletionService<
+            Pair<String,Result<List<CatalogHit>>>>(pool)
+        val pending=providers.map{it.first}.toMutableSet()
+        try{
+            for((name,task) in providers){
+                completion.submit(java.util.concurrent.Callable{
+                    name to runCatching{task()}
+                })
+            }
+            val deadline=System.nanoTime()+
+                java.util.concurrent.TimeUnit.SECONDS.toNanos(28)
+            repeat(providers.size){
+                val left=(deadline-System.nanoTime()).coerceAtLeast(0L)
+                if(left==0L || Thread.currentThread().isInterrupted)return@repeat
+                val outcome=completion.poll(left,
+                    java.util.concurrent.TimeUnit.NANOSECONDS)?:return@repeat
+                val (providerName,result)=outcome.get()
+                pending.remove(providerName)
+                result.onSuccess{hits+=it}.onFailure{
+                    errors+=providerName+": "+(it.message?:"Unavailable")
+                }
+            }
+            for(name in pending)
+                errors+=name+": unavailable within search deadline"
+        }finally{
+            // Cancel late network reads when the owner navigates away or
+            // requests a newer search. No zombie provider threads.
+            pool.shutdownNow()
         }
         return hits.filter{area!=TorrentArea.GAMES || !GameTorrentPolicy.clearlyNonGameTitle(it.title)}.distinctBy{
             if(it.url.startsWith("magnet:"))it.url.substringAfter("urn:btih:").substringBefore("&").lowercase()
