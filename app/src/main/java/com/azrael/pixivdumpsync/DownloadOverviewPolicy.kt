@@ -37,7 +37,10 @@ internal object DownloadOverviewPolicy {
         val complete=numbers.groupValues[1].toLongOrNull()?:return null
         val expected=numbers.groupValues[2].toLongOrNull()?:return null
         if(expected<=0L || complete>expected)return null
-        return (complete*100L/expected).toInt()
+        // Fragment completion alone is NOT a verified playable file.
+        // Reserve 100% for the final validated MediaStore receipt; HLS
+        // still requires ordered assembly, track checks and publication.
+        return (complete*100L/expected).toInt().coerceAtMost(95)
     }
 
     fun isLiveFile(state:String,source:String,filename:String,mime:String)=
