@@ -657,6 +657,36 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "id=? AND state NOT IN ('done','dismissed')",
             arrayOf(id.toString()))==1
     }
+    /** Acknowledge and remove terminal error cards without erasing the
+     * original URL/title, the exact failure reason, the event history or
+     * any saved media. A 'dismissed' tombstone prevents background backfill
+     * from silently recreating the same failed selected task.
+     *
+     * Retry cooldowns, live jobs and completed originals are NOT touched.
+     */
+    fun clearTerminalFailures():Int {
+        val statement=writableDatabase.compileStatement(
+            "UPDATE videos SET state='dismissed', progress=0, retry_after=0,"+
+            "lease=lease+1,updated=? "+
+            "WHERE state IN ('error','full_only_hold')")
+        statement.use{
+            it.bindLong(1,System.currentTimeMillis())
+            return it.executeUpdateDelete()
+        }
+    }
+    fun clearTerminalFailure(id:Long):Boolean {
+        val cv=ContentValues().apply{
+            put("state","dismissed")
+            put("progress",0)
+            put("retry_after",0L)
+            put("lease",System.currentTimeMillis())
+            put("updated",System.currentTimeMillis())
+        }
+        return writableDatabase.update("videos",cv,
+            "id=? AND state IN ('error','full_only_hold')",
+            arrayOf(id.toString()))==1
+    }
+
     fun runningIds():List<Long>{
         val ids=ArrayList<Long>()
         readableDatabase.rawQuery(
