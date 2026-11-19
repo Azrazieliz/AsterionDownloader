@@ -152,13 +152,8 @@ object UnifiedDownloadsUi {
                         Regex("""[1-9][0-9]{0,6}/[1-9][0-9]{0,6} fragments""")
                             .matches(it)
                     }
-                val hlsCompletion=hlsFragments?.let{parts->
-                    val numbers=parts.substringBefore(' ').split('/')
-                    val completed=numbers.getOrNull(0)?.toLongOrNull()?:0L
-                    val expected=numbers.getOrNull(1)?.toLongOrNull()?:0L
-                    if(expected>0L && completed in 0..expected)
-                        (completed*100L/expected).toInt() else null
-                }
+                val hlsCompletion=DownloadOverviewPolicy.hlsCompletion(
+                    hlsFragments)
                 val state=when{
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
