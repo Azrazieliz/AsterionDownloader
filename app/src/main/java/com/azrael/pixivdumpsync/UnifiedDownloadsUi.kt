@@ -659,6 +659,12 @@ object UnifiedDownloadsUi {
                     TorrentVerifiedExport.request(a,torrent.id)
                 }else if(torrent.stage=="EXPORTED"){
                     TorrentVerifiedExport.open(a,torrent.id)
+                }else if(torrent.stage in setOf("QUEUED","WAITING_PEERS")){
+                    // Read the existing isolated torrent ledger and let the
+                    // owner inspect/choose an explicit recovery. Merely opening
+                    // Manage MUST NOT load libtorrent or resume a torrent that
+                    // previously coincided with a whole-device crash.
+                    TorrentTransfers.showQueue(a)
                 }else{
                 val action=when(torrent.stage){
                     "TRANSFERRING"->TorrentTransferService.PAUSE
@@ -691,6 +697,7 @@ object UnifiedDownloadsUi {
                 actionText=when(torrent.stage){
                     "TRANSFERRING"->"PAUSE"
                     "PAUSED","FAILED"->"RESUME"
+                    "QUEUED","WAITING_PEERS"->"INSPECT / RECOVER"
                     "QUARANTINED"->"EXPORT VERIFIED FILES"
                     "EXPORTED"->"OPEN"
                     else->null
@@ -698,7 +705,8 @@ object UnifiedDownloadsUi {
                 receivedBytes=torrent.verifiedBytes,
                 totalBytes=torrent.wantedBytes,
                 hasPrimaryAction=torrent.stage in setOf(
-                    "TRANSFERRING","PAUSED","FAILED","QUARANTINED","EXPORTED"),
+                    "TRANSFERRING","PAUSED","FAILED","QUEUED","WAITING_PEERS",
+                    "QUARANTINED","EXPORTED"),
                 key="torrent:"+torrent.id,
                 transferStage=torrent.stage,
                 transferUpdated=torrent.updated)
