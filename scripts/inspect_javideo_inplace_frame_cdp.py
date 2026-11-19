@@ -135,18 +135,23 @@ def main():
                   ready:document.readyState,videoCount:document.querySelectorAll('video').length,
                   videoReady:v?.readyState??null,videoNetwork:v?.networkState??null,
                   videoError:v?.error?.code??null,duration:Number.isFinite(v?.duration)?Math.round(v.duration):null,
-                  srcHost:u?.hostname||null,srcExt:u?.pathname.split('.').pop().slice(0,8)||null,
+                  srcHost:src?(u?.hostname||null):null,srcExt:src?(u?.pathname.split('.').pop().slice(0,8)||null):null,
                   srcPresent:!!src,playerTarget:click===v?'video':'button',
                   rect:b?{x:b.left,y:b.top,w:b.width,h:b.height}:null};
             })()"""
-            state=js(ws,400,inspect,ctx)
+            state=None
+            for poll in range(40):
+                state=js(ws,1400+poll,inspect,ctx)
+                if state and state.get("ready") in ("interactive","complete") and (
+                      state.get("videoCount",0)>0 or state.get("srcPresent")):break
+                time.sleep(.6)
             if not state:raise RuntimeError("Selected isolated frame did not evaluate")
             print(json.dumps({"stage":"SELECTED_JAVIDEO_INPLACE_INITIAL",
                 **{k:v for k,v in state.items() if k!="rect"},
                 "media_verified":False}),flush=True)
             if not state.get("srcPresent") and state.get("rect"):
                 rect=state["rect"]
-                parent=js(ws,401,r"""(() => {
+                parent=js(ws,900,r"""(() => {
                     const f=document.querySelector(
                       '.embed-responsive.player:not(.d-none) iframe[src]');
                     if(!f)return null;
@@ -164,13 +169,13 @@ def main():
                              ("mouseMoved",{}),
                              ("mousePressed",{"button":"left","clickCount":1}),
                              ("mouseReleased",{"button":"left","clickCount":1}))):
-                            answer=cdp(ws,440+i,"Input.dispatchMouseEvent",
+                            answer=cdp(ws,920+i,"Input.dispatchMouseEvent",
                                 {"type":kind,"x":x,"y":y,**extra})
                             if "error_code" in answer:ok=False;break
                         print(json.dumps({"stage":"SELECTED_JAVIDEO_INPLACE_GESTURE",
                             "same_selected_frame":True,"real_mouse":ok}),flush=True)
                         for i in range(25):
-                            state=js(ws,480+i,inspect,ctx) or {}
+                            state=js(ws,1000+i,inspect,ctx) or {}
                             if state.get("srcPresent") and (state.get("videoReady") or 0)>=1:break
                             time.sleep(.55)
                         print(json.dumps({"stage":"SELECTED_JAVIDEO_INPLACE_AFTER_GESTURE",
