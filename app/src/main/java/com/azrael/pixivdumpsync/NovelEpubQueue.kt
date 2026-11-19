@@ -113,6 +113,31 @@ class NovelEpubQueue(context:Context):
      * any cached chapters or the existing EPUB file. Manual re-adding this
      * exact URL reactivates the subscription.
      */
+    /** Per-book pause and cancel persist across process death. No chapter
+     * cache or existing successfully saved book is deleted.
+     */
+    fun pause(url:String):Boolean =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","PAUSED");put("retry_after",0L)
+            put("last_update",System.currentTimeMillis())
+        },"url=? AND state IN ('WORKING','PENDING','RETRY','ERROR','WAIT_LOGIN')",
+            arrayOf(url))>0
+    fun resumePaused(url:String):Boolean =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","PENDING");put("retry_after",0L)
+            putNull("last_error")
+            put("last_update",System.currentTimeMillis())
+        },"url=? AND state='PAUSED'",arrayOf(url))>0
+    fun wasStopped(url:String):Boolean =
+        readableDatabase.rawQuery(
+            "SELECT state FROM novels WHERE url=? LIMIT 1",arrayOf(url))
+            .use{c->c.moveToFirst() &&
+                c.getString(0) in setOf("PAUSED","DISMISSED")}
+    fun cancel(url:String):Boolean =
+        writableDatabase.update("novels",ContentValues().apply{
+            put("state","DISMISSED");put("retry_after",0L)
+            put("sync_enabled",0);put("last_update",System.currentTimeMillis())
+        },"url=? AND state NOT IN ('DONE','DISMISSED')",arrayOf(url))>0
     fun dismiss(url:String):Boolean =
         writableDatabase.update("novels",ContentValues().apply{
             put("state","DISMISSED");put("sync_enabled",0)
@@ -214,7 +239,7 @@ class NovelEpubQueue(context:Context):
             put("fingerprint",fingerprint);put("last_check",System.currentTimeMillis())
             put("retry_after",0);putNull("last_error")
             put("last_update",System.currentTimeMillis())
-        },"url=?",arrayOf(url))
+        },"url=? AND state='WORKING'",arrayOf(url))
     }
     /** Only network-transient failures retry automatically. A broken
      * parser or missing chapter is not a connection failure: hold the job
@@ -254,7 +279,7 @@ class NovelEpubQueue(context:Context):
                 System.currentTimeMillis()+delay,notBeforeEpochMs) else 0L)
             put("last_error",error.take(200))
             put("last_update",System.currentTimeMillis())
-        },"url=?",arrayOf(item.url))
+        },"url=? AND state='WORKING'",arrayOf(item.url))
     }
 
     /** Resume only the blocked novels belonging to the newly connected host. */
