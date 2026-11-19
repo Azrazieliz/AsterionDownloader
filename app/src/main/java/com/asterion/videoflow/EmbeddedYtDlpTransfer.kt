@@ -30,14 +30,11 @@ internal object EmbeddedYtDlpTransfer {
         paths.asMap()[PyObject.fromJava("temp")]=
             PyObject.fromJava(directory.absolutePath)
         opts.asMap()[PyObject.fromJava("paths")]=paths
-        // Selected HentaiHaven publishes separate audio and video.
-        // Its current manifest labels its only audio "audio-English" (en),
-        // and has English subtitles, but declares NO Japanese audio.
-        // That does not certify VOSTA: never silently select English-
-        // labelled audio or claim that subtitles change a dub to original.
-        // Japanese-original voice + English subtitles is required, with
-        // any unverified/English-only episode held until actual evidence.
-        // This restriction applies solely to the exact selected episode.
+        // HentaiHaven's selected HLS currently declares one audio rendition
+        // with a misleading "audio-English" label. The owner confirms the
+        // selected recording has no English dub. Keep source audio and embed
+        // the publisher's English subtitles; don't block all downloads on
+        // a language-label heuristic. Never claim speech verified from tags.
         val havenEpisodeHls=!referer.isNullOrBlank() &&
             HentaiHavenEpisodeSource.isEpisode(referer) &&
             HentaiHavenEpisodeSource.isApprovedHls(url)
@@ -56,10 +53,9 @@ internal object EmbeddedYtDlpTransfer {
             put("merge_output_format","mkv")
         }
         if(havenEpisodeHls){
-            // Subtitles belong in the playable MKV, not a lost VTT sidecar
-            // from the temporary staging directory. Require the exact
-            // English subtitle stream from the selected episode; a missing
-            // caption or original-language audio must never be a receipt.
+            // Embed the actual publisher's English subtitle rendition in
+            // the final MKV rather than discarding its VTT sidecar. Spoken
+            // language cannot be established from the audio track label.
             put("writesubtitles",true)
             put("subtitlesformat","best")
             val languages=builtins.callAttr("list")
@@ -98,20 +94,7 @@ internal object EmbeddedYtDlpTransfer {
         try{
             val urls=builtins.callAttr("list")
             urls.callAttr("append",url)
-            val result=try {
-                ydl.callAttr("download",urls)
-            }catch(error:Exception){
-                if(havenEpisodeHls && Regex(
-                        """(?i)requested format is not available|requested format not available"""
-                    ).containsMatchIn(error.toString()))
-                    throw IOException(
-                        "VOSTA required: selected episode has no compatible "+
-                        "publisher-declared Japanese original-audio rendition. "+
-                        "English-labelled audio is not an automatic fallback; "+
-                        "keep this video on hold for verified original audio.",
-                        error)
-                throw error
-            }
+            val result=ydl.callAttr("download",urls)
             return result?.toString()?.toIntOrNull()
                 ?:throw IOException("Video extractor returned no exit status")
         }finally{
