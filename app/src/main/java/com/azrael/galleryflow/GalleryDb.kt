@@ -6,7 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 
-class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", null, 6) {
+class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "galleryflow.db", null, 6) {
+    private val signalContext=context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entities(
             source TEXT NOT NULL,
@@ -511,6 +512,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             "source=? AND media_id=?",
             arrayOf(source.wireName, mediaId)
         )
+        com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
     }
 
     fun markMediaComplete(media: MediaRef, result: DownloadResult, duplicateOf: String? = null) {
@@ -530,6 +532,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context, "galleryflow.db", 
             "source=? AND media_id=?",
             arrayOf(media.source.wireName, media.stableId)
         )
+        com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
     }
 
     fun findCompleteByHash(hash: String): MediaRecord? =
