@@ -152,6 +152,13 @@ object UnifiedDownloadsUi {
                         Regex("""[1-9][0-9]{0,6}/[1-9][0-9]{0,6} fragments""")
                             .matches(it)
                     }
+                val hlsCompletion=hlsFragments?.let{parts->
+                    val numbers=parts.substringBefore(' ').split('/')
+                    val completed=numbers.getOrNull(0)?.toLongOrNull()?:0L
+                    val expected=numbers.getOrNull(1)?.toLongOrNull()?:0L
+                    if(expected>0L && completed in 0..expected)
+                        (completed*100L/expected).toInt() else null
+                }
                 val state=when{
                     item.status=="done" && present->State.DONE
                     item.status=="done" || item.status=="error"->State.FAILED
@@ -185,7 +192,7 @@ object UnifiedDownloadsUi {
                         bytes>0L && hlsFragments!=null->
                             "Receiving original · "+received+" · "+hlsFragments
                         bytes>0L && item.progress>0->
-                            "Receiving original · "+received+" · engine "+item.progress+"%"
+                            "Receiving original · "+received+" · total size unknown"
                         bytes>0L->"Receiving original · "+received+
                             " · measuring HLS completion"
                         item.progress>0->"Engine reports "+item.progress+
@@ -196,8 +203,7 @@ object UnifiedDownloadsUi {
                     }
                 }
                 rows+=Row("Video",fileName(a,if(present)item.savedUri else null,item.title),
-                    info,state,if(item.status=="running" && item.progress>0)
-                        item.progress else null,item.updated,{
+                    info,state,if(state==State.ACTIVE)hlsCompletion else null,item.updated,{
                         if(!retired || state==State.DONE)when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED,State.HELD->{
@@ -230,7 +236,7 @@ object UnifiedDownloadsUi {
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
                         State.HELD->if(verifySelectedHoster)"VERIFY FILE HOST" else "RETRY"
-                        State.FAILED->if(verifySelectedHoster)"VERIFY FILE HOST" else null
+                        State.FAILED->if(verifySelectedHoster)"VERIFY FILE HOST" else "RETRY"
                         else->null
                     },
                     onRemove=if(state==State.DONE) ({
