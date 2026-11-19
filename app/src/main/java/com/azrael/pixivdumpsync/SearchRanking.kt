@@ -3,6 +3,7 @@ package com.azrael.pixivdumpsync
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
+import com.asterion.videoflow.VideoSiteProfiles
 
 /** Parsing and ranking are independent of Android and never remove user query terms. */
 enum class SearchProviderKind { SEARXNG, HTML }
@@ -86,6 +87,12 @@ object SearchRanking {
             return query.contains("v=")
         if(host=="youtu.be")return path.length>2
         if(host.contains("vimeo.com")&&Regex("^/\\d+").containsMatchIn(path))return true
+        // Approved publisher-selected articles need not contain /video:
+        // JAV Guru WordPress posts, JAVIDEO FC2 identifiers, HelloPorn
+        // video-<id>-<slug> and MP4Hentai dated posts are valid examples.
+        // Reuse the SAME exact publisher route profiles as VideoFlow; do
+        // not guess slug IDs or promote ads, category pages or site cards.
+        if(VideoSiteProfiles.isVideoPage(url))return true
         return Regex("(?i)(/(?:watch|watch-video|watching|video|videos|view_video|viewkey|movie|movies|shorts|reel|reels|clip|clips|scene|scenes|embed|post|posts)(?:[/_-]|$)|\\.(?:mp4|webm|m3u8|mpd)$)")
             .containsMatchIn(path)
     }
