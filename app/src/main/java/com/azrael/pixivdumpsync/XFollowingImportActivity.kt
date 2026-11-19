@@ -141,13 +141,49 @@ class XFollowingImportActivity:Activity(){
         },ui.lp(this,5))
         importButton=ui.action(this,"STOP & RETURN (PROGRESS SAVED)",true){
             if(discovered.isEmpty()){
-                Toast.makeText(this,"No accounts detected. Open the Following list.",Toast.LENGTH_LONG).show()
+                Toast.makeText(this,"No verified accounts detected. Open your own Following list.",Toast.LENGTH_LONG).show()
                 return@action
             }
-            // Import was already committed progressively as each virtualized cell
-            // appeared; the button only returns, never requires manual page batches.
-            Toast.makeText(this,"Saved "+discovered.size+" detected accounts ("+
-                totalNew+" new). Import stops when this browser closes.",Toast.LENGTH_LONG).show()
+            if(completed && listExtent>0 && scanCycles>=20 &&
+                discovered.size>=10){
+                // Old imports could mix unrelated suggestions with real
+                // follows. Remove only after a COMPLETE authenticated scan
+                // and explicit owner confirmation. Original saved files stay.
+                val confirmed=discovered.map{it.lowercase()}.toSet()
+                val unmatched=XPhotoQueue(this).use{db->
+                    db.allSources().filter{it.handle.lowercase() !in confirmed}
+                }
+                if(unmatched.isNotEmpty()){
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Reconcile my actual X Following?")
+                        .setMessage("The signed-in account's complete Following "+
+                            "timeline yielded "+confirmed.size+" verified profiles. "+
+                            unmatched.size+" currently saved subscriptions were "+
+                            "not in that list. Remove those subscriptions and "+
+                            "pause their pending tasks? Previously downloaded "+
+                            "photos are kept. Nothing is removed automatically "+
+                            "without this confirmation.")
+                        .setNegativeButton("Keep all",null)
+                        .setPositiveButton("Reconcile"){_,_->
+                            importWorker.execute{
+                                val removed=XPhotoQueue(applicationContext).use{db->
+                                    unmatched.count{db.removeSource(it.url);true}
+                                }
+                                runOnUiThread{
+                                    Toast.makeText(this,
+                                        "Removed $removed unverified subscriptions; "+
+                                        "saved photos kept",Toast.LENGTH_LONG).show()
+                                    setResult(RESULT_OK)
+                                    finish()
+                                }
+                            }
+                        }.show()
+                    return@action
+                }
+            }
+            Toast.makeText(this,
+                "Saved "+discovered.size+" verified accounts ("+totalNew+" new).",
+                Toast.LENGTH_LONG).show()
             setResult(RESULT_OK)
             finish()
         }
@@ -229,6 +265,10 @@ class XFollowingImportActivity:Activity(){
                 updateStatus()
         }
     private fun updateStatus() {
+        importButton.text=if(completed &&
+            listExtent>0 && scanCycles>=20 && discovered.size>=10)
+            "RECONCILE MY VERIFIED FOLLOWING LIST"
+        else "STOP & RETURN (PROGRESS SAVED)"
         label.text=if(completed)
             "Automatic scan reached the end. "+discovered.size+
                 " accounts detected, "+totalNew+" newly saved. If X limited results, resume."
