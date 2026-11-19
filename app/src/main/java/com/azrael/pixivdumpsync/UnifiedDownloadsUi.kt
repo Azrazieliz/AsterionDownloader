@@ -73,7 +73,9 @@ object UnifiedDownloadsUi {
         val receivedBytes:Long=0L,
         val onRemove:(()->Unit)?=null,
         val hasPrimaryAction:Boolean=true,
-        val key:String?=null
+        val key:String?=null,
+        val transferStage:String?=null,
+        val transferUpdated:Long=0L
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -249,7 +251,9 @@ object UnifiedDownloadsUi {
                     }) else ({
                         VideoEngine.cancelVideo(a.applicationContext,item.id)
                     }),hasPrimaryAction=!retired || state==State.DONE,
-                    key="video:"+item.id)
+                    key="video:"+item.id,
+                    transferStage=journal?.stage,
+                    transferUpdated=journal?.updated?:0L)
             }
         }
         ChapterQueue(a).use{db->
@@ -961,14 +965,23 @@ object UnifiedDownloadsUi {
 
         // A truly live file (not an image, not an incomplete cloud handoff,
         // not a paused/queued item) is the only individual row shown by default.
-        val live=rows.filter{
+        val now=System.currentTimeMillis()
+        val live=rows.filter{row->
             DownloadOverviewPolicy.isLiveFile(
-                it.state.name,it.source,it.filename,it.mime)
+                row.state.name,row.source,row.filename,row.mime) &&
+                (row.source!="Video" || (
+                    row.receivedBytes>0L &&
+                    row.transferStage in setOf("receiving","fragments") &&
+                    row.transferUpdated in (now-15_000L)..now))
         }.sortedByDescending{it.updated}
+        val resolving=rows.count{
+            it.source=="Video" && it.state==State.ACTIVE && it !in live
+        }
         val liveHeader=ui.row(a)
         liveHeader.addView(ui.text(a,"Live transfers",16f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
-        liveHeader.addView(ui.text(a,live.size.toString()+" active",
+        liveHeader.addView(ui.text(a,live.size.toString()+" transferring"+
+            (if(resolving>0)" · $resolving resolving" else ""),
             11f,ui.secondary),LinearLayout.LayoutParams(-2,-2))
         parent.addView(liveHeader,ui.lp(a,16,8))
         val livePanel=ui.card(a,14)
@@ -1051,7 +1064,7 @@ object UnifiedDownloadsUi {
                 val speed=speedLabel(item)
                 val details=ArrayList<String>()
                 if(validProgress!=null)
-                    details.add(validProgress.toString()+"% reported")
+                    details.add(validProgress.toString()+"% of known file")
                 if(item.receivedBytes>0L)
                     details.add(sizeLabel(item.receivedBytes)+" received")
                 if(speed!=null)details.add(speed)
