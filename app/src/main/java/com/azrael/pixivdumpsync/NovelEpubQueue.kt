@@ -216,18 +216,42 @@ class NovelEpubQueue(context:Context):
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(url))
     }
-    /** A blocked website must not be hammered automatically for hours.
-     * Preserve acquired chapter cache until the website account is reconnected.
+    /** Only network-transient failures retry automatically. A broken
+     * parser or missing chapter is not a connection failure: hold the job
+     * for inspection, without consuming bandwidth or losing chapter cache.
      */
+    internal object RetryDecision{
+        private val transient=Regex(
+            """(?i)(?:timed?\s*out|timeout|connection reset|connection refused|connection aborted|unknownhost|dns|no route to host|network unreachable|broken pipe|unexpected eof|socketexception|sslhandshake|temporary unavailable|\b(?:408|425|429|500|502|503|504)\b|too many requests|rate.limit)"""
+        )
+        private val permanent=Regex(
+            """(?i)(?:\b(?:404|410)\b|chapter not found|unsupported|invalid chapter|missing chapter|no supported reader|parse error|selector missing|book removed|source retired)"""
+        )
+        fun retryable(error:String,attempt:Int):Boolean=
+            attempt in 1..5 && transient.containsMatchIn(error) &&
+                !permanent.containsMatchIn(error) &&
+                !NovelAccountPolicy.needsBrowserConnection(error)
+        fun delay(error:String,attempt:Int):Long{
+            if(Regex("""(?i)(?:\b429\b|rate.limit|too many requests)""")
+                .containsMatchIn(error))return 10L*60_000L
+            val shift=(attempt-1).coerceIn(0,4)
+            return (15_000L shl shift).coerceAtMost(5L*60_000L)
+        }
+    }
     fun failure(item:NovelEpubTask,error:String,notBeforeEpochMs:Long=0L){
         val n=(item.attempts+1).coerceAtMost(30)
         val blocked=NovelAccountPolicy.needsBrowserConnection(error)
-        val delay=(60_000L shl n.coerceAtMost(7)).coerceAtMost(6*60*60_000L)
+        val retry=!blocked && RetryDecision.retryable(error,n)
+        val delay=if(retry)RetryDecision.delay(error,n) else 0L
         writableDatabase.update("novels",ContentValues().apply{
-            put("state",if(blocked)"WAIT_LOGIN" else "RETRY")
+            put("state",when{
+                blocked->"WAIT_LOGIN"
+                retry->"RETRY"
+                else->"ERROR"
+            })
             put("attempts",n)
-            put("retry_after",if(blocked)0L else maxOf(
-                System.currentTimeMillis()+delay,notBeforeEpochMs))
+            put("retry_after",if(retry)maxOf(
+                System.currentTimeMillis()+delay,notBeforeEpochMs) else 0L)
             put("last_error",error.take(200))
             put("last_update",System.currentTimeMillis())
         },"url=?",arrayOf(item.url))
