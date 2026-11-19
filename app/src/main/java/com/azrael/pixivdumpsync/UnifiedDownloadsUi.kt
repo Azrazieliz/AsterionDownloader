@@ -69,8 +69,28 @@ object UnifiedDownloadsUi {
     }
     private enum class State { ACTIVE, QUEUED, PAUSED, HELD, FAILED, DONE }
     private enum class Filter(val label:String) {
-        ALL("All"),ACTIVE("Transferring"),QUEUED("Queued"),PAUSED("Paused"),
-        HELD("Needs action"),FAILED("Failed"),DONE("Saved")
+        ALL("Unfinished"),ACTIVE("Transferring"),QUEUED("Queued"),
+        PAUSED("Paused"),HELD("Needs action"),FAILED("Failed"),DONE("Saved")
+    }
+    /** View-only filters; they never mutate the underlying transfer queue. */
+    private fun selectedFilter(
+        prefs:android.content.SharedPreferences,source:String
+    ):Filter=Filter.entries.firstOrNull{
+        it.name==prefs.getString("filter:"+source,"ALL")
+    }?:Filter.ALL
+    private fun matchesFilter(state:State,filter:Filter):Boolean =
+        if(filter==Filter.ALL)state!=State.DONE else state.name==filter.name
+    private fun clearFailedJob(a:Activity,job:Row){
+        if(job.source=="Video"){
+            job.key?.removePrefix("video:")?.toLongOrNull()?.let{id->
+                VideoDb(a).use{it.clearTerminalFailure(id)}
+            }
+        }else{
+            // Use existing durable dismissals to remove real failure totals
+            // instead of concealing an item while leaving the alert inflated.
+            job.onRemove?.invoke() ?: hideRow(a,job)
+        }
+        DownloadStateSignals.changed(a)
     }
     private data class Row(
         val source:String,val filename:String,val info:String,val state:State,
@@ -302,6 +322,7 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
+                        State.FAILED->"RETRY"
                         else->null
                     },
                     onRemove={
@@ -393,7 +414,9 @@ object UnifiedDownloadsUi {
                         state==State.QUEUED->"HOLD"
                         state==State.PAUSED->"RESUME"
                         providerCooling->"COOLDOWN"
-                        item.state=="RETRY" && state==State.HELD->"RETRY"
+                        state==State.HELD && item.state=="WAIT_LOGIN"->"CONNECT ACCOUNT"
+                        state==State.HELD->"RETRY"
+                        state==State.FAILED->"RETRY"
                         else->null
                     },
                     onRemove={
@@ -434,6 +457,7 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
+                        State.FAILED->"RETRY"
                         else->null
                     },
                     onRemove={
@@ -1420,7 +1444,30 @@ object UnifiedDownloadsUi {
                 val failures=items.filter{
                     it.state in setOf(State.FAILED,State.HELD)
                 }
-                val managed=items.filter{it.state!=State.DONE}.take(16)
+                val chosenFilter=selectedFilter(prefs,source)
+                val available=items.filter{matchesFilter(it.state,chosenFilter)}
+                val stateCounts=items.groupingBy{it.state}.eachCount()
+                val filterChips=ui.row(a)
+                for(filter in Filter.entries){
+                    val visible=filter==Filter.ALL || (if(filter==Filter.DONE)
+                        totals.saved>0 else
+                        (stateCounts[State.valueOf(filter.name)]?:0)>0)
+                    if(!visible)continue
+                    filterChips.addView(ui.chip(a,filter.label,
+                        chosenFilter==filter){
+                        prefs.edit().putString("filter:"+source,filter.name).apply()
+                        refresh()
+                    },LinearLayout.LayoutParams(-2,-2).apply{
+                        rightMargin=ui.px(a,6)
+                    })
+                }
+                card.addView(HorizontalScrollView(a).apply{
+                    isHorizontalScrollBarEnabled=false
+                    addView(filterChips)
+                },ui.lp(a,8))
+                val pageKey="page:"+source+":"+chosenFilter.name
+                val pageSize=prefs.getInt(pageKey,16).coerceIn(8,180)
+                val managed=available.take(pageSize)
                 if(source=="Video" && totals.failed>0){
                     card.addView(ui.action(a,
                         "CLEAR "+totals.failed+" FAILED · KEEP FILES",false){
@@ -1441,7 +1488,8 @@ object UnifiedDownloadsUi {
                 }
                 if(managed.isNotEmpty()){
                     card.addView(ui.text(a,
-                        "Tracked jobs · "+managed.size+" shown",
+                        chosenFilter.label+" · "+managed.size+" of "+
+                            available.size+" recent tracked jobs",
                         12f,ui.secondary,true),ui.lp(a,10,4))
                     for(job in managed){
                         val panel=LinearLayout(a).apply{
@@ -1476,16 +1524,32 @@ object UnifiedDownloadsUi {
                                 job.action();refresh()
                             },LinearLayout.LayoutParams(0,-2,1f))
                         }
-                        if(job.state in setOf(State.FAILED,State.HELD)){
+                        if(job.state==State.FAILED){
                             actions.addView(ui.action(a,"CLEAR",false){
-                                if(job.source=="Video"){
-                                    val id=job.key?.removePrefix("video:")
-                                        ?.toLongOrNull()
-                                    if(id!=null)VideoDb(a).use{
-                                        it.clearTerminalFailure(id)
-                                    }
-                                }else hideRow(a,job)
+                                clearFailedJob(a,job)
                                 refresh()
+                            },LinearLayout.LayoutParams(0,-2,1f))
+                        }else if(job.onRemove!=null &&
+                            job.state in setOf(State.ACTIVE,State.QUEUED,
+                                State.PAUSED,State.HELD,State.DONE)){
+                            actions.addView(ui.action(a,
+                                if(job.state==State.DONE)"HIDE"
+                                else if(job.state==State.ACTIVE)"CANCEL"
+                                else "DISCARD",false){
+                                if(job.state==State.ACTIVE){
+                                    android.app.AlertDialog.Builder(a)
+                                        .setTitle("Cancel this transfer?")
+                                        .setMessage("Completed originals and "+
+                                            "saved partials are retained.")
+                                        .setNegativeButton("Keep",null)
+                                        .setPositiveButton("Cancel"){_,_->
+                                            job.onRemove.invoke()
+                                            refresh()
+                                        }.show()
+                                }else{
+                                    job.onRemove.invoke()
+                                    refresh()
+                                }
                             },LinearLayout.LayoutParams(0,-2,1f))
                         }
                         if(actions.childCount>0)
@@ -1494,9 +1558,24 @@ object UnifiedDownloadsUi {
                     }
                 }else{
                     card.addView(ui.text(a,
-                        "No unfinished file jobs in this module. "+
-                            "Totals include durable background media records.",
+                        "No "+chosenFilter.label.lowercase()+
+                            " jobs in the recent queue sample. "+
+                            "Module totals include durable history.",
                         12f,ui.secondary),ui.lp(a,10))
+                }
+                if(available.size>managed.size){
+                    card.addView(ui.action(a,
+                        "SHOW MORE · "+(available.size-managed.size)+
+                            " additional tracked jobs",false){
+                        prefs.edit().putInt(pageKey,
+                            (pageSize+24).coerceAtMost(180)).apply()
+                        refresh()
+                    },ui.lp(a,7))
+                }else if(pageSize>16){
+                    card.addView(ui.action(a,"SHOW FEWER",false){
+                        prefs.edit().putInt(pageKey,16).apply()
+                        refresh()
+                    },ui.lp(a,7))
                 }
                 // Scoped bulk controls retain the existing engine operations.
                 val pausable=items.filter{
@@ -1580,14 +1659,7 @@ object UnifiedDownloadsUi {
                                                 refresh()
                                             }
                                             "Clear failure · keep saved files"->{
-                                                if(failure.source=="Video"){
-                                                    val id=failure.key
-                                                        ?.removePrefix("video:")
-                                                        ?.toLongOrNull()
-                                                    if(id!=null)VideoDb(a).use{
-                                                        it.clearTerminalFailure(id)
-                                                    }
-                                                }else hideRow(a,failure)
+                                                clearFailedJob(a,failure)
                                                 refresh()
                                             }
                                             "Keep for later"->{}
