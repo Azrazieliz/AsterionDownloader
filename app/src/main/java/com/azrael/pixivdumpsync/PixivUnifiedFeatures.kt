@@ -91,8 +91,13 @@ internal object PixivUnifiedFeatures {
             leftMargin=ui.px(a,8)
         })
         p.addView(runActions,ui.lp(a,7))
-        fun status(){
-            if(a.isDestroyed || a.isFinishing || !state.isAttachedToWindow)return
+        // The status view is inserted before this listener is installed;
+        // onViewAttached can already have fired. Arm once after layout and
+        // invalidate pending timers when the user leaves the page.
+        val statusGeneration=java.util.concurrent.atomic.AtomicLong()
+        fun status(token:Long){
+            if(token!=statusGeneration.get() || a.isDestroyed ||
+                a.isFinishing || !state.isAttachedToWindow)return
             val current=SyncControl.snapshot()
             state.text=when {
                 current.stopping->"Pixiv · stopping safely"
@@ -103,12 +108,22 @@ internal object PixivUnifiedFeatures {
             pause.text=if(current.paused)"RESUME PIXIV" else "PAUSE PIXIV"
             pause.isEnabled=current.running && !current.stopping
             stop.isEnabled=current.running && !current.stopping
-            state.postDelayed({status()},900L)
+            state.postDelayed({status(token)},900L)
+        }
+        fun armStatus(){
+            val token=statusGeneration.incrementAndGet()
+            state.post{status(token)}
         }
         state.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener{
-            override fun onViewAttachedToWindow(view:View){status()}
-            override fun onViewDetachedFromWindow(view:View){}
+            override fun onViewAttachedToWindow(view:View){armStatus()}
+            override fun onViewDetachedFromWindow(view:View){
+                statusGeneration.incrementAndGet()
+            }
         })
+        state.post{
+            if(statusGeneration.get()==0L && state.isAttachedToWindow)
+                armStatus()
+        }
 
         val feedSwitch=android.widget.Switch(a).apply{
             text="Archive new artwork from Pixiv Following"
