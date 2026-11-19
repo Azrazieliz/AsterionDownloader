@@ -71,6 +71,14 @@ internal object VisibleMediaSupport {
                 } else already++
                 continue
             }
+            if(NduSettings.cloudOnly(context)){
+                val ok=runCatching{
+                    CloudOriginalRouting.enqueue(
+                        context,media.url,folder,fileName(media))
+                }.isSuccess
+                if(ok)queued++ else failed++
+                continue
+            }
             if(!CrossSourceDedup(context).use{it.reserve(media.url)}){already++;continue}
             try{
                 val filename=fileName(media)
