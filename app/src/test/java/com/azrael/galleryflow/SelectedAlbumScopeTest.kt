@@ -28,6 +28,19 @@ class SelectedAlbumScopeTest {
             SelectedAlbumScope.originals(doc,selected).map{it.url})
     }
 
+    @Test fun aSignedCdnPhotoIsNotCountedTwiceAcrossAlbumPages(){
+        val original="https://cdn.cosplaytele.com/selected/01.jpg?token=abc"
+        val renewed="https://cdn.cosplaytele.com/selected/01.jpg?token=def"
+        assertEquals(SelectedAlbumScope.originalIdentity(original),
+            SelectedAlbumScope.originalIdentity(renewed))
+        assertNotEquals(SelectedAlbumScope.originalIdentity(original),
+            SelectedAlbumScope.originalIdentity(
+                "https://cdn.cosplaytele.com/selected/02.jpg?token=abc"))
+        assertNotEquals(SelectedAlbumScope.originalIdentity(original),
+            SelectedAlbumScope.originalIdentity(
+                "https://another-cdn.cosplaytele.com/selected/01.jpg?token=abc"))
+    }
+
     @Test fun declared37PhotoAlbumNeverAbsorbs17RecommendedPhotos() {
         val photos=(1..37).joinToString(""){i->
             "<img src='https://cdn.cosplaytele.com/set/$i.jpg' alt='photo'/>"
