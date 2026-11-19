@@ -589,6 +589,66 @@ object BrowserPageFetch {
                                 .slice(0,1000).map(p=>'<p>'+
                                     esc((p.innerText||p.textContent||'').slice(0,20000))+
                                     '</p>').join(''):'';
+                            // HentaiHaven's exact episode exposes its HLS
+                            // through a first-party VideoObject JSON-LD. The
+                            // compact WebView snapshot previously discarded
+                            // ALL JSON-LD, so the episode resolver could find
+                            // no original even if browser playback succeeded.
+                            if(publisher==='hentaihaven.xxx' &&
+                                /^\\/watch\\/[a-z0-9-]{4,220}\\/episode-[0-9]{1,5}\\/?$/i
+                                    .test(currentPath)){
+                                const published=new Set();
+                                const selected=location.href.replace(/\\/$/,'');
+                                const valid=u=>{
+                                    try{
+                                        const p=new URL(u);
+                                        return p.protocol==='https:' &&
+                                            p.hostname==='octopusmanifest.org' &&
+                                            p.port==='' && !p.search && !p.hash &&
+                                            /^\\/[A-Za-z0-9_.\\/-]{8,500}\\.m3u8$/i
+                                                .test(p.pathname) &&
+                                            (p.pathname.match(/\\//g)||[]).length===2 &&
+                                            !/preview|sample|trailer|teaser/i
+                                                .test(p.pathname);
+                                    }catch(_){return false;}
+                                };
+                                for(const node of [...document.querySelectorAll(
+                                    'script[type="application/ld+json"]')].slice(0,20)){
+                                    try{
+                                        const data=JSON.parse(node.textContent||'');
+                                        const walk=(obj,depth)=>{
+                                            if(depth>8 || !obj || typeof obj!=='object')
+                                                return;
+                                            if(Array.isArray(obj)){
+                                                obj.slice(0,100).forEach(x=>walk(x,depth+1));
+                                                return;
+                                            }
+                                            const types=Array.isArray(obj['@type'])
+                                                ?obj['@type']:[obj['@type']];
+                                            if(types.includes('VideoObject')){
+                                                const declared=String(obj.url||'')
+                                                    .replace(/\\/$/,'');
+                                                if((!declared || declared===selected) &&
+                                                    valid(obj.contentUrl))
+                                                    published.add(obj.contentUrl);
+                                            }
+                                            Object.values(obj).forEach(v=>
+                                                typeof v==='object'&&walk(v,depth+1));
+                                        };
+                                        walk(data,0);
+                                    }catch(_){}
+                                }
+                                if(published.size===1){
+                                    const link=[...published][0];
+                                    const evidence=JSON.stringify({
+                                        '@type':'VideoObject',
+                                        url:location.href,
+                                        contentUrl:link
+                                    });
+                                    return '<html><head><script type="application/ld+json">'+
+                                        evidence+'</script></head><body></body></html>';
+                                }
+                            }
                             // Jav Guru's real shortcode player is not a normal
                             // iframe. The old synthetic DOM omitted its article
                             // ID, data-localize keys and inline iframe_url JSON,
