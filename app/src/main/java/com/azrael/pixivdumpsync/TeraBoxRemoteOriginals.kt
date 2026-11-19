@@ -94,7 +94,6 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                       val retryAfter:Long)
     /** Conservative TeraBox server-side transfer admission; URL imports are
      * truly remote, not simultaneously buffered on the Android device. */
-    companion object { const val MAX_REMOTE_IMPORTS=4 }
     data class Summary(val pending:Int,val active:Int,
                        val verified:Int,val failed:Int)
 
@@ -338,6 +337,7 @@ internal class TeraBoxRemoteQueue(ctx:Context):
         }finally{synchronized(admission){active=false}}
     }
     companion object {
+        const val MAX_REMOTE_IMPORTS=4
         private val admission=Any()
         @Volatile private var active=false
     }
