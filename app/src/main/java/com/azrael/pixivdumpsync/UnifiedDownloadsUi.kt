@@ -1075,17 +1075,17 @@ object UnifiedDownloadsUi {
 
         // A truly live file (not an image, not an incomplete cloud handoff,
         // not a paused/queued item) is the only individual row shown by default.
-        val now=System.currentTimeMillis()
+        // All active non-image originals remain visible from preparation to
+        // verification, even when the peer/server is idle or speed is unknown.
+        // 'Flowing' below is a STRICT measured byte delta, never inferred
+        // from a running state, progress stage or number of worker threads.
         val live=rows.filter{row->
             DownloadOverviewPolicy.isLiveFile(
-                row.state.name,row.source,row.filename,row.mime) &&
-                (row.source!="Video" || (
-                    row.receivedBytes>0L &&
-                    row.transferStage in setOf("receiving","fragments") &&
-                    row.transferUpdated in (now-15_000L)..now))
+                row.state.name,row.source,row.filename,row.mime)
         }.sortedByDescending{it.updated}
-        val resolving=rows.count{
-            it.source=="Video" && it.state==State.ACTIVE && it !in live
+        val resolving=live.count{row->
+            row.source=="Video" &&
+                row.transferStage !in setOf("receiving","fragments")
         }
         // A concurrent-thread count is not proof of parallel downloads.
         // Only two independent IDs whose actual byte counters advanced
@@ -1164,13 +1164,11 @@ object UnifiedDownloadsUi {
                     })
                 }
                 livePanel.addView(heading)
-                // Progress reflects the actual worker report. For unmeasured
-                // media, an indeterminate bar is more honest than fake 0%.
-                // VideoDb.progress is extractor/stage percentage, NOT
-                // received bytes / verified expected length. Do not render
-                // it as a file progress percentage or invent an ETA.
-                val validProgress=if(item.source=="Video")null
-                    else item.percent?.coerceIn(0,100)
+                // A video percentage is shown ONLY when it has an
+                // authoritative HLS fragment denominator; the extractor's
+                // stage percentage is never mistaken for transfer completion.
+                // Files with unknown total size stay indeterminate.
+                val validProgress=item.percent?.coerceIn(0,100)
                 val bar=ProgressBar(a,null,
                     android.R.attr.progressBarStyleHorizontal).apply{
                     max=100
@@ -1190,6 +1188,17 @@ object UnifiedDownloadsUi {
                 if(item.receivedBytes>0L)
                     details.add(sizeLabel(item.receivedBytes)+" received")
                 if(speed!=null)details.add(speed)
+                if(item.source=="Video"){
+                    val stage=when(item.transferStage){
+                        "receiving","fragments"->"Receiving original"
+                        "verification","verifying"->"Verifying media"
+                        "transfer"->"Connecting to source"
+                        "python_fallback"->"Trying alternate extractor"
+                        "native_deferred"->"Waiting for primary extractor"
+                        else->"Resolving selected publisher"
+                    }
+                    details.add(0,stage)
+                }
                 if(details.isEmpty())
                     details.add(item.info.substringAfter(" · ",item.info)
                         .ifBlank{"Connecting to original"}.take(110))
