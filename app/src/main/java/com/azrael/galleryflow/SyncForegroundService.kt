@@ -107,14 +107,23 @@ class SyncForegroundService : Service() {
                         com.azrael.pixivdumpsync.AppPower.enabled(applicationContext)){
                         val job=next
                         if(job!=null){
-                            SyncEngine(applicationContext).run(job.mode,
+                            val result=SyncEngine(applicationContext).run(job.mode,
                                 targetEntityId=job.entityId,
                                 targetSiteHost=job.siteHost,
                                 targetGalleryUrl=job.albumUrl,
                                 targetGalleryTitle=job.albumTitle){notifyNow()}
-                            // Only remove after the engine has returned.
-                            // Failed originals remain in GalleryDb retry rows.
-                            GalleryRequestLedger.completed(applicationContext,job)
+                            // A selected album is not a completed download
+                            // merely because the worker returned. Retain its
+                            // exact original request through network errors,
+                            // mismatched counts and partial files. The retry
+                            // ledger preserves individual failed originals.
+                            val verified=job.albumUrl==null ||
+                                (result.galleriesCompleted>0 &&
+                                    result.incompleteGalleries==0 &&
+                                    result.errors==0 &&
+                                    !SyncControl.isStopping())
+                            if(verified)GalleryRequestLedger.completed(
+                                applicationContext,job)
                         }
                         next=synchronized(pending){
                             val following=if(pending.isEmpty())null
