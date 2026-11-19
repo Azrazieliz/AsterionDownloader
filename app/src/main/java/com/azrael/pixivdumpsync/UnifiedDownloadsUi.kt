@@ -823,6 +823,25 @@ object UnifiedDownloadsUi {
         return sizeLabel((added.toDouble()*1000.0/elapsed).toLong())+"/s"
     }
 
+    /** Perform queue commands on the Activity thread in bounded batches.
+     * Some legacy callbacks interact with Android UI/foreground services,
+     * and invoking those on a raw background Thread causes crashes.
+     */
+    private fun applyModuleActions(a:Activity,actions:List<()->Unit>,
+                                   refresh:()->Unit){
+        val iterator=actions.iterator()
+        fun nextBatch(){
+            if(a.isFinishing || a.isDestroyed)return
+            repeat(4){
+                if(iterator.hasNext())runCatching{iterator.next().invoke()}
+            }
+            if(iterator.hasNext())
+                a.window.decorView.post{nextBatch()}
+            else refresh()
+        }
+        nextBatch()
+    }
+
     private fun metric(a:Activity,label:String,count:Int,
                        warning:Boolean=false):LinearLayout =
         LinearLayout(a).apply {
@@ -1056,8 +1075,7 @@ object UnifiedDownloadsUi {
                             // Callbacks are UI-facing (some launch Activities
                             // or notifications). Never invoke them from an
                             // unsafe raw worker thread.
-                            pausable.forEach{runCatching{it.action()}}
-                            refresh()
+                            applyModuleActions(a,pausable.map{it.action},refresh)
                         },LinearLayout.LayoutParams(0,-2,1f))
                     if(resumable.isNotEmpty())
                         actions.addView(ui.action(a,"RESUME",true){
@@ -1069,10 +1087,9 @@ object UnifiedDownloadsUi {
                                     }
                                 }
                                 VideoEngine.launch(a.applicationContext,false)
-                            }else resumable.forEach{
-                                runCatching{it.action()}
-                            }
-                            refresh()
+                                refresh()
+                            }else applyModuleActions(
+                                a,resumable.map{it.action},refresh)
                         },LinearLayout.LayoutParams(0,-2,1f))
                     if(cancellable.isNotEmpty())
                         actions.addView(ui.action(a,"CANCEL",false){
@@ -1083,10 +1100,9 @@ object UnifiedDownloadsUi {
                                     "Saved originals are preserved.")
                                 .setNegativeButton("Keep",null)
                                 .setPositiveButton("Cancel jobs"){_,_->
-                                    cancellable.forEach{row->
-                                        runCatching{row.onRemove?.invoke()}
-                                    }
-                                    refresh()
+                                    applyModuleActions(a,
+                                        cancellable.mapNotNull{it.onRemove},
+                                        refresh)
                                 }.show()
                         },LinearLayout.LayoutParams(0,-2,1f))
                     card.addView(actions,ui.lp(a,9))
