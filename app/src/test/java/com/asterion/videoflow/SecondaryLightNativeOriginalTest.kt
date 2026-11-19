@@ -7,6 +7,8 @@ import org.junit.Test
 class SecondaryLightNativeOriginalTest {
     @Test fun lightweightNativeAdmissionOnlyForExactSelectedPages(){
         assertTrue(SecondaryLightNativeOriginal.eligible(
+            "https://jav.guru/1234567/owner-selected-original/"))
+        assertTrue(SecondaryLightNativeOriginal.eligible(
             "https://rule34video.com/video/123456/selected-scene"))
         assertTrue(SecondaryLightNativeOriginal.eligible(
             "https://hentaibros.net/example-specific-video-episode/"))
@@ -15,6 +17,11 @@ class SecondaryLightNativeOriginalTest {
         for(url in listOf(
             "https://rule34video.com/",
             "https://rule34video.com/category/popular",
+            "https://jav.guru/",
+            "https://jav.guru/category/selected-originals",
+            "http://jav.guru/1234567/owner-selected-original/",
+            "https://jav.guru.evil.example/1234567/owner-selected-original/",
+            "https://jav.guru/1234567/",
             "https://hentaibros.net/",
             "https://hentaibros.net/latest-videos",
             "https://freepornvideos.xxx/",
