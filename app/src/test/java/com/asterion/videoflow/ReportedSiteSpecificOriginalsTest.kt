@@ -482,4 +482,24 @@ class ReportedSiteSpecificOriginalsTest {
             Jsoup.parse(html,mirror),
             "https://www.mirrored.to/files/WRONG_ID/").isEmpty())
     }
+
+    @Test fun selectedMp4HentaiCanSaveOnlyRealFileHosterSessions() {
+        val selected="https://mp4hentai.com/2026/11/selected-episode/"
+        val hoster="https://frdl.hk/selectedFileAB1234/"
+        assertTrue(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,hoster))
+        assertTrue(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,"https://rapidgator.net/file/12345678901234567890123456789012/" +
+                "Selected%20%28Original%29%20%5B2026%5D.mp4.html"))
+        assertFalse(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,"https://frdl.hk.evil.example/selectedFileAB1234/"))
+        assertFalse(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,"https://ads.example/selectedFileAB1234/"))
+        assertFalse(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,"https://frdl.hk/unrelated/next"))
+        assertFalse(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            "https://mp4hentai.com/",hoster))
+        assertFalse(Mp4HentaiPublishedHost.eligibleUserVerifiedHosterPage(
+            selected,"https://rapidgator.net/file/12345678901234567890123456789012/part%2Fother.mp4.html"))
+    }
 }
