@@ -38,7 +38,8 @@ object RounderInventoryIndex {
         }
     }
     fun confirmedCount(ctx:Context):Int=Db(ctx).use{db->
-        db.readableDatabase.rawQuery("SELECT COUNT(*) FROM inventory",null).use{
+        db.readableDatabase.rawQuery("SELECT COUNT(*) FROM (SELECT 1 FROM inventory "+
+            "GROUP BY work_key,volume,format)",null).use{
             if(it.moveToFirst())it.getInt(0) else 0
         }
     }
@@ -50,7 +51,7 @@ object RounderInventoryIndex {
             root.optInt("version")==1){"Expected Rounder inventory v1"}
         val entries=root.getJSONArray("items")
         require(entries.length()<=200_000)
-        val clean=ArrayList<ContentValues>()
+        val clean=LinkedHashMap<String,ContentValues>()
         for(i in 0 until entries.length()){
             val row=entries.getJSONObject(i)
             if(!row.optBoolean("confirmed"))continue
@@ -59,10 +60,17 @@ object RounderInventoryIndex {
             val kind=row.optString("format").uppercase()
             val remoteId=row.optString("remote_id").take(240)
             val path=row.optString("remote_path").take(1200)
+            val expectedExtension=if(kind=="EPUB")".epub" else ".zip"
+            val safePath=path.startsWith("/") && !path.contains('\\') &&
+                !path.contains('\\u0000') && path.split('/').none{
+                    it=="." || it==".."
+                } && path.endsWith(expectedExtension,ignoreCase=true)
             if(work.isBlank() || volume !in 1..999 ||
                 kind !in setOf("EPUB","ZIP") ||
-                remoteId.isBlank() || path.isBlank())continue
-            clean+=ContentValues().apply{
+                remoteId.isBlank() || !safePath)continue
+            val key=work+"|"+volume+"|"+kind+"|"+remoteId
+            if(clean.containsKey(key))continue
+            clean[key]=ContentValues().apply{
                 put("work_key",work);put("volume",volume)
                 put("format",kind);put("remote_id",remoteId)
                 put("remote_path",path);put("last_seen",System.currentTimeMillis())
@@ -73,7 +81,7 @@ object RounderInventoryIndex {
             db.beginTransaction()
             try {
                 db.delete("inventory",null,null)
-                for(row in clean)db.insertOrThrow("inventory",null,row)
+                for(row in clean.values)db.insertOrThrow("inventory",null,row)
                 db.setTransactionSuccessful()
             }finally{db.endTransaction()}
         }
