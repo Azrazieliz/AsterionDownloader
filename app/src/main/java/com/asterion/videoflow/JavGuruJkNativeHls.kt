@@ -194,6 +194,68 @@ internal object JavGuruJkNativeHls {
         return Plan(segments,keyUrl,sequence,iv,sum)
     }
 
+    private fun hex(bytes:ByteArray):String =
+        bytes.joinToString(""){"%02x".format(Locale.ROOT,it.toInt() and 0xff)}
+    private fun sha256(bytes:ByteArray):ByteArray =
+        MessageDigest.getInstance("SHA-256").digest(bytes)
+
+    /**
+     * A signed HLS query may refresh between legitimate owner retries.
+     * Reuse only fragments from the SAME selected article + player + CDN
+     * paths, exact per-segment durations, sequence, IV and AES key.
+     * Changed video/episode, playlist, encryption key or segment identity
+     * gets a different private stage and cannot be mixed with old bytes.
+     */
+    internal fun stageFingerprint(article:String,media:String,frame:String,
+                                  variant:String,plan:Plan,key:ByteArray,
+                                  durations:List<String>):String {
+        require(eligible(article,media,frame))
+        require(key.size==16 && durations.size==plan.segments.size)
+        val identity=buildString {
+            appendLine("selected-jav-guru-jk-v1")
+            appendLine(article)
+            appendLine(frame)
+            appendLine(cdnOnly(media).path)
+            appendLine(cdnOnly(variant).path)
+            appendLine(hex(sha256(key)))
+            appendLine(plan.mediaSequence)
+            appendLine(plan.explicitIv?.let(::hex).orEmpty())
+            appendLine(plan.durationSeconds.toString())
+            for(index in plan.segments.indices) {
+                append(cdnOnly(plan.segments[index]).path)
+                append('|').append(durations[index]).append('\n')
+            }
+        }
+        return hex(sha256(identity.toByteArray(Charsets.UTF_8))).take(32)
+    }
+
+    private fun fileHash(file:File):String {
+        val digest=MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { source ->
+            val buffer=ByteArray(65536)
+            while(true) {
+                val count=source.read(buffer)
+                if(count<0)break
+                digest.update(buffer,0,count)
+            }
+        }
+        return hex(digest.digest())
+    }
+
+    /** A complete decrypted fragment is written before its SHA sidecar.
+     * Missing/truncated/mismatched sidecars are not trusted on resume.
+     * No publisher file is accepted from a prior different HLS stage.
+     */
+    internal fun reusableFragment(file:File):Boolean = runCatching {
+        if(!file.isFile || file.length() !in 1504L..MAX_FRAGMENT.toLong() ||
+            file.length()%188L!=0L)return@runCatching false
+        val sign=File(file.parentFile,file.name+".sha256")
+        if(!sign.isFile)return@runCatching false
+        val expected=sign.readText().trim()
+        expected.matches(Regex("[a-f0-9]{64}")) &&
+            expected==fileHash(file)
+    }.getOrDefault(false)
+
     private fun segmentIv(plan:Plan,index:Int):ByteArray {
         plan.explicitIv?.let{return it.copyOf()}
         val iv=ByteArray(16)
@@ -224,7 +286,7 @@ internal object JavGuruJkNativeHls {
 
     fun download(article:String,media:String,referer:String?,
                  directory:File,filenameStem:String,proxy:Proxy?=null,
-                 progress:(Int)->Unit={},cancelled:()->Boolean={false}):File {
+                 progress:(Int,Long)->Unit={_,_->},cancelled:()->Boolean={false}):File {
         require(eligible(article,media,referer)){
             "Not the exact selected Jav Guru JK original HLS"
         }
@@ -247,9 +309,16 @@ internal object JavGuruJkNativeHls {
         // The PC original was 1.416GB, so reserve at least 2GB on device.
         if(directory.usableSpace<2_000_000_000L)
             throw IOException("Insufficient Android storage for the selected full JK original")
-        val scratch=File.createTempFile("selected-jk-", ".stage",directory)
-        if(!scratch.delete() || !scratch.mkdir())
-            throw IOException("Cannot create isolated JK media staging")
+        val durations=vod.lines().map{it.trim()}.filter{
+            it.startsWith("#EXTINF:")
+        }
+        // Private durable fragments are held across interruption, unlike the
+        // previous random /selected-jk-* temp directory deleted on ANY error.
+        val fingerprint=stageFingerprint(
+            article,media,frame,variant,plan,key,durations)
+        val scratch=File(directory,"selected-jk-$fingerprint.stage")
+        if(!scratch.isDirectory && !scratch.mkdirs())
+            throw IOException("Cannot create selected JK durable staging")
         val cleaned=filenameStem.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""),"_")
             .take(140).ifBlank{"video"}
         val finalFile=File(directory,"$cleaned.ts")
@@ -258,25 +327,63 @@ internal object JavGuruJkNativeHls {
         val pool=Executors.newFixedThreadPool(4)
         try{
             val queue=ExecutorCompletionService<Pair<Int,Long>>(pool)
+            var completedFragments=0
+            var total=0L
+            val missing=ArrayList<Pair<Int,String>>()
             for((index,url) in plan.segments.withIndex()){
+                checkCancel()
+                val fragment=File(scratch,"fragment-%04d.ts".format(Locale.ROOT,index))
+                if(reusableFragment(fragment)){
+                    total+=fragment.length()
+                    completedFragments++
+                }else {
+                    // Never interpret a partial/stale fragment as verified
+                    // progress; completed fragments have a SHA-256 sidecar.
+                    missing+=index to url
+                }
+            }
+            progress(5+(completedFragments*78/plan.segments.size),total)
+            for((index,url) in missing){
                 queue.submit(Callable{
                     checkCancel()
                     val ciphertext=fetch(url,variant,MAX_FRAGMENT,proxy)
                     val clear=decodeSegment(ciphertext,key,segmentIv(plan,index))
                     val fragment=File(scratch,"fragment-%04d.ts".format(Locale.ROOT,index))
-                    FileOutputStream(fragment).use{it.write(clear)}
-                    Pair(index,clear.size.toLong())
+                    val digest=File(scratch,fragment.name+".sha256")
+                    val pending=File(scratch,fragment.name+".pending")
+                    val pendingHash=File(scratch,fragment.name+".sha256.pending")
+                    try{
+                        FileOutputStream(pending).use{
+                            it.write(clear)
+                            it.fd.sync()
+                        }
+                        pendingHash.writeText(hex(sha256(clear)))
+                        if(fragment.exists() && !fragment.delete())
+                            throw IOException("Cannot replace corrupt JK fragment")
+                        if(digest.exists() && !digest.delete())
+                            throw IOException("Cannot replace corrupt JK fragment receipt")
+                        if(!pending.renameTo(fragment) ||
+                            !pendingHash.renameTo(digest))
+                            throw IOException("Cannot persist selected JK fragment safely")
+                        Pair(index,clear.size.toLong())
+                    }finally{
+                        pending.delete()
+                        pendingHash.delete()
+                    }
                 })
             }
-            var total=0L
-            repeat(plan.segments.size){completedFragments->
+            repeat(missing.size){
                 checkCancel()
                 val (index,size)=queue.take().get()
-                if(index !in plan.segments.indices || size<1504L)
-                    throw IOException("Selected JK segment ledger inconsistent")
+                val fragment=File(scratch,"fragment-%04d.ts".format(Locale.ROOT,index))
+                if(index !in plan.segments.indices || size<1504L ||
+                    !reusableFragment(fragment))
+                    throw IOException("Selected JK fragment checksum/ledger inconsistent")
                 total+=size
-                if(completedFragments%8==0 || completedFragments==plan.segments.size-1)
-                    progress(5+((completedFragments+1)*78/plan.segments.size))
+                completedFragments++
+                if(completedFragments%8==0 ||
+                    completedFragments==plan.segments.size)
+                    progress(5+(completedFragments*78/plan.segments.size),total)
             }
             checkCancel()
             if(total<30_000_000L)
@@ -299,7 +406,8 @@ internal object JavGuruJkNativeHls {
                     }
                     if(!part.delete())
                         throw IOException("Unable to release selected fragment staging")
-                    if(index%24==0)progress(84+(index*12/plan.segments.size))
+                    if(index%24==0)
+                        progress(84+(index*12/plan.segments.size),total)
                 }
                 out.fd.sync()
             }
@@ -320,19 +428,33 @@ internal object JavGuruJkNativeHls {
             val expectedMs=plan.durationSeconds*1000.0
             if(abs(actualMs-expectedMs)>max(5000.0,expectedMs*0.01))
                 throw IOException("Selected JK complete media disagrees with ENDLIST runtime")
-            if(finalFile.exists())
-                throw IOException("Selected JK destination already exists; refusing overwrite")
-            if(!tempFinal.renameTo(finalFile))
+            if(finalFile.exists()) {
+                // A prior attempt may have completed the original but failed
+                // subsequent MediaStore publication. Keep that validated file
+                // only if it is byte-for-byte the SAME selected original.
+                if(finalFile.length()!=total ||
+                    fileHash(finalFile)!=hex(digest.digest()))
+                    throw IOException("JK destination differs from selected original; refusing overwrite")
+                if(!tempFinal.delete())
+                    throw IOException("Cannot remove redundant verified JK assembly")
+            }else if(!tempFinal.renameTo(finalFile))
                 throw IOException("Cannot publish validated JK staging file")
             completed=true
-            progress(100)
+            progress(100,total)
             return finalFile
         }finally{
             pool.shutdownNow()
             runCatching{pool.awaitTermination(8,TimeUnit.SECONDS)}
-            scratch.listFiles()?.forEach{runCatching{it.delete()}}
-            scratch.delete()
-            if(!completed)runCatching{tempFinal.delete()}
+            if(completed) {
+                // All fragment checksums were verified and one complete
+                // original is now in the parent staging folder.
+                scratch.listFiles()?.forEach{runCatching{it.delete()}}
+                scratch.delete()
+            }else {
+                // Cancellation, a 403 or MediaMetadataRetriever failure must
+                // NOT destroy previous complete selected fragments.
+                runCatching{tempFinal.delete()}
+            }
         }
     }
 }
