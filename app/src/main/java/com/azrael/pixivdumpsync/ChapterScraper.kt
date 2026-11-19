@@ -28,7 +28,8 @@ object ChapterScraper {
             SequenceOrder.Kind.CHAPTER,{it.title},{it.url})
     fun isSingleChapter(url:String):Boolean =
         pathChapter.containsMatchIn(URI(url).path.orEmpty()) ||
-            SushiScanChapters.isReader(url)
+            SushiScanChapters.isReader(url) ||
+            MangaDexChapters.isReader(url)
     private fun read(url:String,context:Context?=null):Document{
         val agent=context?.let{runCatching{WebSettings.getDefaultUserAgent(it)}
             .getOrNull()}?.takeIf{it.isNotBlank()}
@@ -86,6 +87,10 @@ object ChapterScraper {
             }
             return full
         }
+        if(MangaDexChapters.isSeries(seriesUrl))
+            return MangaDexChapters.chapters(seriesUrl)
+        if(MangaDexChapters.isReader(seriesUrl))
+            return listOf(ChapterLink(seriesUrl,"Selected English chapter"))
         if(SushiScanChapters.isSeries(seriesUrl)){
             val page=read(seriesUrl,context)
             val chapters=SushiScanChapters.chapters(page,seriesUrl)
@@ -167,6 +172,8 @@ object ChapterScraper {
         // image files: do not treat them as HTML chapter-reader pages.
         if(NhentaiChapters.isOriginalImage(chapterUrl))
             return listOf(chapterUrl)
+        if(MangaDexChapters.isReader(chapterUrl))
+            return MangaDexChapters.pageImages(chapterUrl)
         val doc=read(chapterUrl,context)
         val images=if(NhentaiChapters.isPage(chapterUrl))
             NhentaiChapters.pageImage(doc)
