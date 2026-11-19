@@ -37,9 +37,10 @@ internal object OnlyHentaiKvsOriginalSource {
         // provenance; comparing these unrelated IDs rejects real originals.
         val players=doc.select("#kt_player")
         val script=scripts.single()
-        return players.size==1 && script.contains("flashvars") &&
-            script.contains("video_url") && videoId.containsMatchIn(script) &&
-            id.length in 1..12
+        return players.size==1 &&
+            Regex("""\bkt_player\s*\(""").containsMatchIn(script) &&
+            script.contains("flashvars") && script.contains("video_url") &&
+            videoId.containsMatchIn(script) && id.length in 1..12
     }
     /** Only a publisher-rendered #kt_player video matching the selected ID. */
     fun rendered(selected:String,html:String):String? {
