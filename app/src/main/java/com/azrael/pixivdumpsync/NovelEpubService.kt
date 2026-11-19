@@ -524,12 +524,24 @@ object NovelEpubService {
         val uri=resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values)
             ?:error("Cannot create EPUB download")
         try{
-            resolver.openOutputStream(uri,"w")!!.use{output->
-                file.inputStream().buffered().use{it.copyTo(output,256*1024)}
-            }
+            // A complete EPUB is already ZIP-validated in private staging.
+            // Public Downloads is still an independent copy: compare the
+            // exact SHA-256 of the bytes written and read back before making
+            // it visible or attempting a separate cloud backup.
+            val copiedDigest=resolver.openOutputStream(uri,"w")?.use{output->
+                file.inputStream().buffered().use{input->
+                    com.asterion.videoflow.NativeMediaReceipt.copyAndDigest(
+                        input,output)
+                }
+            }?:error("EPUB Downloads destination not writable")
             val written=resolver.openAssetFileDescriptor(uri,"r")
                 ?.use{it.length}?:-1L
             require(written<0 || written==file.length()){"Incomplete EPUB file copy"}
+            val copyValid=resolver.openInputStream(uri)?.use{input->
+                com.asterion.videoflow.NativeMediaReceipt.matchesSavedCopy(
+                    input,copiedDigest)
+            }?:false
+            check(copyValid){"EPUB Downloads copy failed SHA-256 verification"}
             val published=resolver.update(uri,ContentValues().apply{
                 put(MediaStore.Downloads.IS_PENDING,0)
             },null,null)
