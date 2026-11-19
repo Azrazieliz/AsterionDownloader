@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
  */
 internal object BencodedTorrentManifest {
     data class Entry(val path:String,val size:Long)
-    data class Manifest(val name:String,val files:List<Entry>)
+    data class Manifest(val name:String,val files:List<Entry>,val infoHashHex:String)
 
     fun parse(bytes:ByteArray):Manifest {
         require(bytes.size in 33..8_388_608){"Torrent descriptor exceeds safe limits"}
@@ -56,7 +56,7 @@ internal object BencodedTorrentManifest {
             total+=file.size
         }
         require(entries.isNotEmpty()){"No selectable torrent files"}
-        return Manifest(name,entries)
+        return Manifest(name,entries,decoder.infoHashHex())
     }
 
     private fun part(value:Any?):String {
@@ -78,6 +78,12 @@ internal object BencodedTorrentManifest {
     private class Decoder(private val data:ByteArray) {
         private var index=0
         private var nodes=0
+        private var rawInfo:ByteArray?=null
+        fun infoHashHex():String {
+            val bytes=rawInfo?:error("No captured info dictionary")
+            return java.security.MessageDigest.getInstance("SHA-1")
+                .digest(bytes).joinToString(""){"%02x".format(it)}
+        }
         fun complete()=index==data.size
         fun value(depth:Int):Any {
             require(depth<=48 && ++nodes<=150_000){"Torrent metadata too complex"}
@@ -89,7 +95,11 @@ internal object BencodedTorrentManifest {
                     while(current()!='e'){
                         val key=String(bytes(),StandardCharsets.ISO_8859_1)
                         require(!result.containsKey(key)){"Duplicate metadata key"}
-                        result[key]=value(depth+1)
+                        if(depth==0 && key=="info"){
+                            val from=index
+                            result[key]=value(depth+1)
+                            rawInfo=data.copyOfRange(from,index)
+                        }else result[key]=value(depth+1)
                     }
                     index++
                     result
