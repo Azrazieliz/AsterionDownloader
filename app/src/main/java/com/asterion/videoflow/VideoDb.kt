@@ -186,6 +186,20 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "SELECT state FROM videos WHERE url=? LIMIT 1",
             arrayOf(normalized)).use{c->if(c.moveToFirst())c.getString(0)else null}
     }
+    /** Reconcile a selected video with its real TeraBox original receipt. */
+    fun pendingCloudIdForUrl(url:String):String? {
+        val normalized=WebDiscovery.normalize(url)?:return null
+        return readableDatabase.rawQuery(
+            "SELECT saved_uri FROM videos WHERE url=? AND state='cloud_pending' "+
+                "LIMIT 1",arrayOf(normalized)).use{c->
+            if(!c.moveToFirst())return@use null
+            val value=c.getString(0).orEmpty()
+            value.removePrefix("terabox-pending:").takeIf{
+                value.startsWith("terabox-pending:") &&
+                    it.matches(Regex("[0-9a-f]{64}"))
+            }
+        }
+    }
     fun next(nativeOnly:Boolean=false): Video? {
         val now=System.currentTimeMillis().toString()
         // Enforce explicit episode order inside ONE recognisable series only.
