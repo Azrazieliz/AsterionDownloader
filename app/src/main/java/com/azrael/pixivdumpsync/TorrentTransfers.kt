@@ -234,10 +234,18 @@ class TorrentTransferService : Service() {
             update(id,"FAILED: Previously selected files are unavailable")
             return false
         }
+        // One native torrent operation at a time on the device after an
+        // owner-observed full-device crash; no competing metadata session.
+        if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty()){
+            update(id,"Paused · another native torrent operation is active")
+            return false
+        }
         if(!inFlight.add(id))return false
         stopRequests.remove(id)
         val worker=thread(start=false,name="asterion-torrent-$id"){
             try {
+                val admitted=TorrentSafetyGate.begin(applicationContext)
+                if(!admitted.allowed)throw java.io.IOException(admitted.reason)
                 transfer(id,folder,indices)
                 // A completed transfer is QUARANTINED until an actual scanner
                 // clears it. Keep its selected file indices and target
@@ -253,6 +261,7 @@ class TorrentTransferService : Service() {
                 else
                     update(id,"FAILED: "+(e.message?:e.javaClass.simpleName))
             }finally {
+                TorrentSafetyGate.finished(applicationContext)
                 workers.remove(id)
                 inFlight.remove(id)
                 if(inFlight.isEmpty() && metadataWorkers.isEmpty()){
@@ -271,6 +280,27 @@ class TorrentTransferService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if(intent?.action!=PAUSE){
+            val admitted=TorrentSafetyGate.assess(applicationContext)
+            if(!admitted.allowed){
+                @Suppress("DEPRECATION")
+                val receiver=if(Build.VERSION.SDK_INT>=33)
+                    intent?.getParcelableExtra(
+                        TorrentMetadataBridge.RECEIVER,
+                        android.os.ResultReceiver::class.java)
+                else intent?.getParcelableExtra<android.os.ResultReceiver>(
+                    TorrentMetadataBridge.RECEIVER)
+                receiver?.send(0,android.os.Bundle().apply{
+                    putString("error",admitted.reason)
+                })
+                intent?.getStringExtra("job")
+                    ?.takeIf{it.matches(Regex("[a-f0-9]{24}"))}
+                    ?.let{update(it,"Paused · "+admitted.reason)}
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
+        }
         if(intent?.action==PREPARE_MAGNET || intent?.action==PREPARE_DESCRIPTOR){
             val action=intent.action.orEmpty()
             val chosen=intent.getStringExtra("folder").orEmpty()
@@ -280,8 +310,19 @@ class TorrentTransferService : Service() {
                     android.os.ResultReceiver::class.java)
                 else intent.getParcelableExtra<android.os.ResultReceiver>(
                     TorrentMetadataBridge.RECEIVER)
+            if(metadataWorkers.isNotEmpty() || inFlight.isNotEmpty()){
+                receiver?.send(0,android.os.Bundle().apply{
+                    putString("error","Native torrent worker already busy; "+
+                        "no parallel metadata JNI will be started")
+                })
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
             val worker=thread(start=false,name="asterion-torrent-metadata"){
                 try{
+                    val admitted=TorrentSafetyGate.begin(applicationContext)
+                    if(!admitted.allowed)
+                        throw java.io.IOException(admitted.reason)
                     val hash=TorrentMetadataBridge.prepareInTorrentProcess(
                         applicationContext,action,intent,chosen)
                     receiver?.send(1,android.os.Bundle().apply{putString("job",hash)})
@@ -289,6 +330,7 @@ class TorrentTransferService : Service() {
                     receiver?.send(0,android.os.Bundle().apply{
                         putString("error",t.message?:t.javaClass.simpleName)})
                 }finally{
+                    TorrentSafetyGate.finished(applicationContext)
                     metadataWorkers.remove(Thread.currentThread())
                     if(metadataWorkers.isEmpty() && inFlight.isEmpty()){
                         stopForeground(STOP_FOREGROUND_REMOVE)
