@@ -1026,12 +1026,18 @@ class AsterionHomeActivity:Activity(){
                     })
                 }else if(!hit.queued){
                     put(c,button("DOWNLOAD THIS RESULT"){
-                        val added=VideoDb(this).use{it.addVideo(hit.url,hit.title)}
+                        if(com.asterion.videoflow.HentaiHavenEpisodeSource.isSeries(hit.url)){
+                            SelectedVideoRouter.request(this,hit.url,hit.title,"HENTAI")
+                            return@button
+                        }
+                        val added=VideoDb(this).use{
+                            it.addVideo(hit.url,hit.title,origin="user")
+                        }
                         if(added){
                             SearchResultsDb(this).use{it.markQueued(hit.query,hit.url)}
                             VideoEngine.launch(this,false)
                         }
-                        toast(if(added)"Added to downloads" else "Already in downloads")
+                        toast(if(added)"Resolving selected original" else "Already in downloads")
                         open("Queue")
                     })
                 }else put(c,text("Already added to downloads",12f,theme.primary))
