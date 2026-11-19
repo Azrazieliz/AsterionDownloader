@@ -141,7 +141,14 @@ class SiteLoginActivity:Activity() {
             web.evaluateJavascript("""(function(){
                 const title=document.title||'';
                 const body=(document.body?.innerText||'').slice(0,800);
+                const visibleChallenge=[...document.querySelectorAll(
+                    'form#file-captcha,input[name*=captcha],.cf-turnstile,'+
+                    '.h-captcha,.g-recaptcha,[data-sitekey]')].some(el=>{
+                    const rect=el.getBoundingClientRect();
+                    return rect.width>0 && rect.height>0;
+                });
                 const good=document.readyState==='complete' &&
+                    !visibleChallenge &&
                     !/just a moment|attention required|verify you are human|enable javascript and cookies|access denied|403 forbidden|rate limit/i.test(title+' '+body);
                 const watchLinks=document.querySelectorAll(
                     'a[href*="/watch/"],video[src],video source[src]').length;
