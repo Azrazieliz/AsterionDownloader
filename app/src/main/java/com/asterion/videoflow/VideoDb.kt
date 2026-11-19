@@ -514,6 +514,93 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             return it.executeUpdateDelete()==1
         }
     }
+    /** A stale 'done' row is not an actual saved original if its saved
+     * MediaStore URI cannot be read. Repair only after a fresh device check,
+     * and never edit an accessible completed original or delete its bytes. */
+    private fun savedFileReadable(savedUri:String?):Boolean {
+        if(savedUri.isNullOrBlank())return false
+        return runCatching {
+            val uri=Uri.parse(savedUri)
+            when(uri.scheme){
+                "content"->appContext.contentResolver.openFileDescriptor(uri,"r")
+                    ?.use{it.statSize>0L}?:false
+                "file"->java.io.File(uri.path.orEmpty())
+                    .let{it.isFile && it.length()>0L}
+                else->false
+            }
+        }.getOrDefault(false)
+    }
+
+    /** Count absent 'done' receipts without trusting a stale DB state.
+     * Called off the Android UI thread from the existing Downloads snapshot.
+     */
+    fun missingSavedCount():Int {
+        var count=0
+        readableDatabase.rawQuery(
+            "SELECT saved_uri FROM videos WHERE state='done'",null
+        ).use{rows->
+            while(rows.moveToNext()){
+                if(!savedFileReadable(rows.getString(0)))count++
+            }
+        }
+        return count
+    }
+
+    /** Manual retry of one missing saved original. A genuine existing file
+     * is always protected. The former URI and job identity remain for audit
+     * until a replacement selected original is genuinely completed. */
+    fun retryMissingSaved(id:Long):Boolean{
+        val source=readableDatabase.rawQuery(
+            "SELECT url,saved_uri FROM videos WHERE id=? AND state='done'",
+            arrayOf(id.toString())).use{c->
+            if(c.moveToFirst())c.getString(0) to c.getString(1)
+            else null
+        }?:return false
+        if(savedFileReadable(source.second) ||
+            com.azrael.pixivdumpsync.ProviderRetirement.isRetired(source.first))
+            return false
+        val cv=ContentValues().apply{
+            put("state","queued");put("progress",0);put("attempts",0)
+            put("retry_after",0L);put("request_origin","user")
+            putNull("error");put("lease",System.currentTimeMillis())
+            put("updated",System.currentTimeMillis())
+        }
+        return writableDatabase.update("videos",cv,
+            "id=? AND state='done'",arrayOf(id.toString()))==1
+    }
+
+    /** Acknowledge a broken saved receipt without touching its original
+     * URL, media URI, private staging or filesystem. Dismissal prevents
+     * automatic reacquisition until the owner explicitly selects Retry. */
+    fun acknowledgeMissingSaved(id:Long):Boolean {
+        val uri=readableDatabase.rawQuery(
+            "SELECT saved_uri FROM videos WHERE id=? AND state='done'",
+            arrayOf(id.toString())).use{c->
+            if(c.moveToFirst())c.getString(0) else return false
+        }
+        if(savedFileReadable(uri))return false
+        val cv=ContentValues().apply{
+            put("state","dismissed");put("progress",0)
+            put("retry_after",0L);put("lease",System.currentTimeMillis())
+            put("updated",System.currentTimeMillis())
+            put("error","Missing saved original acknowledged by user")
+        }
+        return writableDatabase.update("videos",cv,
+            "id=? AND state='done'",arrayOf(id.toString()))==1
+    }
+
+    fun acknowledgeAllMissingSaved():Int {
+        val missing=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id,saved_uri FROM videos WHERE state='done'",null
+        ).use{c->
+            while(c.moveToNext()){
+                if(!savedFileReadable(c.getString(1)))missing.add(c.getLong(0))
+            }
+        }
+        return missing.count{acknowledgeMissingSaved(it)}
+    }
+
     /** One-time migration for rows held by the superseded runtime policy.
      * Requeue only user-designated full-video providers; old untrusted rows
      * remain available for individual manual RETRY. Preserve all completed files.
