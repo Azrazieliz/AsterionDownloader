@@ -673,6 +673,38 @@ object UnifiedDownloadsUi {
                     setOf("WORKING"),setOf("PAUSED"))
             }
         }
+        // Authoritative Pixiv page receipts and Kyora media ledger.
+        // The 70 newest MediaStore images in collect() are PREVIEW ROWS,
+        // not a total. Never promote that bounded slice to a "Saved" count.
+        AppDb(a).use{db->
+            val sql=db.readableDatabase
+            fun count(q:String):Int=android.database.DatabaseUtils.longForQuery(
+                sql,q,null).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            val sync=SyncControl.snapshot()
+            counts["Pixiv"]=Totals(
+                saved=count("SELECT COUNT(*) FROM pages WHERE saved=1"),
+                failed=count("SELECT COUNT(*) FROM works "+
+                    "WHERE state IN ('ERROR','FAILED')"),
+                queued=count("SELECT COUNT(*) FROM pages WHERE saved=0"),
+                active=if(sync.running && !sync.paused &&
+                    sync.mode!=SyncMode.CLOUD)1 else 0,
+                paused=if(sync.running && sync.paused)1 else 0)
+        }
+        com.azrael.galleryflow.GalleryDb(a).use{db->
+            val sql=db.readableDatabase
+            fun count(q:String):Int=android.database.DatabaseUtils.longForQuery(
+                sql,q,null).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            counts["Gallery"]=Totals(
+                saved=count("SELECT COUNT(*) FROM media WHERE "+
+                    "state='complete' AND content_uri IS NOT NULL "+
+                    "AND bytes>0"),
+                failed=count("SELECT COUNT(*) FROM media WHERE "+
+                    "state IN ('permanent_error','inaccessible')"),
+                queued=count("SELECT COUNT(*) FROM media WHERE "+
+                    "state IN ('pending','retrying')"),
+                active=count("SELECT COUNT(*) FROM media WHERE "+
+                    "state='downloading'"))
+        }
         // Include ALL server-side cloud records, not only the 200 newest
         // rows shown in Manage. Count submitted work as pending receipt,
         // never as a verified save.
