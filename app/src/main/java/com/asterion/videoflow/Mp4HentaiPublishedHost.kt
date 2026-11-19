@@ -118,6 +118,33 @@ internal object Mp4HentaiPublishedHost {
     fun isPublishedHost(selected:String,link:String):Boolean =
         hostname(selected)=="mp4hentai.com" &&
             post.matches(uri(selected)?.path.orEmpty()) && isHosterPage(link)
+    /**
+     * Only an explicitly selected MP4Hentai post may offer the user's
+     * saved-browser-session flow for a file host reached by navigation.
+     * This validates the visible hoster page before saving *that host's*
+     * own cookies. Source provenance and original-video bytes remain
+     * independently validated when the same queued item is retried.
+     */
+    internal fun eligibleUserVerifiedHosterPage(selected:String,current:String):Boolean {
+        if(hostname(selected)!="mp4hentai.com" ||
+            !post.matches(uri(selected)?.path.orEmpty()) ||
+            !safe(current) || uri(current)?.rawFragment!=null)
+            return false
+        val path=uri(current)?.rawPath.orEmpty()
+        return when(hostname(current)){
+            "frdl.hk" -> FreedlSelectedOriginal.isSelectedFilePage(current)
+            "upfiles.com","upfilesgo.com" -> isHosterPage(current)
+            "rapidgator.net" -> uri(current)?.rawQuery.isNullOrBlank() &&
+                Regex("""^/file/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9%._~!$&'()*+,;=:@-]{1,210})?/?$""")
+                    .matches(path) &&
+                !Regex("""(?i)%(?:2f|5c|00|0[ad])""").containsMatchIn(path)
+            "buzzheavier.com","freedl.ink","frdl.io" ->
+                uri(current)?.rawQuery.isNullOrBlank() &&
+                Regex("""^/[A-Za-z0-9_-]{6,100}/?$""").matches(path)
+            else -> false
+        }
+    }
+
 
     fun selectedLinks(doc:Document,selected:String):List<String>{
         if(hostname(selected)!="mp4hentai.com" ||
