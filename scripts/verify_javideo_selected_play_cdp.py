@@ -506,7 +506,42 @@ def main():
            "extension":u.path.rsplit(".",1)[-1][:8],"signed":bool(u.query)})
       inspect(obj)
       observed_t=obj.get("t") if isinstance(obj,dict) else None
+      # This publisher's selected player sends a 199-character t field.
+      # Check its PUBLIC transport encoding without exporting the value,
+      # forging a token, guessing other CDN URLs or downloading any media.
+      t_encoding={"known_encoding":"unverified"}
+      if isinstance(observed_t,str) and len(observed_t)<3000:
+       value=urllib.parse.unquote(observed_t)
+       if value.startswith("https://"):
+        u=urllib.parse.urlsplit(value)
+        t_encoding={"known_encoding":"url_encoded_https","host":u.hostname,
+          "extension":u.path.rsplit(".",1)[-1][:8] if "." in u.path else "",
+          "has_query":bool(u.query)}
+       else:
+        candidate=value.strip()
+        if re.fullmatch(r"[A-Za-z0-9_+/=-]{16,3000}",candidate):
+         try:
+          raw=base64.urlsafe_b64decode(candidate+"="*((-len(candidate))%4))
+          decoded=raw.decode("utf-8","replace")
+          if decoded.startswith("https://"):
+           u=urllib.parse.urlsplit(decoded)
+           t_encoding={"known_encoding":"base64_https",
+             "host":u.hostname,
+             "extension":u.path.rsplit(".",1)[-1][:8] if "." in u.path else "",
+             "has_query":bool(u.query)}
+          elif decoded.strip().startswith(("{","[")):
+           parsed=json.loads(decoded)
+           t_encoding={"known_encoding":"base64_json",
+             "root_kind":type(parsed).__name__,
+             "field_names":sorted(parsed.keys())[:12] if isinstance(parsed,dict) else []}
+          else:
+           t_encoding={"known_encoding":"base64_binary_or_opaque",
+             "decoded_length":len(raw),
+             "ascii_ratio":round(sum(32<=c<127 for c in raw)/max(1,len(raw)),2)}
+         except Exception:
+          t_encoding={"known_encoding":"not_simple_base64"}
       api_receipts.append({"valid_json":True,
+        "publisher_t_encoding":t_encoding,
         "root_kind":type(obj).__name__,"fields":sorted(set(fields))[:50],
         "status_flags":status,
         "published_t_type":type(observed_t).__name__,
