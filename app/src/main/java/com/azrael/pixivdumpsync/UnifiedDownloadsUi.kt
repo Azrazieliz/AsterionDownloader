@@ -284,12 +284,15 @@ object UnifiedDownloadsUi {
                         State.PAUSED->"RESUME"
                         else->null
                     },
-                    onRemove=if(state!=State.ACTIVE)({
+                    onRemove={
                         if(state==State.DONE)hideRow(a,Row(
                             "Comic ZIP",item.title,"",state,null,0L,{},
                             key="comic:"+item.id))
-                        else ChapterQueue(a).use{it.dismiss(item.id)}
-                    }) else null,key="comic:"+item.id)
+                        else{
+                            if(state==State.ACTIVE)ChapterArchives.pause(a,item.id)
+                            ChapterQueue(a).use{it.dismiss(item.id)}
+                        }
+                    },key="comic:"+item.id)
             }
         }
         NovelEpubQueue(a).use{db->
@@ -399,11 +402,14 @@ object UnifiedDownloadsUi {
                         State.PAUSED->"RESUME"
                         else->null
                     },
-                    onRemove=if(state!=State.ACTIVE)({
+                    onRemove={
                         if(state==State.DONE)hideRow(a,Row(
                             "X",name,"",state,null,0L,{},key="x:"+item.id))
-                        else XPhotoQueue(a).use{it.dismiss(item.id)}
-                    }) else null,key="x:"+item.id)
+                        else{
+                            if(state==State.ACTIVE)XPhotoEngine.pause(a,item.id)
+                            XPhotoQueue(a).use{it.dismiss(item.id)}
+                        }
+                    },key="x:"+item.id)
             }
         }
         // Pixiv and Kyora store successful originals in MediaStore rather
