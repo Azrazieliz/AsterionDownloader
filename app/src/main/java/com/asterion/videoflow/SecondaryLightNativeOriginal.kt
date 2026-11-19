@@ -23,6 +23,7 @@ internal object SecondaryLightNativeOriginal {
                 .removePrefix("www.")
         }.getOrDefault("")
         return when(host){
+            "jav.guru"->JavGuruJkNativeHls.selectedArticleForNative(selected)
             "rule34video.com"->Rule34VideoOriginalSource.videoId(selected)!=null
             "hentaibros.net"->VideoSiteProfiles.isVideoPage(selected)
             // This publisher directly advertises quality-labelled MP4 files
@@ -57,6 +58,17 @@ internal object SecondaryLightNativeOriginal {
         val source=when(
             URI(selected).host.orEmpty().lowercase(Locale.ROOT)
                 .removePrefix("www.")){
+            "jav.guru" -> {
+                // Reuse the tested same-selected shortcode -> first-party
+                // relay -> Maxstream source resolver, WITHOUT the browser
+                // fallback or any SB/DD/LU/Python candidate. A missing JK
+                // source is deferred to the primary rather than substituted.
+                SiteSpecificOriginalSources.javGuru(
+                    context,doc,selected,nativeJkOnly=true)
+                    .singleOrNull()?.takeIf{
+                        JavGuruJkNativeHls.eligible(selected,it.url,it.referer)
+                    }?.let{Candidate(it.url,it.referer,false)}
+            }
             "rule34video.com" -> {
                 // The selected publisher's quality-labelled /get_file link
                 // is stronger identity evidence than unrelated HTML5 adverts.
