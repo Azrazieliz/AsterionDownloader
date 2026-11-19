@@ -361,11 +361,11 @@ object BrowserPageFetch {
                                     return '';
                                 const match=/^\/videos\/([0-9]{1,12})\/[A-Za-z0-9_-]{3,250}\/?$/
                                     .exec(location.pathname);
-                                const config=typeof window.flashvars==='object'
-                                    ?window.flashvars:null;
-                                if(!match || !config ||
-                                    String(config.video_id)!==match[1])
-                                    return '';
+                                const scripts=[...document.scripts].filter(node=>
+                                    !node.src && /\\bkt_player\\s*\\(/.test(node.textContent||'') &&
+                                    /\\bvideo_url\\b/.test(node.textContent||'') &&
+                                    /\\bflashvars\\b/.test(node.textContent||''));
+                                if(!match || scripts.length!==1)return '';
                                 const root=document.getElementById('kt_player');
                                 if(!root || root.closest('aside,.related,'+
                                         '.recommendations,.ads,.sidebar'))return '';
@@ -390,7 +390,7 @@ object BrowserPageFetch {
                                             .test(u.pathname))return '';
                                     const duration=Number.isFinite(video.duration)
                                         ?Math.round(video.duration):0;
-                                    return '<div id="kt_player" data-video-id="'+
+                                    return '<div id="kt_player" data-selected-page-id="'+
                                         esc(match[1])+'"><video src="'+esc(u.href)+
                                         '" data-duration="'+duration+'"></video></div>';
                                 }catch(_){return '';}
