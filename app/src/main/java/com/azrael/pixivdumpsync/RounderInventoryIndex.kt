@@ -62,7 +62,7 @@ object RounderInventoryIndex {
             val path=row.optString("remote_path").take(1200)
             val expectedExtension=if(kind=="EPUB")".epub" else ".zip"
             val safePath=path.startsWith("/") && !path.contains('\\') &&
-                !path.contains('\\u0000') && path.split('/').none{
+                !path.any{it.code<32} && path.split('/').none{
                     it=="." || it==".."
                 } && path.endsWith(expectedExtension,ignoreCase=true)
             if(work.isBlank() || volume !in 1..999 ||
