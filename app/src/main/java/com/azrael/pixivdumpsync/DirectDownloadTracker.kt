@@ -52,7 +52,9 @@ object DirectDownloadTracker {
         prefs(c).edit().putString(KEY,arr.toString()).apply()
     }
     fun states(c:Context,limit:Int=50):List<State>{
-        val saved=read(c).take(limit.coerceIn(1,500))
+        val saved=read(c).filter{
+            OriginalReceiptState.get(c,it.id)!="DISMISSED"
+        }.take(limit.coerceIn(1,500))
         if(saved.isEmpty())return emptyList()
         val manager=c.getSystemService(DownloadManager::class.java)
         val byId=HashMap<Long,State>()
