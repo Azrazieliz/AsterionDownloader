@@ -294,6 +294,11 @@ class ProviderWebActivity : Activity() {
             if(route=="Games" && Regex("(?i)\\.(?:mp4|mkv|webm|mov)$")
                     .containsMatchIn(filename))
                 throw IllegalArgumentException("Games must contain game files, not videos")
+            if(com.azrael.pixivdumpsync.NduSettings.cloudOnly(this)){
+                com.azrael.pixivdumpsync.CloudOriginalRouting.enqueue(
+                    this,url,route?:"Files",filename)
+                return@runCatching
+            }
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
                 setMimeType(mimeType)
@@ -324,7 +329,9 @@ class ProviderWebActivity : Activity() {
         }.onSuccess {
             Toast.makeText(
                 this,
-                "Original download queued in Android Downloads",
+                if(com.azrael.pixivdumpsync.NduSettings.cloudOnly(this))
+                    "Original queued in TeraBox; awaiting remote file proof"
+                else "Original download queued in Android Downloads",
                 Toast.LENGTH_LONG
             ).show()
         }.onFailure {
