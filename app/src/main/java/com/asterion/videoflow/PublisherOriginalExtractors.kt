@@ -164,6 +164,21 @@ internal object PublisherOriginalExtractors {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
         val page=WebDiscovery.selectedDocument(selected,context)
+        if(host=="onlyhentaistuff.com" &&
+            OnlyHentaiKvsOriginalSource.hasSelectedConfig(
+                selected,page.outerHtml())){
+            // The observed KVS selected player has no static <video> or
+            // iframe. Its first-party kt_player Javascript initializes one
+            // exact original; never try its encoded function/... URL as HTTP.
+            val rendered=runCatching{
+                com.azrael.pixivdumpsync.BrowserPageFetch.html(context,selected)
+            }.getOrNull()
+            val exact=rendered?.let {
+                OnlyHentaiKvsOriginalSource.rendered(selected,it)
+            }
+            return exact?.let{listOf(Candidate(it,selected,host))}
+                .orEmpty()
+        }
         // Real Pornhub selected watch pages publish their signed original
         // HLS quality variants in one first-party flashvars_<id> JSON object.
         // Initial HTML5 video/src is absent; generic CSS only finds previews.
