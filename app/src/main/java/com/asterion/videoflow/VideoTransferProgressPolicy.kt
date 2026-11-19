@@ -9,4 +9,23 @@ internal object VideoTransferProgressPolicy {
         percent>0->"Extractor reports $percent% · checking for saved media bytes"
         else->"Waiting for first original media byte"
     }
+
+    /**
+     * The JK native VOD writer persists SHA-verified fragments in its private
+     * selected-jk-* stage. The original top-level file scanner deliberately
+     * does not count those nested fragments, so using it alone aborts a real
+     * transfer as an 80-second zero-byte stall. Only a fresh, selected JK
+     * journal stage can contribute these independently verified bytes.
+     * Other video providers keep their existing top-level byte policy.
+     */
+    fun observedBytes(isJkNative:Boolean,topLevelBytes:Long,
+                      journalStage:String?,journalUpdatedMs:Long?,
+                      journalBytes:Long?,attemptStartWallMs:Long):Long {
+        val disk=topLevelBytes.coerceAtLeast(0L)
+        if(!isJkNative || journalStage !in setOf(
+                "receiving","fragments","verifying") ||
+            journalUpdatedMs==null ||
+            journalUpdatedMs<attemptStartWallMs)return disk
+        return maxOf(disk,journalBytes?.coerceAtLeast(0L)?:0L)
+    }
 }
