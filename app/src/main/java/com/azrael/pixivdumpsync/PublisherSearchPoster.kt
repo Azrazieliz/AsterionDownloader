@@ -47,7 +47,7 @@ internal object PublisherSearchPoster {
             ?.let{connection.header("Cookie",it)}
         val response=connection.execute()
         if(response.statusCode() !in 200..299)return null
-        val mime=response.contentType().lowercase()
+        val mime=response.contentType().orEmpty().lowercase(java.util.Locale.ROOT)
         if(!mime.startsWith("text/html") &&
             !mime.startsWith("application/xhtml+xml"))return null
         return fromHtml(response.body(),response.url().toString())
