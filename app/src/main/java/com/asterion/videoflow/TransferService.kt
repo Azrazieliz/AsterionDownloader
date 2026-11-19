@@ -685,7 +685,7 @@ object VideoEngine {
                         item.url,link,referer,parent,
                         item.title+" ["+item.id+"]",
                         NetworkRoute.javaProxy(context,item.url),
-                        progress={percent,verifiedBytes->
+                        progress={percent,verifiedBytes,fragmentsDone,fragmentsTotal->
                             if(!db.progressClaim(item.id,item.lease,percent))
                                 throw java.util.concurrent.CancellationException(
                                     "Selected JK native transfer lease superseded")
@@ -699,6 +699,16 @@ object VideoEngine {
                             if(percent>=90)
                                 VideoTransferJournal.record(context,item.id,
                                     "verifying","Assembling selected HLS original")
+                            else if(verifiedBytes>0L &&
+                                fragmentsDone in 1..fragmentsTotal &&
+                                fragmentsTotal>0)
+                                // Preserve the actual publisher HLS fragment
+                                // denominator in the existing cross-process
+                                // journal. The UI must not infer file progress
+                                // from a generic extractor percentage.
+                                VideoTransferJournal.record(context,item.id,
+                                    "fragments",
+                                    "$fragmentsDone/$fragmentsTotal fragments")
                             status(percent)
                         },
                         cancelled={
