@@ -325,10 +325,31 @@ object AsterionAdultHub {
                 publicBySite[it.host].orEmpty().isNotEmpty()
         }
         val inactive=sources.filterNot{it in active}
+        // A source with 100 indexed posters can STILL have 7 failed real
+        // originals. Previously "0 source errors" counted only providers
+        // lacking a thumbnail, hiding actual VideoFlow failures completely.
+        val catalogErrors=sources.count{!error(it,a).isNullOrBlank()}
+        val transferBySite=runCatching{
+            VideoDb(a).use{db->
+                val counts=HashMap<String,Int>()
+                db.readableDatabase.rawQuery(
+                    "SELECT url FROM videos WHERE state IN ('error','full_only_hold')",
+                    null).use{cursor->
+                    while(cursor.moveToNext()){
+                        val site=SiteControls.key(cursor.getString(0).orEmpty())
+                        if(site in approvedHosts)
+                            counts[site]=(counts[site]?:0)+1
+                    }
+                }
+                counts
+            }
+        }.getOrDefault(emptyMap())
+        val transferFailures=transferBySite.values.sum()
         parent.addView(ui.text(a,
             sources.size.toString()+" websites · "+active.size+
                 " with indexed media cards · "+
-                inactive.count{!error(it,a).isNullOrBlank()}+" source errors · "+
+                catalogErrors+" catalog errors · "+
+                transferFailures+" failed selected originals · "+
                 inactive.size+" without cards",
             12f,ui.secondary),ui.lp(a,3))
         // A selected model's content remains inside that model's card, rather
@@ -378,6 +399,11 @@ object AsterionAdultHub {
                 maxLines=1;ellipsize=TextUtils.TruncateAt.END
             })
             nameBlock.addView(ui.text(a,site.host,12f,ui.secondary),ui.lp(a,4))
+            transferBySite[site.host]?.takeIf{it>0}?.let{count->
+                nameBlock.addView(ui.text(a,
+                    count.toString()+" selected original transfer failures",
+                    11f,ui.danger,true),ui.lp(a,4))
+            }
             identity.addView(nameBlock,LinearLayout.LayoutParams(0,-2,1f))
             card.addView(identity)
             if(media.isNotEmpty()||searches.isNotEmpty()||public.isNotEmpty()){
