@@ -26,14 +26,16 @@ class NduUploadService : Service() {
         @Volatile var currentStatus:String="Idle"
             private set
         fun launch(context:android.content.Context, backfill:Boolean=false) {
-            if (!AppPower.enabled(context) || !NduSettings.configured(context)) return
+            if (!NduSettings.cloudOnly(context) ||
+                !AppPower.enabled(context) || !NduSettings.configured(context))return
             val i=Intent(context,NduUploadService::class.java)
                 .setAction(if(backfill) ACTION_QUEUE_EXISTING else ACTION_UPLOAD)
             context.startForegroundService(i)
         }
         /** Explicit TeraBox upload; does not turn on site backfill/sync. */
         fun uploadNow(context:android.content.Context):Boolean{
-            if(!NduSettings.configured(context))return false
+            if(!NduSettings.cloudOnly(context) ||
+                !NduSettings.configured(context))return false
             context.startForegroundService(Intent(context,NduUploadService::class.java)
                 .setAction(ACTION_MANUAL_UPLOAD))
             return true
@@ -58,7 +60,8 @@ class NduUploadService : Service() {
             return START_NOT_STICKY
         }
         val manual=intent?.action==ACTION_MANUAL_UPLOAD
-        if(!manual && !AppPower.enabled(this)){
+        if(!NduSettings.cloudOnly(this) ||
+            (!manual && !AppPower.enabled(this))){
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             return START_NOT_STICKY
@@ -67,7 +70,8 @@ class NduUploadService : Service() {
         stop=false
         running=executor.submit {
             try {
-                if(!NduSettings.configured(this)) return@submit
+                if(!NduSettings.cloudOnly(this) ||
+                    !NduSettings.configured(this))return@submit
                 // Cloud-first: only queue explicit originals. Do not scan
                 // historical Kuroha/device storage or manufacture new phone
                 // transfers from DownloadManager. Existing pending legacy
