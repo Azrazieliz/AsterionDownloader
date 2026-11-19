@@ -673,7 +673,8 @@ object UnifiedDownloadsUi {
             }
         }
         val hidden=hiddenPrefs(a).getStringSet("keys",emptySet()).orEmpty()
-        return rows.filterNot{it.state in setOf(State.DONE,State.PAUSED) &&
+        return rows.filterNot{it.state in setOf(State.DONE,State.PAUSED,
+            State.FAILED,State.HELD) &&
             rowId(it) in hidden}.sortedWith(compareBy<Row>{
             when(it.state){
                 State.ACTIVE->0;State.FAILED->1;State.HELD->2
@@ -1253,8 +1254,91 @@ object UnifiedDownloadsUi {
             })
             card.addView(header)
             if(opened){
-                // No per-file history/matrix in this view. Retain scoped
-                // commands that operate on the real durable queue records.
+                // 'Manage' must perform actual operations. Show the selected
+                // module's unfinished durable jobs and contextual actions
+                // rather than merely toggling its heading to 'Close'.
+                val failures=items.filter{
+                    it.state in setOf(State.FAILED,State.HELD)
+                }
+                val managed=items.filter{it.state!=State.DONE}.take(16)
+                if(source=="Video" && totals.failed>0){
+                    card.addView(ui.action(a,
+                        "CLEAR "+totals.failed+" FAILED · KEEP FILES",false){
+                        android.app.AlertDialog.Builder(a)
+                            .setTitle("Clear failed video jobs?")
+                            .setMessage("This acknowledges terminal failures "+
+                                "and removes their red download alerts. "+
+                                "Saved originals and the original error "+
+                                "records remain on the phone. "+
+                                "Queued, active and paused jobs are not touched.")
+                            .setNegativeButton("Keep",null)
+                            .setPositiveButton("Clear failures"){_,_->
+                                VideoDb(a).use{it.clearTerminalFailures()}
+                                DownloadStateSignals.changed(a)
+                                refresh()
+                            }.show()
+                    },ui.lp(a,9))
+                }
+                if(managed.isNotEmpty()){
+                    card.addView(ui.text(a,
+                        "Tracked jobs · "+managed.size+" shown",
+                        12f,ui.secondary,true),ui.lp(a,10,4))
+                    for(job in managed){
+                        val panel=LinearLayout(a).apply{
+                            orientation=LinearLayout.VERTICAL
+                            setPadding(0,ui.px(a,8),0,ui.px(a,8))
+                        }
+                        panel.addView(ui.text(a,job.filename.take(95),
+                            13f,ui.white,true).apply{
+                            maxLines=2
+                            ellipsize=android.text.TextUtils.TruncateAt.END
+                        })
+                        val stateDescription=when(job.state){
+                            State.ACTIVE->"Working"
+                            State.QUEUED->"Queued"
+                            State.PAUSED->"Paused"
+                            State.FAILED->"Failed"
+                            State.HELD->"Needs action"
+                            State.DONE->"Saved"
+                        }
+                        val progress=job.percent?.let{" · $it%"}.orEmpty()
+                        val bytes=if(job.receivedBytes>0)
+                            " · "+sizeLabel(job.receivedBytes) else ""
+                        panel.addView(ui.text(a,
+                            stateDescription+progress+bytes+" · "+
+                                job.info.substringAfter(" · ",job.info).take(105),
+                            11f,if(job.state in setOf(State.FAILED,State.HELD))
+                                ui.danger else ui.secondary),ui.lp(a,5))
+                        val actions=ui.row(a)
+                        if(job.hasPrimaryAction && job.actionText!=null &&
+                            job.actionText !in setOf("COOLDOWN")){
+                            actions.addView(ui.action(a,job.actionText,false){
+                                job.action();refresh()
+                            },LinearLayout.LayoutParams(0,-2,1f))
+                        }
+                        if(job.state in setOf(State.FAILED,State.HELD)){
+                            actions.addView(ui.action(a,"CLEAR",false){
+                                if(job.source=="Video"){
+                                    val id=job.key?.removePrefix("video:")
+                                        ?.toLongOrNull()
+                                    if(id!=null)VideoDb(a).use{
+                                        it.clearTerminalFailure(id)
+                                    }
+                                }else hideRow(a,job)
+                                refresh()
+                            },LinearLayout.LayoutParams(0,-2,1f))
+                        }
+                        if(actions.childCount>0)
+                            panel.addView(actions,ui.lp(a,6))
+                        card.addView(panel,ui.lp(a,5))
+                    }
+                }else{
+                    card.addView(ui.text(a,
+                        "No unfinished file jobs in this module. "+
+                            "Totals include durable background media records.",
+                        12f,ui.secondary),ui.lp(a,10))
+                }
+                // Scoped bulk controls retain the existing engine operations.
                 val pausable=items.filter{
                     it.state in setOf(State.ACTIVE,State.QUEUED) &&
                     it.actionText in setOf("PAUSE","HOLD")
@@ -1306,9 +1390,6 @@ object UnifiedDownloadsUi {
                         },LinearLayout.LayoutParams(0,-2,1f))
                     card.addView(actions,ui.lp(a,9))
                 }
-                val failures=items.filter{
-                    it.state in setOf(State.FAILED,State.HELD)
-                }
                 if(failures.isNotEmpty()){
                     card.addView(ui.action(a,
                         "ISSUES · "+totals.failed,true){
@@ -1326,6 +1407,7 @@ object UnifiedDownloadsUi {
                                 if(failure.hasPrimaryAction)choices.add(
                                     failure.actionText?:"Retry original")
                                 choices.add("Keep for later")
+                                choices.add("Clear failure · keep saved files")
                                 if(failure.onRemove!=null)
                                     choices.add("Discard failed job")
                                 android.app.AlertDialog.Builder(a)
@@ -1335,6 +1417,17 @@ object UnifiedDownloadsUi {
                                         when(choices[i]){
                                             "Discard failed job"->{
                                                 failure.onRemove?.invoke()
+                                                refresh()
+                                            }
+                                            "Clear failure · keep saved files"->{
+                                                if(failure.source=="Video"){
+                                                    val id=failure.key
+                                                        ?.removePrefix("video:")
+                                                        ?.toLongOrNull()
+                                                    if(id!=null)VideoDb(a).use{
+                                                        it.clearTerminalFailure(id)
+                                                    }
+                                                }else hideRow(a,failure)
                                                 refresh()
                                             }
                                             "Keep for later"->{}
