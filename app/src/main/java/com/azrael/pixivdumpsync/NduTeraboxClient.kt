@@ -24,7 +24,11 @@ class NduTeraboxClient(private val ndus: String,
     private var jsToken = ""
     private var bdstoken = ""
     private val createdFolders = hashSetOf<String>()
-    private val base = "https://$domain"
+    // nephobox.com redirects its homepage (HTTP 301) to www.nephobox.com.
+    // Canonicalize BEFORE sending the encrypted NDUS session, never replay
+    // credentialed requests through arbitrary HTTP redirects.
+    private val canonicalHost=if(domain=="nephobox.com")"www.nephobox.com" else domain
+    private val base = "https://$canonicalHost"
     private val userAgent = "terabox;1.37.0.7;PC;PC-Windows;10.0.22631;WindowsTeraBox"
 
     init { require(domain in setOf("www.terabox.com","nephobox.com")) }
@@ -75,6 +79,7 @@ class NduTeraboxClient(private val ndus: String,
         val host=uri.host?.lowercase(Locale.ROOT).orEmpty()
         require(uri.scheme=="https" &&
             (host=="www.terabox.com" || host=="nephobox.com" ||
+             host=="www.nephobox.com" ||
              host.endsWith(".terabox.com") || host.endsWith(".nephobox.com"))) {
             "Refusing untrusted TeraBox endpoint"
         }
@@ -128,6 +133,13 @@ class NduTeraboxClient(private val ndus: String,
     fun connect() {
         // Check cookie before exposing any upload operation.
         val login=request("/api/check/login")
+        val status=login.optInt("errno",Int.MIN_VALUE)
+        if(status!=0)
+            throw java.io.IOException(
+                if(status==-6 || status==-9 || status==2)
+                    "NDUS is expired or the account is not signed in on "+
+                    canonicalHost+" (TeraBox code "+status+")"
+                else "TeraBox NDUS login was not accepted (code "+status+")")
         ok(login,"NDUS authentication")
         // Web token is necessary for precreate/create. Sources sometimes ship
         // the token in a URL-encoded inline JS function.
