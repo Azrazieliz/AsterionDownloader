@@ -12,10 +12,25 @@ import java.util.concurrent.Future
 /** Periodic network-only retry for a durable upload queue. */
 object NduCloudScheduler {
     private const val JOB_ID=9321
+    private const val NOW_ID=9322
+    /** Wake the genuine cloud transfer worker now, not at the next
+     * 15-minute periodic upload. The platform may defer the job. */
+    fun requestImmediate(ctx:Context):Boolean {
+        if(!NduSettings.configured(ctx) || !AppPower.enabled(ctx))return false
+        val job=JobInfo.Builder(NOW_ID,
+            ComponentName(ctx,NduCloudJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setMinimumLatency(1_000L)
+            .setOverrideDeadline(12_000L)
+            .build()
+        return ctx.getSystemService(JobScheduler::class.java)
+            .schedule(job)==JobScheduler.RESULT_SUCCESS
+    }
     fun configure(ctx:Context, enabled:Boolean) {
         val scheduler=ctx.getSystemService(JobScheduler::class.java)
         if(!enabled || !AppPower.enabled(ctx)) {
             scheduler.cancel(JOB_ID)
+            scheduler.cancel(NOW_ID)
             return
         }
         val info=JobInfo.Builder(JOB_ID,ComponentName(ctx,NduCloudJobService::class.java))
