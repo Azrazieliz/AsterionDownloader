@@ -848,6 +848,16 @@ object VideoEngine {
                             "Selected video yielded no original bytes after "+
                             (VideoTransferLimits.NO_BYTES_RESOLVE_MS/1000)+"s; "+
                             "check the selected player before retrying")
+                    if(VideoTransferProgressPolicy.nativeAssemblyAdvanced(
+                            jkNative,stageSnapshot?.stage,
+                            stageSnapshot?.updated,lastAssemblyTick,attemptWallStart)){
+                        lastAssemblyTick=stageSnapshot!!.updated
+                        // During native ordered assembly, fragment reception
+                        // is complete but new validated staging checkpoints
+                        // prove that the worker is still making real progress.
+                        // Keep the 110-second safety limit for idle assembly.
+                        lastByteTick=now
+                    }
                     if(current>latestBytes){
                         latestBytes=current
                         lastByteTick=now
