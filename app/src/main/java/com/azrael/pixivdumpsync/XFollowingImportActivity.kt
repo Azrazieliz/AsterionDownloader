@@ -363,7 +363,7 @@ class XFollowingImportActivity:Activity(){
                           const ownerProfile=document.querySelector(
                             'a[data-testid="AppTabBar_Profile_Link"]');
                           const ownerHref=(ownerProfile?.getAttribute('href')||
-                            '').replace(/\\/$/,'');
+                            '').replace(/\/$/,'');
                           // Count comes ONLY from the signed-in owner's
                           // own /following link, never a recommendation or
                           // a target person's sidebar "Following" count.
@@ -376,7 +376,7 @@ class XFollowingImportActivity:Activity(){
                             const raw=(a.getAttribute('aria-label')||'')+
                               ' '+(a.textContent||'');
                             const match=raw.replace(/,/g,'').match(
-                              /(?:^|\\s)(\\d{1,7})\\s*following\\b|\\bfollowing\\s*(\\d{1,7})\\b/i);
+                              /(?:^|\s)(\d{1,7})\s*following\b|\bfollowing\s*(\d{1,7})\b/i);
                             if(match)followingCount=Number(match[1]||match[2]);
                           });
                           return JSON.stringify({
