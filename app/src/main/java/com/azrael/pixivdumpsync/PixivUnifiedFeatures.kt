@@ -52,12 +52,16 @@ internal object PixivUnifiedFeatures {
             return
         }
         val state=SyncControl.snapshot()
-        if(state.running){
+        if(state.running && mode!=SyncMode.BACKFILL){
             notice(a,if(mode==SyncMode.LIVE)
                 "Pixiv is busy; new artwork can be checked after this run"
                 else "Pixiv is already running; finish or stop the current job first")
             return
         }
+        // The EXISTING Kuroha service already durably queues a manual
+        // BACKFILL while another sync runs. Do not block it in this unified
+        // UI: that was why legacy backfill worked but regular artist actions
+        // silently rejected the same valid request.
         val req=Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
             .putExtra(SyncForegroundService.EXTRA_MODE,mode.name)
@@ -66,7 +70,9 @@ internal object PixivUnifiedFeatures {
         if(artist!=null)req.putExtra(SyncForegroundService.EXTRA_TARGET_ARTIST_ID,artist)
         if(artwork!=null)req.putExtra(SyncForegroundService.EXTRA_TARGET_ARTWORK_ID,artwork)
         runCatching{a.startForegroundService(req)}
-            .onSuccess{notice(a,"Pixiv "+mode.name.lowercase()+" request sent")}
+            .onSuccess{notice(a,if(state.running && mode==SyncMode.BACKFILL)
+                "Pixiv history request queued after the active run"
+                else "Pixiv "+mode.name.lowercase()+" request sent")}
             .onFailure{notice(a,"Pixiv could not start: "+it.message)}
     }
 
@@ -247,16 +253,19 @@ internal object PixivUnifiedFeatures {
                 Uri.parse("https://www.pixiv.net/users/"+artist.userId)))
         },LinearLayout.LayoutParams(0,-2,1f))
         if(status=="RUNNING" && SyncControl.snapshot().running){
-            row.addView(ui.text(a,"SYNC RUNNING",11f,ui.primary,true),
-                LinearLayout.LayoutParams(0,-2,1f).apply{
-                    leftMargin=ui.px(a,6)
-                })
+            row.addView(ui.action(a,"QUEUE BACKFILL",false){
+                service(a,SyncMode.BACKFILL,artist=artist.userId)
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=ui.px(a,6)
+            })
         }else{
             row.addView(ui.action(a,actionLabel,false){
                 if(SyncControl.snapshot().running){
                     notice(a,"Pixiv sync is already active")
                 }else{
-                    if(hasPartial)AppDb(a).use{it.clearArtistError(artist.userId)}
+                    // Preserve the earlier error until the service has
+                    // actually started; it clears it when it enters RUNNING.
+                    // A failed foreground start must not erase diagnostics.
                     val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
                         else SyncMode.LIVE
                     service(a,mode,artist=artist.userId)
