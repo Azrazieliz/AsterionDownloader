@@ -244,7 +244,7 @@ object VideoEngine {
                         db.pause(next.id)
                         VideoTransferJournal.record(context,next.id,"paused")
                         onStatus("Paused video: "+next.title)
-                    }else if(t is java.util.concurrent.CancellationException ||
+                    }else if(VideoErrorDetail.workerInterrupted(t) ||
                         Thread.currentThread().isInterrupted){
                         db.workerInterrupted(next.id,next.lease)
                         VideoTransferJournal.record(context,next.id,"worker_interrupted")
