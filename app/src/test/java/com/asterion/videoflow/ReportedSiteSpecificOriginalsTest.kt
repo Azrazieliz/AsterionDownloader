@@ -248,6 +248,25 @@ class ReportedSiteSpecificOriginalsTest {
             "https://rule34video.com/video/4727779/",
             "https://nhplayer.com/v/Z2flAXXPucyCbVJ/"))
     }
+    @Test fun nhplayerCompactBrowserSnapshotRoutesOnlyItsPublishedSelectedServer() {
+        // BrowserPageFetch emits this compact first-party DOM after the
+        // selected /v/ HTML has loaded. It must reach the existing native
+        // selected-server resolver without a generic extractor hop.
+        val selected="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
+        val server="https://nhplayer.com/player.php?i=opaque1&s=2&vid=episode2"
+        val snapshot="""<html><body><main><div class="video-player">
+            <ul class="servers"><li data-id="$server"></li></ul>
+            </div></main></body></html>"""
+        assertEquals(server,SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,snapshot))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,snapshot.replace("</ul>",
+                "<li data-id='/player.php?i=other&s=3&vid=wrong'></li></ul>")))
+        assertNull(SiteSpecificOriginalSources.selectedNhPlayerServer(
+            selected,snapshot.replace("nhplayer.com/player.php",
+                "nhplayer.com.evil.example/player.php")))
+    }
+
     @Test fun selectedNhplayerServerMustBeUniquelyPublishedByThatIframe(){
         val selected="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
         val accepted="https://nhplayer.com/player.php?data=selected_opaque_token"
