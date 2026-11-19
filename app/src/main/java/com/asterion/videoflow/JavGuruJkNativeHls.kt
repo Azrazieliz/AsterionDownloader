@@ -256,6 +256,14 @@ internal object JavGuruJkNativeHls {
             expected==fileHash(file)
     }.getOrDefault(false)
 
+    /** The percentage is derived from verified completed fragments, not
+     * elapsed time, worker count, or an optimistic network estimate.
+     */
+    internal fun fragmentPercent(complete:Int,total:Int):Int {
+        require(total>0 && complete in 0..total)
+        return complete*90/total
+    }
+
     private fun segmentIv(plan:Plan,index:Int):ByteArray {
         plan.explicitIv?.let{return it.copyOf()}
         val iv=ByteArray(16)
@@ -342,7 +350,7 @@ internal object JavGuruJkNativeHls {
                     missing+=index to url
                 }
             }
-            progress(5+(completedFragments*78/plan.segments.size),total)
+            progress(fragmentPercent(completedFragments,plan.segments.size),total)
             for((index,url) in missing){
                 queue.submit(Callable{
                     checkCancel()
@@ -383,7 +391,7 @@ internal object JavGuruJkNativeHls {
                 completedFragments++
                 if(completedFragments%8==0 ||
                     completedFragments==plan.segments.size)
-                    progress(5+(completedFragments*78/plan.segments.size),total)
+                    progress(fragmentPercent(completedFragments,plan.segments.size),total)
             }
             checkCancel()
             if(total<30_000_000L)
@@ -404,10 +412,12 @@ internal object JavGuruJkNativeHls {
                             digest.update(buffer,0,n)
                         }
                     }
-                    if(!part.delete())
-                        throw IOException("Unable to release selected fragment staging")
+                    // Keep SHA-verified fragments through the ENTIRE
+                    // ordered assembly, media validation and final rename.
+                    // A failed playback check or pause must not destroy the
+                    // first N fragments of the selected movie.
                     if(index%24==0)
-                        progress(84+(index*12/plan.segments.size),total)
+                        progress(90+(index*9/plan.segments.size),total)
                 }
                 out.fd.sync()
             }
@@ -440,7 +450,7 @@ internal object JavGuruJkNativeHls {
             }else if(!tempFinal.renameTo(finalFile))
                 throw IOException("Cannot publish validated JK staging file")
             completed=true
-            progress(100,total)
+            progress(99,total)
             return finalFile
         }finally{
             pool.shutdownNow()
