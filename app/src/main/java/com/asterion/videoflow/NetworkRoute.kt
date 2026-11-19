@@ -103,7 +103,7 @@ internal object NetworkRoute {
         val owner=siteKey(publisher)
         val source=siteKey(selected)
         return if(owner.isNotBlank() && source.isNotBlank() &&
-            owner!=source && selectedMode in setOf("http","socks5","vpn"))
+            owner!=source && selectedMode.orEmpty() in setOf("http","socks5","vpn"))
             selected else publisher
     }
     fun javaProxyForSelected(
