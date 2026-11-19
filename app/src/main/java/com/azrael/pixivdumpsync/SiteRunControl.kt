@@ -117,7 +117,10 @@ object SiteRunControl {
             .putLong(key(address)+":requested_ms",System.currentTimeMillis()).apply()
         record(app,address,"QUEUED","Manual historical backfill requested")
         val launched=spawn(app,address,area)
-        if(!launched)scheduleIfPending(app)
+        // A user-tapped BACKFILL is interactive work. Recover an unavailable
+        // immediate worker within a few seconds, not the old 90-second
+        // periodic source sweep. Background-only retries still use backoff.
+        if(!launched)scheduleIfPending(app,3_000L)
         return launched
     }
 
