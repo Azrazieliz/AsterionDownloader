@@ -64,7 +64,10 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
  scans=list(pool.map(inspect,pages))
 print(json.dumps({"site":"helloporn.com","catalog_status":status,
  "selected_articles_discovered":len(pages),"articles":scans,
- "distinct_player_host_sets":dict(collections.Counter(
-   tuple(sorted(set(f["host"] for f in scan["frames"]))) for scan in scans)),
+ "distinct_player_host_sets":{
+   ",".join(hosts) or "(none)":amount
+   for hosts,amount in collections.Counter(
+     tuple(sorted(set(f["host"] for f in scan["frames"]))) for scan in scans
+   ).items()},
  "sampled_original_media_bytes":0,"proof_of_selected_media":False
 }),flush=True)
