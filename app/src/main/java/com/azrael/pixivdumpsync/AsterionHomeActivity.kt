@@ -463,6 +463,24 @@ class AsterionHomeActivity:Activity(){
         render()
         scroller.post{scroller.scrollTo(0,pageScroll[previous]?:0)}
     }
+    /** Genuine destination for module-scoped management. Downloads remains
+     * the one global Control Center; existing module pages own artist,
+     * gallery, source and torrent selection state.
+     */
+    fun openDownloadsModule(source:String){
+        val destination=when(source){
+            "Pixiv"->"Pixiv"
+            "Gallery"->"Site"
+            "X"->"X"
+            "Torrents"->"Torrents"
+            "Video"->"Porn"
+            "Comic ZIP","EPUB","Novel ZIP"->"Books"
+            "Assets"->"Assets"
+            "Creators"->"CreatorDiscovery"
+            else->null
+        }
+        if(destination!=null)open(destination)
+    }
     private fun open(target:String){
         if(target==page){
             if(::scroller.isInitialized)scroller.smoothScrollTo(0,0)
