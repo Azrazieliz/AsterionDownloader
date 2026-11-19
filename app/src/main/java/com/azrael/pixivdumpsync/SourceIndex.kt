@@ -186,6 +186,7 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
         DownloadStateSignals.changed(signalContext)
+        DownloadStateSignals.catalogChanged(signalContext)
     }
     /** A failed page must never roll back the last successful backfill cursor/count. */
     /** Remove only a disproven *generic parser* warning on a provider with
@@ -206,6 +207,7 @@ class SourceIndexDb(context:Context):
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
         DownloadStateSignals.changed(signalContext)
+        DownloadStateSignals.catalogChanged(signalContext)
     }
     fun sources():List<IndexedSource>{
         val out=ArrayList<IndexedSource>()
@@ -238,6 +240,7 @@ class SourceIndexDb(context:Context):
         }
         if(inserted || !item.preview.isNullOrBlank())
             DownloadStateSignals.changed(signalContext)
+        DownloadStateSignals.catalogChanged(signalContext)
         return inserted
     }
     fun markQueued(url:String){
