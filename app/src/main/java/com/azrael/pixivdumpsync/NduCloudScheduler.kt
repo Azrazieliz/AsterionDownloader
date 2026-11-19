@@ -17,7 +17,8 @@ object NduCloudScheduler {
      * 15-minute periodic upload. The platform may defer the job. */
     fun requestImmediate(ctx:Context):Boolean = requestAfter(ctx,1_000L)
     fun requestAfter(ctx:Context,delayMs:Long):Boolean {
-        if(!NduSettings.configured(ctx) || !AppPower.enabled(ctx))return false
+        if(!NduSettings.cloudOnly(ctx) || !NduSettings.configured(ctx) ||
+            !AppPower.enabled(ctx))return false
         val delay=delayMs.coerceIn(1_000L,60L*60_000L)
         val job=JobInfo.Builder(NOW_ID,
             ComponentName(ctx,NduCloudJobService::class.java))
@@ -30,7 +31,8 @@ object NduCloudScheduler {
     }
     fun configure(ctx:Context, enabled:Boolean) {
         val scheduler=ctx.getSystemService(JobScheduler::class.java)
-        if(!enabled || !AppPower.enabled(ctx)) {
+        if(!enabled || !NduSettings.cloudOnly(ctx) ||
+            !AppPower.enabled(ctx)) {
             scheduler.cancel(JOB_ID)
             scheduler.cancel(NOW_ID)
             return
@@ -48,7 +50,8 @@ class NduCloudJobService : JobService() {
     private val executor=Executors.newSingleThreadExecutor()
     private var running:Future<*>?=null
     override fun onStartJob(params:JobParameters):Boolean {
-        if(!NduSettings.configured(this)) return false
+        if(!NduSettings.cloudOnly(this) ||
+            !NduSettings.configured(this))return false
         running=executor.submit {
             var nextRemoteDue:Long?=null
             try {
@@ -65,10 +68,9 @@ class NduCloudJobService : JobService() {
                     // original. Retry from the existing encrypted ledger.
                     nextRemoteDue=120_000L
                 }
-                if(!NduSettings.cloudOnly(this)){
-                    NduUploadEngine.drain(this,100,7*60_000L,
-                        stop={Thread.currentThread().isInterrupted})
-                }
+                // Local test mode must never drain cloud upload queues.
+                // On cloud-only mode, remote original imports own receipts;
+                // an earlier local-staged uploader is not run in this job.
             } finally {
                 if(!Thread.currentThread().isInterrupted &&
                     AppPower.enabled(this))nextRemoteDue?.let{
