@@ -105,6 +105,7 @@ object TorrentTransfers {
             val raw=value.lowercase(java.util.Locale.ROOT)
             val stage=when{
                 "exported" in raw->"EXPORTED"
+                "exporting" in raw->"EXPORTING"
                 "quarantin" in raw || "security review" in raw->"QUARANTINED"
                 "failed:" in raw || "stalled:" in raw->"FAILED"
                 "pause" in raw->"PAUSED"
