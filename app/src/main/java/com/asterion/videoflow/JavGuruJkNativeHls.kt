@@ -49,13 +49,19 @@ internal object JavGuruJkNativeHls {
         ?.takeIf{it.scheme=="https" && it.userInfo==null &&
             it.host!=null && it.port==-1 && it.rawFragment==null}
 
-    fun eligible(article:String,source:String,referer:String?):Boolean {
+    /** Native-only queue selection must still be an exact JAV Guru post,
+     * never a listing, shortcut, recommendation or spoofed site. */
+    fun selectedArticleForNative(article:String):Boolean {
         val p=parsed(article)?:return false
+        return p.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="jav.guru" &&
+            selectedArticle.matches(p.path.orEmpty())
+    }
+
+    fun eligible(article:String,source:String,referer:String?):Boolean {
+        if(!selectedArticleForNative(article))return false
         val h=parsed(source)?:return false
         val frame=referer?.let(::parsed)?:return false
-        return p.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="jav.guru" &&
-            selectedArticle.matches(p.path.orEmpty()) &&
-            h.host.equals(CDN,ignoreCase=true) &&
+        return h.host.equals(CDN,ignoreCase=true) &&
             h.path.orEmpty().endsWith(".m3u8",true) &&
             h.path.orEmpty().length in 12..900 &&
             !h.path.orEmpty().contains("..") &&
