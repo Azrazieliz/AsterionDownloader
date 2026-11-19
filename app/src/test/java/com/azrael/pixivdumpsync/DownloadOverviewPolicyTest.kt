@@ -44,6 +44,24 @@ class DownloadOverviewPolicyTest {
         assertTrue(DownloadOverviewPolicy.isLiveFile(
             "ACTIVE","Video","real.mp4","video/mp4"))
     }
+    @Test fun missingActualSavedVideoCountsAsFailureRatherThanCompleted(){
+        val oneMissing=DownloadOverviewPolicy.reconciledVideoCounts(
+            done=1,failed=0,missingOriginals=1)
+        org.junit.Assert.assertEquals(0,oneMissing.saved)
+        org.junit.Assert.assertEquals(1,oneMissing.failed)
+        val large=DownloadOverviewPolicy.reconciledVideoCounts(
+            done=120,failed=7,missingOriginals=3)
+        org.junit.Assert.assertEquals(117,large.saved)
+        org.junit.Assert.assertEquals(10,large.failed)
+        val allReadable=DownloadOverviewPolicy.reconciledVideoCounts(
+            done=8,failed=2,missingOriginals=0)
+        org.junit.Assert.assertEquals(8,allReadable.saved)
+        org.junit.Assert.assertEquals(2,allReadable.failed)
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java){
+            DownloadOverviewPolicy.reconciledVideoCounts(1,0,2)
+        }
+    }
+
     @Test fun completionPercentRequiresRealFragmentDenominator() {
         org.junit.Assert.assertEquals(0,
             DownloadOverviewPolicy.hlsCompletion("0/99 fragments"))
