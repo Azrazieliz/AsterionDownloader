@@ -338,42 +338,76 @@ internal object TorrentMetadataBridge {
         val list=obj.getJSONArray("files")
         require(list.length() in 1..20000){"Invalid torrent manifest"}
         val paths=(0 until list.length()).map{list.getJSONObject(it).getString("path")}
-        val names=Array(list.length()){i->
-            val e=list.getJSONObject(i)
-            val risk=TorrentContentRisk.reviewReason(paths[i])
-            (if(risk!=null)"[REVIEW: $risk] " else "")+
-                paths[i]+"  ("+(e.getLong("size")/1024)+" KiB)"
-        }
+        // Rendering 20,000 CheckBox rows in one AlertDialog could freeze
+        // System UI under native memory pressure. Retain ALL 20,000 index
+        // choices in one small boolean array; render at most 80 rows at once.
         val selected=BooleanArray(paths.size){i->
             TorrentContentRisk.selectByDefault(folder,paths[i])
         }
-        AlertDialog.Builder(a).setTitle("Select files: "+obj.optString("name"))
-            .setMultiChoiceItems(names,selected){_,i,checked->selected[i]=checked}
-            .setPositiveButton("DOWNLOAD SELECTED"){_,_->
-                if(!selected.any{it}){
-                    Toast.makeText(a,"Select at least one file",Toast.LENGTH_LONG).show()
-                }else if(folder=="Books" && selected.indices.any{
-                    selected[it] && !paths[it].endsWith(".epub",true)
-                }){
-                    Toast.makeText(a,"Books supports EPUB files",Toast.LENGTH_LONG).show()
-                }else{
-                    val admission=TorrentSafetyGate.assess(a)
-                    if(!admission.allowed){
-                        AlertDialog.Builder(a).setTitle("Torrent safety hold")
-                            .setMessage(admission.reason)
-                            .setPositiveButton("Close",null).show()
-                        return@setPositiveButton
-                    }
-                    val indices=selected.indices.filter{selected[it]}.joinToString(",")
-                    a.startForegroundService(Intent(a,TorrentTransferService::class.java).apply{
-                        action=TorrentTransferService.ADD
-                        putExtra("job",hash)
-                        putExtra("folder",folder)
-                        putExtra("indices",indices)
-                    })
-                    Toast.makeText(a,"Starting selected torrent files",
-                        Toast.LENGTH_LONG).show()
+        fun startSelected(){
+            if(!selected.any{it}){
+                Toast.makeText(a,"Select at least one file",Toast.LENGTH_LONG).show()
+                return
+            }
+            if(folder=="Books" && selected.indices.any{
+                selected[it] && !paths[it].endsWith(".epub",true)
+            }){
+                Toast.makeText(a,"Books supports EPUB files",Toast.LENGTH_LONG).show()
+                return
+            }
+            val admission=TorrentSafetyGate.assess(a)
+            if(!admission.allowed){
+                AlertDialog.Builder(a).setTitle("Torrent safety hold")
+                    .setMessage(admission.reason)
+                    .setPositiveButton("Close",null).show()
+                return
+            }
+            val indices=selected.indices.filter{selected[it]}.joinToString(",")
+            runCatching{
+                a.startForegroundService(Intent(a,TorrentTransferService::class.java).apply{
+                    action=TorrentTransferService.ADD
+                    putExtra("job",hash)
+                    putExtra("folder",folder)
+                    putExtra("indices",indices)
+                })
+            }.onSuccess{
+                Toast.makeText(a,"Starting selected torrent files",
+                    Toast.LENGTH_LONG).show()
+            }.onFailure{
+                AlertDialog.Builder(a).setTitle("Torrent worker unavailable")
+                    .setMessage(it.message?:"Could not start selected torrent transfer")
+                    .setPositiveButton("Close",null).show()
+            }
+        }
+        fun showPage(page:Int){
+            if(a.isFinishing || a.isDestroyed)return
+            val bounds=TorrentChooserPagination.bounds(paths.size,page)
+            val names=Array(bounds.last-bounds.first){offset->
+                val index=bounds.first+offset
+                val e=list.getJSONObject(index)
+                val risk=TorrentContentRisk.reviewReason(paths[index])
+                (if(risk!=null)"[REVIEW: $risk] " else "")+
+                    paths[index].take(230)+"  ("+(e.getLong("size")/1024)+" KiB)"
+            }
+            val checked=BooleanArray(names.size){selected[bounds.first+it]}
+            val heading=obj.optString("name").take(75)+" · "+
+                (page+1)+"/"+TorrentChooserPagination.pageCount(paths.size)
+            val builder=AlertDialog.Builder(a)
+                .setTitle(heading)
+                .setMessage(selected.count{it}.toString()+" / "+paths.size+
+                    " selected · files "+(bounds.first+1)+"–"+bounds.last)
+                .setMultiChoiceItems(names,checked){_,index,value->
+                    selected[bounds.first+index]=value
                 }
-            }.setNegativeButton("Cancel",null).show()
+                .setPositiveButton("DOWNLOAD SELECTED"){_,_->startSelected()}
+                .setNegativeButton(if(page==0)"CANCEL" else "PREVIOUS"){_,_->
+                    if(page>0)showPage(page-1)
+                }
+            if(TorrentChooserPagination.hasNext(paths.size,page)){
+                builder.setNeutralButton("NEXT PAGE"){_,_->showPage(page+1)}
+            }
+            builder.show()
+        }
+        showPage(0)
     }
 }
