@@ -274,20 +274,50 @@ object AsterionDownloadWorker {
                     }
                 }
             }
+            // Cross-app cloud originals are completed ONLY when an actual
+            // TeraBox task is linked to a positive-size remote file receipt.
+            // No completed state from a task submission or HTTP metadata.
+            val cloudJobs=db.inFlightCloud()
+            if(cloudJobs.isNotEmpty())TeraBoxRemoteQueue(context).use{cloud->
+                for(job in cloudJobs){
+                    val remote=cloud.stateForId(job.originalId)
+                    val state=when{
+                        remote=="VERIFIED" &&
+                            cloud.hasVerifiedReceipt(job.originalId)->"COMPLETED"
+                        remote=="ERROR" || remote=="CANCELLED"->"ERROR"
+                        else->null
+                    }?:continue
+                    db.status(job.requestId,state,
+                        if(state=="COMPLETED")
+                            "TeraBox original has verified remote file receipt"
+                        else "TeraBox original import was not completed")
+                    report(context,job.requestId,job.sender,state)
+                }
+            }
             // VideoFlow has its own native queue and cannot be checked through
             // DownloadManager. Report completion only after its saved media exists.
             val videoJobs=db.inFlightVideos()
             if(videoJobs.isNotEmpty())VideoDb(context).use{videoDb->
-                for(job in videoJobs){
-                    val result=when(videoDb.stateForUrl(job.url)){
-                        "done"->"COMPLETED"
-                        "error"->"ERROR"
-                        else->null
-                    }?:continue
-                    db.status(job.requestId,result,
-                        if(result=="COMPLETED")"VideoFlow saved the verified full video"
-                        else "VideoFlow reported an unsuccessful download")
-                    report(context,job.requestId,job.sender,result)
+                TeraBoxRemoteQueue(context).use{remote->
+                    for(job in videoJobs){
+                        val videoState=videoDb.stateForUrl(job.url)
+                        val cloudId=videoDb.pendingCloudIdForUrl(job.url)
+                        val result=when{
+                            cloudId!=null &&
+                                remote.hasVerifiedReceipt(cloudId)->"COMPLETED"
+                            cloudId!=null && remote.stateForId(cloudId)
+                                in setOf("ERROR","CANCELLED")->"ERROR"
+                            videoState=="done" &&
+                                !NduSettings.cloudOnly(context)->"COMPLETED"
+                            videoState=="error"->"ERROR"
+                            else->null
+                        }?:continue
+                        db.status(job.requestId,result,
+                            if(result=="COMPLETED")
+                                "Verified original at required destination"
+                            else "Selected video original not delivered")
+                        report(context,job.requestId,job.sender,result)
+                    }
                 }
             }
         }
@@ -342,6 +372,19 @@ object AsterionDownloadWorker {
                         require(accepted){"VideoFlow did not accept the download request"}
                         db.attachVideo(item.id,original.url)
                     }else{
+                        if(NduSettings.cloudOnly(context)){
+                            // A validated cross-app request may never write to
+                            // Android Downloads. The cloud reservation is
+                            // canonical across sender applications.
+                            CloudOriginalRouting.enqueue(context,original.url,
+                                item.category,original.filename)
+                            db.attachCloud(item.id,
+                                TeraBoxRemoteOriginals.identity(original.url))
+                            db.status(item.id,"QUEUED",
+                                "Waiting for TeraBox verified original")
+                            report(context,item,"QUEUED")
+                            continue
+                        }
                         if(!CrossSourceDedup(context).use{it.reserve(original.url)}){
                             val claim=CrossSourceDedup(context).use{
                                 it.claim(original.url)
