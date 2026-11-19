@@ -137,6 +137,26 @@ object DirectDownloadRetry {
         }catch(_:Exception){false}
         finally{inFlight.remove(id)}
     }
+    /** Clear a FAILED OS request without removing a possibly recoverable
+     * partial from DownloadManager, discarding installed/saved files, or
+     * allowing scheduled jobs to retry after the owner dismissed it.
+     * The error receipt remains as a private tombstone.
+     */
+    fun clearFailed(ctx:Context,id:Long):Boolean {
+        if(id<=0 || inFlight.contains(id) || manualScheduled.contains(id))
+            return false
+        val state=DirectDownloadTracker.states(ctx,250)
+            .firstOrNull{it.job.id==id}?:return false
+        val receipt=OriginalReceiptState.get(ctx,id)
+        if(!DirectDownloadClearPolicy.mayAcknowledge(state.status,receipt))
+            return false
+        OriginalReceiptState.set(ctx,id,"DISMISSED")
+        DirectRetryVault.remove(ctx,id)
+        CrossSourceDedup(ctx).use{it.releaseById(id)}
+        DownloadStateSignals.changed(ctx)
+        return true
+    }
+
     fun retryNow(ctx:Context,id:Long):Boolean{
         if(!AppPower.enabled(ctx))return false
         val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}?:return false
