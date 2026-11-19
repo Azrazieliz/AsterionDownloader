@@ -171,6 +171,22 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(selected,SiteSpecificOriginalSources.playerLink(
             Jsoup.parse(html,page),"fullporner.com"))
     }
+    @Test fun javideoFirstPartyHtmlIsNotAnOriginalForGenericPython(){
+        val page="https://javideo.net/en/fc2ppv-4994603"
+        val firstParty="https://play.javideo.net/embed/selectedplayer123"
+        val supported="https://streamtape.com/e/AaBbCcDdEe12345"
+        // In-place browser evidence: first-party HTML/API HTTP 200, but no
+        // media src or duration after the selected real Play gesture.
+        // Never send that HTML page to generic yt-dlp as an original.
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(page,firstParty))
+        assertFalse(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
+            page,firstParty))
+        assertTrue(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
+            page,supported))
+        assertFalse(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
+            page,"https://ads.example/embed/selectedplayer123"))
+    }
+
     @Test fun selectedHosterFallbackAdmitsExactPlayersButNeverAdIframes(){
         val jav="https://javideo.net/en/mida-863-mosaic"
         val voe="https://helloporn.com/video-28699-selected-video"
