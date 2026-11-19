@@ -44,6 +44,23 @@ class DownloadOverviewPolicyTest {
         assertTrue(DownloadOverviewPolicy.isLiveFile(
             "ACTIVE","Video","real.mp4","video/mp4"))
     }
+    @Test fun completionPercentRequiresRealFragmentDenominator() {
+        org.junit.Assert.assertEquals(0,
+            DownloadOverviewPolicy.hlsCompletion("0/99 fragments"))
+        org.junit.Assert.assertEquals(49,
+            DownloadOverviewPolicy.hlsCompletion("49/100 fragments"))
+        org.junit.Assert.assertEquals(100,
+            DownloadOverviewPolicy.hlsCompletion("4/4 fragments"))
+        org.junit.Assert.assertNull(
+            DownloadOverviewPolicy.hlsCompletion("1% engine stage"))
+        org.junit.Assert.assertNull(
+            DownloadOverviewPolicy.hlsCompletion("101/100 fragments"))
+        org.junit.Assert.assertNull(
+            DownloadOverviewPolicy.hlsCompletion("10/0 fragments"))
+        org.junit.Assert.assertNull(
+            DownloadOverviewPolicy.hlsCompletion(null))
+    }
+
     @Test fun misleadingFileNameCannotOverrideImageMime() {
         assertFalse(DownloadOverviewPolicy.isLiveFile(
             "ACTIVE","Video","download.mp4","image/png"))
