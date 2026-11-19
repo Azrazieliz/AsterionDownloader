@@ -93,6 +93,12 @@ def main():
                     if test.scheme=="https" and test.hostname=="play.javideo.net" and re.fullmatch(
                         r"/(?:embed|player)/[A-Za-z0-9_-]{5,100}/?",test.path) and not test.query:
                         exact=state["frames"][0];break
+                if i in (7,17):
+                    # Genuine re-click of the identical first-party article
+                    # control only when no selected iframe has appeared.
+                    # Publisher JS can register its handler after first click.
+                    try:trusted_selected_play(ws,700+i*5)
+                    except Exception:pass
                 time.sleep(.6)
             if not exact:
                 print(json.dumps({"stage":"SELECTED_JAVIDEO_SAME_PROCESS_FRAME",
