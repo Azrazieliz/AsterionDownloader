@@ -246,3 +246,21 @@ tasks.matching { it.name == "packageAcceptance" }.configureEach {
     dependsOn(verifyFrozenVideoProviders)
     dependsOn("testAcceptanceUnitTest")
 }
+
+/** JVM loopback-original tests write several MiB of genuinely received
+ * range bytes. Windows' user TEMP (normally on C:) may have insufficient
+ * headroom while Android dex/signing builds run concurrently on D:.
+ * Keep test scratch in the same build volume. This does NOT change the
+ * Android app, any frozen provider, its 64MiB production reserve or tests'
+ * length/hash/ETag/original-integrity assertions.
+ */
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    val scratch=project.layout.buildDirectory
+        .dir("test-scratch/${name}").get().asFile
+    systemProperty("java.io.tmpdir",scratch.absolutePath)
+    doFirst {
+        check(scratch.isDirectory || scratch.mkdirs()) {
+            "Cannot create durable JVM acceptance-test scratch directory"
+        }
+    }
+}
