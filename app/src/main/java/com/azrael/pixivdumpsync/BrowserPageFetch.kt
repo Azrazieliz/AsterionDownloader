@@ -756,6 +756,14 @@ object BrowserPageFetch {
                                     // verified child server is serialized.
                                     com.asterion.videoflow.SiteSpecificOriginalSources
                                         .selectedNhPlayerServer(url,page)==null
+                                } else if(host=="nhplayer.com" &&
+                                    Uri.parse(url).path=="/player.php") {
+                                    // Empty or ad video tags may arrive before
+                                    // the selected first-party AJAX response.
+                                    // Wait only for the genuine /v/ linked
+                                    // r2.1hanime.com .mp4?verify=... source.
+                                    !SelectedPlayerWaitPolicy.selectedNhPlayerReady(
+                                        playerReferer.orEmpty(),url,page)
                                 } else if(host=="javideo.net") {
                                     // Only the selected iframe appears after
                                     // JAVIDEO's Play button; its HTML5 video is
