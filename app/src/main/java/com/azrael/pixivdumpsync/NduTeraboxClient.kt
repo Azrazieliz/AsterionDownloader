@@ -22,6 +22,7 @@ import kotlin.math.min
 class NduTeraboxClient(private val ndus: String,
                       private val domain: String = "www.terabox.com") {
     private var jsToken = ""
+    private var bdstoken = ""
     private val createdFolders = hashSetOf<String>()
     private val base = "https://$domain"
     private val userAgent = "terabox;1.37.0.7;PC;PC-Windows;10.0.22631;WindowsTeraBox"
@@ -138,6 +139,12 @@ class NduTeraboxClient(private val ndus: String,
             Regex("[\"']jsToken[\"']\\s*:\\s*[\"']([^\"']+)[\"']")
         )
         jsToken=patterns.firstNotNullOfOrNull { it.find(html)?.groupValues?.get(1) }.orEmpty()
+        bdstoken=listOf(
+            Regex("""(?i)["']bdstoken["']\\s*:\\s*["']([A-Za-z0-9_-]{8,})["']"""),
+            Regex("""(?i)bdstoken%22%3A%22([A-Za-z0-9_-]{8,})%22""")
+        ).firstNotNullOfOrNull { it.find(html)?.groupValues?.get(1) }
+            ?: login.optJSONObject("data")?.optString("bdstoken").orEmpty()
+
         if (jsToken.isBlank())
             throw java.io.IOException("NDUS login accepted, but TeraBox web token could not be read")
     }
@@ -325,6 +332,71 @@ class NduTeraboxClient(private val ndus: String,
             response.optString("task_id").takeIf{it.isNotBlank()}
         ).firstOrNull()?.take(120)
         return RemoteImportTicket(task)
+    }
+    /**
+     * TeraBox cloud_dl backend for magnet links, no phone-side pieces.
+     * A task ticket is NOT an original-file receipt.
+     */
+    data class CloudTorrentTicket(val taskId:String)
+    fun submitCloudMagnet(magnet:String,savePath:String):CloudTorrentTicket {
+        require(CloudTorrentPolicy.infoHash(magnet)!=null){
+            "Require a valid selected BitTorrent v1 magnet info hash"
+        }
+        require(bdstoken.isNotBlank()){
+            "TeraBox did not expose the authorized cloud-download token"
+        }
+        val directory=NduSettings.validateDirectory(savePath)
+        val response=request("/rest/2.0/services/cloud_dl","POST",
+            query=mapOf("bdstoken" to bdstoken),
+            fields=mapOf("method" to "add_task","type" to "4",
+                "task_from" to "1","source_url" to magnet,
+                "selected_idx" to "","save_path" to directory))
+        val errno=response.optInt("errno",
+            response.optInt("error_code",0))
+        check(errno==0){"TeraBox refused cloud torrent task ($errno)"}
+        val data=response.optJSONObject("data")
+        val task=listOf(response.optString("task_id"),
+            data?.optString("task_id").orEmpty(),
+            response.optString("taskid")).firstOrNull{
+                it.matches(Regex("[A-Za-z0-9_-]{1,120}"))
+            }?:throw java.io.IOException("Cloud torrent task ID missing")
+        return CloudTorrentTicket(task)
+    }
+    fun cloudTorrentTask(taskId:String):JSONObject {
+        require(taskId.matches(Regex("[A-Za-z0-9_-]{1,120}")))
+        require(bdstoken.isNotBlank()){"Missing cloud-download token"}
+        val response=request("/rest/2.0/services/cloud_dl","POST",
+            query=mapOf("bdstoken" to bdstoken),
+            fields=mapOf("method" to "query_task","op_type" to "0",
+                "task_ids" to taskId))
+        val error=response.optInt("errno",
+            response.optInt("error_code",0))
+        check(error==0){"TeraBox torrent query failed ($error)"}
+        return response
+    }
+    /** A task status must be corroborated by actual nonempty files in its
+     * isolated output directory. Do not treat an empty directory as complete.
+     */
+    fun cloudTorrentRemoteFiles(path:String):Pair<Int,Long>{
+        val directory=NduSettings.validateDirectory(path)
+        val response=request("/api/list","GET",
+            query=mapOf("dir" to directory,"num" to "1000",
+                "page" to "1","order" to "name"))
+        ok(response,"TeraBox torrent file inventory")
+        val files=response.optJSONArray("list")?:return 0 to 0L
+        var count=0
+        var total=0L
+        for(i in 0 until files.length()){
+            val row=files.optJSONObject(i)?:continue
+            val size=row.optLong("size",0L)
+            if(row.optInt("isdir",0)!=0 || size<=0L ||
+                row.optLong("fs_id",0L)<=0L)continue
+            val name=row.optString("path")
+            if(!name.startsWith(directory+"/"))continue
+            count++
+            total+=size
+        }
+        return count to total
     }
     /** Real TeraBox transfer record: never interpret a task-submitted
      * response alone as full file delivery. The server may not expose every
