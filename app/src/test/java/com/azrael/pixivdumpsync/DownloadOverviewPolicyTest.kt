@@ -49,8 +49,10 @@ class DownloadOverviewPolicyTest {
             DownloadOverviewPolicy.hlsCompletion("0/99 fragments"))
         org.junit.Assert.assertEquals(49,
             DownloadOverviewPolicy.hlsCompletion("49/100 fragments"))
-        org.junit.Assert.assertEquals(100,
+        org.junit.Assert.assertEquals(95,
             DownloadOverviewPolicy.hlsCompletion("4/4 fragments"))
+        org.junit.Assert.assertEquals(95,
+            DownloadOverviewPolicy.hlsCompletion("751/751 fragments"))
         org.junit.Assert.assertNull(
             DownloadOverviewPolicy.hlsCompletion("1% engine stage"))
         org.junit.Assert.assertNull(
