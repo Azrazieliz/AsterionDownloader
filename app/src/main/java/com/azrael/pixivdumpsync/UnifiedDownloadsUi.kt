@@ -309,6 +309,7 @@ object UnifiedDownloadsUi {
                         item.error.startsWith("Chapter extraction continuing:"))->
                         State.QUEUED
                     item.state=="RETRY"->State.HELD
+                    item.state=="PAUSED"->State.PAUSED
                     item.state=="WORKING"->State.ACTIVE
                     else->State.QUEUED
                 }
@@ -332,6 +333,7 @@ object UnifiedDownloadsUi {
                                     " · $cached chapters safely cached"
                             else "Automatic retry scheduled · "+item.error.orEmpty().take(90)
                         State.ACTIVE->"$cached chapters cached · Extracting"
+                        State.PAUSED->"$cached chapters cached · Paused"
                         State.QUEUED->if(item.state=="RETRY")
                             "$cached chapters cached · next chapter retrieval scheduled"
                             else "$cached chapters cached · Waiting for original"
@@ -356,17 +358,29 @@ object UnifiedDownloadsUi {
                             NovelEpubQueue(a).use{it.retryNow(item.url)}
                             NovelEpubService.schedule(a)
                         }
+                        State.ACTIVE,State.QUEUED->NovelEpubQueue(a).use{
+                            it.pause(item.url)
+                        }
+                        State.PAUSED->{
+                            NovelEpubQueue(a).use{it.resumePaused(item.url)}
+                            NovelEpubService.schedule(a)
+                        }
                         else->{}
                     }
                 },if(present)item.savedUri else null,mime=mime,
-                    actionText=if(providerCooling)"COOLDOWN"
-                        else if(item.state=="RETRY" && state==State.HELD)"RETRY"
-                        else null,
-                    onRemove=if(state!=State.ACTIVE)({
+                    actionText=when{
+                        state==State.ACTIVE->"PAUSE"
+                        state==State.QUEUED->"HOLD"
+                        state==State.PAUSED->"RESUME"
+                        providerCooling->"COOLDOWN"
+                        item.state=="RETRY" && state==State.HELD->"RETRY"
+                        else->null
+                    },
+                    onRemove={
                         if(state==State.DONE)hideRow(a,Row(type,name,"",state,
                             null,0L,{},key="novel:"+item.url))
-                        else NovelEpubQueue(a).use{it.dismiss(item.url)}
-                    }) else null,key="novel:"+item.url)
+                        else NovelEpubQueue(a).use{it.cancel(item.url)}
+                    },key="novel:"+item.url)
             }
         }
         XPhotoQueue(a).use{db->
