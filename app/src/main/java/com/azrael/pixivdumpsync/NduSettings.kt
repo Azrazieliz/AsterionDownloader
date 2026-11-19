@@ -21,6 +21,11 @@ object NduSettings {
     private const val DOMAIN = "domain"
 
     fun enabled(ctx: Context) = ctx.getSharedPreferences(PREF,0).getBoolean(ENABLE,false)
+    /** Owner's canonical policy: final originals are cloud-owned, not phone
+     * Downloads files. Unsupported private streams must be held, never
+     * silently routed back to Android DownloadManager.
+     */
+    fun cloudOnly(ctx:Context):Boolean=true
     fun setEnabled(ctx: Context, yes: Boolean) {
         ctx.getSharedPreferences(PREF,0).edit().putBoolean(ENABLE,yes).apply()
         NduCloudScheduler.configure(ctx,yes)
