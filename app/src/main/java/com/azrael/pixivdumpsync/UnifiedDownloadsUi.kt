@@ -546,6 +546,69 @@ object UnifiedDownloadsUi {
                     actionText=if(state==State.HELD)"RETRY" else null,
                     receivedBytes=item.bytes,key="android:"+item.job.id)
         }
+        // Integrate the existing isolated BitTorrent engine into the ONE
+        // Downloads manager. The main process reads only its atomic receipts;
+        // it never creates another libtorrent engine or fake file success.
+        for(torrent in TorrentTransfers.snapshots(a,200)){
+            val state=when(torrent.stage){
+                "TRANSFERRING"->State.ACTIVE
+                "FAILED"->State.FAILED
+                "PAUSED"->State.PAUSED
+                "QUARANTINED"->State.HELD
+                else->State.QUEUED
+            }
+            val info=when(torrent.stage){
+                "TRANSFERRING"->"Verified torrent pieces · "+
+                    torrent.verifiedBytes+" / "+torrent.wantedBytes+
+                    " bytes · "+torrent.peers+" peers"
+                "WAITING_PEERS"->"Waiting for peers · "+
+                    torrent.peers+" connected; partial pieces preserved"
+                "VERIFYING"->"Checking selected pieces in quarantine"
+                "QUARANTINED"->"BitTorrent hashes verified; private "+
+                    "quarantine awaits a separate security review"
+                else->torrent.text.substringAfter(" · ",torrent.text)
+                    .take(250)
+            }
+            val onAction:()->Unit={
+                val action=when(torrent.stage){
+                    "TRANSFERRING"->TorrentTransferService.PAUSE
+                    "PAUSED","FAILED"->TorrentTransferService.RESUME
+                    else->null
+                }
+                if(action!=null){
+                    runCatching{
+                        a.startForegroundService(
+                            Intent(a,TorrentTransferService::class.java)
+                                .setAction(action)
+                                .putExtra("job",torrent.id))
+                    }.onFailure{
+                        Toast.makeText(a,"Torrent worker: "+
+                            (it.message?:"Unable to start").take(120),
+                            Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            rows+=Row("Torrents","Torrent "+torrent.id.take(8),
+                info,state,
+                if(torrent.stage=="TRANSFERRING" &&
+                    torrent.wantedBytes>0L)
+                    ((torrent.verifiedBytes.toDouble()/
+                        torrent.wantedBytes)*100).toInt().coerceIn(0,100)
+                else null,
+                torrent.updated,onAction,
+                mime="application/x-bittorrent",
+                actionText=when(torrent.stage){
+                    "TRANSFERRING"->"PAUSE"
+                    "PAUSED","FAILED"->"RESUME"
+                    else->null
+                },
+                receivedBytes=torrent.verifiedBytes,
+                hasPrimaryAction=torrent.stage in setOf(
+                    "TRANSFERRING","PAUSED","FAILED"),
+                key="torrent:"+torrent.id,
+                transferStage=torrent.stage,
+                transferUpdated=torrent.updated)
+        }
         // Server-side cloud originals are native download jobs, not a
         // second local-download list. Expose only safe filenames, counts
         // and real cloud proof states. Never expose an encrypted URL.
