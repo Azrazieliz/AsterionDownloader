@@ -175,13 +175,8 @@ internal object FullPornerParallelOriginal {
                 .toString(Charsets.US_ASCII)!="ftyp")
                 throw IOException("Selected source is not MP4")
         }finally{conn.disconnect()}
-        // A resumed verified original already has durable downloaded
-        // segments. Never demand the FULL file size a second time before
-        // reading its ledger: that falsely fails interrupted downloads when
-        // the remaining bytes are tiny. Validate free space against the
-        // actual unverified/missing segments below instead.
-        if(total !in 1024..MAX_SIZE)
-            throw IOException("Selected original size is invalid or too large")
+        if(total !in 1024..MAX_SIZE || directory.usableSpace<total+64L*1024*1024)
+            throw IOException("Original too large or insufficient staging storage")
         val signature=fingerprint+"|"+total+"|"+etag
         if(runCatching{origin.readText().trim()}.getOrNull()!=fingerprint ||
             runCatching{info.readText().trim()}.getOrNull()!=signature)
@@ -200,20 +195,6 @@ internal object FullPornerParallelOriginal {
             if((seg.start to seg.end) in ranges && valid(stage,seg))
                 accepted[seg.start]=seg
         }
-        val missing=ranges.asSequence().filter{it.first !in accepted}
-            .sumOf{it.second-it.first+1L}
-        // Keep a conservative free-space reserve for real phone transfers.
-        // The isolated loopback test's bytes are validated by the filesystem
-        // itself; its host machine may have <64 MiB while Gradle is running.
-        val reserve=when{
-            localTest->0L
-            accepted.isNotEmpty()->8L*1024*1024
-            else->64L*1024*1024
-        }
-        if(directory.usableSpace<missing+reserve)
-            throw IOException(
-                "Insufficient storage for remaining selected original "+
-                "(missing="+missing+" bytes, reserve="+reserve+")")
         val lock=Any()
         val executor=Executors.newFixedThreadPool(2)
         try{
