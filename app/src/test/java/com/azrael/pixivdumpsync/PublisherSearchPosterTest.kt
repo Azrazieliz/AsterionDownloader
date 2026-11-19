@@ -1,0 +1,36 @@
+package com.azrael.pixivdumpsync
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class PublisherSearchPosterTest {
+    @Test fun firstPartyOgImageIsResolvedFromSelectedVideoPage(){
+        val html="<html><head><meta property=\"og:image\" "+
+            "content=\"/uploads/poster.jpg\"></head></html>"
+        assertEquals("https://example.org/uploads/poster.jpg",
+            PublisherSearchPoster.fromHtml(html,"https://example.org/video/123"))
+    }
+    @Test fun javascriptAndLocalPosterAddressesAreRejected(){
+        val html="<meta property=\"og:image\" content=\"javascript:alert(1)\">"
+        assertNull(PublisherSearchPoster.fromHtml(html,
+            "https://example.org/video/123"))
+        val privateHost="<meta property=\"og:image\" "+
+            "content=\"http://127.0.0.1/a.jpg\">"
+        assertNull(PublisherSearchPoster.fromHtml(privateHost,
+            "https://example.org/video/123"))
+    }
+    @Test fun webSearchParsesActualPublisherResultsNotSearchPages(){
+        val html="<div class=\"result\"><a class=\"result__a\" "+
+            "href=\"https://example.org/video/123\">Example Performer Scene</a>"+
+            "<div class=\"result__snippet\">Actual video page</div></div>"+
+            "<div class=\"result\"><a class=\"result__a\" "+
+            "href=\"https://example.org/search?q=example\">Search</a></div>"
+        val found=KeywordSources.parseWebIndex(html,
+            "https://html.duckduckgo.com/html/","DuckDuckGo Web")
+        assertEquals(1,found.size)
+        assertEquals("https://example.org/video/123",found.first().url)
+        assertTrue(found.first().description.contains("Actual"))
+    }
+}
