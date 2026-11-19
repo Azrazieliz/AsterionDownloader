@@ -32,6 +32,18 @@ internal object XFollowingImportPolicy {
         return owner.substring(1).equals(ownHandle,ignoreCase=true)
     }
 
+    /** Virtualized X timelines may look exhausted after one screenful.
+     * Only reconcile/remove old subscriptions if the authenticated owner's
+     * own displayed Following count is known AND exactly matches the unique
+     * verified collected accounts. Unknown or partial counts can ADD
+     * verified subscriptions but can never purge existing accounts.
+     */
+    fun canReconcile(reachedBottom:Boolean,collected:Int,
+                     declaredFollowingCount:Int?):Boolean =
+        reachedBottom && collected>=1 &&
+            declaredFollowingCount!=null &&
+            declaredFollowingCount==collected
+
     fun isOwnFollowingPage(path:String,ownHandle:String):Boolean {
         if(!handlePattern.matches(ownHandle))return false
         return followingPath.matchEntire(path)?.groupValues?.get(1)
