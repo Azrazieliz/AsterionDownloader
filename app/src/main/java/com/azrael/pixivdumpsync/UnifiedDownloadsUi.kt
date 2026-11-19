@@ -82,7 +82,8 @@ object UnifiedDownloadsUi {
         val hasPrimaryAction:Boolean=true,
         val key:String?=null,
         val transferStage:String?=null,
-        val transferUpdated:Long=0L
+        val transferUpdated:Long=0L,
+        val totalBytes:Long=-1L
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -559,7 +560,8 @@ object UnifiedDownloadsUi {
                     }
                 },if(state==State.DONE)original else null,
                     actionText=if(state==State.HELD)"RETRY" else null,
-                    receivedBytes=item.bytes,key="android:"+item.job.id)
+                    receivedBytes=item.bytes,totalBytes=item.total,
+                    key="android:"+item.job.id)
         }
         // Integrate the existing isolated BitTorrent engine into the ONE
         // Downloads manager. The main process reads only its atomic receipts;
@@ -629,6 +631,7 @@ object UnifiedDownloadsUi {
                     else->null
                 },
                 receivedBytes=torrent.verifiedBytes,
+                totalBytes=torrent.wantedBytes,
                 hasPrimaryAction=torrent.stage in setOf(
                     "TRANSFERRING","PAUSED","FAILED","QUARANTINED","EXPORTED"),
                 key="torrent:"+torrent.id,
@@ -1296,7 +1299,17 @@ object UnifiedDownloadsUi {
                     details.add(validProgress.toString()+"% of known file")
                 if(item.receivedBytes>0L)
                     details.add(sizeLabel(item.receivedBytes)+" received")
-                if(speed!=null)details.add(speed)
+                if(speed!=null){
+                    details.add(speed)
+                    // Only an advancing rate and a genuine declared byte
+                    // total permit an ETA. Never derive this from publisher
+                    // bitrates, extractor stage percents or unknown HLS size.
+                    val eta=DownloadLiveRate.etaSeconds(
+                        item.receivedBytes,item.totalBytes,
+                        liveSamples[rowId(item)]?.rateBytesPerSecond)
+                    if(eta!=null)details.add("~"+DownloadLiveRate.etaLabel(eta)+
+                        " remaining")
+                }
                 if(item.source=="Video"){
                     val stage=when(item.transferStage){
                         "receiving","fragments"->"Receiving original"
@@ -1579,6 +1592,23 @@ object UnifiedDownloadsUi {
  * A stalled, restarted or rolled-back transfer cannot display stale speed.
  */
 internal object DownloadLiveRate {
+    fun etaSeconds(receivedBytes:Long,totalBytes:Long,
+                   rateBytesPerSecond:Long?):Long? {
+        val rate=rateBytesPerSecond?:return null
+        if(receivedBytes<=0L || totalBytes<=receivedBytes ||
+            rate<=0L || totalBytes<=0L)return null
+        val remaining=totalBytes-receivedBytes
+        val seconds=remaining/rate+if(remaining%rate>0L)1L else 0L
+        // A week-long projection from a burst is too uncertain to display.
+        return seconds.takeIf{it in 1..604_800L}
+    }
+
+    fun etaLabel(seconds:Long):String = when {
+        seconds<60L->"${seconds}s"
+        seconds<3600L->"${seconds/60}m ${seconds%60}s"
+        seconds<86400L->"${seconds/3600}h ${seconds%3600/60}m"
+        else->"${seconds/86400}d ${seconds%86400/3600}h"
+    }
     data class Sample(
         val bytes:Long,
         val baselineTimeMs:Long,
