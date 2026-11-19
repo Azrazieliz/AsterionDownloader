@@ -222,9 +222,22 @@ internal object PixivUnifiedFeatures {
 
     fun artistExtras(a:Activity,p:LinearLayout,artist:ArtistRecord,refresh:()->Unit){
         val record=AppDb(a).use{it.artistProgress(artist.userId,artist.knownTotal)}
+        val status=artist.archiveStatus.uppercase(java.util.Locale.ROOT)
+        val hasPartial=record.partial>0 || status in setOf("PARTIAL","ERROR","FAILED")
+        val neverStarted=status in setOf("NOT_STARTED","NEW","PENDING")
+        // An unknown archive total must never render as "1 saved / 0
+        // expected" and a first-time backfill is not a failed Retry.
+        val expected=if(artist.knownTotal<=0)"total not discovered"
+            else artist.knownTotal.toString()+" expected"
+        val actionLabel=when{
+            hasPartial->"RETRY FAILED"
+            neverStarted->"BACKFILL"
+            status=="RUNNING"->"SYNC RUNNING"
+            else->"CHECK NEW"
+        }
         p.addView(ui.text(a,
             "Archive: "+artist.archiveStatus+" · "+
-            record.done+" saved / "+artist.knownTotal+" expected · "+
+            record.done+" saved · "+expected+" · "+
             record.pending+" pending · "+record.partial+" partial"+
             (if(artist.liveCursor.isNullOrBlank())" · Live baseline pending" else " · Live ready"),
             12f,ui.secondary),ui.lp(a,5))
@@ -233,13 +246,12 @@ internal object PixivUnifiedFeatures {
             a.startActivity(Intent(Intent.ACTION_VIEW,
                 Uri.parse("https://www.pixiv.net/users/"+artist.userId)))
         },LinearLayout.LayoutParams(0,-2,1f))
-        row.addView(ui.action(a,"RETRY",false){
-            if(SyncControl.snapshot().running){
+        row.addView(ui.action(a,actionLabel,false){
+            if(SyncControl.snapshot().running || status=="RUNNING"){
                 notice(a,"Pixiv sync is already active")
             }else{
-                AppDb(a).use{it.clearArtistError(artist.userId)}
-                val mode=if(artist.archiveStatus in setOf(
-                        "PARTIAL","ERROR","RUNNING"))SyncMode.BACKFILL
+                if(hasPartial)AppDb(a).use{it.clearArtistError(artist.userId)}
+                val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
                     else SyncMode.LIVE
                 service(a,mode,artist=artist.userId)
             }
