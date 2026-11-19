@@ -212,7 +212,8 @@ object VideoEngine {
                     // The MediaStore receipt was committed already. A cloud
                     // handoff failure must not mark that actual saved original
                     // as FAILED, nor restart its download on the next retry.
-                    if(com.azrael.pixivdumpsync.NduSettings.configured(context)){
+                    if(com.azrael.pixivdumpsync.NduSettings.cloudOnly(context) &&
+                        com.azrael.pixivdumpsync.NduSettings.configured(context)){
                         runCatching{
                             com.azrael.pixivdumpsync.NduCloudQueue(context).use{queue->
                                 queue.enqueue("videos",
@@ -1464,13 +1465,25 @@ object VideoEngine {
                     ?.toLongOrNull()
             }finally{retriever.release()}
         }.getOrElse { failure ->
-            file.delete()
-            throw java.io.IOException("Downloaded container could not be played",failure)
+            // The prior unconditional delete() discarded hundreds of MiB
+            // on a transient Android MediaMetadataRetriever failure.
+            // Preserve the staged original for explicit re-verification; it
+            // is NOT promoted to Android Downloads or counted as saved.
+            VideoTransferJournal.record(context,item.id,
+                "verification_failed_retained",
+                "Original container preserved in private staging")
+            throw java.io.IOException(
+                "Downloaded container verification failed; original "+
+                "bytes retained in private staging for inspection",failure)
         }
         val minimum=expectedDuration?.minus(5L)?.coerceAtLeast(0L)?.times(1000L)?:0L
         if(actual==null || actual<=0L || actual<minimum){
-            file.delete()
-            throw java.io.IOException("Downloaded video is incomplete or has invalid playback duration")
+            VideoTransferJournal.record(context,item.id,
+                "verification_failed_retained",
+                "Duration incomplete; staged bytes preserved")
+            throw java.io.IOException(
+                "Downloaded video has invalid/incomplete playback duration; "+
+                "staged bytes preserved without publishing as an original")
         }
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
         val values=ContentValues().apply {
