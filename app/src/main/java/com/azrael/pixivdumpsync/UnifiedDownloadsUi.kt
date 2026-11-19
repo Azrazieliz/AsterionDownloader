@@ -817,6 +817,64 @@ object UnifiedDownloadsUi {
         return counts
     }
 
+    /** Structural states determine when buttons/actions must be rebound.
+     * Bytes, speed, percentages and Saved counters do NOT change structure.
+     * Preserve the actual View instances on every normal progress event
+     * instead of rebuilding a static screenshot every few seconds.
+     */
+    private fun renderStructure(rows:List<Row>,counts:Map<String,Totals>,
+                                expanded:String?):String=buildString {
+        append(expanded.orEmpty())
+        for(row in rows){
+            if(row.state==State.DONE)continue
+            append('|').append(rowId(row)).append(':')
+                .append(row.state.name).append(':')
+                .append(row.actionText).append(':')
+                .append(row.hasPrimaryAction).append(':')
+                .append(row.onRemove!=null)
+        }
+        for((source,stat) in counts.toSortedMap()){
+            append('|').append(source).append('=')
+                .append(stat.active).append(',')
+                .append(stat.queued).append(',')
+                .append(stat.failed).append(',')
+                .append(stat.paused)
+        }
+    }
+
+    private fun sameVisualTree(old:View,fresh:View):Boolean{
+        if(old.javaClass!=fresh.javaClass)return false
+        if(old is android.view.ViewGroup &&
+            fresh is android.view.ViewGroup){
+            if(old.childCount!=fresh.childCount)return false
+            for(index in 0 until old.childCount)
+                if(!sameVisualTree(old.getChildAt(index),
+                        fresh.getChildAt(index)))return false
+        }
+        return true
+    }
+
+    private fun updateVisualValues(old:View,fresh:View){
+        if(old is TextView && fresh is TextView){
+            if(old.text!=fresh.text)old.text=fresh.text
+            if(old.currentTextColor!=fresh.currentTextColor)
+                old.setTextColor(fresh.currentTextColor)
+            old.contentDescription=fresh.contentDescription
+            old.isEnabled=fresh.isEnabled
+        }
+        if(old is ProgressBar && fresh is ProgressBar){
+            old.max=fresh.max
+            old.isIndeterminate=fresh.isIndeterminate
+            if(!fresh.isIndeterminate)old.progress=fresh.progress
+        }
+        if(old is android.view.ViewGroup &&
+            fresh is android.view.ViewGroup){
+            for(index in 0 until old.childCount)
+                updateVisualValues(old.getChildAt(index),
+                    fresh.getChildAt(index))
+        }
+    }
+
     /** Refresh the Downloads content in place. The Activity, its global
      * navigation, scroll view and the existing cards remain alive while the
      * database is read. A refresh must never restart transfers or remove the
@@ -830,6 +888,7 @@ object UnifiedDownloadsUi {
         surface.addView(loading,ui.lp(a,8))
         val inFlight=java.util.concurrent.atomic.AtomicBoolean(false)
         val missed=java.util.concurrent.atomic.AtomicBoolean(false)
+        var previousStructure:String?=null
         lateinit var reload:()->Unit
         reload=reload@{
             if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
@@ -859,10 +918,23 @@ object UnifiedDownloadsUi {
                             orientation=LinearLayout.VERTICAL
                         }
                         show(a,next,reload,rows,totals,cloud)
-                        // Replace only this module's view, in the same frame.
-                        // This avoids blanking the whole Activity/scroller.
-                        surface.removeAllViews()
-                        surface.addView(next)
+                        val structure=renderStructure(rows,totals,
+                            a.getSharedPreferences("asterion_downloads_ui",0)
+                                .getString("module",null))
+                        val previous=surface.getChildAt(0)
+                        if(structure==previousStructure &&
+                            previous!=null &&
+                            sameVisualTree(previous,next)){
+                            // Structural buttons and their listeners are still
+                            // valid. Update text and progress IN PLACE;
+                            // this is a continuously updating control panel,
+                            // not a 3-second slideshow of replacement views.
+                            updateVisualValues(previous,next)
+                        }else{
+                            surface.removeAllViews()
+                            surface.addView(next)
+                        }
+                        previousStructure=structure
                     }.onFailure{error->
                         if(loading.parent===surface)
                             loading.text="Unable to load downloads: "+
