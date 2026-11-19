@@ -15,6 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import dev.ffmpegkit_maintained.ytdlp.YtDlp
 
 class FullVersionUnavailable(message:String):Exception(message)
+/** Selected public original handed to TeraBox; NOT a saved-file receipt. */
+private class CloudOriginalQueued(val cloudId:String):Exception()
+
 
 object VideoEngine {
     private val busy=AtomicBoolean(false)
@@ -247,6 +250,12 @@ object VideoEngine {
                         onStatus("Download worker interrupted; saved work retained")
                         Thread.currentThread().interrupt()
                         break
+                    }else if(t is CloudOriginalQueued){
+                        if(db.completeCloudClaim(next.id,next.lease,t.cloudId)){
+                            VideoTransferJournal.record(context,next.id,
+                                "cloud_pending","TeraBox remote original submitted")
+                            onStatus("Queued in TeraBox; awaiting original-file receipt")
+                        }else onStatus("Cloud handoff superseded by queue state")
                     }else if(t is FullVersionUnavailable) {
                         db.update(next.id,"full_only_hold",error=t.message)
                         VideoTransferJournal.record(context,next.id,"held")
@@ -597,7 +606,8 @@ object VideoEngine {
         }
         fun <T> publisherResult(inspect:()->T):Result<T> =
             runCatching{inspectPublisher(inspect)}.onFailure{
-                if(it is java.util.concurrent.CancellationException ||
+                if(it is CloudOriginalQueued ||
+                    it is java.util.concurrent.CancellationException ||
                     it is VirtualMachineError || it is ThreadDeath)throw it
             }
         // The third-party Java request wrapper silently discards several
@@ -610,6 +620,26 @@ object VideoEngine {
                               verifiedFirstPartyMp4:Boolean=false) {
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
+            if(com.azrael.pixivdumpsync.NduSettings.cloudOnly(context)){
+                // Selected publisher URL only. Cloud-only NEVER transfers
+                // video files, HLS fragments or .part files to Android.
+                if(!com.azrael.pixivdumpsync.NduSettings.configured(context))
+                    throw FullVersionUnavailable(
+                        "Connect TeraBox to download this original")
+                if(!com.azrael.pixivdumpsync.TeraBoxRemoteOriginals
+                        .verifiedPublicFileLink(link))
+                    throw FullVersionUnavailable(
+                        "Selected player is not a public HTTPS original "+
+                        "eligible for TeraBox remote import; no device fallback")
+                val id=com.azrael.pixivdumpsync.TeraBoxRemoteOriginals
+                    .identity(link)
+                com.azrael.pixivdumpsync.TeraBoxRemoteQueue(context).use{
+                    it.enqueue(context,link,"videos")
+                }
+                com.azrael.pixivdumpsync.NduCloudScheduler
+                    .requestImmediate(context)
+                throw CloudOriginalQueued(id)
+            }
             // A user can connect the selected external video host (VOE,
             // Streamtape or the first-party JAVIDEO player) independently
             // of the publisher. Its own session must be used by yt-dlp;
