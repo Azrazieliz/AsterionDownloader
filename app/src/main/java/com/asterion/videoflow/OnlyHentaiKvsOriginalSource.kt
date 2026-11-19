@@ -25,7 +25,7 @@ internal object OnlyHentaiKvsOriginalSource {
     }
     fun hasSelectedConfig(selected:String,html:String):Boolean {
         val id=selectedId(selected)?:return false
-        if(html.length !in 300..2_000_000 || !html.contains("kt_player"))return false
+        if(html.length !in 100..2_000_000 || !html.contains("kt_player"))return false
         val doc=Jsoup.parse(html,selected)
         val scripts=doc.select("script:not([src])").take(60).map{
             it.data().ifBlank{it.html()}
