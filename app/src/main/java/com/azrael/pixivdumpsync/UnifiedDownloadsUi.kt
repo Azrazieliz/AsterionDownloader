@@ -795,178 +795,316 @@ object UnifiedDownloadsUi {
      * Item controls are available only after opening their own module.
      * Saved originals are excluded from bulk cancellation.
      */
+    // Actual byte deltas between visible refreshes. Speed and ETA are never
+    // invented from a progress percentage, file title, or expected bitrate.
+    private val liveSamples=java.util.concurrent.ConcurrentHashMap<
+        String,Pair<Long,Long>>()
+
+    private fun sizeLabel(bytes:Long):String {
+        if(bytes<1_024L)return bytes.toString()+" B"
+        val unit=when{
+            bytes>=1_073_741_824L->1_073_741_824.0 to "GiB"
+            bytes>=1_048_576L->1_048_576.0 to "MiB"
+            else->1_024.0 to "KiB"
+        }
+        return String.format(java.util.Locale.US,"%.1f %s",
+            bytes/unit.first,unit.second)
+    }
+
+    private fun speedLabel(item:Row):String? {
+        if(item.receivedBytes<=0L)return null
+        if(liveSamples.size>80)liveSamples.clear()
+        val now=android.os.SystemClock.elapsedRealtime()
+        val previous=liveSamples.put(rowId(item),item.receivedBytes to now)
+            ?:return null
+        val elapsed=now-previous.second
+        val added=item.receivedBytes-previous.first
+        if(elapsed<600L || added<=0L)return null
+        return sizeLabel((added.toDouble()*1000.0/elapsed).toLong())+"/s"
+    }
+
+    private fun metric(a:Activity,label:String,count:Int):LinearLayout =
+        LinearLayout(a).apply {
+            orientation=LinearLayout.VERTICAL
+            background=ui.shape(a,ui.raised,16,ui.border)
+            setPadding(ui.px(a,15),ui.px(a,12),
+                ui.px(a,10),ui.px(a,13))
+            addView(ui.text(a,count.toString(),24f,ui.white,true))
+            addView(ui.text(a,label,12f,ui.secondary),ui.lp(a,2))
+            contentDescription=label+": "+count
+        }
+
+    /** Merged Control Center and Live Queue. Only active non-image files
+     * receive an individual live row. Images, saved files, queued files and
+     * failures remain aggregate module counts, not a scrolling file matrix.
+     */
     private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,
                      rows:List<Row>,exact:Map<String,Totals>,
                      cloud:NduCloudQueue.Status){
         val prefs=a.getSharedPreferences("asterion_downloads_ui",0)
         val expanded=prefs.getString("module",null)
-        val groups=rows.groupBy{it.source}.entries.sortedWith(
-            compareByDescending<Map.Entry<String,List<Row>>>{
-                it.value.count{row->row.state==State.ACTIVE}
-            }.thenByDescending{
-                it.value.count{row->row.state==State.FAILED ||
-                    row.state==State.HELD}
-            }.thenBy{it.key.lowercase()})
-        val selected=groups.map{(module,items)->
-            exact[module]?:Totals(
+        val grouped=rows.groupBy{it.source}
+        fun totalsFor(source:String):Totals=exact[source]?:run {
+            val items=grouped[source].orEmpty()
+            Totals(
                 saved=items.count{it.state==State.DONE},
                 failed=items.count{it.state in setOf(State.FAILED,State.HELD)},
                 queued=items.count{it.state==State.QUEUED},
                 active=items.count{it.state==State.ACTIVE},
                 paused=items.count{it.state==State.PAUSED})
-        }.fold(Totals()){acc,next->acc+next}
-        parent.addView(ui.text(a,"Downloads",23f,ui.white,true),ui.lp(a,10))
-        parent.addView(ui.text(a,
-            "${selected.saved} saved · ${selected.failed} failed / needs action · "+
-                "${selected.queued} queued · ${selected.active} active",
-            12f,ui.secondary),ui.lp(a,6))
-        parent.addView(ui.text(a,
-            "TeraBox: ${cloud.completed} remotely verified · "+
-                "${cloud.pending} awaiting cloud proof",
-            12f,ui.secondary),ui.lp(a,4))
+        }
+        fun nonEmpty(t:Totals)=t.saved+t.failed+t.queued+t.active+t.paused>0
+        // Source rows are capped for performance. The overview MUST still
+        // include modules whose full-database counters exceed that slice.
+        val sources=(grouped.keys+exact.keys).distinct()
+            .filter{nonEmpty(totalsFor(it))}
+            .sortedWith(compareByDescending<String>{totalsFor(it).active}
+                .thenByDescending{totalsFor(it).failed}
+                .thenByDescending{totalsFor(it).queued}
+                .thenBy{it.lowercase()})
+        val all=sources.map{totalsFor(it)}
+            .fold(Totals()){acc,next->acc+next}
+
+        parent.addView(ui.text(a,"Downloads",23f,ui.white,true),
+            ui.lp(a,8))
+        val metrics=ui.row(a).apply{gravity=Gravity.TOP}
+        val topLeft=metric(a,"Downloading",all.active)
+        val topRight=metric(a,"Queued",all.queued)
+        metrics.addView(topLeft,LinearLayout.LayoutParams(0,-2,1f).apply{
+            rightMargin=ui.px(a,5)
+        })
+        metrics.addView(topRight,LinearLayout.LayoutParams(0,-2,1f).apply{
+            leftMargin=ui.px(a,5)
+        })
+        parent.addView(metrics,ui.lp(a,5))
+        val second=ui.row(a).apply{gravity=Gravity.TOP}
+        second.addView(metric(a,"Needs attention",all.failed),
+            LinearLayout.LayoutParams(0,-2,1f).apply{
+                rightMargin=ui.px(a,5)
+            })
+        second.addView(metric(a,"Saved",all.saved),
+            LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=ui.px(a,5)
+            })
+        parent.addView(second,ui.lp(a,5))
         if(!AppPower.enabled(a))parent.addView(
-            ui.action(a,"RESUME TRANSFERS",true){
+            ui.action(a,"RESUME DOWNLOADS",true){
                 AppPower.set(a,true);refresh()
-            },ui.lp(a,7))
-        if(groups.isEmpty()){
-            parent.addView(ui.text(a,"No tracked downloads",13f,ui.secondary),
-                ui.lp(a,12))
+            },ui.lp(a,9))
+
+        // A truly live file (not an image, not an incomplete cloud handoff,
+        // not a paused/queued item) is the only individual row shown by default.
+        val live=rows.filter{
+            DownloadOverviewPolicy.isLiveFile(
+                it.state.name,it.source,it.filename,it.mime)
+        }.sortedByDescending{it.updated}
+        val liveHeader=ui.row(a)
+        liveHeader.addView(ui.text(a,"Live transfers",16f,ui.white,true),
+            LinearLayout.LayoutParams(0,-2,1f))
+        liveHeader.addView(ui.text(a,live.size.toString()+" active files",
+            11f,ui.secondary),LinearLayout.LayoutParams(-2,-2))
+        parent.addView(liveHeader,ui.lp(a,16,8))
+        val livePanel=ui.card(a,14)
+        if(live.isEmpty()){
+            livePanel.addView(ui.text(a,"No file downloads running",
+                13f,ui.secondary))
+        }else{
+            for((index,item) in live.withIndex()){
+                if(index>0){
+                    val line=View(a).apply{
+                        setBackgroundColor(ui.border)
+                    }
+                    livePanel.addView(line,ui.lp(a,11,11).apply{
+                        height=ui.px(a,1)
+                    })
+                }
+                val heading=ui.row(a)
+                val name=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                }
+                name.addView(ui.text(a,item.source,11f,ui.secondary,true))
+                name.addView(ui.text(a,item.filename,14f,ui.white,true).apply{
+                    maxLines=2
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                },ui.lp(a,2))
+                heading.addView(name,LinearLayout.LayoutParams(0,-2,1f))
+                val canPause=item.hasPrimaryAction &&
+                    item.actionText=="PAUSE"
+                val canCancel=item.onRemove!=null
+                if(canPause || canCancel){
+                    heading.addView(ui.action(a,"⋮",false){
+                        val choices=ArrayList<String>()
+                        if(canPause)choices.add("Pause transfer")
+                        if(canCancel)choices.add("Cancel transfer")
+                        android.app.AlertDialog.Builder(a)
+                            .setTitle(item.filename.take(80))
+                            .setItems(choices.toTypedArray()){_,selected->
+                                when(choices[selected]){
+                                    "Pause transfer"->{
+                                        item.action()
+                                        refresh()
+                                    }
+                                    "Cancel transfer"->{
+                                        android.app.AlertDialog.Builder(a)
+                                            .setTitle("Cancel this transfer?")
+                                            .setMessage("Saved originals are preserved.")
+                                            .setNegativeButton("Keep",null)
+                                            .setPositiveButton("Cancel"){_,_->
+                                                item.onRemove?.invoke()
+                                                refresh()
+                                            }.show()
+                                    }
+                                }
+                            }.show()
+                    },LinearLayout.LayoutParams(
+                        ui.px(a,48),-2).apply{
+                        leftMargin=ui.px(a,8)
+                    })
+                }
+                livePanel.addView(heading)
+                // Progress reflects the actual worker report. For unmeasured
+                // media, an indeterminate bar is more honest than fake 0%.
+                val validProgress=item.percent?.coerceIn(0,100)
+                    ?.takeUnless{item.source=="Video" &&
+                        item.receivedBytes<=0L}
+                val bar=ProgressBar(a,null,
+                    android.R.attr.progressBarStyleHorizontal).apply{
+                    max=100
+                    isIndeterminate=validProgress==null
+                    if(validProgress!=null)progress=validProgress
+                    progressTintList=ColorStateList.valueOf(ui.primary)
+                    indeterminateTintList=ColorStateList.valueOf(ui.primary)
+                    progressBackgroundTintList=ColorStateList.valueOf(ui.border)
+                }
+                livePanel.addView(bar,ui.lp(a,9).apply{
+                    height=ui.px(a,5)
+                })
+                val speed=speedLabel(item)
+                val details=ArrayList<String>()
+                if(validProgress!=null)
+                    details.add(validProgress.toString()+"% reported")
+                if(item.receivedBytes>0L)
+                    details.add(sizeLabel(item.receivedBytes)+" received")
+                if(speed!=null)details.add(speed)
+                if(details.isEmpty())
+                    details.add(item.info.substringAfter(" · ",item.info)
+                        .ifBlank{"Connecting to original"}.take(110))
+                livePanel.addView(ui.text(a,details.joinToString(" · "),
+                    11f,ui.secondary),ui.lp(a,6))
+            }
+        }
+        parent.addView(livePanel,ui.lp(a,0,7))
+        parent.addView(ui.text(a,"Modules",16f,ui.white,true),
+            ui.lp(a,15,7))
+        if(sources.isEmpty()){
+            parent.addView(ui.text(a,"No tracked downloads",
+                12f,ui.secondary),ui.lp(a,5))
             return
         }
-        for((source,items) in groups){
+        for(source in sources){
+            val items=grouped[source].orEmpty()
+            val totals=totalsFor(source)
             val opened=source==expanded
-            val totals=exact[source]?:Totals(
-                saved=items.count{it.state==State.DONE},
-                failed=items.count{it.state==State.FAILED ||
-                    it.state==State.HELD},
-                queued=items.count{it.state==State.QUEUED},
-                active=items.count{it.state==State.ACTIVE},
-                paused=items.count{it.state==State.PAUSED})
-            val savedCount=totals.saved
-            val failingCount=totals.failed
-            val queuedCount=totals.queued
-            val activeCount=totals.active
-            val pausedCount=totals.paused
-            val card=ui.card(a,10)
-            val line=ui.row(a)
-            val summary=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            summary.addView(ui.text(a,source,16f,ui.white,true))
-            summary.addView(ui.text(a,
-                (if(source in exact)"" else "Recent: ")+
-                "$savedCount saved · $failingCount failed · $queuedCount queued"+
-                    (if(activeCount>0)" · $activeCount active" else "")+
-                    (if(pausedCount>0)" · $pausedCount paused" else ""),
-                11f,ui.secondary),ui.lp(a,3))
-            line.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
-            line.addView(ui.action(a,if(opened)"CLOSE" else "MANAGE",false){
-                prefs.edit().putString("module",if(opened)null else source).apply()
+            val card=ui.card(a,12)
+            val header=ui.row(a)
+            val title=LinearLayout(a).apply{
+                orientation=LinearLayout.VERTICAL
+            }
+            title.addView(ui.text(a,source,15f,ui.white,true))
+            val counts=ArrayList<String>()
+            counts.add(totals.saved.toString()+" saved")
+            if(totals.active>0)counts.add(totals.active.toString()+" active")
+            if(totals.queued>0)counts.add(totals.queued.toString()+" queued")
+            if(totals.failed>0)counts.add(totals.failed.toString()+" failed")
+            if(totals.paused>0)counts.add(totals.paused.toString()+" paused")
+            title.addView(ui.text(a,counts.joinToString(" · "),
+                11f,if(totals.failed>0)ui.secondary else ui.secondary)
+                .apply{
+                    maxLines=2
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                },ui.lp(a,3))
+            header.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+            header.addView(ui.action(a,if(opened)"CLOSE" else "MANAGE",
+                false){
+                prefs.edit().putString("module",
+                    if(opened)null else source).apply()
                 refresh()
             },LinearLayout.LayoutParams(-2,-2).apply{
-                leftMargin=ui.px(a,8)
+                leftMargin=ui.px(a,7)
             })
-            card.addView(line)
+            card.addView(header)
             if(opened){
-                val pausable=items.filter{it.state in setOf(State.ACTIVE,State.QUEUED)
-                    && it.actionText in setOf("PAUSE","HOLD")}
-                val resumable=items.filter{it.state==State.PAUSED
-                    && it.actionText=="RESUME"}
-                val cancellable=items.filter{it.state!=State.DONE
-                    && it.onRemove!=null}
-                if(pausable.isNotEmpty()||resumable.isNotEmpty()||
+                // No per-file history/matrix in this view. Retain scoped
+                // commands that operate on the real durable queue records.
+                val pausable=items.filter{
+                    it.state in setOf(State.ACTIVE,State.QUEUED) &&
+                    it.actionText in setOf("PAUSE","HOLD")
+                }
+                val resumable=items.filter{
+                    it.state==State.PAUSED && it.actionText=="RESUME"
+                }
+                val cancellable=items.filter{
+                    it.state!=State.DONE && it.onRemove!=null
+                }
+                if(pausable.isNotEmpty() || resumable.isNotEmpty() ||
                     cancellable.isNotEmpty()){
-                    val commands=ui.row(a)
-                    if(pausable.isNotEmpty())commands.addView(
-                        ui.action(a,"PAUSE MODULE",false){
-                            kotlin.concurrent.thread(name="asterion-pause-module"){
-                                pausable.forEach{runCatching{it.action()}}
-                                a.runOnUiThread{
-                                    if(!a.isFinishing&&!a.isDestroyed)refresh()
-                                }
-                            }
+                    val actions=ui.row(a)
+                    if(pausable.isNotEmpty())
+                        actions.addView(ui.action(a,"PAUSE",false){
+                            // Callbacks are UI-facing (some launch Activities
+                            // or notifications). Never invoke them from an
+                            // unsafe raw worker thread.
+                            pausable.forEach{runCatching{it.action()}}
+                            refresh()
                         },LinearLayout.LayoutParams(0,-2,1f))
-                    if(resumable.isNotEmpty())commands.addView(
-                        ui.action(a,"RESUME MODULE",true){
-                            kotlin.concurrent.thread(name="asterion-resume-module"){
-                                if(source=="Video"){
-                                    VideoDb(a).use{db->resumable.forEach{row->
-                                        row.key?.removePrefix("video:")?.toLongOrNull()
-                                            ?.let{db.retry(it)}
-                                    }}
-                                    VideoEngine.launch(a.applicationContext,false)
-                                }else resumable.forEach{runCatching{it.action()}}
-                                a.runOnUiThread{
-                                    if(!a.isFinishing&&!a.isDestroyed)refresh()
+                    if(resumable.isNotEmpty())
+                        actions.addView(ui.action(a,"RESUME",true){
+                            if(source=="Video"){
+                                VideoDb(a).use{db->
+                                    resumable.forEach{row->
+                                        row.key?.removePrefix("video:")
+                                            ?.toLongOrNull()?.let{db.retry(it)}
+                                    }
                                 }
+                                VideoEngine.launch(a.applicationContext,false)
+                            }else resumable.forEach{
+                                runCatching{it.action()}
                             }
+                            refresh()
                         },LinearLayout.LayoutParams(0,-2,1f))
-                    if(cancellable.isNotEmpty())commands.addView(
-                        ui.action(a,"CANCEL QUEUE",false){
+                    if(cancellable.isNotEmpty())
+                        actions.addView(ui.action(a,"CANCEL",false){
                             android.app.AlertDialog.Builder(a)
-                                .setTitle("Cancel "+source+" unfinished downloads?")
-                                .setMessage("Cancel "+cancellable.size+
-                                    " tracked unfinished items in this module. "+
-                                    "Saved originals will be preserved.")
+                                .setTitle("Cancel "+source+" unfinished jobs?")
+                                .setMessage(cancellable.size.toString()+
+                                    " tracked jobs will be cancelled. "+
+                                    "Saved originals are preserved.")
                                 .setNegativeButton("Keep",null)
                                 .setPositiveButton("Cancel jobs"){_,_->
-                                    kotlin.concurrent.thread(name="asterion-cancel-module"){
-                                        cancellable.forEach{row->
-                                            runCatching{row.onRemove?.invoke()}
-                                        }
-                                        a.runOnUiThread{
-                                            if(!a.isFinishing&&!a.isDestroyed)refresh()
-                                        }
+                                    cancellable.forEach{row->
+                                        runCatching{row.onRemove?.invoke()}
                                     }
+                                    refresh()
                                 }.show()
                         },LinearLayout.LayoutParams(0,-2,1f))
-                    card.addView(commands,ui.lp(a,10))
+                    card.addView(actions,ui.lp(a,9))
                 }
-                for(item in items.take(100)){
-                    val detail=ui.row(a)
-                    val desc=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-                    desc.addView(ui.text(a,item.filename,12f,ui.white).apply{
-                        maxLines=1
-                        ellipsize=android.text.TextUtils.TruncateAt.END
-                    })
-                    val label=when(item.state){
-                        State.DONE->"Saved"
-                        State.FAILED->"Failed"
-                        State.HELD->"Needs action"
-                        State.ACTIVE->if(item.receivedBytes>0L)
-                            item.receivedBytes.toString()+" bytes received"
-                            else "Connecting"
-                        State.QUEUED->"Queued"
-                        State.PAUSED->"Paused"
-                    }
-                    val issue=if(item.state in setOf(State.FAILED,State.HELD))
-                        item.info.substringAfter(" · ",item.info).take(85)
-                    else ""
-                    desc.addView(ui.text(a,
-                        label+(if(issue.isNotBlank())" · $issue" else ""),
-                        11f,if(item.state==State.FAILED)ui.danger else ui.secondary)
-                        .apply{
-                            maxLines=2
-                            ellipsize=android.text.TextUtils.TruncateAt.END
-                        },ui.lp(a,2))
-                    detail.addView(desc,LinearLayout.LayoutParams(0,-2,1f))
-                    if(item.hasPrimaryAction){
-                        val action=when(item.state){
-                            State.DONE->"OPEN"
-                            State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText
-                            State.FAILED->item.actionText?:"RETRY"
-                            State.HELD->item.actionText?:"RETRY"
-                        }
-                        if(!action.isNullOrBlank() && action!="COOLDOWN")
-                            detail.addView(ui.action(a,action,false){
-                                item.action()
-                                if(item.state!=State.DONE)refresh()
-                            },LinearLayout.LayoutParams(-2,-2).apply{
-                                leftMargin=ui.px(a,7)
-                            })
-                    }
-                    card.addView(detail,ui.lp(a,10))
+                items.firstOrNull{it.state in setOf(State.FAILED,State.HELD)}
+                    ?.let{failure->
+                    card.addView(ui.text(a,
+                        "Latest issue: "+
+                            failure.info.substringAfter(" · ",failure.info)
+                                .take(110),11f,ui.danger),ui.lp(a,9))
                 }
             }
-            parent.addView(card,ui.lp(a,7))
+            parent.addView(card,ui.lp(a,0,7))
+        }
+        if(NduSettings.cloudOnly(a) &&
+            (cloud.pending>0 || cloud.completed>0)){
+            parent.addView(ui.text(a,
+                "TeraBox · "+cloud.completed+" verified · "+
+                    cloud.pending+" awaiting proof",
+                11f,ui.secondary),ui.lp(a,8))
         }
     }
 }
