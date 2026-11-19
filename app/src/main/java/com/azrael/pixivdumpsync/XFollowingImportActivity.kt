@@ -180,6 +180,7 @@ class XFollowingImportActivity:Activity(){
                             it,evidence.optBoolean("following",false))
                     }
                 }
+                if(!obj.optBoolean("verifiedTimeline",false))return@runCatching null
                 FollowingScan(items,obj.optInt("position",0),
                     obj.optInt("extent",0),obj.optString("profileHref"))
             }.getOrNull()?:return
@@ -248,11 +249,22 @@ class XFollowingImportActivity:Activity(){
                     browser.evaluateJavascript("""
                         (function(){
                           const found=new Set();
-                          // Recommendations and ads may also be UserCell elements.
-                          // Only the platform's followed-account control is proof.
-                          const cells=[...document.querySelectorAll(
-                            '[data-testid="UserCell"]')];
+                          // Only X's OWN account Following timeline.
+                          // The global UserCell selector also returns sidebar
+                          // recommendations, promoted accounts and Home posts.
+                          // Fail closed if X changes its timeline markup.
+                          const primary=document.querySelector(
+                            '[data-testid="primaryColumn"]');
+                          const timeline=primary?.querySelector(
+                            '[aria-label="Timeline: Following"],'+
+                            '[aria-label="Timeline: following"]');
+                          const cells=timeline?[...timeline.querySelectorAll(
+                            '[data-testid="UserCell"]')]:[];
                           cells.forEach(cell=>{
+                            if(cell.closest(
+                              '[data-testid="whoToFollow"],[data-testid="promoted"],'+
+                              '[aria-label="Who to follow"],[aria-label="Suggested"]'
+                            ))return;
                             const actions=[...cell.querySelectorAll(
                               'button,[role="button"]')];
                             const following=actions.some(b=>{
@@ -275,12 +287,18 @@ class XFollowingImportActivity:Activity(){
                                   found.add(match[1]);
                               });
                           });
-                          const scrollables=[document.scrollingElement,
-                              ...document.querySelectorAll('main,section,[data-testid="primaryColumn"],div')]
-                            .filter(Boolean).filter(el=>el.scrollHeight>el.clientHeight+120);
+                          // Scroll within the verified Following pane
+                          // only. Global scrolling could advance unrelated
+                          // recommendations instead of the account list.
+                          const scrollables=timeline?[
+                            timeline,...timeline.querySelectorAll('div'),
+                            document.scrollingElement
+                          ].filter(Boolean).filter(el=>el.scrollHeight>
+                              el.clientHeight+120):[];
                           scrollables.sort((a,b)=>
                             (b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight));
-                          const target=scrollables[0]||document.scrollingElement;
+                          const target=scrollables[0]||
+                            timeline||document.scrollingElement;
                           const move=Math.max(380,Math.floor(window.innerHeight*0.78));
                           const before=target.scrollTop;
                           if(target===document.scrollingElement){
@@ -297,7 +315,8 @@ class XFollowingImportActivity:Activity(){
                             users:[...found].map(handle=>({handle,following:true})),
                             position:Math.round(target.scrollTop),
                             extent:Math.round(target.scrollHeight-target.clientHeight),
-                            profileHref:ownerProfile?.getAttribute('href')||''
+                            profileHref:ownerProfile?.getAttribute('href')||'',
+                            verifiedTimeline:!!timeline
                           });
                         })()
                     """.trimIndent()){ encoded ->
