@@ -52,7 +52,7 @@ Uncensored Hentai|https://uncensoredhentai.xxx/|HENTAI
 3DHentai|https://3dhentaix.com/|HENTAI
 Hentai Haven|https://hentaihaven.xxx/|HENTAI
 Rule34 videos|https://rule34video.com/|HENTAI
-Sushi-Scan|https://sushiscan.net/|COMICS
+MangaDex (English)|https://mangadex.org/|COMICS
 Freeweb Novel|https://freewebnovel.com/home|BOOKS
 NovelBuddy|https://novelbuddy.me/home|BOOKS
 ReadNovelFull|https://readnovelfull.com/|BOOKS
