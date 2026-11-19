@@ -104,6 +104,7 @@ object TorrentTransfers {
             val age=System.currentTimeMillis()-updated
             val raw=value.lowercase(java.util.Locale.ROOT)
             val stage=when{
+                "exported" in raw->"EXPORTED"
                 "quarantin" in raw || "security review" in raw->"QUARANTINED"
                 "failed:" in raw || "stalled:" in raw->"FAILED"
                 "pause" in raw->"PAUSED"
@@ -168,11 +169,22 @@ object TorrentTransfers {
         AlertDialog.Builder(a).setTitle("BitTorrent transfers")
             .setItems(labels){_,index->
                 val id=keys[index]
-                val controls=arrayOf("Pause transfer","Resume transfer",
-                    "Show current status","Quarantine security report")
+                val finished=labels[index].contains("EXPORTED",true)
+                val quarantined=labels[index].contains("QUARANTINED",true)
+                val controls=buildList {
+                    add("Pause transfer");add("Resume transfer")
+                    add("Show current status")
+                    add("Quarantine security report")
+                    if(quarantined)add("Export selected verified files")
+                    if(finished)add("Open exported originals")
+                }.toTypedArray()
                 AlertDialog.Builder(a).setTitle(labels[index])
                     .setItems(controls){_,which->
-                        if(which>=2){
+                        if(controls[which]=="Export selected verified files"){
+                            TorrentVerifiedExport.request(a,id)
+                        }else if(controls[which]=="Open exported originals"){
+                            TorrentVerifiedExport.open(a,id)
+                        }else if(which>=2){
                             val details=if(which==3)runCatching{
                                 val report=File(statusDir(a),"$id.security-review.txt")
                                 if(report.isFile)report.readText().take(3500)
@@ -213,6 +225,7 @@ class TorrentTransferService : Service() {
         const val RESUME = "asterion.torrent.RESUME"
         const val PREPARE_MAGNET = "asterion.torrent.PREPARE_MAGNET"
         const val PREPARE_DESCRIPTOR = "asterion.torrent.PREPARE_DESCRIPTOR"
+        const val EXPORT = "asterion.torrent.EXPORT"
         private const val CHANNEL = "asterion_peer_transfers"
         private const val NOTIFICATION = 56823
         private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -222,6 +235,7 @@ class TorrentTransferService : Service() {
         // its dataSync foreground allowance.
         private val stopRequests = ConcurrentHashMap.newKeySet<String>()
         private val workers = ConcurrentHashMap<String,Thread>()
+        private val exportWorkers = ConcurrentHashMap.newKeySet<Thread>()
     }
     private val metadataWorkers=ConcurrentHashMap.newKeySet<Thread>()
     override fun onBind(intent: Intent?): IBinder? = null
@@ -273,7 +287,8 @@ class TorrentTransferService : Service() {
                 TorrentSafetyGate.finished(applicationContext)
                 workers.remove(id)
                 inFlight.remove(id)
-                if(inFlight.isEmpty() && metadataWorkers.isEmpty()){
+                if(inFlight.isEmpty() && metadataWorkers.isEmpty() &&
+                    exportWorkers.isEmpty()){
                     // Native libtorrent's alerts loop otherwise survives
                     // stopped Service instances and may keep the phone busy.
                     runCatching{TorrentTransfers.stopSessionWhenIdle()}
@@ -292,6 +307,45 @@ class TorrentTransferService : Service() {
         try { startForeground(NOTIFICATION, notification("Preparing torrent…")) }
         catch(t:Exception){
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if(intent?.action==EXPORT){
+            val target=intent.getStringExtra("job").orEmpty()
+            if(!target.matches(Regex("[a-f0-9]{24}"))){
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
+            // Export never initializes libtorrent, but simultaneous disk
+            // copies and native peer traffic could again overload this phone.
+            if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty() ||
+                exportWorkers.isNotEmpty()){
+                update(target,"QUARANTINED · Export deferred until torrent engine idle")
+                return START_NOT_STICKY
+            }
+            val worker=thread(start=false,name="asterion-torrent-export"){
+                try{
+                    val total=TorrentVerifiedExport.publish(
+                        applicationContext,target){done,count->
+                        update(target,
+                            "QUARANTINED · Exporting verified file $done/$count")
+                    }
+                    update(target,
+                        "EXPORTED · $total selected originals saved to Downloads")
+                }catch(t:Throwable){
+                    if(t is VirtualMachineError || t is ThreadDeath)throw t
+                    update(target,"QUARANTINED · Export failed: "+
+                        (t.message?:t.javaClass.simpleName).take(130))
+                }finally{
+                    exportWorkers.remove(Thread.currentThread())
+                    if(inFlight.isEmpty() && metadataWorkers.isEmpty() &&
+                        exportWorkers.isEmpty()){
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
+            }
+            exportWorkers.add(worker)
+            worker.start()
             return START_NOT_STICKY
         }
         if(intent?.action!=PAUSE){
@@ -346,7 +400,8 @@ class TorrentTransferService : Service() {
                 }finally{
                     TorrentSafetyGate.finished(applicationContext)
                     metadataWorkers.remove(Thread.currentThread())
-                    if(metadataWorkers.isEmpty() && inFlight.isEmpty()){
+                    if(metadataWorkers.isEmpty() && inFlight.isEmpty() &&
+                        exportWorkers.isEmpty()){
                         runCatching{TorrentTransfers.stopSessionWhenIdle()}
                             .onFailure{android.util.Log.e("AsterionTorrent",
                                 "Native session shutdown failed",it)}
@@ -370,7 +425,8 @@ class TorrentTransferService : Service() {
                 paused.add(id)
                 prefs.edit().putBoolean("job_paused_$id",true).apply()
                 update(id,"Paused")
-                if(inFlight.isEmpty())stopSelfResult(startId)
+                if(inFlight.isEmpty() && exportWorkers.isEmpty())
+                    stopSelfResult(startId)
                 return START_NOT_STICKY
             }
             RESUME->{
@@ -406,6 +462,7 @@ class TorrentTransferService : Service() {
     override fun onTimeout(startId:Int,fgsType:Int) {
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
         metadataWorkers.toList().forEach{it.interrupt()}
+        exportWorkers.toList().forEach{it.interrupt()}
         for(id in inFlight){
             stopRequests.add(id)
             paused.add(id)
@@ -418,6 +475,7 @@ class TorrentTransferService : Service() {
     }
     override fun onDestroy() {
         metadataWorkers.toList().forEach{it.interrupt()}
+        exportWorkers.toList().forEach{it.interrupt()}
         for(id in inFlight){
             stopRequests.add(id)
             workers[id]?.interrupt()
