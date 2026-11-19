@@ -360,7 +360,7 @@ class SourceIndexDb(context:Context):
                     OR (kind='comics' AND area='COMICS' AND
                         (url LIKE 'https://nhentai.net/g/%' OR
                          url LIKE 'https://nhentai.xxx/g/%' OR
-                         url LIKE 'https://sushiscan.net/catalogue/%'))
+                         url LIKE 'https://mangadex.org/title/%'))
                     OR (kind='archive' AND area='COMICS' AND
                         (url LIKE '%.zip' OR url LIKE '%.zip?%'))
                     OR (kind='archive' AND area IN ('GAMES','ASSETS'))
@@ -511,7 +511,7 @@ internal object SourceIndexParser {
         "COMICS"->(item.kind=="archive" &&
             runCatching{URI(item.url).path.endsWith(".zip",true)}.getOrDefault(false)) ||
             (item.kind=="comics" && (NhentaiChapters.isGallery(item.url) ||
-                SushiScanChapters.isSeries(item.url)))
+                MangaDexChapters.isSeries(item.url)))
         "GAMES"->item.kind in setOf("apk","archive")
         "ASSETS"->item.kind in setOf("model","archive")
         "STUDIO","MMD","LIVE2D","ANIMATION"->item.kind in
@@ -1507,7 +1507,7 @@ object SourceIndex {
         }
         if(!SourceIndexParser.autoOriginal(item))return false
         if(item.area=="COMICS" && (NhentaiChapters.isGallery(item.url) ||
-            SushiScanChapters.isSeries(item.url))){
+            MangaDexChapters.isSeries(item.url))){
             ChapterQueue(context).use{it.enqueue(item.url,item.title)}
             ChapterArchives.start(context)
             return true
