@@ -559,7 +559,30 @@ object UnifiedDownloadsUi {
                         else->{}
                     }
                 },if(state==State.DONE)original else null,
-                    actionText=if(state==State.HELD)"RETRY" else null,
+                    actionText=if(state in setOf(State.FAILED,State.HELD))
+                        "RETRY" else null,
+                    onRemove=when(state){
+                        State.ACTIVE,State.QUEUED,State.HELD->({
+                            // OS DownloadManager owns this job; use its
+                            // existing tracked cancel path so only this
+                            // selected request is stopped and any verified
+                            // completed original remains untouched.
+                            val cancelled=DirectDownloadRetry.cancel(a,item.job.id)
+                            if(cancelled)DownloadStateSignals.changed(a)
+                            else Toast.makeText(a,
+                                "Download changed; refresh before cancelling",
+                                Toast.LENGTH_LONG).show()
+                        })
+                        State.FAILED->({
+                            // Explicitly discard this failure card, retaining
+                            // its persisted diagnostic / retry evidence.
+                            hideRow(a,Row(item.job.folder,item.job.filename,
+                                "",State.FAILED,null,0L,{},
+                                key="android:"+item.job.id))
+                            DownloadStateSignals.changed(a)
+                        })
+                        else->null
+                    },
                     receivedBytes=item.bytes,totalBytes=item.total,
                     key="android:"+item.job.id)
         }
