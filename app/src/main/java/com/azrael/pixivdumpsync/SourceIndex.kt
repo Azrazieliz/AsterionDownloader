@@ -33,7 +33,8 @@ data class IndexedItem(val url:String,val title:String,val preview:String?,val s
     val area:String,val kind:String,val discoveredAt:Long,val queued:Boolean)
 
 class SourceIndexDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_source_index.sqlite",null,6) {
+    SQLiteOpenHelper(context.applicationContext,"asterion_source_index.sqlite",null,6) {
+    private val signalContext=context.applicationContext
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE sources(
             url TEXT PRIMARY KEY,name TEXT NOT NULL,area TEXT NOT NULL,
@@ -184,6 +185,7 @@ class SourceIndexDb(context:Context):
             if(historyComplete!=null)put("history_complete",if(historyComplete)1 else 0)
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
+        DownloadStateSignals.changed(signalContext)
     }
     /** A failed page must never roll back the last successful backfill cursor/count. */
     /** Remove only a disproven *generic parser* warning on a provider with
@@ -203,6 +205,7 @@ class SourceIndexDb(context:Context):
             put("last_check",System.currentTimeMillis())
         }
         writableDatabase.update("sources",v,"url=?",arrayOf(url))
+        DownloadStateSignals.changed(signalContext)
     }
     fun sources():List<IndexedSource>{
         val out=ArrayList<IndexedSource>()
@@ -233,6 +236,8 @@ class SourceIndexDb(context:Context):
             }
             db.update("entries",refreshed,"url=?",arrayOf(item.url))
         }
+        if(inserted || !item.preview.isNullOrBlank())
+            DownloadStateSignals.changed(signalContext)
         return inserted
     }
     fun markQueued(url:String){
