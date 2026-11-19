@@ -40,6 +40,7 @@ class XFollowingImportActivity:Activity(){
     private var totalNew=0
     private var listPosition=0
     private var listExtent=0
+    private var declaredFollowingCount:Int?=null
     private val reserved=setOf("home","explore","search","notifications","messages",
         "settings","compose","i","login","signup","privacy","tos","intent","hashtag",
         "following","followers","lists","bookmarks","premium","help","account","media")
@@ -144,8 +145,9 @@ class XFollowingImportActivity:Activity(){
                 Toast.makeText(this,"No verified accounts detected. Open your own Following list.",Toast.LENGTH_LONG).show()
                 return@action
             }
-            if(completed && listExtent>0 && scanCycles>=20 &&
-                discovered.size>=10){
+            if(XFollowingImportPolicy.canReconcile(
+                    completed && listExtent>0 && scanCycles>=20,
+                    discovered.size,declaredFollowingCount)){
                 // Old imports could mix unrelated suggestions with real
                 // follows. Remove only after a COMPLETE authenticated scan
                 // and explicit owner confirmation. Original saved files stay.
@@ -202,7 +204,7 @@ class XFollowingImportActivity:Activity(){
     }
     private data class FollowingScan(
         val users:List<String>,val position:Int,val extent:Int,
-        val loggedInProfileHref:String
+        val loggedInProfileHref:String,val declaredFollowingCount:Int?
     )
     private fun acceptScan(raw:String) {
             val batch=runCatching {
@@ -218,7 +220,8 @@ class XFollowingImportActivity:Activity(){
                 }
                 if(!obj.optBoolean("verifiedTimeline",false))return@runCatching null
                 FollowingScan(items,obj.optInt("position",0),
-                    obj.optInt("extent",0),obj.optString("profileHref"))
+                    obj.optInt("extent",0),obj.optString("profileHref"),
+                    obj.optInt("followingCount",-1).takeIf{it>=0})
             }.getOrNull()?:return
                 if(!scanning||completed)return
                 val own=getPreferences(MODE_PRIVATE).getString("own_x_handle","")
@@ -233,6 +236,8 @@ class XFollowingImportActivity:Activity(){
                 val fresh=batch.users.filter{validHandle(it)&&discovered.add(it)}
                 listPosition=batch.position
                 listExtent=batch.extent
+                if(batch.declaredFollowingCount!=null)
+                    declaredFollowingCount=batch.declaredFollowingCount
                 if(fresh.isNotEmpty()){
                     // Never accumulate an entire thousand-user account list in RAM
                     // before committing. Persistence is serial and idempotent.
@@ -265,13 +270,19 @@ class XFollowingImportActivity:Activity(){
                 updateStatus()
         }
     private fun updateStatus() {
-        importButton.text=if(completed &&
-            listExtent>0 && scanCycles>=20 && discovered.size>=10)
+        importButton.text=if(XFollowingImportPolicy.canReconcile(
+            completed && listExtent>0 && scanCycles>=20,
+            discovered.size,declaredFollowingCount))
             "RECONCILE MY VERIFIED FOLLOWING LIST"
         else "STOP & RETURN (PROGRESS SAVED)"
         label.text=if(completed)
             "Automatic scan reached the end. "+discovered.size+
-                " accounts detected, "+totalNew+" newly saved. If X limited results, resume."
+                " verified accounts, "+totalNew+" newly saved. "+
+                (if(XFollowingImportPolicy.canReconcile(true,
+                        discovered.size,declaredFollowingCount))
+                    "Owner count reconciled."
+                else "Full Following count unverified or incomplete; "+
+                    "existing subscriptions cannot be removed.")
         else
             "AUTOMATIC IMPORT: "+discovered.size+" accounts detected; "+
                 totalNew+" newly saved. Scrolling the full list without manual steps. "+
@@ -351,11 +362,29 @@ class XFollowingImportActivity:Activity(){
                           }
                           const ownerProfile=document.querySelector(
                             'a[data-testid="AppTabBar_Profile_Link"]');
+                          const ownerHref=(ownerProfile?.getAttribute('href')||
+                            '').replace(/\\/$/,'');
+                          // Count comes ONLY from the signed-in owner's
+                          // own /following link, never a recommendation or
+                          // a target person's sidebar "Following" count.
+                          const ownerFollowing=[...document.querySelectorAll(
+                            'a[href]')].filter(a=>
+                              (a.getAttribute('href')||'').toLowerCase()===
+                              (ownerHref+'/following').toLowerCase());
+                          let followingCount=-1;
+                          ownerFollowing.forEach(a=>{
+                            const raw=(a.getAttribute('aria-label')||'')+
+                              ' '+(a.textContent||'');
+                            const match=raw.replace(/,/g,'').match(
+                              /(?:^|\\s)(\\d{1,7})\\s*following\\b|\\bfollowing\\s*(\\d{1,7})\\b/i);
+                            if(match)followingCount=Number(match[1]||match[2]);
+                          });
                           return JSON.stringify({
                             users:[...found].map(handle=>({handle,following:true})),
                             position:Math.round(target.scrollTop),
                             extent:Math.round(target.scrollHeight-target.clientHeight),
                             profileHref:ownerProfile?.getAttribute('href')||'',
+                            followingCount,
                             verifiedTimeline:!!timeline
                           });
                         })()
