@@ -540,7 +540,7 @@ object UnifiedDownloadsUi {
                     }
                 },if(state==State.DONE)original else null,
                     actionText=if(state==State.HELD)"RETRY" else null,
-                    receivedBytes=item.bytes)
+                    receivedBytes=item.bytes,key="android:"+item.job.id)
         }
         // Server-side cloud originals are native download jobs, not a
         // second local-download list. Expose only safe filenames, counts
@@ -819,17 +819,19 @@ object UnifiedDownloadsUi {
             ?:return null
         val elapsed=now-previous.second
         val added=item.receivedBytes-previous.first
-        if(elapsed<600L || added<=0L)return null
+        if(elapsed<600L || elapsed>30_000L || added<=0L)return null
         return sizeLabel((added.toDouble()*1000.0/elapsed).toLong())+"/s"
     }
 
-    private fun metric(a:Activity,label:String,count:Int):LinearLayout =
+    private fun metric(a:Activity,label:String,count:Int,
+                       warning:Boolean=false):LinearLayout =
         LinearLayout(a).apply {
             orientation=LinearLayout.VERTICAL
             background=ui.shape(a,ui.raised,16,ui.border)
             setPadding(ui.px(a,15),ui.px(a,12),
                 ui.px(a,10),ui.px(a,13))
-            addView(ui.text(a,count.toString(),24f,ui.white,true))
+            addView(ui.text(a,count.toString(),24f,
+                if(warning && count>0)ui.danger else ui.white,true))
             addView(ui.text(a,label,12f,ui.secondary),ui.lp(a,2))
             contentDescription=label+": "+count
         }
@@ -878,7 +880,7 @@ object UnifiedDownloadsUi {
         })
         parent.addView(metrics,ui.lp(a,5))
         val second=ui.row(a).apply{gravity=Gravity.TOP}
-        second.addView(metric(a,"Needs attention",all.failed),
+        second.addView(metric(a,"Needs attention",all.failed,true),
             LinearLayout.LayoutParams(0,-2,1f).apply{
                 rightMargin=ui.px(a,5)
             })
@@ -901,7 +903,7 @@ object UnifiedDownloadsUi {
         val liveHeader=ui.row(a)
         liveHeader.addView(ui.text(a,"Live transfers",16f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
-        liveHeader.addView(ui.text(a,live.size.toString()+" active files",
+        liveHeader.addView(ui.text(a,live.size.toString()+" active",
             11f,ui.secondary),LinearLayout.LayoutParams(-2,-2))
         parent.addView(liveHeader,ui.lp(a,16,8))
         val livePanel=ui.card(a,14)
@@ -1018,7 +1020,7 @@ object UnifiedDownloadsUi {
             if(totals.failed>0)counts.add(totals.failed.toString()+" failed")
             if(totals.paused>0)counts.add(totals.paused.toString()+" paused")
             title.addView(ui.text(a,counts.joinToString(" · "),
-                11f,if(totals.failed>0)ui.secondary else ui.secondary)
+                11f,if(totals.failed>0)ui.danger else ui.secondary)
                 .apply{
                     maxLines=2
                     ellipsize=android.text.TextUtils.TruncateAt.END
