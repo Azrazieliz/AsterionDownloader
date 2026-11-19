@@ -601,228 +601,164 @@ object UnifiedDownloadsUi {
             RemoteImageLoader.load(a,view,row.image,row.image)
         }
     }
+    /** A single module summary replaces repetitive per-file card matrices.
+     * Item controls are available only after opening their own module.
+     * Saved originals are excluded from bulk cancellation.
+     */
     private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,rows:List<Row>){
-        val active=rows.count{it.state==State.ACTIVE}
-        val transferring=rows.count{
-            DownloadProgressPolicy.receiving(
-                it.state==State.ACTIVE,it.receivedBytes,it.percent)
-        }
-        val preparing=active-transferring
-        val queued=rows.count{it.state==State.QUEUED}
-        val paused=rows.count{it.state==State.PAUSED}
-        val attention=rows.count{it.state==State.HELD}
-        val failed=rows.count{it.state==State.FAILED}
+        val prefs=a.getSharedPreferences("asterion_downloads_ui",0)
+        val expanded=prefs.getString("module",null)
+        val groups=rows.groupBy{it.source}.entries.sortedWith(
+            compareByDescending<Map.Entry<String,List<Row>>>{
+                it.value.count{row->row.state==State.ACTIVE}
+            }.thenByDescending{
+                it.value.count{row->row.state==State.FAILED ||
+                    row.state==State.HELD}
+            }.thenBy{it.key.lowercase()})
         val saved=rows.count{it.state==State.DONE}
-        val heading=ui.text(a,"Downloads",24f,ui.white,true)
-        parent.addView(heading,ui.lp(a,15))
-        // The visible module now refreshes itself every 3 seconds in place.
-        if(!AppPower.enabled(a)){
-            val notice=ui.card(a,12)
-            notice.addView(ui.text(a,"Transfers paused",15f,ui.danger,true))
-            notice.addView(ui.text(a,
-                "Existing jobs stay queued until you resume. Nothing has been discarded.",
-                12f,ui.secondary),ui.lp(a,5))
-            notice.addView(ui.action(a,"Resume transfers",true){
-                AppPower.set(a,true)
-                val started=VideoEngine.launch(a,false)
-                if(!started)VideoEngine.submit(a,false)
-                XPhotoEngine.start(a)
-                ChapterArchives.start(a)
-                NovelEpubService.schedule(a)
-                // Discovery's SQLite scan is not safe to run in a touch
-                // callback. Launch both durable queues off the main thread.
-                kotlin.concurrent.thread(name="asterion-start-original-queues"){
-                    ModuleOriginalAgents.startAll(a.applicationContext)
-                    DirectDownloadRetry.retry(a.applicationContext)
-                }
-                refresh()
-            },ui.lp(a,7))
-            parent.addView(notice,ui.lp(a,9))
-        }
+        val failed=rows.count{it.state in setOf(State.FAILED,State.HELD)}
+        val queued=rows.count{it.state==State.QUEUED}
+        val active=rows.count{it.state==State.ACTIVE}
+        parent.addView(ui.text(a,"Downloads",23f,ui.white,true),ui.lp(a,10))
         parent.addView(ui.text(a,
-            "$transferring progressing · $preparing connecting · $queued queued · $paused paused · "+
-                "$attention need action · $failed failed · $saved saved (recent)",
-            12f,if(failed>0)ui.danger else ui.secondary),ui.lp(a,6))
-        // Queued jobs are rearmed by their own persisted workers on opening
-        // this screen. A manual Start button was hiding scheduler failures.
-        val refreshButton=ui.row(a)
-        refreshButton.addView(ui.action(a,"Refresh now",false){refresh()},
-            LinearLayout.LayoutParams(-1,-2))
-        parent.addView(refreshButton,ui.lp(a,11))
-        // Clearing is explicit and affects only unfinished video tasks.
-        // Saved MediaStore files and non-video queues are never touched.
-        if(rows.any{it.source=="Video" && it.state!=State.DONE}){
-            parent.addView(ui.action(a,"Clear unfinished videos",false){
-                android.app.AlertDialog.Builder(a)
-                    .setTitle("Clear unfinished video downloads?")
-                    .setMessage("Stop active video transfers and remove all "+
-                        "queued, failed, paused and retrying video rows from "+
-                        "the list. Saved files remain untouched. Re-add a "+
-                        "video manually if you want it again.")
-                    .setNegativeButton("Keep",null)
-                    .setPositiveButton("Clear"){_,_->
-                        kotlin.concurrent.thread(name="asterion-clear-video-queue"){
-                            val removed=VideoEngine.clearUnfinished(a.applicationContext)
-                            a.runOnUiThread{
-                                Toast.makeText(a,"Cleared $removed unfinished videos",
-                                    Toast.LENGTH_LONG).show()
-                                refresh()
-                            }
-                        }
-                    }.show()
+            "$saved saved · $failed failing / needs action · $queued queued · "+
+                "$active transferring",12f,ui.secondary),ui.lp(a,6))
+        if(!AppPower.enabled(a))parent.addView(
+            ui.action(a,"RESUME TRANSFERS",true){
+                AppPower.set(a,true);refresh()
             },ui.lp(a,7))
+        if(groups.isEmpty()){
+            parent.addView(ui.text(a,"No tracked downloads",13f,ui.secondary),
+                ui.lp(a,12))
+            return
         }
-        parent.addView(ui.action(a,"Torrent transfers",false){
-            TorrentTransfers.showQueue(a)
-        },ui.lp(a,5))
-        val pref=a.getSharedPreferences("asterion_downloads_ui",0)
-        val filter=runCatching{
-            Filter.valueOf(pref.getString("filter","ALL").orEmpty())
-        }.getOrDefault(Filter.ALL)
-        val chips=ui.row(a)
-        for(option in Filter.entries){
-            chips.addView(ui.chip(a,option.label,option==filter){
-                pref.edit().putString("filter",option.name).putInt("page",20).apply()
+        for((source,items) in groups){
+            val opened=source==expanded
+            val savedCount=items.count{it.state==State.DONE}
+            val failingCount=items.count{it.state==State.FAILED ||
+                it.state==State.HELD}
+            val queuedCount=items.count{it.state==State.QUEUED}
+            val activeCount=items.count{it.state==State.ACTIVE}
+            val pausedCount=items.count{it.state==State.PAUSED}
+            val card=ui.card(a,10)
+            val line=ui.row(a)
+            val summary=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+            summary.addView(ui.text(a,source,16f,ui.white,true))
+            summary.addView(ui.text(a,
+                "$savedCount saved · $failingCount failed · $queuedCount queued"+
+                    (if(activeCount>0)" · $activeCount active" else "")+
+                    (if(pausedCount>0)" · $pausedCount paused" else ""),
+                11f,ui.secondary),ui.lp(a,3))
+            line.addView(summary,LinearLayout.LayoutParams(0,-2,1f))
+            line.addView(ui.action(a,if(opened)"CLOSE" else "MANAGE",false){
+                prefs.edit().putString("module",if(opened)null else source).apply()
                 refresh()
-            },LinearLayout.LayoutParams(-2,-2).apply{rightMargin=ui.px(a,7)})
-        }
-        parent.addView(HorizontalScrollView(a).apply{
-            isHorizontalScrollBarEnabled=false
-            addView(chips)
-        },ui.lp(a,13))
-        val filtered=rows.filter{
-            filter==Filter.ALL || it.state.name==filter.name
-        }
-        val size=pref.getInt("page",20).coerceIn(10,160)
-        for(item in filtered.take(size)){
-            val card=ui.row(a).apply{
-                background=ui.touch(a,ui.surface,16)
-                setPadding(ui.px(a,11),ui.px(a,11),ui.px(a,11),ui.px(a,11))
-            }
-            val image=ImageView(a).apply{
-                scaleType=ImageView.ScaleType.CENTER_CROP
-                background=ui.shape(a,ui.raised,12)
-                setPadding(ui.px(a,12),ui.px(a,12),ui.px(a,12),ui.px(a,12))
-                setImageResource(when(item.mime){
-                    "video/*"->R.drawable.ic_source_video
-                    "application/zip","application/epub+zip"->R.drawable.ic_source_toonily
-                    else->R.drawable.ic_source_site
-                })
-                contentDescription="File preview: "+item.filename
-            }
-            card.addView(image,LinearLayout.LayoutParams(ui.px(a,60),ui.px(a,60))
-                .apply{rightMargin=ui.px(a,11)})
-            thumbnail(a,image,item)
-            val main=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            main.addView(ui.text(a,item.filename.ifBlank{"Unnamed file"},14f,ui.white,true).apply{
-                maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+            },LinearLayout.LayoutParams(-2,-2).apply{
+                leftMargin=ui.px(a,8)
             })
-            val label=when(item.state){
-                State.DONE->"Saved"
-                State.FAILED->"Failed"
-                State.HELD->"Retry available"
-                State.PAUSED->"Paused"
-                State.QUEUED->"Queued"
-                State.ACTIVE->when {
-                    item.receivedBytes>0L && item.percent!=null && item.percent>0->
-                        "Transferring · ~"+item.percent+"% (media/fragment progress)"
-                    item.receivedBytes>0L->"Receiving original bytes"
-                    item.percent!=null && item.percent>0->
-                        "Engine progress · "+item.percent+"%"
-                    else->"Preparing / connecting"
+            card.addView(line)
+            if(opened){
+                val pausable=items.filter{it.state in setOf(State.ACTIVE,State.QUEUED)
+                    && it.actionText in setOf("PAUSE","HOLD")}
+                val resumable=items.filter{it.state==State.PAUSED
+                    && it.actionText=="RESUME"}
+                val cancellable=items.filter{it.state!=State.DONE
+                    && it.onRemove!=null}
+                if(pausable.isNotEmpty()||resumable.isNotEmpty()||
+                    cancellable.isNotEmpty()){
+                    val commands=ui.row(a)
+                    if(pausable.isNotEmpty())commands.addView(
+                        ui.action(a,"PAUSE MODULE",false){
+                            kotlin.concurrent.thread(name="asterion-pause-module"){
+                                pausable.forEach{runCatching{it.action()}}
+                                a.runOnUiThread{
+                                    if(!a.isFinishing&&!a.isDestroyed)refresh()
+                                }
+                            }
+                        },LinearLayout.LayoutParams(0,-2,1f))
+                    if(resumable.isNotEmpty())commands.addView(
+                        ui.action(a,"RESUME MODULE",true){
+                            kotlin.concurrent.thread(name="asterion-resume-module"){
+                                if(source=="Video"){
+                                    VideoDb(a).use{db->resumable.forEach{row->
+                                        row.key?.removePrefix("video:")?.toLongOrNull()
+                                            ?.let{db.retry(it)}
+                                    }}
+                                    VideoEngine.launch(a.applicationContext,false)
+                                }else resumable.forEach{runCatching{it.action()}}
+                                a.runOnUiThread{
+                                    if(!a.isFinishing&&!a.isDestroyed)refresh()
+                                }
+                            }
+                        },LinearLayout.LayoutParams(0,-2,1f))
+                    if(cancellable.isNotEmpty())commands.addView(
+                        ui.action(a,"CANCEL QUEUE",false){
+                            android.app.AlertDialog.Builder(a)
+                                .setTitle("Cancel "+source+" unfinished downloads?")
+                                .setMessage("Cancel "+cancellable.size+
+                                    " tracked unfinished items in this module. "+
+                                    "Saved originals will be preserved.")
+                                .setNegativeButton("Keep",null)
+                                .setPositiveButton("Cancel jobs"){_,_->
+                                    kotlin.concurrent.thread(name="asterion-cancel-module"){
+                                        cancellable.forEach{row->
+                                            runCatching{row.onRemove?.invoke()}
+                                        }
+                                        a.runOnUiThread{
+                                            if(!a.isFinishing&&!a.isDestroyed)refresh()
+                                        }
+                                    }
+                                }.show()
+                        },LinearLayout.LayoutParams(0,-2,1f))
+                    card.addView(commands,ui.lp(a,10))
+                }
+                for(item in items.take(100)){
+                    val detail=ui.row(a)
+                    val desc=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+                    desc.addView(ui.text(a,item.filename,12f,ui.white).apply{
+                        maxLines=1
+                        ellipsize=android.text.TextUtils.TruncateAt.END
+                    })
+                    val label=when(item.state){
+                        State.DONE->"Saved"
+                        State.FAILED->"Failed"
+                        State.HELD->"Needs action"
+                        State.ACTIVE->if(item.receivedBytes>0L)
+                            item.receivedBytes.toString()+" bytes received"
+                            else "Connecting"
+                        State.QUEUED->"Queued"
+                        State.PAUSED->"Paused"
+                    }
+                    val issue=if(item.state in setOf(State.FAILED,State.HELD))
+                        item.info.substringAfter(" · ",item.info).take(85)
+                    else ""
+                    desc.addView(ui.text(a,
+                        label+(if(issue.isNotBlank())" · $issue" else ""),
+                        11f,if(item.state==State.FAILED)ui.danger else ui.secondary)
+                        .apply{
+                            maxLines=2
+                            ellipsize=android.text.TextUtils.TruncateAt.END
+                        },ui.lp(a,2))
+                    detail.addView(desc,LinearLayout.LayoutParams(0,-2,1f))
+                    if(item.hasPrimaryAction){
+                        val action=when(item.state){
+                            State.DONE->"OPEN"
+                            State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText
+                            State.FAILED->item.actionText?:"RETRY"
+                            State.HELD->item.actionText?:"RETRY"
+                        }
+                        if(!action.isNullOrBlank() && action!="COOLDOWN")
+                            detail.addView(ui.action(a,action,false){
+                                item.action()
+                                if(item.state!=State.DONE)refresh()
+                            },LinearLayout.LayoutParams(-2,-2).apply{
+                                leftMargin=ui.px(a,7)
+                            })
+                    }
+                    card.addView(detail,ui.lp(a,10))
                 }
             }
-            val stateColor=when(item.state){
-                State.FAILED->ui.danger
-                State.ACTIVE->android.graphics.Color.rgb(104,214,164)
-                State.PAUSED->ui.secondary
-                State.DONE->ui.primary
-                State.HELD->android.graphics.Color.rgb(242,194,116)
-                State.QUEUED->ui.secondary
-            }
-            main.addView(ui.text(a,label,12f,stateColor,true),ui.lp(a,4))
-            main.addView(ui.text(a,item.info.take(110),11f,ui.secondary).apply{
-                maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
-            },ui.lp(a,3))
-            if(item.state==State.ACTIVE && item.percent!=null &&
-                item.percent>0){
-                main.addView(ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal).apply{
-                    max=100;progress=item.percent
-                    progressTintList=ColorStateList.valueOf(
-                        if(item.receivedBytes>0L)
-                            android.graphics.Color.rgb(104,214,164)
-                        else ui.secondary)
-                },LinearLayout.LayoutParams(-1,ui.px(a,3)).apply{topMargin=ui.px(a,7)})
-            }
-            card.addView(main,LinearLayout.LayoutParams(0,-2,1f))
-            // Keep per-file Retry and Clear together IN that file's card.
-            // The old parent-level Clear rendered as a huge detached button
-            // immediately above the next unrelated download row.
-            val actions=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
-            if(item.hasPrimaryAction && (item.state in setOf(
-                    State.DONE,State.FAILED,State.HELD,State.PAUSED) ||
-                    item.actionText!=null)){
-                val command=when(item.state){
-                    State.DONE->"OPEN";State.FAILED->item.actionText?:"RETRY"
-                    State.HELD->item.actionText?:"SIGN IN"
-                    State.ACTIVE,State.QUEUED,State.PAUSED->item.actionText.orEmpty()
-                }
-                val action=ui.action(a,command,false){
-                    item.action()
-                    if(item.state!=State.DONE)refresh()
-                }
-                // Pausing is a neutral stop; resuming is a positive action.
-                // Red is reserved exclusively for actual failed transfers.
-                val actionColor=when(command){
-                    "RESUME","START"->android.graphics.Color.rgb(38,105,79)
-                    "RETRY"->android.graphics.Color.rgb(113,83,39)
-                    "PAUSE","HOLD"->ui.raised
-                    else->ui.raised
-                }
-                action.background=ui.touch(a,actionColor,15,
-                    if(command=="RESUME")android.graphics.Color.rgb(92,182,139)
-                    else ui.border)
-                action.setTextColor(if(command=="RESUME")
-                    android.graphics.Color.rgb(226,255,239) else ui.white)
-                action.isSingleLine=true
-                action.setPadding(ui.px(a,5),0,ui.px(a,5),0)
-                actions.addView(action,LinearLayout.LayoutParams(-1,-2).apply{
-                    bottomMargin=ui.px(a,5)
-                })
-            }
-            // Each video has independent cancellation even when its primary
-            // control is PAUSE, RETRY or HOLD. Do not rely on a global stop.
-            val removal=item.onRemove ?: if(item.state in setOf(
-                    State.DONE,State.PAUSED))({
-                    hideRow(a,item)
-                }) else null
-            removal?.let{remove->
-                val label=when{
-                    item.state==State.ACTIVE->"CANCEL"
-                    else->"CLEAR"
-                }
-                val removeButton=ui.action(a,label,false){
-                    remove()
-                    refresh()
-                }.apply{
-                    isSingleLine=true
-                    setTextColor(ui.secondary)
-                }
-                actions.addView(removeButton,LinearLayout.LayoutParams(-1,-2))
-            }
-            if(actions.childCount>0)
-                card.addView(actions,LinearLayout.LayoutParams(ui.px(a,88),-2).apply{
-                    leftMargin=ui.px(a,6)
-                })
-            parent.addView(card,ui.lp(a,8))
+            parent.addView(card,ui.lp(a,7))
         }
-        if(filtered.size>size)parent.addView(ui.action(a,
-            "Show more ("+(filtered.size-size)+")",false){
-            pref.edit().putInt("page",(size+20).coerceAtMost(160)).apply()
-            refresh()
-        },ui.lp(a,10))
-        if(filtered.isEmpty())parent.addView(ui.text(a,
-            if(rows.isEmpty())"No downloads yet." else "Nothing in this filter.",
-            13f,ui.secondary),ui.lp(a,13))
     }
 }
