@@ -31,20 +31,23 @@ internal object OnlyHentaiKvsOriginalSource {
             it.data().ifBlank{it.html()}
         }.filter{it.contains("kt_player") && it.contains("video_id")}
         if(scripts.size!=1)return false
-        // Preserve exact selected item association. An unrelated global
-        // video_id from a sidebar script cannot authorize an original.
-        val ids=videoId.findAll(scripts.single()).map{it.groupValues[1]}.toSet()
-        return ids.size==1 && ids.single()==id &&
-            scripts.single().contains("flashvars") &&
-            scripts.single().contains("video_url")
+        // Real public KVS pages use a player-internal video_id that is
+        // NOT the numerical segment in the visible /videos/<id>/<slug>.
+        // The selected article URL and unique #kt_player container bind
+        // provenance; comparing these unrelated IDs rejects real originals.
+        val players=doc.select("#kt_player")
+        val script=scripts.single()
+        return players.size==1 && script.contains("flashvars") &&
+            script.contains("video_url") && videoId.containsMatchIn(script) &&
+            id.length in 1..12
     }
     /** Only a publisher-rendered #kt_player video matching the selected ID. */
     fun rendered(selected:String,html:String):String? {
         val id=selectedId(selected)?:return null
         val doc=Jsoup.parse(html,selected)
-        val root=doc.select("#kt_player[data-video-id]").singleOrNull()
+        val root=doc.select("#kt_player[data-selected-page-id]").singleOrNull()
             ?:return null
-        if(root.attr("data-video-id")!=id)return null
+        if(root.attr("data-selected-page-id")!=id)return null
         if(root.closest("aside,.related,.recommended,.recommendations,"+
                 ".ads,.advertisement,.sidebar,[data-ad]")!=null)return null
         val videos=root.select("video[src],video source[src]")
