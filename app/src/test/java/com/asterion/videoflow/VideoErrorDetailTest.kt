@@ -68,6 +68,14 @@ class VideoErrorDetailTest {
         assertFalse(msg.contains("video.example"))
     }
 
+    @Test fun missingVostaOriginalAudioIsActionableWithoutAutomaticRetry(){
+        val reason="VOSTA required: selected episode has no compatible " +
+            "publisher-declared Japanese original-audio rendition"
+        val classification=VideoFailurePolicy.classify(reason)
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,classification)
+        assertEquals(0,VideoFailurePolicy.maxRetries(classification))
+    }
+
     @Test fun pythonRuntimeDependencyFailureIsDistinct(){
         val msg=VideoErrorDetail.summary(
             ExecutionException(IllegalStateException("ModuleNotFoundError: No module named yt_dlp")))
