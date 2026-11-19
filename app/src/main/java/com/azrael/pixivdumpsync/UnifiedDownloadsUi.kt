@@ -1491,6 +1491,28 @@ object UnifiedDownloadsUi {
                             }.show()
                     },ui.lp(a,9))
                 }
+                if(source!="Video"){
+                    val recentFailures=items.filter{it.state==State.FAILED}
+                    if(recentFailures.isNotEmpty()){
+                        card.addView(ui.action(a,
+                            "CLEAR "+recentFailures.size+
+                                " RECENT FAILED · KEEP SAVED FILES",false){
+                            android.app.AlertDialog.Builder(a)
+                                .setTitle("Clear "+source+" failures?")
+                                .setMessage("Dismiss "+recentFailures.size+
+                                    " recent failed jobs. Saved files and "+
+                                    "downloaded chapters are retained; "+
+                                    "additional older failures may remain.")
+                                .setNegativeButton("Keep",null)
+                                .setPositiveButton("Clear failures"){_,_->
+                                    applyModuleActions(a,
+                                        recentFailures.map{job->
+                                            {clearFailedJob(a,job)}
+                                        },refresh)
+                                }.show()
+                        },ui.lp(a,8))
+                    }
+                }
                 if(managed.isNotEmpty()){
                     card.addView(ui.text(a,
                         chosenFilter.label+" · "+managed.size+" of "+
