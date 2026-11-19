@@ -10,7 +10,7 @@ internal object VideoFailurePolicy {
         return when {
             // Public HTTPS publisher host unexpectedly pointed at loopback:
             // fail as route/DNS failure rather than spending a Python retry.
-            Regex("""(?:failed to connect to|connectexception).{0,180}/(?:127\.0\.0\.1|0\.0\.0\.0):443""")
+            Regex("""(?:resolved to local loopback|(?:failed to connect to|connectexception).{0,180}/(?:127\.0\.0\.1|0\.0\.0\.0):443)""")
                 .containsMatchIn(text)->Kind.DNS
             Regex("""(?:no address associated with hostname|unknownhostexception|name or service not known|dns lookup failed|unable to resolve host|temporary failure in name resolution)""")
                 .containsMatchIn(text)->Kind.DNS
