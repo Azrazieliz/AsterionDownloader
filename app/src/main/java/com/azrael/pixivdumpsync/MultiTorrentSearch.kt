@@ -15,8 +15,19 @@ enum class TorrentArea { GAMES, BOOKS, ADULT }
 object MultiTorrentSearch {
     private fun enc(s:String)=URLEncoder.encode(s.trim(),"UTF-8")
     private val hashPattern=Regex("(?i)^[a-f0-9]{40}$")
+    // Index APIs often return only an infohash, not the original .torrent
+    // descriptor or any announce trackers. A trackerless synthesized magnet
+    // can wait indefinitely for DHT bootstrap on Android mobile networks.
+    // Preserve the exact publisher infohash; add only documented public
+    // announce endpoints, retaining libtorrent's existing DHT fallback.
+    // These are NOT download/verification services or substitute media.
+    private val publicTrackers=listOf(
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://open.demonii.com:1337/announce"
+    )
     private fun magnet(hash:String,title:String):String =
-        "magnet:?xt=urn:btih:"+hash.uppercase()+"&dn="+enc(title.take(150))
+        "magnet:?xt=urn:btih:"+hash.uppercase()+"&dn="+enc(title.take(150))+
+            publicTrackers.joinToString(""){"&tr="+enc(it)}
     private fun request(url:String,body:String?=null):String {
         val host=URL(url).host.lowercase()
         require(host in setOf("bitsearch.eu","api.knaben.org","apibay.org")){"Untrusted torrent index host"}
