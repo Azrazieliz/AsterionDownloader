@@ -10,7 +10,8 @@ internal object OriginalReceiptState {
         context.getSharedPreferences(PREF,Context.MODE_PRIVATE)
             .getString(key(id),"UNVERIFIED").orEmpty()
     fun set(context:Context,id:Long,state:String){
-        require(state in setOf("VERIFIED","INVALID","UNVERIFIED","STALLED","MISSING"))
+        require(state in setOf("VERIFIED","INVALID","UNVERIFIED","STALLED","MISSING",
+            "DISMISSED"))
         context.getSharedPreferences(PREF,Context.MODE_PRIVATE)
             .edit().putString(key(id),state).apply()
     }
