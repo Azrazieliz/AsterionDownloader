@@ -196,7 +196,7 @@ object VideoEngine {
                 // blind state update could steal a paused or replaced job.
                 VideoTransferJournal.record(context,next.id,"preparing")
                 try {
-                    val uri=downloadOne(context,db,next) { percent ->
+                    val uri=downloadOne(context,db,next,nativeOnly=nativeOnly) { percent ->
                         onStatus("${next.title}: $percent%")
                     }
                     if(stopRequests.contains(next.id))
@@ -250,6 +250,11 @@ object VideoEngine {
                         onStatus("Download worker interrupted; saved work retained")
                         Thread.currentThread().interrupt()
                         break
+                    }else if(t is SecondaryNativeDeferred){
+                        db.deferToPrimary(next.id,next.lease)
+                        VideoTransferJournal.record(context,next.id,
+                            "native_deferred","Primary extractor required")
+                        onStatus("Selected original returned to primary extractor")
                     }else if(t is CloudOriginalQueued){
                         if(db.completeCloudClaim(next.id,next.lease,t.cloudId)){
                             VideoTransferJournal.record(context,next.id,
@@ -517,7 +522,8 @@ object VideoEngine {
     fun submit(context: Context, scan: Boolean, targetHost:String?=null,
                onStatus: (String)->Unit = {}) =
         executor.submit { work(context,scan,onStatus,targetHost) }
-    private fun downloadOne(context: Context, db: VideoDb, item: Video, status:(Int)->Unit): String {
+    private fun downloadOne(context: Context, db: VideoDb, item: Video,
+                            nativeOnly:Boolean=false,status:(Int)->Unit): String {
         // Native yt-dlp may run in a read-only working directory on Android.
         // Force every output and .part file into a writable private staging area.
         val previous=File(context.cacheDir,"videoflow-staging/${item.id}")
@@ -964,12 +970,28 @@ object VideoEngine {
             inspectPublisher{ensureExtractor(context)}
             signedRuntimePrimed=true
         }
-        val publisherOriginals=if(canInspectPublisherHtml &&
+        val lightweight= nativeOnly &&
+            SecondaryLightNativeOriginal.eligible(item.url)
+        val publisherOriginals=if(lightweight)
+            publisherResult{
+                val candidate=SecondaryLightNativeOriginal.resolve(
+                    context,item.url)
+                if(candidate==null)emptyList()
+                else listOf(PublisherOriginalExtractors.Candidate(
+                    candidate.url,candidate.referer,
+                    NetworkRoute.siteKey(item.url)))
+            }
+        else if(canInspectPublisherHtml &&
             PublisherOriginalExtractors.owns(item.url) &&
             VideoSiteProfiles.isVideoPage(item.url))
             publisherResult{PublisherOriginalExtractors.resolve(context,item.url)}
         else Result.success(emptyList())
         val publishedOriginals=publisherOriginals.getOrDefault(emptyList())
+        // Zero or ambiguous selected sources are NOT a video failure.
+        // The secondary must return this claim to the primary's existing
+        // full player extractor rather than start a second Python process.
+        if(lightweight && publishedOriginals.size!=1)
+            throw SecondaryNativeDeferred()
         // A previous 3DHentaiX job saved a real but UNRELATED playable video.
         // No generic fallback is permitted for this provider. If the selected
         // player does not identify one unambiguous source, fail instead.
@@ -1040,6 +1062,20 @@ object VideoEngine {
         }.getOrNull()
         var last:Throwable?=null
         var downloaded=false
+        if(lightweight){
+            val exact=publishedOriginals.single()
+            execute(exact.url,exact.referer,
+                Rule34VideoOriginalSource.firstPartyDownload(
+                    item.url,exact.url))
+            downloaded=true
+        }else if(nativeOnly){
+            // Ordinary direct files can transfer natively without ever
+            // loading the second Chaquopy/youtube-dl runtime.
+            if(!NativeMediaDownloader.isNativeEligible(item.url,item.url))
+                throw SecondaryNativeDeferred()
+            execute(item.url)
+            downloaded=true
+        }
         var expectedDuration:Long?=null
         var heldReason:String?=null
             // Real selected FreePornVideos HTML5MediaEmbed exposes 3 verified
