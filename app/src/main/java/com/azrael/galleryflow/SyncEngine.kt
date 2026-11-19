@@ -336,6 +336,16 @@ class SyncEngine(private val context: Context) {
             if(SelectedAlbumScope.owns(meta.canonicalUrl)){
                 val declared=SelectedAlbumScope.advertisedCount(
                     ref.title,meta.title)
+                // A single genuine official archive is validated by
+                // expectedArchivePhotos after extraction. A webpage gallery
+                // instead MUST match the selected article's claimed count
+                // before any media is downloaded. Prior code accepted all
+                // 54 including recommendations when the title said 37.
+                val officialArchive=mediaItems.size==1 &&
+                    mediaItems.first().expectedArchivePhotos!=null
+                if(declared!=null && !officialArchive)
+                    SelectedAlbumScope.verifyAdvertisedCount(
+                        declared,mediaItems.size)
                 if(declared!=null && declared==mediaItems.size){
                     val moved=db.detachUnverifiedSelectedAlbumMedia(
                         meta.source,meta.stableId,
