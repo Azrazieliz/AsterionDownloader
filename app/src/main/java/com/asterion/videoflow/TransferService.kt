@@ -1010,6 +1010,9 @@ object VideoEngine {
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
+        val strictOnlyHentai=NetworkRoute.siteKey(item.url)==
+            "onlyhentaistuff.com" &&
+            VideoSiteProfiles.isVideoPage(item.url)
         if(strictRoshy && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1025,6 +1028,11 @@ object VideoEngine {
                 IllegalStateException(
                     "Selected article exposed no attributable original; "+
                     "the HTML page and recommended media are not downloads"))
+        if(strictOnlyHentai && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "OnlyHentai's selected KVS player has not exposed one "+
+                    "complete transferable source; no original bytes claimed"))
         if(strictIframe && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1258,6 +1266,10 @@ object VideoEngine {
             if(strictSelectedArticle && !downloaded)
                 throw (last?:IllegalStateException(
                     "Selected article file host or player exposed no transferable original"))
+            if(strictOnlyHentai && !downloaded)
+                throw (last?:IllegalStateException(
+                    "OnlyHentai selected KVS original did not transfer; "+
+                    "no unrelated preview or article fallback allowed"))
             if(strictIframe && !downloaded)
                 throw (last?:IllegalStateException(
                     "Selected external player did not transfer the original media"))
