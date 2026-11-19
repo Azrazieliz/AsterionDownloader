@@ -1600,7 +1600,7 @@ internal object DownloadLiveRate {
         val remaining=totalBytes-receivedBytes
         val seconds=remaining/rate+if(remaining%rate>0L)1L else 0L
         // A week-long projection from a burst is too uncertain to display.
-        return seconds.takeIf{it in 1..604_800L}
+        return seconds.takeIf{it in 1L..604_800L}
     }
 
     fun etaLabel(seconds:Long):String = when {
