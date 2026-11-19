@@ -1254,6 +1254,28 @@ object UnifiedDownloadsUi {
             })
             card.addView(header)
             if(opened){
+                if(source in setOf("Pixiv","Gallery","X","Torrents",
+                    "Video","Comic ZIP","EPUB","Novel ZIP","Assets","Creators")){
+                    card.addView(ui.action(a,
+                        "OPEN "+source.uppercase(java.util.Locale.ROOT)+
+                            " MODULE",false){
+                        (a as? AsterionHomeActivity)
+                            ?.openDownloadsModule(source)
+                    },ui.lp(a,9))
+                }
+                if(source=="Pixiv"){
+                    val sync=SyncControl.snapshot()
+                    if(sync.running && !sync.stopping){
+                        card.addView(ui.action(a,
+                            if(sync.paused)"RESUME PIXIV SYNC" else
+                                "PAUSE PIXIV SYNC",false){
+                            if(sync.paused)SyncControl.resume()
+                            else SyncControl.pause()
+                            DownloadStateSignals.changed(a)
+                            refresh()
+                        },ui.lp(a,7))
+                    }
+                }
                 // 'Manage' must perform actual operations. Show the selected
                 // module's unfinished durable jobs and contextual actions
                 // rather than merely toggling its heading to 'Close'.
