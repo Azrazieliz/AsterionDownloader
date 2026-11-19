@@ -25,9 +25,21 @@ internal object SecondaryLightNativeOriginal {
         return when(host){
             "rule34video.com"->Rule34VideoOriginalSource.videoId(selected)!=null
             "hentaibros.net"->VideoSiteProfiles.isVideoPage(selected)
+            // This publisher directly advertises quality-labelled MP4 files
+            // bound to the selected numeric video ID. The second isolated
+            // native agent needs neither Python nor a heavyweight WebView.
+            "freepornvideos.xxx"->FreePornVideosOriginalSource.selectedPage(selected)
             else->false
         }
     }
+    /** Keep the native transfer's validated first-party MIME path when the
+     * publisher's selected MP4 URL ends in a slash, rather than dispatching
+     * the entire publisher page to an unsupported Python extractor.
+     */
+    fun verifiedFirstPartyMp4(selected:String,media:String):Boolean =
+        Rule34VideoOriginalSource.firstPartyDownload(selected,media) ||
+        FreePornVideosOriginalSource.selectedFileQuality(selected,media)!=null
+
     fun resolve(context:Context,selected:String):Candidate? {
         if(!eligible(selected))return null
         val connection=Jsoup.connect(selected)
@@ -61,6 +73,18 @@ internal object SecondaryLightNativeOriginal {
                     NativeMediaDownloader.isNativeEligible(
                         selected,it.url)
                 }?.let{Candidate(it.url,it.referer,false)}
+            }
+            "freepornvideos.xxx" -> {
+                // Never use the site's unrelated recommendation videos.
+                // selectedOriginal matches the requested /videos/<id> to
+                // the native /get_file/.../<same-id>_<quality>m.mp4/ route.
+                FreePornVideosOriginalSource.selectedOriginal(doc,selected)
+                    ?.takeIf{
+                        FreePornVideosOriginalSource.selectedFileQuality(
+                            selected,it)!=null &&
+                        NativeMediaDownloader.isNativeEligible(
+                            selected,it,true)
+                    }?.let{Candidate(it,selected,true)}
             }
             else -> null
         }
