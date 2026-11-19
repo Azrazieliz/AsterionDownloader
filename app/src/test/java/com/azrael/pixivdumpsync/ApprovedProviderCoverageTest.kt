@@ -30,7 +30,8 @@ class ApprovedProviderCoverageTest {
                 AlohaArea.VIDEOS -> host in VideoSiteProfiles.coveredHosts
                 AlohaArea.BOOKS ->
                     host=="mp4directs.com" || SiteBackfillProfiles.supports(host)
-                AlohaArea.COMICS -> SiteBackfillProfiles.supports(host)
+                AlohaArea.COMICS ->
+                    host=="mangadex.org" || SiteBackfillProfiles.supports(host)
                 AlohaArea.GAMES -> false
                 AlohaArea.ASSETS -> host=="db.bepis.moe"
                 else->false
@@ -48,6 +49,10 @@ class ApprovedProviderCoverageTest {
             assertFalse(NovelEpubParser.readableZipSeries(url))
         }
         assertTrue(NhentaiChapters.isGallery("https://nhentai.net/g/12345"))
+        assertTrue(MangaDexChapters.isSeries(
+            "https://mangadex.org/title/12345678-abcd-4567-89ab-123456789abc/example"))
+        // Previously queued French archive links remain readable without
+        // being presented as new auto-download providers.
         assertTrue(SushiScanChapters.isSeries(
             "https://sushiscan.net/catalogue/example/"))
     }
