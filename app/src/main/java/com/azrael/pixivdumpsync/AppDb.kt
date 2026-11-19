@@ -29,7 +29,8 @@ data class ArtistProgress(
         get() = (knownTotal - done - skipped).coerceAtLeast(0)
 }
 
-class AppDb(context: Context) : SQLiteOpenHelper(context, "pixivdump.db", null, 4) {
+class AppDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "pixivdump.db", null, 4) {
+    private val signalContext=context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE artists(
                 user_id TEXT PRIMARY KEY,
@@ -427,6 +428,7 @@ class AppDb(context: Context) : SQLiteOpenHelper(context, "pixivdump.db", null, 
             "illust_id=?",
             arrayOf(illustId)
         )
+        DownloadStateSignals.changed(signalContext)
     }
 
     fun isPageSaved(illustId: String, pageIndex: Int): Boolean {
@@ -456,5 +458,6 @@ class AppDb(context: Context) : SQLiteOpenHelper(context, "pixivdump.db", null, 
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+        DownloadStateSignals.changed(signalContext)
     }
 }
