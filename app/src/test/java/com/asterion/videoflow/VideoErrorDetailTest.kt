@@ -5,6 +5,20 @@ import org.junit.Test
 import java.util.concurrent.ExecutionException
 
 class VideoErrorDetailTest {
+    @Test fun realOrWrappedWorkerInterruptionIsNotASiteError(){
+        assertTrue(VideoErrorDetail.workerInterrupted(InterruptedException()))
+        assertTrue(VideoErrorDetail.workerInterrupted(
+            ExecutionException(InterruptedException("worker stopped"))))
+        assertTrue(VideoErrorDetail.workerInterrupted(
+            IllegalStateException("Video transfer failed",InterruptedException())))
+        assertTrue(VideoErrorDetail.workerInterrupted(
+            IllegalStateException("java.lang.InterruptedException")))
+        assertFalse(VideoErrorDetail.workerInterrupted(
+            IllegalArgumentException("Unsupported URL")))
+        assertFalse(VideoErrorDetail.workerInterrupted(
+            IllegalStateException("Interrupted transfer because of HTTP 403")))
+    }
+
     @Test fun unwrapsNestedExceptionsAndRedactsSignedMediaUrls(){
         val nested=IllegalStateException(
             "Unable to extract: https://cdn.example/video.mp4?token=secret123")
