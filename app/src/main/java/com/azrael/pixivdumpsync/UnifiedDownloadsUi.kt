@@ -668,7 +668,11 @@ object UnifiedDownloadsUi {
                     "QUEUED"->"PAUSE"
                     else->null
                 }
-                rows+=Row(source,record.filename,info,state,null,
+                // A remote verified receipt is NOT another local saved
+                // original. Preserve the category in detail but track the
+                // cloud queue under its own independent module.
+                rows+=Row("TeraBox",record.filename,
+                    "Remote "+source+" · "+info,state,null,
                     record.updatedAt,{
                         when(record.state){
                             "ERROR","PAUSED"->{
@@ -827,7 +831,7 @@ object UnifiedDownloadsUi {
                         "QUEUED","SUBMITTED"->Totals(queued=number)
                         else->Totals()
                     }
-                    counts[source]=(counts[source]?:Totals())+contribution
+                    counts["TeraBox"]=(counts["TeraBox"]?:Totals())+contribution
                 }
             }
         }
@@ -1139,7 +1143,9 @@ object UnifiedDownloadsUi {
                 .thenByDescending{totalsFor(it).failed}
                 .thenByDescending{totalsFor(it).queued}
                 .thenBy{it.lowercase()})
-        val all=sources.map{totalsFor(it)}
+        // Never count a remote cloud proof twice as an original stored
+        // locally. TeraBox has its own module counters and progress.
+        val all=sources.filter{it!="TeraBox"}.map{totalsFor(it)}
             .fold(Totals()){acc,next->acc+next}
 
         parent.addView(ui.text(a,"Downloads",23f,ui.white,true),
