@@ -645,6 +645,7 @@ internal object SiteSpecificOriginalSources {
         context:Context,selected:String,frame:Source
     ):List<Source> {
         val originals=LinkedHashMap<String,Source>()
+        var hostFailure:Throwable?=null
         val raw=runCatching {
             Jsoup.connect(frame.url)
                 .userAgent(NativeMediaDownloader.USER_AGENT)
@@ -661,7 +662,7 @@ internal object SiteSpecificOriginalSources {
                     NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
                 }
                 .execute()
-        }.getOrNull()
+        }.onFailure{hostFailure=it}.getOrNull()
         if(raw!=null && raw.statusCode() in 200..299 &&
             raw.contentType().contains("html",ignoreCase=true)) {
             val player=Jsoup.parse(raw.body(),frame.url)
@@ -683,6 +684,29 @@ internal object SiteSpecificOriginalSources {
                     "main .video-player video source[src]"))
                     originals.putIfAbsent(media.url,media)
             }
+        }
+        // The owner confirmed the HelloPorn job previously spent its
+        // entire resolve window "gaining" yet never opened the original.
+        // If the ONE selected VOE host is blocked, stop immediately with
+        // an actionable network/session failure. Do not send its publisher
+        // article or an advertising iframe through generic yt-dlp.
+        if(originals.isEmpty() && host(frame.url)=="voe.sx"){
+            val status=raw?.statusCode()
+            if(hostFailure!=null || status !in 200..299){
+                val reason=when(status){
+                    401,403->"VOE player requires its own authorized session"
+                    429->"VOE player rate-limited this network"
+                    in 500..599->"VOE player is temporarily unavailable"
+                    else->"Selected VOE player is unreachable from this "+
+                        "configured Android network route"
+                }
+                throw java.io.IOException(
+                    "HelloPorn selected original cannot start: "+reason+
+                    ". No original bytes transferred.",hostFailure)
+            }
+            throw java.io.IOException(
+                "HelloPorn selected VOE player loaded but did not publish "+
+                "one attributable original. The iframe page is not media.")
         }
         return originals.values.toList().takeIf{it.size==1}.orEmpty()
     }
