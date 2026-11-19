@@ -31,4 +31,18 @@ class VideoTransferProgressPolicyTest {
         assertEquals(0L,observed(false,0L,"fragments",1100L,9_000L))
         assertEquals(1200L,observed(false,1200L,"fragments",1100L,9_000L))
     }
+
+    @Test fun selectedJkAssemblyCheckpointMustAdvanceWithinCurrentAttempt(){
+        fun advanced(jk:Boolean,stage:String?,updated:Long?,
+                     last:Long=1500L,start:Long=1000L):Boolean =
+            VideoTransferProgressPolicy.nativeAssemblyAdvanced(
+                jk,stage,updated,last,start)
+
+        assertTrue(advanced(true,"verifying",1600L))
+        assertFalse(advanced(true,"verifying",1500L))
+        assertFalse(advanced(true,"verifying",999L))
+        assertFalse(advanced(true,"fragments",1600L))
+        assertFalse(advanced(false,"verifying",1600L))
+        assertFalse(advanced(true,"verifying",null))
+    }
 }
