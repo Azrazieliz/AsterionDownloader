@@ -16,7 +16,11 @@ object AssetsPanel {
         .userAgent("AsterionDownloader/1.3 Android")
         .ignoreContentType(true).timeout(19000).maxBodySize(6000000).execute().body()
     private fun safe(url:String)=runCatching{
-        val u=URI(url);u.scheme=="https" && u.host in setOf("dl.polyhaven.org","ambientcg.com")
+        val u=URI(url)
+        u.scheme=="https" && u.userInfo==null && u.port==-1 &&
+            u.rawFragment==null && u.path.orEmpty().isNotBlank() &&
+            u.host.orEmpty().lowercase(java.util.Locale.ROOT) in
+                setOf("dl.polyhaven.org","ambientcg.com")
     }.getOrDefault(false)
     private fun download(a:Activity,id:String,files:List<Pair<String,String>>){
         val dm=a.getSystemService(DownloadManager::class.java)
@@ -125,13 +129,35 @@ object AssetsPanel {
             val q=input.text.toString().trim().lowercase()
             CreatorNames.remember(a,q,"ASSETS",true)
             if(q.length<2){status.text="Enter a model name";return@action}
-            results.removeAllViews();status.text="Searching Poly Haven"
+            results.removeAllViews();status.text="Searching Poly Haven and ambientCG…"
+            // Each search owns its view token. A later query or navigation
+            // cannot be overwritten by a stale asynchronous response.
+            val requestToken=Any()
+            results.tag=requestToken
             thread(name="asset-search"){
-                val outcome=runCatching{JSONObject(fetch("https://api.polyhaven.com/assets?type=models"))}
-                val ambient=runCatching{JSONObject(fetch("https://ambientcg.com/api/v3/assets?q="+
-                    java.net.URLEncoder.encode(q,"UTF-8")+"&limit=12&include=title,tags,downloads"))}
+                // The earlier serial fetches could keep the first source's
+                // successful result hidden behind a 19-second second-source
+                // timeout. Fetch both approved public catalogs concurrently.
+                val pool=java.util.concurrent.Executors.newFixedThreadPool(2)
+                val searches=try{
+                    val poly=pool.submit<JSONObject>{
+                        JSONObject(fetch("https://api.polyhaven.com/assets?type=models"))
+                    }
+                    val ambientResult=pool.submit<JSONObject>{
+                        JSONObject(fetch("https://ambientcg.com/api/v3/assets?q="+
+                            java.net.URLEncoder.encode(q,"UTF-8")+
+                            "&limit=12&include=title,tags,downloads"))
+                    }
+                    Pair(runCatching{poly.get()},runCatching{ambientResult.get()})
+                }finally{pool.shutdownNow()}
+                val (outcome,ambient)=searches
                 a.runOnUiThread{
-                    if(a.isDestroyed || a.isFinishing)return@runOnUiThread
+                    if(a.isDestroyed || a.isFinishing ||
+                        results.parent==null || results.tag!==requestToken)
+                        return@runOnUiThread
+                    var polyCount=0
+                    var ambientCount=0
+                    val errors=ArrayList<String>()
                     outcome.onSuccess{data->
                         var found=0
                         for(id in data.keys()){
@@ -154,8 +180,9 @@ object AssetsPanel {
                             results.addView(tile,ui.lp(a,9))
                             if(++found>=18)break
                         }
-                        status.text=found.toString()+" models found"
-                    }.onFailure{status.text="Poly Haven: "+it.message}
+                        polyCount=found
+                    }.onFailure{errors+="Poly Haven unavailable: "+
+                        (it.cause?.message?:it.message).orEmpty().take(120)}
                     ambient.onSuccess{catalog->
                         val rows=catalog.optJSONArray("assets")
                         for(i in 0 until minOf(rows?.length()?:0,12)){
@@ -190,8 +217,18 @@ object AssetsPanel {
                                     }.setNegativeButton("CANCEL",null).show()
                             },ui.lp(a,8))
                             results.addView(tile,ui.lp(a,9))
+                            ambientCount++
                         }
-                    }.onFailure{status.text=status.text.toString()+" · ambientCG: "+it.message}
+                    }.onFailure{errors+="ambientCG unavailable: "+
+                        (it.cause?.message?:it.message).orEmpty().take(120)}
+                    status.text=buildString{
+                        append(polyCount).append(" Poly Haven models · ")
+                        append(ambientCount).append(" ambientCG assets")
+                        if(polyCount+ambientCount==0 && errors.isEmpty())
+                            append(" · No matching originals")
+                        if(errors.isNotEmpty())
+                            append(" · ").append(errors.joinToString(" · "))
+                    }
                 }
             }
         },ui.lp(a,8))
