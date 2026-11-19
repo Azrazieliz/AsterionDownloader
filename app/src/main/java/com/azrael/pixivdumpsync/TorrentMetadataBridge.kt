@@ -24,6 +24,27 @@ import java.lang.ref.WeakReference
 internal object TorrentMetadataBridge {
     const val RECEIVER="asterion.torrent.result_receiver"
     private val idPattern=Regex("[0-9a-f]{24}")
+    // Each release gets ONE native metadata resolver at a time. Repeated
+    // FILES taps used to spawn duplicate 100-second peer waits without
+    // producing a selectable manifest. The lease also expires if the
+    // isolated torrent process dies before ResultReceiver can reply.
+    private val preparing=java.util.concurrent.ConcurrentHashMap<String,Long>()
+    internal fun claimRequest(key:String,now:Long):Boolean{
+        require(key.isNotBlank())
+        val until=now+120_000L
+        while(true){
+            val current=preparing.putIfAbsent(key,until)
+            if(current==null)return true
+            if(current>now)return false
+            if(preparing.replace(key,current,until))return true
+        }
+    }
+    internal fun releaseRequest(key:String){preparing.remove(key)}
+    private fun requestKey(value:String):String{
+        val parsed=CloudTorrentPolicy.infoHash(value)
+        if(parsed!=null)return "magnet:"+parsed
+        return "metadata:"+id(value.toByteArray(Charsets.UTF_8))
+    }
     private fun root(context:Context)=File(context.filesDir,"torrent-jobs").apply{mkdirs()}
     private fun id(bytes:ByteArray)=MessageDigest.getInstance("SHA-256")
         .digest(bytes).take(12).joinToString(""){"%02x".format(it)}
@@ -31,10 +52,11 @@ internal object TorrentMetadataBridge {
         require(idPattern.matches(value)){"Invalid torrent job identifier"}
         return value
     }
-    private fun callback(a:Activity,folder:String):ResultReceiver {
+    private fun callback(a:Activity,folder:String,request:String):ResultReceiver {
         val activity=WeakReference(a)
         return object:ResultReceiver(Handler(Looper.getMainLooper())){
             override fun onReceiveResult(resultCode:Int,data:Bundle?){
+                releaseRequest(request)
                 val owner=activity.get()?:return
                 if(owner.isFinishing || owner.isDestroyed)return
                 if(resultCode==1){
@@ -62,27 +84,61 @@ internal object TorrentMetadataBridge {
             Toast.makeText(a,"Invalid magnet info hash",Toast.LENGTH_LONG).show()
             return
         }
+        val request=requestKey(magnet)
+        if(!claimRequest(request,android.os.SystemClock.elapsedRealtime())){
+            Toast.makeText(a,"Already retrieving this release's file list",
+                Toast.LENGTH_SHORT).show()
+            return
+        }
         val intent=Intent(a,TorrentTransferService::class.java).apply{
             action=TorrentTransferService.PREPARE_MAGNET
             putExtra("magnet",magnet)
             putExtra("folder",folder)
-            putExtra(RECEIVER,callback(a,folder))
+            putExtra(RECEIVER,callback(a,folder,request))
         }
-        a.startForegroundService(intent)
-        Toast.makeText(a,"Reading torrent metadata from peers…",Toast.LENGTH_LONG).show()
+        runCatching{a.startForegroundService(intent)}
+            .onSuccess{Toast.makeText(a,
+                "Waiting for peer metadata (up to 100 seconds)",
+                Toast.LENGTH_LONG).show()}
+            .onFailure{
+                releaseRequest(request)
+                AlertDialog.Builder(a).setTitle("Torrent engine unavailable")
+                    .setMessage(it.message?:"Android could not start torrent metadata")
+                    .setPositiveButton("Close",null).show()
+            }
     }
     fun prepareDescriptor(a:Activity,bytes:ByteArray,folder:String) {
         runCatching{
             require(bytes.size in 33..8_388_608){"Invalid torrent descriptor size"}
             val hash=id(bytes)
-            File(root(a),"$hash.torrent").writeBytes(bytes)
-            a.startForegroundService(Intent(a,TorrentTransferService::class.java).apply{
-                action=TorrentTransferService.PREPARE_DESCRIPTOR
-                putExtra("job",hash)
-                putExtra("folder",folder)
-                putExtra(RECEIVER,callback(a,folder))
-            })
-            Toast.makeText(a,"Reading selected torrent files…",Toast.LENGTH_LONG).show()
+            // Reuse the verified immutable descriptor/manifest instead of
+            // launching JNI peer metadata work for every repeated FILES tap.
+            val manifest=File(root(a),"$hash.manifest.json")
+            if(manifest.isFile){
+                showPreparedFiles(a,hash,folder)
+                return
+            }
+            val request="descriptor:"+hash
+            if(!claimRequest(request,android.os.SystemClock.elapsedRealtime())){
+                Toast.makeText(a,"Already preparing this file list",
+                    Toast.LENGTH_SHORT).show()
+                return
+            }
+            try{
+                File(root(a),"$hash.torrent").writeBytes(bytes)
+                a.startForegroundService(
+                    Intent(a,TorrentTransferService::class.java).apply{
+                        action=TorrentTransferService.PREPARE_DESCRIPTOR
+                        putExtra("job",hash)
+                        putExtra("folder",folder)
+                        putExtra(RECEIVER,callback(a,folder,request))
+                    })
+                Toast.makeText(a,"Checking selected torrent files",
+                    Toast.LENGTH_LONG).show()
+            }catch(e:Exception){
+                releaseRequest(request)
+                throw e
+            }
         }.onFailure{
             AlertDialog.Builder(a).setTitle("Torrent metadata error")
                 .setMessage(it.message).setPositiveButton("Close",null).show()
