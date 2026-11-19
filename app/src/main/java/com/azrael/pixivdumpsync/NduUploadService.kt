@@ -68,13 +68,20 @@ class NduUploadService : Service() {
         running=executor.submit {
             try {
                 if(!NduSettings.configured(this)) return@submit
-                if(manual || intent?.action==ACTION_QUEUE_EXISTING) {
-                    currentStatus="Scanning owned downloads across all modules"
+                // Cloud-first: only queue explicit originals. Do not scan
+                // historical Kuroha/device storage or manufacture new phone
+                // transfers from DownloadManager. Existing pending legacy
+                // uploads remain readable and may finish separately.
+                val remote=runCatching{
+                    TeraBoxRemoteQueue(this).use{q->q.drain(this,24){
+                        stop || (!manual && !AppPower.enabled(this)) ||
+                        Thread.currentThread().isInterrupted
+                    }}
+                }
+                if(remote.isFailure){
+                    currentStatus="Remote cloud transfer not confirmed: "+
+                        remote.exceptionOrNull()?.javaClass?.simpleName
                     notifyNow()
-                    // Retain the legacy Kuroha/Kyora index and capture the unified
-                    // Assets, Games, Books, Comics, Videos, X and Koikatsu folders.
-                    NduCloudQueue(this).use { it.enqueueExisting(this) }
-                    RounderDispatch.scan(this,manual=manual)
                 }
                 val outcome=NduUploadEngine.drain(this,20000,12*60_000L,
                     stop={stop || (!manual && !AppPower.enabled(this)) ||
