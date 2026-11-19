@@ -595,19 +595,19 @@ object BrowserPageFetch {
                             // ALL JSON-LD, so the episode resolver could find
                             // no original even if browser playback succeeded.
                             if(publisher==='hentaihaven.xxx' &&
-                                /^\\/watch\\/[a-z0-9-]{4,220}\\/episode-[0-9]{1,5}\\/?$/i
+                                /^\/watch\/[a-z0-9-]{4,220}\/episode-[0-9]{1,5}\/?$/i
                                     .test(currentPath)){
                                 const published=new Set();
-                                const selected=location.href.replace(/\\/$/,'');
+                                const selected=location.href.replace(/\/$/,'');
                                 const valid=u=>{
                                     try{
                                         const p=new URL(u);
                                         return p.protocol==='https:' &&
                                             p.hostname==='octopusmanifest.org' &&
                                             p.port==='' && !p.search && !p.hash &&
-                                            /^\\/[A-Za-z0-9_.\\/-]{8,500}\\.m3u8$/i
+                                            /^\/[A-Za-z0-9_.\/-]{8,500}\.m3u8$/i
                                                 .test(p.pathname) &&
-                                            (p.pathname.match(/\\//g)||[]).length===2 &&
+                                            (p.pathname.match(/\//g)||[]).length===2 &&
                                             !/preview|sample|trailer|teaser/i
                                                 .test(p.pathname);
                                     }catch(_){return false;}
@@ -627,7 +627,7 @@ object BrowserPageFetch {
                                                 ?obj['@type']:[obj['@type']];
                                             if(types.includes('VideoObject')){
                                                 const declared=String(obj.url||'')
-                                                    .replace(/\\/$/,'');
+                                                    .replace(/\/$/,'');
                                                 if((!declared || declared===selected) &&
                                                     valid(obj.contentUrl))
                                                     published.add(obj.contentUrl);
