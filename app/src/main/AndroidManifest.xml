@@ -30,6 +30,12 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- One private, data-free authority for durable transfer-state
+             invalidations across existing downloader processes. -->
+        <provider android:name=".DownloadStateSignalProvider"
+            android:authorities="${applicationId}.download-events"
+            android:exported="false"
+            android:grantUriPermissions="false"/>
         <!-- Opt-in signed/UID-checked Control diagnostics. No arbitrary
              ContentProvider reads, writable files, or implicit authorization. -->
         <provider android:name=".AsterionControlDiagnosticsProvider"
