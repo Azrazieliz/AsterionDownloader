@@ -58,7 +58,12 @@ object KeywordSources {
         return (hentaiSites+pornSites+clearnetIndexes).joinToString("\n")
     }
     private fun searchProviders(context:Context,area:VideoSearchArea):List<SearchProvider> {
-        val direct=SearchRanking.parseProviders(siteDefinitions(area).joinToString("\n"))
+        val direct=SearchRanking.parseProviders(siteDefinitions(area).joinToString("\n")).toMutableList()
+        val configured=endpoint(context).trim().trimEnd('/')
+        if(SearchRanking.validUrl(configured) && configured.startsWith("https://")){
+            direct.add(SearchProvider(SearchProviderKind.SEARXNG,configured,
+                "Federated web index"))
+        }
         if(area!=VideoSearchArea.PIRACY_DARKWEB){
             val category=if(area==VideoSearchArea.PORN)AlohaArea.ADULT else AlohaArea.HENTAI
             val nativeHosts=direct.mapNotNull{runCatching{
@@ -315,36 +320,96 @@ object KeywordSources {
         }
         return found
     }
+    /**
+     * Broad web discovery in addition to individual adapters. These results
+     * are source-page candidates, never proof that a file is downloadable.
+     * Two independent indexes prevent one blocked publisher from reducing
+     * search to a single provider such as SpankBang.
+     */
+    internal fun parseWebIndex(html:String,base:String,
+                               label:String):List<RankedHit>{
+        val doc=Jsoup.parse(html,base)
+        val hits=ArrayList<RankedHit>()
+        val entries=if(label=="DuckDuckGo Web")
+            doc.select(".result__a")
+        else doc.select("li.b_algo h2 a")
+        for(a in entries.take(120)){
+            val raw=a.absUrl("href").ifBlank{a.attr("href")}
+            val uri=runCatching{URI(raw)}.getOrNull()?:continue
+            val url=if(uri.host.orEmpty().endsWith("duckduckgo.com") &&
+                uri.path=="/l/"){
+                uri.rawQuery.orEmpty().split('&').firstOrNull{
+                    it.startsWith("uddg=")
+                }?.substringAfter('=')?.let{
+                    java.net.URLDecoder.decode(it,"UTF-8")
+                }.orEmpty()
+            }else raw
+            if(!url.startsWith("https://",true) ||
+                !SearchRanking.validUrl(url) ||
+                !(SearchRanking.isVideoUrl(url) ||
+                    SearchRanking.isIndexPage(url)))continue
+            val title=a.text().trim().take(220)
+            if(title.length<3)continue
+            val parent=a.closest(".result,li.b_algo")
+            val snippet=parent?.selectFirst(".result__snippet,.b_caption p")
+                ?.text().orEmpty().take(400)
+            hits+=RankedHit(title,url,label,snippet)
+        }
+        return hits.distinctBy{SearchRanking.canonicalKey(it.url)}
+    }
+    private fun broadWebIndex(context:Context,keyword:String,
+                              area:VideoSearchArea,duck:Boolean):List<RankedHit>{
+        val scope=when(area){
+            VideoSearchArea.HENTAI->" hentai animation video"
+            VideoSearchArea.PORN->" adult video"
+            VideoSearchArea.PIRACY_DARKWEB->" torrent download"
+        }
+        val encoded=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
+        val url=if(duck)
+            "https://html.duckduckgo.com/html/?q="+encoded
+        else "https://www.bing.com/search?q="+encoded+"&count=50"
+        val response=connection(context,url).ignoreHttpErrors(true)
+            .maxBodySize(3_000_000).timeout(18_000).execute()
+        require(response.statusCode() in 200..299){
+            "Web index HTTP "+response.statusCode()
+        }
+        return parseWebIndex(response.body(),response.url().toString(),
+            if(duck)"DuckDuckGo Web" else "Bing Web")
+    }
+
     fun searchDetailed(context:Context,keyword:String,
                        area:VideoSearchArea=VideoSearchArea.PORN):SearchOutcome {
         require(keyword.trim().isNotBlank()){"Enter a search term"}
         val providers=searchProviders(context,area)
-        if(providers.isEmpty())return SearchOutcome(emptyList(),0,
-            listOf("No search sources for this area. Hidden services require a configured local Tor proxy."))
-        val pool=java.util.concurrent.Executors.newFixedThreadPool(minOf(6,providers.size))
+        val tasks=ArrayList<Pair<String,()->List<RankedHit>>>()
+        for(provider in providers)tasks+=provider.label to {
+            when(provider.kind){
+                SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
+                SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
+            }
+        }
+        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
+        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true)}
+        val pool=java.util.concurrent.Executors.newFixedThreadPool(minOf(8,tasks.size))
         val completion=java.util.concurrent.ExecutorCompletionService<
             Triple<String,List<RankedHit>,String?>>(pool)
         val collected=ArrayList<RankedHit>()
         val errors=ArrayList<String>()
         try {
-            for(provider in providers)completion.submit(java.util.concurrent.Callable {
+            for((label,task) in tasks)completion.submit(java.util.concurrent.Callable {
                 try {
-                    val hits=when(provider.kind){
-                        SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
-                        SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
-                    }
-                    Triple(provider.label,hits,null)
+                    Triple(label,task(),null)
                 }catch(t:Exception){
-                    Triple(provider.label,emptyList(),
+                    Triple(label,emptyList<RankedHit>(),
                         t.message?:t.javaClass.simpleName)
                 }
             })
-            // Execute independent providers concurrently. A broken site cannot hold
-            // the whole search queue hostage.
+            // Search engines and direct publishers run in parallel. Results
+            // are only source-page candidates until original resolution.
             val deadline=System.nanoTime()+
-                java.util.concurrent.TimeUnit.SECONDS.toNanos(90)
+                java.util.concurrent.TimeUnit.SECONDS.toNanos(38)
             var finished=0
-            while(finished<providers.size){
+            while(finished<tasks.size){
                 val remaining=deadline-System.nanoTime()
                 if(remaining<=0L)break
                 val result=completion.poll(remaining,
@@ -352,16 +417,16 @@ object KeywordSources {
                 val (label,hits,error)=result.get()
                 finished++
                 collected.addAll(hits)
-                if(error!=null)errors.add("$label: $error")
+                if(error!=null)errors.add(label+": "+error)
             }
-            if(finished<providers.size)
-                errors.add("${providers.size-finished} search source(s) timed out")
+            if(finished<tasks.size)
+                errors.add((tasks.size-finished).toString()+" search sources timed out")
         }finally{pool.shutdownNow()}
         return SearchOutcome(
             if(area==VideoSearchArea.PIRACY_DARKWEB)
                 SearchRanking.deduplicateIndex(keyword,collected)
             else SearchRanking.deduplicate(keyword,collected),
-            providers.size,errors)
+            tasks.size,errors)
     }
     /** Search one explicitly supplied site, including HTML sites with unusual page URLs. */
     fun searchCustom(context:Context,keyword:String,address:String):SearchOutcome {
