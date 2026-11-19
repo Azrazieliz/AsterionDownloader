@@ -79,6 +79,13 @@ internal object TorrentMetadataBridge {
         }
     }
     fun prepareMagnet(a:Activity,magnet:String,folder:String) {
+        val safety=TorrentSafetyGate.assess(a)
+        if(!safety.allowed){
+            AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
+                .setMessage(safety.reason)
+                .setPositiveButton("Close",null).show()
+            return
+        }
         if(!(magnet.startsWith("magnet:?xt=urn:btih:",true) ||
                 magnet.startsWith("magnet:?xt=urn:btmh:",true))){
             Toast.makeText(a,"Invalid magnet info hash",Toast.LENGTH_LONG).show()
@@ -108,6 +115,13 @@ internal object TorrentMetadataBridge {
             }
     }
     fun prepareDescriptor(a:Activity,bytes:ByteArray,folder:String) {
+        val safety=TorrentSafetyGate.assess(a)
+        if(!safety.allowed){
+            AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
+                .setMessage(safety.reason)
+                .setPositiveButton("Close",null).show()
+            return
+        }
         runCatching{
             require(bytes.size in 33..8_388_608){"Invalid torrent descriptor size"}
             val hash=id(bytes)
@@ -229,6 +243,13 @@ internal object TorrentMetadataBridge {
                 }){
                     Toast.makeText(a,"Books supports EPUB files",Toast.LENGTH_LONG).show()
                 }else{
+                    val admission=TorrentSafetyGate.assess(a)
+                    if(!admission.allowed){
+                        AlertDialog.Builder(a).setTitle("Torrent safety hold")
+                            .setMessage(admission.reason)
+                            .setPositiveButton("Close",null).show()
+                        return@setPositiveButton
+                    }
                     val indices=selected.indices.filter{selected[it]}.joinToString(",")
                     a.startForegroundService(Intent(a,TorrentTransferService::class.java).apply{
                         action=TorrentTransferService.ADD
