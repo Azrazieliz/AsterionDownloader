@@ -30,7 +30,11 @@ object VideoSearchPreviews {
         val rule34Page=referer?.takeIf{
             com.asterion.videoflow.Rule34VideoOriginalSource.videoId(it)!=null
         }
-        val key=validUrl?:rule34Page?:return
+        val selectedPage=referer?.takeIf{
+            it.startsWith("https://") && SearchRanking.validUrl(it) &&
+                SearchRanking.isVideoUrl(it)
+        }
+        val key=validUrl?:selectedPage?:return
         synchronized(lock){memory.get(key)}?.let{
             image.scaleType=ImageView.ScaleType.CENTER_CROP
             image.setImageBitmap(it)
@@ -52,11 +56,20 @@ object VideoSearchPreviews {
                 validUrl?.let{verifiedPoster->
                     yieldAll(PublisherPreviewFallback.candidates(verifiedPoster,referer))
                 }
-                rule34Page?.let{selectedPage->
+                rule34Page?.let{source->
                     val poster=runCatching{
-                        Rule34PosterEvidence.readPoster(app,selectedPage)
+                        Rule34PosterEvidence.readPoster(app,source)
                     }.onFailure{problem->
                         failure="selected_page_"+problem.javaClass.simpleName+
+                            ": "+problem.message.orEmpty().take(80)
+                    }.getOrNull()
+                    if(poster!=null && poster!=validUrl)yield(poster)
+                }
+                selectedPage?.takeIf{it!=rule34Page}?.let{source->
+                    val poster=runCatching{
+                        PublisherSearchPoster.fetch(app,source)
+                    }.onFailure{problem->
+                        failure="publisher_poster_"+problem.javaClass.simpleName+
                             ": "+problem.message.orEmpty().take(80)
                     }.getOrNull()
                     if(poster!=null && poster!=validUrl)yield(poster)
