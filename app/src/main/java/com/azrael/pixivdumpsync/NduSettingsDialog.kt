@@ -22,10 +22,19 @@ object NduSettingsDialog {
             ui.lp(activity,15,6)) }
         fun explanation(t:String) { body.addView(ui.text(activity,t,12f,ui.secondary),
             ui.lp(activity,5)) }
-        val enable=CheckBox(activity).apply {
-            text="Enable direct TeraBox uploads after downloading"
-            isChecked=NduSettings.enabled(activity)
+        val localTest=CheckBox(activity).apply {
+            text="Testing mode: save originals to phone storage"
+            isChecked=!NduSettings.cloudOnly(activity)
             setTextColor(ui.white)
+        }
+        body.addView(localTest)
+        explanation("While testing, save originals in phone internal storage / Downloads. "+
+            "No automatic TeraBox uploads or remote imports. Your cloud queue and "+
+            "encrypted account settings remain intact.")
+        val enable=CheckBox(activity).apply {
+            text="Keep TeraBox connection enabled for later cloud mode"
+            isChecked=NduSettings.enabled(activity)
+            setTextColor(ui.secondary)
         }
         body.addView(enable)
         title("Your NDUS cookie")
@@ -74,14 +83,16 @@ object NduSettingsDialog {
                 Toast.makeText(activity,"Enter your NDUS cookie first",Toast.LENGTH_LONG).show()
             } else {
                 state.text="Checking TeraBox session..."
+                val host=if(alt.isChecked) "nephobox.com" else "www.terabox.com"
                 Thread {
                     val outcome=runCatching {
-                        val host=if(alt.isChecked) "nephobox.com" else "www.terabox.com"
                         NduTeraboxClient(ndus,host).connect()
                     }
                     activity.runOnUiThread {
+                        if(activity.isFinishing || activity.isDestroyed)return@runOnUiThread
                         state.text=if(outcome.isSuccess)
-                            "TeraBox login validated" else
+                            "NDUS session validated on "+
+                                (if(host=="nephobox.com")"www.nephobox.com" else host) else
                             "TeraBox authentication failed: " +
                                 (outcome.exceptionOrNull()?.message ?: "unknown")
                     }
@@ -105,8 +116,12 @@ object NduSettingsDialog {
                         else "www.terabox.com")
                     if(enable.isChecked && NduSettings.cookie(activity)==null)
                         throw IllegalArgumentException("Enter your NDUS cookie first")
+                    NduSettings.setCloudOnly(activity,!localTest.isChecked)
                     NduSettings.setEnabled(activity,enable.isChecked)
-                    Toast.makeText(activity,"Direct TeraBox settings saved",Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity,if(localTest.isChecked)
+                        "Testing mode saved: downloads stay on phone storage"
+                        else "Cloud-only mode saved: remote TeraBox transfers enabled",
+                        Toast.LENGTH_LONG).show()
                     dialog.dismiss()
                 } catch(t:Exception) {
                     Toast.makeText(activity,t.message ?: "Invalid TeraBox settings",Toast.LENGTH_LONG).show()
@@ -126,6 +141,12 @@ object NduSettingsDialog {
     }
 
     fun start(activity:Activity,allExisting:Boolean=false) {
+        if(!NduSettings.cloudOnly(activity)){
+            Toast.makeText(activity,
+                "Testing mode: originals stay on phone storage; cloud uploads paused",
+                Toast.LENGTH_LONG).show()
+            return
+        }
         if(!NduSettings.configured(activity)) {
             Toast.makeText(activity,"Enable TeraBox and save NDUS settings first",
                 Toast.LENGTH_LONG).show()
