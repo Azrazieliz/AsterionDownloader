@@ -685,10 +685,17 @@ object VideoEngine {
                         item.url,link,referer,parent,
                         item.title+" ["+item.id+"]",
                         NetworkRoute.javaProxy(context,item.url),
-                        progress={percent->
+                        progress={percent,verifiedBytes->
                             if(!db.progressClaim(item.id,item.lease,percent))
                                 throw java.util.concurrent.CancellationException(
                                     "Selected JK native transfer lease superseded")
+                            // Verified, durable fragment bytes only. The old
+                            // temporary nested scratch was invisible to the
+                            // top-level payload scanner, leaving large live
+                            // JK transfers displayed as zero-byte preparation.
+                            if(verifiedBytes>0L)
+                                VideoTransferJournal.record(context,item.id,
+                                    "receiving",verifiedBytes.toString())
                             status(percent)
                         },
                         cancelled={
