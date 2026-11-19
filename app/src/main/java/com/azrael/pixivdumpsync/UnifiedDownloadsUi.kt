@@ -41,8 +41,14 @@ object UnifiedDownloadsUi {
      * on every 3-second UI refresh. Work is already persisted in each DB.
      */
     private fun recoverIdleQueues(a:Activity,rows:List<Row>) {
-        if(!AppPower.enabled(a) || rows.any{it.state==State.ACTIVE})return
-        val queued=rows.filter{it.state==State.QUEUED}.map{it.source}.toSet()
+        if(!AppPower.enabled(a))return
+        // A VIDEO extractor may be resolving for minutes while X, comics or
+        // books have queued work. Never let that unrelated active row starve
+        // their persisted queues. Equally, never start a second worker for a
+        // module already running a job (especially a native torrent worker).
+        val queued=DownloadQueueRecoveryPolicy.eligibleSources(
+            rows.filter{it.state==State.QUEUED}.map{it.source}.toSet(),
+            rows.filter{it.state==State.ACTIVE}.map{it.source}.toSet())
         if(queued.isEmpty())return
         val now=android.os.SystemClock.elapsedRealtime()
         val previous=lastQueueRecovery.get()
