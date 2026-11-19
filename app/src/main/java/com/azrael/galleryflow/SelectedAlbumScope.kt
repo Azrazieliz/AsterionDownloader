@@ -76,6 +76,19 @@ internal object SelectedAlbumScope {
         return links.toList()
     }
 
+    /** Two time-limited CDN signatures for the same host + original path
+     * are one selected photo, including across album pagination. Keep the
+     * original signed URL itself for the actual download; identity only
+     * governs deduplication. Never merge files from different hosts/paths. */
+    fun originalIdentity(url:String):String {
+        val uri=runCatching{URI(url)}.getOrNull()?:return url
+        if(uri.scheme !in setOf("http","https") || uri.host.isNullOrBlank() ||
+            uri.userInfo!=null)return url
+        return uri.scheme.lowercase(Locale.ROOT)+"://"+
+            uri.host.lowercase(Locale.ROOT)+
+            (if(uri.port==-1)"" else ":"+uri.port)+uri.path.orEmpty()
+    }
+
     fun owns(url:String):Boolean=runCatching{
         val host=URI(url).host.orEmpty().lowercase(Locale.ROOT)
             .removePrefix("www.")
@@ -138,9 +151,7 @@ internal object SelectedAlbumScope {
             val uri=runCatching{URI(item.url)}.getOrNull()?:continue
             if(uri.scheme !in setOf("http","https") || uri.userInfo!=null)continue
             // Different CDN query signatures may name the same original.
-            val identity=uri.scheme+"://"+uri.host.orEmpty().lowercase(Locale.ROOT)+
-                uri.path.orEmpty()
-            seen.putIfAbsent(identity,item)
+            seen.putIfAbsent(originalIdentity(item.url),item)
         }
         return seen.values.toList()
     }
