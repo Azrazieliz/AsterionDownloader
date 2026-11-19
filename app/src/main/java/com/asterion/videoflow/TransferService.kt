@@ -811,6 +811,7 @@ object VideoEngine {
             }
             extractionJobs[item.id]=future
             val start=android.os.SystemClock.elapsedRealtime()
+            val attemptWallStart=System.currentTimeMillis()
             var latestBytes=VideoPayloadBytes.count(parent)
             var lastByteTick=start
             var lastLeaseTick=0L
@@ -828,7 +829,16 @@ object VideoEngine {
                                 "Transfer paused or claim superseded")
                         lastLeaseTick=now
                     }
-                    val current=VideoPayloadBytes.count(parent)
+                    // JK stores its SHA-checked HLS fragments in a private
+                    // nested stage; the shared top-level scanner sees 0 until
+                    // assembly. Only fresh journal receipts for THIS active
+                    // attempt can prevent a false no-byte/idle abort.
+                    val stageSnapshot=if(jkNative)
+                        VideoTransferJournal.current(context,item.id) else null
+                    val current=VideoTransferProgressPolicy.observedBytes(
+                        jkNative,VideoPayloadBytes.count(parent),
+                        stageSnapshot?.stage,stageSnapshot?.updated,
+                        stageSnapshot?.verifiedBytes,attemptWallStart)
                     if(VideoTransferLimits.resolvingStalled(
                             now-start,current) ||
                         VideoTransferLimits.preparationBudgetExceeded(
@@ -840,7 +850,10 @@ object VideoEngine {
                     if(current>latestBytes){
                         latestBytes=current
                         lastByteTick=now
-                        VideoTransferJournal.record(
+                        // The JK callback has already journaled the real
+                        // fragment denominator. Do not overwrite it with
+                        // a generic receiving event from the watchdog.
+                        if(!jkNative)VideoTransferJournal.record(
                             context,item.id,"receiving",current.toString())
                     }
                     // The shipped yt-dlp stores completed fragment counts in
