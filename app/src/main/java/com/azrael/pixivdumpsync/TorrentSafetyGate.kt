@@ -47,6 +47,10 @@ internal object TorrentSafetyGate {
             BatteryManager.EXTRA_SCALE,100)?.coerceAtLeast(1)?:100
         val plugged=(battery?.getIntExtra(
             BatteryManager.EXTRA_PLUGGED,0)?:0)!=0
+        if(percent!=null && percent*100/scale<15)
+            return Admission(false,
+                "Native torrent processing is suspended below 15% battery "+
+                    "even while charging after a reported full-device crash.")
         if(!plugged && percent!=null && percent*100/scale<25)
             return Admission(false,
                 "Native torrent processing is deferred below 25% battery "+
