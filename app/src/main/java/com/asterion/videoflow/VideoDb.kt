@@ -250,8 +250,13 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                 // when memory permits (independent Android process and CWD).
                 // Under memory pressure it deliberately takes direct HTTP
                 // originals only, keeping Python from multiplying OOM risk.
-                if(nativeOnly && !NativeMediaDownloader.isNativeEligible(
-                        c.getString(1),c.getString(1)))continue
+                if(nativeOnly){
+                    if(c.getString(6)=="secondary_native_deferred")continue
+                    if(!NativeMediaDownloader.isNativeEligible(
+                            c.getString(1),c.getString(1)) &&
+                        !SecondaryLightNativeOriginal.eligible(c.getString(1)))
+                        continue
+                }
                 val watchId=c.getLong(7)
                 if(watchId!=0L){
                     val origin=c.getString(8)
@@ -308,6 +313,22 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
                 else null
         }finally{db.endTransaction()}
     }
+    /** Returning an unresolvable static original is NOT a failed media
+     * download. Leave the selected job for the primary extractor; the
+     * lightweight secondary excludes it on its next pass and never launches
+     * the memory-heavy Python runtime.
+     */
+    fun deferToPrimary(id:Long,lease:Long):Boolean{
+        return writableDatabase.update("videos",ContentValues().apply{
+            put("state","queued")
+            put("progress",0)
+            put("retry_after",0L)
+            put("error","secondary_native_deferred")
+            put("updated",System.currentTimeMillis())
+        },"id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+    }
+
     /** A worker must relinquish a video as soon as its lease is paused or
      * replaced. This also refreshes its crash-recovery heartbeat.
      */
