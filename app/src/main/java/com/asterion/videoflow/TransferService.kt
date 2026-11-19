@@ -1544,11 +1544,28 @@ object VideoEngine {
         val uri=context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values)
             ?: error("Cannot create Downloads/VideoFlow file")
         try {
-            context.contentResolver.openOutputStream(uri,"w")!!.use { output ->
-                file.inputStream().buffered().use { input -> input.copyTo(output,1024*256) }
-            }
-            val size=context.contentResolver.openAssetFileDescriptor(uri,"r")?.use { it.length } ?: -1
-            if(size>=0 && size!=file.length()) error("Copy verification failed")
+            VideoTransferJournal.record(context,item.id,
+                "verifying","Checking copied original file integrity")
+            // The original staging file remains private until the destination
+            // has the SAME content hash. Verify the actual MediaStore bytes,
+            // not just the size or the staging file's successful playback.
+            val stagedHash=context.contentResolver.openOutputStream(uri,"w")
+                ?.use{output->
+                    file.inputStream().buffered().use{input->
+                        NativeMediaReceipt.copyAndDigest(input,output)
+                    }
+                } ?:error("Cannot write public video destination")
+            val size=context.contentResolver.openAssetFileDescriptor(uri,"r")
+                ?.use { it.length } ?: -1
+            if(size>=0 && size!=file.length())
+                error("Video MediaStore copy length differs from selected original")
+            val copied=context.contentResolver.openInputStream(uri)
+                ?.use{input->NativeMediaReceipt.matchesSavedCopy(input,stagedHash)}
+                ?:false
+            if(!copied)
+                error("Video MediaStore SHA-256 mismatch; refusing saved receipt")
+            DownloaderEventJournal.record(context,item.id,
+                "mediastore_verified","sha256_match",file.length())
             val published=context.contentResolver.update(uri,
                 ContentValues().apply{put(MediaStore.Downloads.IS_PENDING,0)},null,null)
             check(published==1){
