@@ -158,6 +158,9 @@ object UnifiedDownloadsUi {
                     else->State.QUEUED
                 }
                 val retired=ProviderRetirement.isRetired(item.url)
+                val verifySelectedHoster=
+                    com.asterion.videoflow.NetworkRoute.siteKey(item.url)=="mp4hentai.com" &&
+                    item.error.orEmpty().contains("CAPTCHA",ignoreCase=true)
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
@@ -195,8 +198,24 @@ object UnifiedDownloadsUi {
                         if(!retired || state==State.DONE)when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED,State.HELD->{
-                                VideoDb(a).use{it.retry(item.id)}
-                                VideoEngine.launch(a,false)
+                                if(verifySelectedHoster){
+                                    // Reopen the exact selected publisher post.
+                                    // The owner follows the publisher's Mirror
+                                    // into the genuine file host and completes
+                                    // its own interactive verification; no
+                                    // challenge is bypassed or wrong file used.
+                                    a.startActivity(Intent(a,
+                                        com.azrael.galleryflow.SiteLoginActivity::class.java)
+                                        .putExtra(
+                                            com.azrael.galleryflow.SiteLoginActivity.EXTRA_URL,
+                                            item.url)
+                                        .putExtra(
+                                            com.azrael.galleryflow.SiteLoginActivity.EXTRA_RETRY_VIDEO_ID,
+                                            item.id))
+                                }else{
+                                    VideoDb(a).use{it.retry(item.id)}
+                                    VideoEngine.launch(a,false)
+                                }
                             }
                             State.ACTIVE,State.QUEUED->VideoEngine.pauseVideo(a,item.id)
                             State.PAUSED->VideoEngine.resumeVideo(a,item.id)
@@ -207,7 +226,8 @@ object UnifiedDownloadsUi {
                         State.ACTIVE->"PAUSE"
                         State.QUEUED->"HOLD"
                         State.PAUSED->"RESUME"
-                        State.HELD->"RETRY"
+                        State.HELD->if(verifySelectedHoster)"VERIFY FILE HOST" else "RETRY"
+                        State.FAILED->if(verifySelectedHoster)"VERIFY FILE HOST" else null
                         else->null
                     },
                     onRemove=if(state==State.DONE) ({
