@@ -307,7 +307,7 @@ internal object JavGuruJkNativeHls {
 
     fun download(article:String,media:String,referer:String?,
                  directory:File,filenameStem:String,proxy:Proxy?=null,
-                 progress:(Int,Long)->Unit={_,_->},cancelled:()->Boolean={false}):File {
+                 progress:(Int,Long,Int,Int)->Unit={_,_,_,_->},cancelled:()->Boolean={false}):File {
         require(eligible(article,media,referer)){
             "Not the exact selected Jav Guru JK original HLS"
         }
@@ -363,7 +363,8 @@ internal object JavGuruJkNativeHls {
                     missing+=index to url
                 }
             }
-            progress(fragmentPercent(completedFragments,plan.segments.size),total)
+            progress(fragmentPercent(completedFragments,plan.segments.size),total,
+                completedFragments,plan.segments.size)
             for((index,url) in missing){
                 queue.submit(Callable{
                     checkCancel()
@@ -405,7 +406,8 @@ internal object JavGuruJkNativeHls {
                 completedFragments++
                 if(completedFragments%8==0 ||
                     completedFragments==plan.segments.size)
-                    progress(fragmentPercent(completedFragments,plan.segments.size),total)
+                    progress(fragmentPercent(completedFragments,plan.segments.size),total,
+                        completedFragments,plan.segments.size)
             }
             checkCancel()
             if(total<30_000_000L)
@@ -437,7 +439,8 @@ internal object JavGuruJkNativeHls {
                     // A failed playback check or pause must not destroy the
                     // first N fragments of the selected movie.
                     if(index%24==0)
-                        progress(90+(index*9/plan.segments.size),total)
+                        progress(90+(index*9/plan.segments.size),total,
+                            completedFragments,plan.segments.size)
                 }
                 out.fd.sync()
             }
@@ -470,7 +473,7 @@ internal object JavGuruJkNativeHls {
             }else if(!tempFinal.renameTo(finalFile))
                 throw IOException("Cannot publish validated JK staging file")
             completed=true
-            progress(99,total)
+            progress(99,total,completedFragments,plan.segments.size)
             return finalFile
         }finally{
             pool.shutdownNow()
