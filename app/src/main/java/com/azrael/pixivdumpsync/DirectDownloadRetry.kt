@@ -302,7 +302,8 @@ object DirectDownloadRetry {
                     OriginalReceiptState.set(ctx,id,"UNVERIFIED")
                     DirectRetryVault.remember(ctx,record.copy(id=id,
                         attempts=record.attempts+1,
-                        after=now+DirectRetryPolicy.backoffMs(record.attempts)))
+                        after=now+DirectRetryPolicy.backoffMs(
+                            record.attempts,state.reason)))
                     check(CrossSourceDedup(ctx).use{
                         it.replaceDownloadId(record.url,record.id,id)
                     }){"This original is already claimed by another transfer"}
