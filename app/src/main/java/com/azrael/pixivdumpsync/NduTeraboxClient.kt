@@ -299,6 +299,71 @@ class NduTeraboxClient(private val ndus: String,
             ?: throw java.io.IOException("TeraBox has not confirmed the uploaded file")
     }
 
+    /** Public URL -> TeraBox cloud. It does not touch Android file storage.
+     * TeraBox accepted != file saved; callers must query remote file metadata
+     * later before crediting a cloud receipt. Never send login cookies or
+     * private origin headers to the URL host from the Android device.
+     */
+    internal data class RemoteImportTicket(val taskId:String?)
+    fun submitRemoteOriginal(source:String,directory:String):RemoteImportTicket {
+        require(TeraBoxRemoteOriginals.verifiedPublicFileLink(source)){
+            "Remote import requires a publicly fetchable original-file HTTPS link"
+        }
+        val destination=NduSettings.validateDirectory(directory)
+        createDirectory(destination)
+        val response=request("/api/webmaster/remoteupload/submit","POST",
+            fields=mapOf("urls" to source,"upload_to" to destination))
+        ok(response,"TeraBox remote original submission")
+        val data=response.optJSONObject("data")
+        val first=data?.optJSONArray("list")?.optJSONObject(0)
+            ?:data?.optJSONArray("tasks")?.optJSONObject(0)
+        val task=listOfNotNull(
+            data?.optString("task_id")?.takeIf{it.isNotBlank()},
+            data?.optString("taskid")?.takeIf{it.isNotBlank()},
+            first?.optString("task_id")?.takeIf{it.isNotBlank()},
+            first?.optString("taskid")?.takeIf{it.isNotBlank()},
+            response.optString("task_id").takeIf{it.isNotBlank()}
+        ).firstOrNull()?.take(120)
+        return RemoteImportTicket(task)
+    }
+    /** Real TeraBox transfer record: never interpret a task-submitted
+     * response alone as full file delivery. The server may not expose every
+     * pending task or task URL; missing record is unknown, not a success.
+     */
+    fun remoteImportRecords(page:Int=1,limit:Int=30):JSONObject {
+        require(page in 1..1000 && limit in 1..50)
+        val response=request("/api/webmaster/remoteupload/record","POST",
+            fields=mapOf("page" to page.toString(),
+                "page_size" to limit.toString(),"order" to "desc","by" to "ctime"))
+        ok(response,"TeraBox remote original task listing")
+        return response
+    }
+    /** Remote read-after-write. Returns evidence that *a file* exists at
+     * the newly reserved cloud path with a positive byte size and fs_id;
+     * publisher-original identity requires separate source proof.
+     */
+    fun remoteOriginalReceipt(path:String):NduRemoteReceipt? {
+        require(NduSettings.validateDirectory(path.substringBeforeLast('/'))+
+            "/"+safeFileName(path.substringAfterLast('/'))==path){
+            "Untrusted TeraBox remote receipt path"
+        }
+        val response=request("/api/filemetas","GET",
+            mapOf("target" to JSONArray(listOf(path)).toString(),"dlink" to "0"))
+        ok(response,"TeraBox original read-after-write")
+        val files=response.optJSONArray("info")?:return null
+        for(i in 0 until files.length()){
+            val item=files.optJSONObject(i)?:continue
+            val bytes=item.optLong("size",-1L)
+            val fsId=item.optLong("fs_id",0L)
+            if(item.optString("path")!=path || bytes<=0L || fsId<=0L)
+                continue
+            return NduRemoteReceipt(path,bytes,fsId,
+                item.optString("md5").trim().takeIf{it.isNotBlank()},
+                System.currentTimeMillis())
+        }
+        return null
+    }
+
     private fun uploadChunk(host:String, path:String, uploadId:String, part:Int,
                             name:String, data:File, md5:String) {
         val uri="https://$host/rest/2.0/pcs/superfile2?"+formEncode(
