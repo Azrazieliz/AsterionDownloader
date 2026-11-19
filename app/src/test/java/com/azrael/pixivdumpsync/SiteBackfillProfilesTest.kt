@@ -31,14 +31,13 @@ class SiteBackfillProfilesTest {
         assertEquals(1,f.size)
         assertEquals("books",f.single().kind)
     }
-    @Test fun sushiscanFindsSeriesWithoutMistakingChapterPageAsSeries(){
+    @Test fun retiredSushiScanCannotBeAutoBackfilledAsNewFrenchSource(){
         val base="https://sushiscan.net/catalogue/"
         val result=titles("""<main>
           <a href="/catalogue/black-clover/">Black Clover</a>
           <a href="/black-clover-chapitre-392/">Chapter 392</a>
         </main>""",base,"COMICS")
-        assertEquals(1,result.size)
-        assertTrue(SushiScanChapters.isSeries(result.single().url))
+        assertTrue(result.isEmpty())
     }
     @Test fun bothNhentaiSitesKeepCorrectGalleryIds(){
         for(host in listOf("nhentai.net","nhentai.xxx")){
