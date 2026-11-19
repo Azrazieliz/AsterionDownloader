@@ -164,12 +164,15 @@ internal object PublisherOriginalExtractors {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
         val page=WebDiscovery.selectedDocument(selected,context)
-        if(host=="onlyhentaistuff.com" &&
-            OnlyHentaiKvsOriginalSource.hasSelectedConfig(
-                selected,page.outerHtml())){
-            // The observed KVS selected player has no static <video> or
-            // iframe. Its first-party kt_player Javascript initializes one
-            // exact original; never try its encoded function/... URL as HTTP.
+        if(host=="onlyhentaistuff.com"){
+            // Fail closed for the entire exact-item provider. Absence of
+            // publisher KVS evidence cannot authorize the generic CSS
+            // extractor to save an unrelated recommendation or teaser.
+            if(!OnlyHentaiKvsOriginalSource.hasSelectedConfig(
+                    selected,page.outerHtml()))return emptyList()
+            // The observed selected player has no static HTML5 video or
+            // iframe. Let its own first-party KVS Javascript initialize
+            // currentSrc; never guess its encoded function/... URL.
             val rendered=runCatching{
                 com.azrael.pixivdumpsync.BrowserPageFetch.html(context,selected)
             }.getOrNull()
