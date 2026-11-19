@@ -17,6 +17,13 @@ object TorrentSearchUi {
         val card=ui.card(a)
         card.addView(ui.text(a,"Find a release · "+name,17f,ui.white,true),ui.lp(a,3))
         card.addView(ui.text(a,"Search by title, then choose the actual files.",12f,ui.secondary),ui.lp(a,5))
+        TorrentSafetyGate.assess(a).takeUnless{it.allowed}?.let{guard->
+            card.addView(ui.text(a,
+                "Native transfer safety hold · "+guard.reason,
+                12f,ui.danger),ui.lp(a,7))
+            // Index search and cached metadata remain available; this only
+            // prevents unsafe native peer/JNI work until conditions improve.
+        }
         val pref=a.getSharedPreferences("asterion_torrent_search",0)
         val field=EditText(a).apply{
             hint="Name / title / keywords"
