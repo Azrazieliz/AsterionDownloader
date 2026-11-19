@@ -268,18 +268,7 @@ object SourceIndexPanel {
             return
         }
         if(SelectedVideoRouter.isSelectedVideo(item.area,item.url,item.kind)){
-            // Index queued flags are not the authoritative video transfer
-            // state. An old index flag must not block an explicit retry.
-            // addVideo safely reclaims failed/paused rows; launching the
-            // worker also rescues accepted but unscheduled queued rows.
-            val created=VideoDb(a).use{
-                it.addVideo(item.url,item.title,origin="user")
-            }
-            VideoEngine.launch(a,false)
-            Toast.makeText(a,
-                if(created)"Selected original queued · "+item.title.take(45)
-                else "Existing download checked · "+item.title.take(45),
-                Toast.LENGTH_SHORT).show()
+            SelectedVideoRouter.request(a,item.url,item.title,item.area)
         }else if(item.queued){
             Toast.makeText(a,"Already queued · check Downloads",
                 Toast.LENGTH_SHORT).show()
