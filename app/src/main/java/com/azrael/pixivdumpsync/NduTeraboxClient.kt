@@ -305,7 +305,7 @@ class NduTeraboxClient(private val ndus: String,
      * private origin headers to the URL host from the Android device.
      */
     internal data class RemoteImportTicket(val taskId:String?)
-    fun submitRemoteOriginal(source:String,directory:String):RemoteImportTicket {
+    internal fun submitRemoteOriginal(source:String,directory:String):RemoteImportTicket {
         require(TeraBoxRemoteOriginals.verifiedPublicFileLink(source)){
             "Remote import requires a publicly fetchable original-file HTTPS link"
         }
