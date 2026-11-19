@@ -28,6 +28,18 @@ internal object DownloadOverviewPolicy {
         return source.trim().lowercase(Locale.ROOT) in imageModules
     }
 
+    /** A progress percentage is a COMPLETE-FILE denominator, never a
+     * publisher resolver stage. No value is returned for unknown length.
+     */
+    fun hlsCompletion(detail:String?):Int? {
+        val numbers=Regex("""^([0-9]{1,7})/([1-9][0-9]{0,7}) fragments$""")
+            .matchEntire(detail?.trim().orEmpty())?:return null
+        val complete=numbers.groupValues[1].toLongOrNull()?:return null
+        val expected=numbers.groupValues[2].toLongOrNull()?:return null
+        if(expected<=0L || complete>expected)return null
+        return (complete*100L/expected).toInt()
+    }
+
     fun isLiveFile(state:String,source:String,filename:String,mime:String)=
         state=="ACTIVE" && !isImage(source,filename,mime)
 }
