@@ -1,6 +1,7 @@
 package com.azrael.pixivdumpsync
 
 import com.asterion.videoflow.VideoSiteProfiles
+import com.asterion.videoflow.WebDiscovery
 import com.asterion.videoflow.HentaiHavenEpisodeSource
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
