@@ -850,9 +850,8 @@ class SyncEngine(private val context: Context) {
                 pageIndex,
                 filename
             )
-            // Do not queue an upload for a borrowed Kuroha file: the new
-            // package's own FileStore cannot resolve that filename.
-            if (TeraboxSettings.enabled(context) && !savedInKuroha) {
+            // Cloud queue references only this application's owned originals.
+            if (TeraboxSettings.enabled(context)) {
                 CloudUploadQueue(context).use { it.enqueue(filename) }
             }
         }
