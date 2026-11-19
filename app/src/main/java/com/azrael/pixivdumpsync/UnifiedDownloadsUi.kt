@@ -25,7 +25,8 @@ object UnifiedDownloadsUi {
     private val thumbnails=Executors.newFixedThreadPool(2)
     private val lastQueueRecovery=java.util.concurrent.atomic.AtomicLong(0L)
     private const val RECOVERY_INTERVAL_MS=180_000L
-    private const val VISIBLE_REFRESH_MS=3_000L
+    private const val RECONCILE_REFRESH_MS=20_000L
+    private const val EVENT_COALESCE_MS=240L
     private fun rowId(row:Row):String =
         row.key ?: (row.source+"|"+(row.saved ?: row.filename))
     private fun hiddenPrefs(a:Activity)=a.getSharedPreferences(
@@ -819,10 +820,15 @@ object UnifiedDownloadsUi {
         val loading=ui.text(a,"Loading downloads…",13f,ui.secondary)
         surface.addView(loading,ui.lp(a,8))
         val inFlight=java.util.concurrent.atomic.AtomicBoolean(false)
+        val missed=java.util.concurrent.atomic.AtomicBoolean(false)
         lateinit var reload:()->Unit
         reload=reload@{
-            if(a.isFinishing || a.isDestroyed || surface.parent!==parent ||
-                !inFlight.compareAndSet(false,true))return@reload
+            if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
+                return@reload
+            if(!inFlight.compareAndSet(false,true)){
+                missed.set(true)
+                return@reload
+            }
             kotlin.concurrent.thread(name="asterion-downloads-read"){
                 // A visual refresh is read-only: it must not reconcile or
                 // restart queue agents merely because a user taps Refresh.
@@ -835,6 +841,8 @@ object UnifiedDownloadsUi {
                     inFlight.set(false)
                     if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
                         return@runOnUiThread
+                    if(missed.getAndSet(false))
+                        surface.postDelayed({reload()},EVENT_COALESCE_MS)
                     result.onSuccess{snapshot->
                         val(rows,totals,cloud)=snapshot
                         recoverIdleQueues(a,rows)
@@ -857,31 +865,70 @@ object UnifiedDownloadsUi {
             }
         }
         reload()
-        // A child inserted into an already-attached Activity can receive
-        // onViewAttachedToWindow BEFORE the listener is registered. Always
-        // arm an initial tick after insertion. A generation token prevents
-        // duplicate polling on detach/reattach and stops offscreen work.
-        val pollGeneration=java.util.concurrent.atomic.AtomicLong(0L)
-        fun poll(token:Long){
-            if(token!=pollGeneration.get() || a.isFinishing || a.isDestroyed ||
-                surface.parent!==parent || !surface.isAttachedToWindow)return
-            reload()
-            surface.postDelayed({poll(token)},VISIBLE_REFRESH_MS)
+        // Real transfer engines signal ContentService only AFTER durable
+        // journal/database writes. A ContentObserver follows those events
+        // across :videoflow_primary, :videoflow_secondary and :torrent
+        // process boundaries. No static 3-second UI snapshot polling.
+        //
+        // Coalesce bursty byte events without starving busy transfers;
+        // a 20-second reconciliation is ONLY a fallback for external
+        // DownloadManager, Gallery or other sources lacking event hooks.
+        val generation=java.util.concurrent.atomic.AtomicLong(0L)
+        val listening=java.util.concurrent.atomic.AtomicBoolean(false)
+        val eventScheduled=java.util.concurrent.atomic.AtomicBoolean(false)
+        val pump=Runnable{
+            eventScheduled.set(false)
+            if(surface.parent===parent && surface.isAttachedToWindow)reload()
         }
-        fun armPoll(){
-            val token=pollGeneration.incrementAndGet()
-            surface.postDelayed({poll(token)},VISIBLE_REFRESH_MS)
-        }
-        surface.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener{
-            override fun onViewAttachedToWindow(v:View){armPoll()}
-            override fun onViewDetachedFromWindow(v:View){
-                pollGeneration.incrementAndGet()
+        val observer=object:android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())){
+            override fun onChange(selfChange:Boolean){
+                if(!a.isFinishing && !a.isDestroyed &&
+                    surface.parent===parent && surface.isAttachedToWindow &&
+                    eventScheduled.compareAndSet(false,true))
+                    surface.postDelayed(pump,EVENT_COALESCE_MS)
             }
-        })
-        // Works whether or not Android already delivered the attach event.
+        }
+        fun reconcile(token:Long){
+            if(token!=generation.get() || a.isFinishing ||
+                a.isDestroyed || surface.parent!==parent ||
+                !surface.isAttachedToWindow)return
+            reload()
+            surface.postDelayed({reconcile(token)},RECONCILE_REFRESH_MS)
+        }
+        fun arm(){
+            if(!listening.compareAndSet(false,true))return
+            // This observer uses only a wake-up URI, no content is queried
+            // from a provider or sent across process boundaries.
+            runCatching {
+                a.contentResolver.registerContentObserver(
+                    DownloadStateSignals.uri(a),false,observer)
+            }.onFailure{
+                listening.set(false)
+                android.util.Log.w("AsterionDownloads",
+                    "Live observer registration failed; reconciliation retained",
+                    it)
+            }
+            val token=generation.incrementAndGet()
+            surface.postDelayed({reconcile(token)},RECONCILE_REFRESH_MS)
+        }
+        fun disarm(){
+            generation.incrementAndGet()
+            surface.removeCallbacks(pump)
+            eventScheduled.set(false)
+            if(listening.getAndSet(false))runCatching{
+                a.contentResolver.unregisterContentObserver(observer)
+            }
+        }
+        surface.addOnAttachStateChangeListener(
+            object:View.OnAttachStateChangeListener{
+                override fun onViewAttachedToWindow(v:View){arm();reload()}
+                override fun onViewDetachedFromWindow(v:View){disarm()}
+            })
+        // Listener may be installed after this view was attached. Unlike
+        // the old on-attach-only polling loop, no event can be missed.
         surface.post{
-            if(pollGeneration.get()==0L && surface.isAttachedToWindow &&
-                surface.parent===parent)armPoll()
+            if(surface.isAttachedToWindow && surface.parent===parent)arm()
         }
     }
     private fun thumbnail(a:Activity,view:ImageView,row:Row){
