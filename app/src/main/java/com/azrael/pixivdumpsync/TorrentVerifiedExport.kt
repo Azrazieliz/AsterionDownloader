@@ -27,6 +27,71 @@ import java.util.Locale
 internal object TorrentVerifiedExport {
     private val jobPattern=Regex("[a-f0-9]{24}")
     private fun root(c:Context)=File(c.filesDir,"torrent-jobs")
+
+    /** Only the owner's on-screen confirmation may start publishing files. */
+    fun request(a:android.app.Activity,id:String) {
+        if(!jobPattern.matches(id))return
+        val status=runCatching {
+            File(root(a),"$id.status").readText()
+        }.getOrDefault("")
+        if(!status.contains("QUARANTINED")) {
+            android.widget.Toast.makeText(a,
+                "The selected torrent has not completed integrity checks",
+                android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        android.app.AlertDialog.Builder(a)
+            .setTitle("Export verified torrent files?")
+            .setMessage("The selected files passed BitTorrent piece hashes and "+
+                "a preliminary filename/archive review. They have NOT been "+
+                "scanned for malware. An executable or game installer may "+
+                "still be dangerous. Copy selected files to your Downloads "+
+                "folder only if you trust their source. No file will be opened.")
+            .setNegativeButton("Keep quarantined",null)
+            .setPositiveButton("Export selected files"){_,_->
+                runCatching {
+                    a.startForegroundService(android.content.Intent(a,
+                        TorrentTransferService::class.java)
+                        .setAction(TorrentTransferService.EXPORT)
+                        .putExtra("job",id))
+                }.onFailure {
+                    android.widget.Toast.makeText(a,
+                        "Unable to export selected torrent: "+it.message.orEmpty(),
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }.show()
+    }
+
+    fun open(a:android.app.Activity,id:String) {
+        val exported=receipts(a,id).filter{stillPublished(a,it)}
+        if(exported.isEmpty()){
+            android.widget.Toast.makeText(a,"No exported originals found",
+                android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val names=exported.map { it.path.substringAfterLast('/')+
+            " · "+it.size+" bytes" }.toTypedArray()
+        android.app.AlertDialog.Builder(a)
+            .setTitle("Verified torrent files")
+            .setItems(names){_,index->
+                val item=exported[index]
+                val ext=item.path.substringAfterLast('.',"")
+                    .lowercase(Locale.ROOT)
+                val mime=MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(ext)?:"application/octet-stream"
+                runCatching {
+                    a.startActivity(android.content.Intent(
+                        android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(Uri.parse(item.uri),mime)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                }.onFailure {
+                    android.widget.Toast.makeText(a,
+                        "No compatible file viewer installed",
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }.setNegativeButton("Close",null).show()
+    }
     data class Receipt(val path:String,val uri:String,val size:Long,val sha256:String)
 
     fun receipts(c:Context,id:String):List<Receipt> {
