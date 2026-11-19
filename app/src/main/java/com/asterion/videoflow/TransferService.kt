@@ -1523,7 +1523,8 @@ object VideoEngine {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
             put(MediaStore.Downloads.MIME_TYPE,when(file.extension.lowercase()){
                 "mp4"->"video/mp4";"webm"->if(audioOnly)"audio/webm" else "video/webm"
-                "mkv"->"video/x-matroska";"m4a"->"audio/mp4";"mp3"->"audio/mpeg"
+                "mkv"->"video/x-matroska";"ts"->"video/mp2t"
+                "m4a"->"audio/mp4";"mp3"->"audio/mpeg"
                 "flac"->"audio/flac";"opus"->"audio/ogg";else->"video/*"
             })
             put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/VideoFlow/")
