@@ -522,6 +522,62 @@ object UnifiedDownloadsUi {
                     actionText=if(state==State.HELD)"RETRY" else null,
                     receivedBytes=item.bytes)
         }
+        // Server-side cloud originals are native download jobs, not a
+        // second local-download list. Expose only safe filenames, counts
+        // and real cloud proof states. Never expose an encrypted URL.
+        TeraBoxRemoteQueue(a).use{cloudQueue->
+            for(record in cloudQueue.recent(200)){
+                val source=when(record.category){
+                    "videos"->"Video";"kyora"->"Gallery"
+                    "x"->"X";"kuroha"->"Pixiv"
+                    "comics"->"Comic ZIP";"books"->"EPUB"
+                    "assets","koikatsu"->"Assets"
+                    "games","torrents"->"Torrents"
+                    "creators"->"Creators"
+                    else->"Images"
+                }
+                val state=when(record.state){
+                    "VERIFIED"->State.DONE
+                    "ERROR"->State.FAILED
+                    "PAUSED"->State.PAUSED
+                    else->State.QUEUED
+                }
+                val info=when(record.state){
+                    "VERIFIED"->"TeraBox remote file confirmed"
+                    "SUBMITTED"->"TeraBox remote import accepted; verification pending"
+                    "ERROR"->record.error?:"Cloud import failed"
+                    "PAUSED"->"Cloud request paused"
+                    else->"Queued for direct TeraBox import"
+                }
+                val actionText=when(record.state){
+                    "ERROR"->"RETRY"
+                    "PAUSED"->"RESUME"
+                    "QUEUED"->"PAUSE"
+                    else->null
+                }
+                rows+=Row(source,record.filename,info,state,null,
+                    record.updatedAt,{
+                        when(record.state){
+                            "ERROR","PAUSED"->{
+                                TeraBoxRemoteQueue(a).use{it.resume(record.id)}
+                                NduCloudScheduler.requestImmediate(a)
+                            }
+                            "QUEUED"->TeraBoxRemoteQueue(a).use{
+                                it.pauseQueued(record.id)
+                            }
+                            else->{}
+                        }
+                    },actionText=actionText,
+                    hasPrimaryAction=actionText!=null,
+                    onRemove=if(record.state in setOf(
+                        "QUEUED","PAUSED","ERROR"))({
+                        TeraBoxRemoteQueue(a).use{
+                            it.cancelUnsubmitted(record.id)
+                        }
+                    }) else null,
+                    key="terabox:"+record.id)
+            }
+        }
         val hidden=hiddenPrefs(a).getStringSet("keys",emptySet()).orEmpty()
         return rows.filterNot{it.state in setOf(State.DONE,State.PAUSED) &&
             rowId(it) in hidden}.sortedWith(compareBy<Row>{
@@ -595,6 +651,38 @@ object UnifiedDownloadsUi {
                 counts[kind]=aggregate(values,setOf("DONE"),
                     setOf("ERROR","WAIT_LOGIN"),setOf("PENDING","RETRY"),
                     setOf("WORKING"),setOf("PAUSED"))
+            }
+        }
+        // Include ALL server-side cloud records, not only the 200 newest
+        // rows shown in Manage. Count submitted work as pending receipt,
+        // never as a verified save.
+        TeraBoxRemoteQueue(a).use{remote->
+            remote.readableDatabase.rawQuery(
+                "SELECT category,state,COUNT(*) FROM remote_originals "+
+                    "WHERE state!='CANCELLED' GROUP BY category,state",
+                null).use{c->
+                while(c.moveToNext()){
+                    val category=c.getString(0).orEmpty()
+                    val state=c.getString(1).orEmpty()
+                    val number=c.getInt(2)
+                    val source=when(category){
+                        "videos"->"Video";"kyora"->"Gallery"
+                        "x"->"X";"kuroha"->"Pixiv"
+                        "comics"->"Comic ZIP";"books"->"EPUB"
+                        "assets","koikatsu"->"Assets"
+                        "games","torrents"->"Torrents"
+                        "creators"->"Creators"
+                        else->"Images"
+                    }
+                    val contribution=when(state){
+                        "VERIFIED"->Totals(saved=number)
+                        "ERROR"->Totals(failed=number)
+                        "PAUSED"->Totals(paused=number)
+                        "QUEUED","SUBMITTED"->Totals(queued=number)
+                        else->Totals()
+                    }
+                    counts[source]=(counts[source]?:Totals())+contribution
+                }
             }
         }
         return counts
