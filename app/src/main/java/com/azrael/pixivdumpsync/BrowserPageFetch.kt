@@ -334,7 +334,7 @@ object BrowserPageFetch {
                             // challenged, and falls back to unsupported yt-dlp.
                             const nhPlayerServer=(()=>{
                                 if(selectedPlayerHost!=='nhplayer.com' ||
-                                    !/^\\/v\\/[A-Za-z0-9]{8,40}\\/?$/.test(location.pathname) ||
+                                    !/^\/v\/[A-Za-z0-9]{8,40}\/?$/.test(location.pathname) ||
                                     location.search || location.hash)return '';
                                 const found=new Set();
                                 for(const item of [...document.querySelectorAll(
