@@ -362,9 +362,9 @@ object BrowserPageFetch {
                                 const match=/^\/videos\/([0-9]{1,12})\/[A-Za-z0-9_-]{3,250}\/?$/
                                     .exec(location.pathname);
                                 const scripts=[...document.scripts].filter(node=>
-                                    !node.src && /\\bkt_player\\s*\\(/.test(node.textContent||'') &&
-                                    /\\bvideo_url\\b/.test(node.textContent||'') &&
-                                    /\\bflashvars\\b/.test(node.textContent||''));
+                                    !node.src && /\bkt_player\s*\(/.test(node.textContent||'') &&
+                                    /\bvideo_url\b/.test(node.textContent||'') &&
+                                    /\bflashvars\b/.test(node.textContent||''));
                                 if(!match || scripts.length!==1)return '';
                                 const root=document.getElementById('kt_player');
                                 if(!root || root.closest('aside,.related,'+
