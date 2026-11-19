@@ -1,0 +1,33 @@
+package com.azrael.pixivdumpsync
+
+import java.util.Locale
+
+/**
+ * The Control Center includes every module in its totals. The live file
+ * monitor displays ONLY real, currently-active non-image original transfers.
+ * Image artwork/backfill activity remains visible in per-module counters.
+ */
+internal object DownloadOverviewPolicy {
+    private val imageExtensions=setOf("jpg","jpeg","png","gif","webp",
+        "bmp","avif","heic","heif","tif","tiff","svg","jxl")
+    private val nonImageExtensions=setOf("mp4","mkv","webm","mov","avi",
+        "mp3","flac","m4a","wav","ogg","zip","7z","rar","tar","gz",
+        "cbz","cbr","epub","pdf","apk","exe","iso","torrent","blend",
+        "fbx","obj","glb","gltf","pmx","pmd","vmd","vrm")
+    private val imageModules=setOf("pixiv","x","gallery","cosplay",
+        "images","artwork","illustrations","kyora","kuroha")
+
+    fun isImage(source:String,filename:String,mime:String):Boolean {
+        val type=mime.substringBefore(';').trim().lowercase(Locale.ROOT)
+        if(type.startsWith("image/"))return true
+        val raw=filename.substringBefore('?').substringBefore('#')
+        val ext=raw.substringAfterLast('.',missingDelimiterValue="")
+            .lowercase(Locale.ROOT)
+        if(ext in imageExtensions)return true
+        if(ext in nonImageExtensions)return false
+        return source.trim().lowercase(Locale.ROOT) in imageModules
+    }
+
+    fun isLiveFile(state:String,source:String,filename:String,mime:String)=
+        state=="ACTIVE" && !isImage(source,filename,mime)
+}
