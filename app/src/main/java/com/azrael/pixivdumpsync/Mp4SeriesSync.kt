@@ -138,6 +138,17 @@ object Mp4SeriesSync {
            !SourceIndexParser.safe(candidate.url))return null
         if(RounderInventoryIndex.isConfirmedPresent(context,work.name,
                 candidate.volume,work.type))return -1L
+        if(NduSettings.cloudOnly(context)){
+            // Genuine source URL is reserved directly on TeraBox. A remote
+            // task is not proof that the whole volume has been saved.
+            // A forum/article or private mirror is not a verified original.
+            return runCatching{
+                CloudOriginalRouting.enqueue(context,candidate.url,
+                    if(work.type=="EPUB")"BOOKS" else "COMICS",
+                    nameFor(candidate.url,work))
+                1L // accepted cloud reservation; not completed file
+            }.getOrNull()
+        }
         // A handoff without an actual file receipt is not completion.
         if(!CrossSourceDedup(context).use{it.reserve(candidate.url)})
             return null
