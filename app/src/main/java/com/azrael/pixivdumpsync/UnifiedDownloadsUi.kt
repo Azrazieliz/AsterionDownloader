@@ -83,7 +83,10 @@ object UnifiedDownloadsUi {
     private fun clearFailedJob(a:Activity,job:Row){
         if(job.source=="Video"){
             job.key?.removePrefix("video:")?.toLongOrNull()?.let{id->
-                VideoDb(a).use{it.clearTerminalFailure(id)}
+                VideoDb(a).use{db->
+                    if(!db.clearTerminalFailure(id))
+                        db.acknowledgeMissingSaved(id)
+                }
             }
         }else{
             // Use existing durable dismissals to remove real failure totals
@@ -122,7 +125,7 @@ object UnifiedDownloadsUi {
             val uri=Uri.parse(value)
             when(uri.scheme){
                 "content"->a.contentResolver.openFileDescriptor(uri,"r")?.use {
-                    it.statSize!=0L
+                    it.statSize>0L
                 }?:false
                 "file"->java.io.File(uri.path.orEmpty()).let{it.isFile&&it.length()>0L}
                 else->false
@@ -236,7 +239,19 @@ object UnifiedDownloadsUi {
                         if(!retired || state==State.DONE)when(state){
                             State.DONE->item.savedUri?.let{open(a,it,"video/*")}
                             State.FAILED,State.HELD->{
-                                if(verifySelectedHoster){
+                                if(item.status=="done" && !present){
+                                    // The old SQLite DONE flag survives a
+                                    // deleted/moved MediaStore file. The normal
+                                    // retry only accepts error rows, so this
+                                    // must explicitly requeue a missing receipt.
+                                    val accepted=VideoDb(a).use{
+                                        it.retryMissingSaved(item.id)
+                                    }
+                                    if(accepted)VideoEngine.launch(a,false)
+                                    else Toast.makeText(a,
+                                        "Saved file changed; recheck before retry",
+                                        Toast.LENGTH_LONG).show()
+                                }else if(verifySelectedHoster){
                                     // Reopen the exact selected publisher post.
                                     // The owner follows the publisher's Mirror
                                     // into the genuine file host and completes
@@ -285,7 +300,9 @@ object UnifiedDownloadsUi {
                                 }
                             }.show()
                     }) else ({
-                        VideoEngine.cancelVideo(a.applicationContext,item.id)
+                        if(item.status=="done" && !present)
+                            VideoDb(a).use{it.acknowledgeMissingSaved(item.id)}
+                        else VideoEngine.cancelVideo(a.applicationContext,item.id)
                     }),hasPrimaryAction=!retired || state==State.DONE,
                     key="video:"+item.id,
                     transferStage=journal?.stage,
@@ -789,9 +806,16 @@ object UnifiedDownloadsUi {
         }
         VideoDb(a).use{db->
             val found=query(db.readableDatabase,"videos","state")
-            counts["Video"]=aggregate(found,
+            val listed=aggregate(found,
                 setOf("done"),setOf("error","full_only_hold"),
                 setOf("queued","retry_wait"),setOf("running"),setOf("paused"))
+            // Full persisted count, not the 50 newest video rows. A former
+            // DONE without readable positive bytes is a missing original,
+            // never both Saved and Failed or a silently successful job.
+            val corrected=DownloadOverviewPolicy.reconciledVideoCounts(
+                listed.saved,listed.failed,db.missingSavedCount())
+            counts["Video"]=listed.copy(
+                saved=corrected.saved,failed=corrected.failed)
         }
         XPhotoQueue(a).use{db->
             counts["X"]=aggregate(db.counts(),setOf("done"),
@@ -1486,9 +1510,26 @@ object UnifiedDownloadsUi {
                                 "Queued, active and paused jobs are not touched.")
                             .setNegativeButton("Keep",null)
                             .setPositiveButton("Clear failures"){_,_->
-                                VideoDb(a).use{it.clearTerminalFailures()}
-                                DownloadStateSignals.changed(a)
-                                refresh()
+                                kotlin.concurrent.thread(
+                                    name="asterion-clear-failed-video-receipts"){
+                                    val cleaned=runCatching{
+                                        VideoDb(a.applicationContext).use{db->
+                                            db.clearTerminalFailures()+
+                                                db.acknowledgeAllMissingSaved()
+                                        }
+                                    }
+                                    a.runOnUiThread{
+                                        if(a.isFinishing || a.isDestroyed)
+                                            return@runOnUiThread
+                                        cleaned.onFailure{
+                                            Toast.makeText(a,
+                                                "Could not clear every failed job",
+                                                Toast.LENGTH_LONG).show()
+                                        }
+                                        DownloadStateSignals.changed(a)
+                                        refresh()
+                                    }
+                                }
                             }.show()
                     },ui.lp(a,9))
                 }
