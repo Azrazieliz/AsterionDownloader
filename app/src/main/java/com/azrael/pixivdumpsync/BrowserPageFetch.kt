@@ -23,7 +23,7 @@ object BrowserPageFetch {
     private val publicBrowserHosts=setOf("jav.guru","rule34video.com",
         "kiutaku.com","freewebnovel.com","novelbuddy.me",
         "novelbuddy.com","readnovelfull.com",
-        "hentaibros.net","3dhentaix.com",
+        "hentaibros.net","3dhentaix.com","onlyhentaistuff.com",
         // Exact first-party player/article pages. These are not generalized
         // Aloha-style media detectors, just the publishers' JS video players.
         "fullporner.com","myxstudio.top","mydaddy.cc","nhplayer.com",
@@ -109,6 +109,7 @@ object BrowserPageFetch {
         val selectedPlayerHost=host in setOf(
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
+            "onlyhentaistuff.com",
             "hqpornerxxx.com","javideo.net","play.javideo.net","helloporn.com","mp4hentai.com",
             "roshy.tv","rule34video.com","pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
@@ -350,6 +351,50 @@ object BrowserPageFetch {
                             const nhAjaxVideo=nhAjaxMedia?
                                 '<video src="'+esc(nhAjaxMedia)+
                                 '" data-duration="0"></video>':'';
+                            // OnlyHentai publishes KVS flashvars with an
+                            // encoded function/... media URL. We never decode
+                            // or guess it. Observe only the normal selected
+                            // #kt_player HTML5 element, after the publisher's
+                            // own scripts initialize its authorized source.
+                            const onlyHentaiVideo=(()=>{
+                                if(selectedPlayerHost!=='onlyhentaistuff.com')
+                                    return '';
+                                const match=/^\\/videos\\/([0-9]{1,12})\\/[A-Za-z0-9_-]{3,250}\\/?$/
+                                    .exec(location.pathname);
+                                const config=typeof window.flashvars==='object'
+                                    ?window.flashvars:null;
+                                if(!match || !config ||
+                                    String(config.video_id)!==match[1])
+                                    return '';
+                                const root=document.getElementById('kt_player');
+                                if(!root || root.closest('aside,.related,'+
+                                        '.recommendations,.ads,.sidebar'))return '';
+                                const videos=[...root.querySelectorAll('video')];
+                                if(videos.length!==1)return '';
+                                const video=videos[0];
+                                if(video.paused){
+                                    try{
+                                        const pending=video.play();
+                                        if(pending&&pending.catch)pending.catch(()=>{});
+                                    }catch(_){}
+                                }
+                                const source=video.currentSrc||
+                                    video.getAttribute('src')||
+                                    video.querySelector('source[src]')?.src||'';
+                                try{
+                                    const u=new URL(source);
+                                    if(u.protocol!=='https:' ||
+                                        !/\\.(mp4|webm|m4v|m3u8|mpd)$/i
+                                            .test(u.pathname) ||
+                                        /preview|teaser|sample|trailer/i
+                                            .test(u.pathname))return '';
+                                    const duration=Number.isFinite(video.duration)
+                                        ?Math.round(video.duration):0;
+                                    return '<div id="kt_player" data-video-id="'+
+                                        esc(match[1])+'"><video src="'+esc(u.href)+
+                                        '" data-duration="'+duration+'"></video></div>';
+                                }catch(_){return '';}
+                            })();
                             // JAVIDEO's visible Play control activates the
                             // selected StreamTape iframe. The initial page's
                             // only HTML5 video is an unrelated muted ad; never
@@ -623,7 +668,7 @@ object BrowserPageFetch {
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+
                                 hentaibrosPlayerConfig+players+
-                                nhAjaxVideo+embeds+'</div><div id="reader">'+images+
+                                nhAjaxVideo+onlyHentaiVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
