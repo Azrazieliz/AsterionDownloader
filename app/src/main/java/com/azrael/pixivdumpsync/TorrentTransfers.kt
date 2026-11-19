@@ -68,6 +68,7 @@ object TorrentTransfers {
                 rate.coerceAtLeast(0L),peers.coerceAtLeast(0)
             ).joinToString("|").toByteArray(Charsets.UTF_8))
             atomic.finishWrite(out)
+            DownloadStateSignals.changed(c)
         }catch(t:Throwable){atomic.failWrite(out);throw t}
     }
     /** Read ONLY existing isolated torrent ledger; do not create/launch
@@ -125,6 +126,7 @@ object TorrentTransfers {
                 file.delete()
                 tmp.renameTo(file)
             }){"Cannot update torrent status"}
+            DownloadStateSignals.changed(c)
         }
     }
     private fun status(c:Context,id:String,prefs:android.content.SharedPreferences):String {
