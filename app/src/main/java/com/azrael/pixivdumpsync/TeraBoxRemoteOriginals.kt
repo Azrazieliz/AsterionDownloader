@@ -100,6 +100,22 @@ internal class TeraBoxRemoteQueue(ctx:Context):
     /** Safe display metadata: signed origin URLs never appear in UI. */
     data class Display(val id:String,val category:String,val filename:String,
                        val state:String,val error:String?,val updatedAt:Long)
+    fun stateForId(id:String):String?{
+        if(!id.matches(Regex("[0-9a-f]{64}")))return null
+        return readableDatabase.rawQuery(
+            "SELECT state FROM remote_originals WHERE id=? LIMIT 1",
+            arrayOf(id)).use{c->
+            if(c.moveToFirst())c.getString(0) else null
+        }
+    }
+    fun hasVerifiedReceipt(id:String):Boolean{
+        if(!id.matches(Regex("[0-9a-f]{64}")))return false
+        return readableDatabase.rawQuery(
+            "SELECT 1 FROM remote_originals WHERE id=? "+
+                "AND state='VERIFIED' AND remote_size>0 AND remote_fs_id>0 "+
+                "AND remote_path IS NOT NULL LIMIT 1",
+            arrayOf(id)).use{it.moveToFirst()}
+    }
     fun recent(limit:Int=100):List<Display>{
         val found=ArrayList<Display>()
         readableDatabase.rawQuery(
