@@ -34,6 +34,14 @@ class NduCloudJobService : JobService() {
         if(!NduSettings.configured(this)) return false
         running=executor.submit {
             try {
+                runCatching{
+                    TeraBoxRemoteQueue(this).use{
+                        it.drain(this,24){
+                            Thread.currentThread().isInterrupted ||
+                                !AppPower.enabled(this)
+                        }
+                    }
+                }
                 NduUploadEngine.drain(this,100,7*60_000L,
                     stop={Thread.currentThread().isInterrupted})
             } finally {
