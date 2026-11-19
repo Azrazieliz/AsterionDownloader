@@ -1,6 +1,8 @@
 package com.asterion.videoflow
 
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.security.MessageDigest
 
 /**
@@ -10,6 +12,38 @@ import java.security.MessageDigest
  * to the finalized bytes and is never used as a web identity claim.
  */
 internal object NativeMediaReceipt {
+    /** Never buffer full originals. Compare the exact bytes published to
+     * MediaStore against the bytes read from selected, validated staging.
+     * A matching file length or HTTP 200 is not sufficient for a receipt.
+     */
+    internal fun copyAndDigest(input:InputStream,output:OutputStream):ByteArray {
+        val hash=MessageDigest.getInstance("SHA-256")
+        val buffer=ByteArray(256*1024)
+        while(true){
+            val count=input.read(buffer)
+            if(count<0)break
+            if(count==0)continue
+            output.write(buffer,0,count)
+            hash.update(buffer,0,count)
+        }
+        output.flush()
+        return hash.digest()
+    }
+
+    internal fun digestStream(input:InputStream):ByteArray {
+        val hash=MessageDigest.getInstance("SHA-256")
+        val buffer=ByteArray(256*1024)
+        while(true){
+            val count=input.read(buffer)
+            if(count<0)break
+            if(count>0)hash.update(buffer,0,count)
+        }
+        return hash.digest()
+    }
+
+    internal fun matchesSavedCopy(input:InputStream,expected:ByteArray):Boolean =
+        expected.size==32 && MessageDigest.isEqual(digestStream(input),expected)
+
     private fun digest(file:File):String {
         val d=MessageDigest.getInstance("SHA-256")
         file.inputStream().buffered(131_072).use{input->
