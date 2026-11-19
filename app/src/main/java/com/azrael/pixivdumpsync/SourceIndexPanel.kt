@@ -58,7 +58,7 @@ object SourceIndexPanel {
             if(!armed.compareAndSet(false,true))return
             runCatching{
                 a.contentResolver.registerContentObserver(
-                    DownloadStateSignals.uri(a),false,observer)
+                    DownloadStateSignals.catalogUri(a),false,observer)
             }.onFailure{
                 armed.set(false)
                 android.util.Log.w("AsterionSources",
