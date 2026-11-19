@@ -84,7 +84,10 @@ object SiteSession {
 }
 
 class SiteLoginActivity:Activity() {
-    companion object { const val EXTRA_URL="site_login_url" }
+    companion object {
+        const val EXTRA_URL="site_login_url"
+        const val EXTRA_RETRY_VIDEO_ID="site_login_retry_video_id"
+    }
     private var browser:WebView?=null
     override fun onCreate(state:Bundle?){
         super.onCreate(state)
@@ -99,6 +102,10 @@ class SiteLoginActivity:Activity() {
             setBackgroundColor(ui.background)
         }
         val archivebate=Uri.parse(address).host.orEmpty().removePrefix("www.")=="archivebate.com"
+        val mp4VerificationId=intent.getLongExtra(EXTRA_RETRY_VIDEO_ID,-1L)
+        val mp4HentaiVerification=mp4VerificationId>0L &&
+            com.asterion.videoflow.NetworkRoute.siteKey(address)=="mp4hentai.com" &&
+            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(address)
         val title=ui.text(this,if(archivebate)"Connect Archivebate listing" else
             "Connect website account",19f,ui.white,true)
         title.setPadding(ui.px(this,15),ui.px(this,14),ui.px(this,15),ui.px(this,4))
@@ -106,6 +113,8 @@ class SiteLoginActivity:Activity() {
         shell.addView(ui.text(this,
             if(archivebate)
                 "Use Archivebate's own Continue control to display real video cards, then SAVE CONNECTION. No account login is needed for publicly available recordings."
+            else if(mp4HentaiVerification)
+                "Follow this exact selected post's Mirror download link into its file host. Complete the host's own verification, then SAVE CONNECTION. Only this queued video will be retried; no CAPTCHA is bypassed."
             else "Log in on the website. Cookies stay in Android's browser storage; sign-in is not shared with other sites.",
             12f,ui.secondary).apply{
             setPadding(ui.px(this@SiteLoginActivity,15),0,
@@ -153,6 +162,7 @@ class SiteLoginActivity:Activity() {
                 const isSelectedJavPost=
                     /^\/[0-9]{4,10}\/[a-z0-9_-]{4,240}\/?$/i.test(location.pathname);
                 return JSON.stringify({good:good,host:location.hostname,
+                    url:location.href,
                     watchLinks:watchLinks,javPosts:javPosts,
                     torrentCards:torrentCards,isSelectedJavPost:isSelectedJavPost});
             })()"""){value->
@@ -163,7 +173,13 @@ class SiteLoginActivity:Activity() {
                     .lowercase(java.util.Locale.ROOT).removePrefix("www.")
                 val expectedHost=Uri.parse(address).host.orEmpty()
                     .lowercase(java.util.Locale.ROOT).removePrefix("www.")
-                val pageOk=info?.optBoolean("good")==true && currentHost==expectedHost
+                val visibleUrl=info?.optString("url").orEmpty()
+                val verifiedSelectedHoster=mp4HentaiVerification &&
+                    com.asterion.videoflow.Mp4HentaiPublishedHost
+                        .eligibleUserVerifiedHosterPage(address,visibleUrl)
+                val pageOk=info?.optBoolean("good")==true &&
+                    (currentHost==expectedHost || verifiedSelectedHoster) &&
+                    (!mp4HentaiVerification || verifiedSelectedHoster)
                 // Archivebate's empty age-gate shell previously passed this
                 // test as a valid connection even with ZERO public videos.
                 // A saved cookie alone is not proof that catalog data loaded.
@@ -181,7 +197,23 @@ class SiteLoginActivity:Activity() {
                         it.trim().startsWith("auth_token=")}==true)
                 if(authenticated){
                     CookieManager.getInstance().flush()
-                    SiteSession.save(this,address)
+                    // In the selected MP4Hentai case the owner has navigated
+                    // from the original article to one of its actual file
+                    // hosters. Save only that host's same-origin browser
+                    // connection, not a false login to the publisher.
+                    SiteSession.save(this,if(verifiedSelectedHoster)
+                        visibleUrl else address)
+                    if(mp4HentaiVerification && verifiedSelectedHoster){
+                        val retry=com.asterion.videoflow.VideoDb(this).use{db->
+                            val candidates=db.listVideosForTab("Failed",300)+
+                                db.listVideosForTab("Held",300)
+                            if(candidates.any{it.id==mp4VerificationId &&
+                                    it.url==address})db.retry(mp4VerificationId)
+                            else false
+                        }
+                        if(retry)com.asterion.videoflow.VideoEngine.launch(
+                            applicationContext,false)
+                    }
                     // Resume only books paused because THIS website previously
                     // required login/interactive verification. Cached chapters
                     // survive and are never discarded by account switching.
@@ -202,6 +234,8 @@ class SiteLoginActivity:Activity() {
                     else if(onejav && pageOk)
                         "OneJAV exposed no torrent cards. Provider access is "+
                         "currently restricted; no account connection saved."
+                    else if(mp4HentaiVerification)
+                        "Open the exact selected download file host, complete its verification, then SAVE CONNECTION. No session was saved."
                     else "Website verification is incomplete. Connection not saved.",
                     Toast.LENGTH_LONG).show()
                 if(authenticated){
