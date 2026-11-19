@@ -15,13 +15,15 @@ object NduCloudScheduler {
     private const val NOW_ID=9322
     /** Wake the genuine cloud transfer worker now, not at the next
      * 15-minute periodic upload. The platform may defer the job. */
-    fun requestImmediate(ctx:Context):Boolean {
+    fun requestImmediate(ctx:Context):Boolean = requestAfter(ctx,1_000L)
+    fun requestAfter(ctx:Context,delayMs:Long):Boolean {
         if(!NduSettings.configured(ctx) || !AppPower.enabled(ctx))return false
+        val delay=delayMs.coerceIn(1_000L,60L*60_000L)
         val job=JobInfo.Builder(NOW_ID,
             ComponentName(ctx,NduCloudJobService::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .setMinimumLatency(1_000L)
-            .setOverrideDeadline(12_000L)
+            .setMinimumLatency(delay)
+            .setOverrideDeadline(delay+30_000L)
             .build()
         return ctx.getSystemService(JobScheduler::class.java)
             .schedule(job)==JobScheduler.RESULT_SUCCESS
@@ -48,18 +50,30 @@ class NduCloudJobService : JobService() {
     override fun onStartJob(params:JobParameters):Boolean {
         if(!NduSettings.configured(this)) return false
         running=executor.submit {
+            var nextRemoteDue:Long?=null
             try {
                 runCatching{
-                    TeraBoxRemoteQueue(this).use{
-                        it.drain(this,24){
+                    TeraBoxRemoteQueue(this).use{queue->
+                        queue.drain(this,24){
                             Thread.currentThread().isInterrupted ||
                                 !AppPower.enabled(this)
                         }
+                        nextRemoteDue=queue.nextDueDelayMs()
                     }
+                }.onFailure{
+                    // A failed connection does not consume a queued cloud
+                    // original. Retry from the existing encrypted ledger.
+                    nextRemoteDue=120_000L
                 }
-                NduUploadEngine.drain(this,100,7*60_000L,
-                    stop={Thread.currentThread().isInterrupted})
+                if(!NduSettings.cloudOnly(this)){
+                    NduUploadEngine.drain(this,100,7*60_000L,
+                        stop={Thread.currentThread().isInterrupted})
+                }
             } finally {
+                if(!Thread.currentThread().isInterrupted &&
+                    AppPower.enabled(this))nextRemoteDue?.let{
+                    NduCloudScheduler.requestAfter(this,it.coerceAtLeast(30_000L))
+                }
                 jobFinished(params,false)
             }
         }
