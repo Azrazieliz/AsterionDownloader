@@ -326,6 +326,38 @@ object BrowserPageFetch {
                             // Serialize that verified selected JS source
                             // ONLY for its exact server and observed MP4 CDN.
                             // Never infer, solve or inject any challenge token.
+                            // The /v/ page is a selected-server chooser, NOT the
+                            // media player. Preserve only its single publisher-
+                            // attested /player.php?i&s&vid entry in the compact
+                            // browser snapshot. Otherwise Android loses the
+                            // exact selected server whenever static HTTP is
+                            // challenged, and falls back to unsupported yt-dlp.
+                            const nhPlayerServer=(()=>{
+                                if(selectedPlayerHost!=='nhplayer.com' ||
+                                    !/^\\/v\\/[A-Za-z0-9]{8,40}\\/?$/.test(location.pathname) ||
+                                    location.search || location.hash)return '';
+                                const found=new Set();
+                                for(const item of [...document.querySelectorAll(
+                                    '.servers li[data-id],ul.servers li[data-id],'+
+                                    '#servers li[data-id]')].slice(0,12)){
+                                    try{
+                                        const parsed=new URL(item.getAttribute('data-id')||'',
+                                            location.href);
+                                        const keys=[...parsed.searchParams.keys()].sort();
+                                        if(parsed.protocol!=='https:' ||
+                                            parsed.hostname!=='nhplayer.com' ||
+                                            parsed.port || parsed.username || parsed.password ||
+                                            parsed.pathname!=='/player.php' || parsed.hash ||
+                                            keys.join(',')!=='i,s,vid' ||
+                                            ['i','s','vid'].some(k=>
+                                                !parsed.searchParams.get(k)))continue;
+                                        found.add(parsed.href);
+                                    }catch(_){}
+                                }
+                                return found.size===1?
+                                    '<ul class="servers"><li data-id="'+
+                                    esc([...found][0])+'"></li></ul>':'';
+                            })();
                             const nhAjaxMedia=(()=>{
                                 if(selectedPlayerHost!=='nhplayer.com' ||
                                     location.pathname!=='/player.php')return '';
@@ -683,7 +715,7 @@ object BrowserPageFetch {
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+
                                 hentaibrosPlayerConfig+players+
-                                nhAjaxVideo+embeds+'</div><div id="reader">'+images+
+                                nhPlayerServer+nhAjaxVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
                             val page=runCatching{JSONTokener(raw).nextValue() as? String}
@@ -716,7 +748,15 @@ object BrowserPageFetch {
                             }else if(selectedPlayerPage &&
                                 selectedPlayerWaits++<
                                     SelectedPlayerWaitPolicy.maxPolls(host) &&
-                                ((if(host=="javideo.net") {
+                                ((if(host=="nhplayer.com" &&
+                                    Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
+                                        .matches(Uri.parse(url).path.orEmpty())) {
+                                    // A /v/ chooser will never have a media
+                                    // <video>; stop waiting as soon as the one
+                                    // verified child server is serialized.
+                                    com.asterion.videoflow.SiteSpecificOriginalSources
+                                        .selectedNhPlayerServer(url,page)==null
+                                } else if(host=="javideo.net") {
                                     // Only the selected iframe appears after
                                     // JAVIDEO's Play button; its HTML5 video is
                                     // a separate advert, not the original.
