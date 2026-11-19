@@ -28,4 +28,15 @@ internal object VideoTransferProgressPolicy {
             journalUpdatedMs<attemptStartWallMs)return disk
         return maxOf(disk,journalBytes?.coerceAtLeast(0L)?:0L)
     }
+
+    /** A complete original still needs ordered assembly and media validation.
+     * A new selected-JK verification checkpoint is genuine work, even when
+     * fragment bytes no longer increase; stale/repeated stage timestamps are
+     * never considered forward progress.
+     */
+    fun nativeAssemblyAdvanced(isJkNative:Boolean,stage:String?,
+                               updatedMs:Long?,lastTickMs:Long,
+                               attemptStartMs:Long):Boolean =
+        isJkNative && stage=="verifying" && updatedMs!=null &&
+            updatedMs>=attemptStartMs && updatedMs>lastTickMs
 }
