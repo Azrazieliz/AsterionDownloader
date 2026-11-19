@@ -1,5 +1,8 @@
 # Seven-provider final-build gate — 18 November 2026
 
+> **LATEST OWNER ANDROID ACCEPTANCE — 19 NOVEMBER 2026 (supersedes historical "no APK built" statements below).** A signed preserve-data **v1.3.75 acceptance APK was built and transferred to the Samsung**, then owner-provided 16m36s screen recording demonstrates multiple selected-video extraction/access/zero-byte failures, failure count rising 0→7, and a non-live Downloads UI. **This is a failed Android acceptance**, not a verified provider pass. The prior **4/7 same-selected complete PC files** remains a distinct historical PC result; do not infer 4/7 Samsung passes. Per-provider observed Android failures include JAV Guru, JAVIDEO, Pornhub, HentaiHaven, MP4Hentai, OnlyHentai and UncensoredHentai; catalog presence alone supplies no full-original proof for HelloPorn/HentaiBros/HQPornerxxx or others. Preserve publisher-selected identity, no substituted media, no bypassed login. Complete [timestamped video audit](DOWNLOADER_V1375_OWNER_VIDEO_AUDIT_20261119.md) and [actionable issue #21](https://github.com/Azrazieliz/AsterionDownloader/issues/21) are the newest acceptance evidence. Reassess this gate only with actual Android byte/file/playback/hash receipts. The rest of this document is historical development/probe evidence as of its entry dates.
+
+
 
 ## 19 November continuation — exact-site reachability, in-place JAVIDEO probe and interactive MP4Hentai recovery
 
