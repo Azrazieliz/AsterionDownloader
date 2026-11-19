@@ -47,6 +47,22 @@ class SearchRankingTest {
             assertFalse(url,SearchRanking.isVideoUrl(url))
         }
     }
+    @Test fun providerNativeSelectedArticlesSurviveSearchVideoFiltering(){
+        for(url in listOf(
+            "https://jav.guru/1234567/owner-selected-original/",
+            "https://javideo.net/en/fc2ppv-4994603",
+            "https://helloporn.com/video-123456-selected-original",
+            "https://mp4hentai.com/2026/11/selected-file-post/"
+        )) assertTrue(url,SearchRanking.isVideoUrl(url))
+        for(url in listOf(
+            "https://jav.guru/category/new-videos/",
+            "https://jav.guru.evil.example/1234567/owner-selected-original/",
+            "https://javideo.net/en/",
+            "https://helloporn.com/",
+            "https://mp4hentai.com/2026/11/",
+            "https://mp4hentai.com/2026/11/upcoming-hentai-release/"
+        )) assertFalse(url,SearchRanking.isVideoUrl(url))
+    }
     @Test fun indexedMediaIsNeverMistakenForDownloadableVideo(){
         val nyaa="https://nyaa.si/view/1917004"
         val torrent="https://1337x.to/torrent/9123456/video-name/"
