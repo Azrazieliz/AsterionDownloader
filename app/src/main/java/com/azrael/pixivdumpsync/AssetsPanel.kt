@@ -212,7 +212,19 @@ object AssetsPanel {
         },ui.lp(a,7))
         body.addView(ui.action(a,"OPEN LOCAL BLENDER / MODEL / ARCHIVE",false){
             a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
-                type="*/*";addCategory(Intent.CATEGORY_OPENABLE)
+                // Android SAF requires a wildcard plus MIME alternatives.
+                // The provider may mislabel a .blend as octet-stream, so
+                // validate the actual selected filename before opening too.
+                type="*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(
+                    "application/octet-stream","application/zip",
+                    "application/x-zip-compressed","application/x-rar-compressed",
+                    "application/vnd.rar","application/x-7z-compressed",
+                    "application/x-tar","application/gzip",
+                    "model/gltf+json","model/gltf-binary","model/obj",
+                    "model/stl","model/3mf","model/vnd.usdz+zip",
+                    "application/x-blender"))
             },5204)
         },ui.lp(a,7))
         val pref=a.getSharedPreferences("asterion_asset_workspace_v2",0)
@@ -231,11 +243,35 @@ object AssetsPanel {
         }
         ContentVerticalsPanel.render(a,body,ContentVerticalsPanel.Group.ASSETS,refresh)
     }
+    internal fun supportedModelOrArchive(filename:String):Boolean{
+        val name=filename.substringAfterLast('/').lowercase(java.util.Locale.ROOT)
+        if(name.isBlank() || name.startsWith('.') || name.contains(".."))return false
+        return setOf("blend","blend1","fbx","obj","stl","gltf","glb",
+            "dae","usd","usdz","3ds","abc","ply","x3d","3mf","ksp",
+            "unitypackage","zip","rar","7z","tar","gz")
+            .any{name.endsWith("."+it)}
+    }
     fun localFile(a:Activity,uri:Uri?){
         if(uri==null)return
+        val name=runCatching{
+            a.contentResolver.query(uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,null,null)?.use{cursor->
+                if(cursor.moveToFirst())cursor.getString(0) else null
+            }
+        }.getOrNull().orEmpty()
+        if(!supportedModelOrArchive(name)){
+            Toast.makeText(a,
+                "Choose an actual 3D model or archive; images are not model files",
+                Toast.LENGTH_LONG).show()
+            return
+        }
         runCatching{a.startActivity(Intent(Intent.ACTION_VIEW).apply{
             setDataAndType(uri,a.contentResolver.getType(uri)?:"application/octet-stream")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        })}
+        })}.onFailure{
+            Toast.makeText(a,"No compatible model viewer is installed",
+                Toast.LENGTH_LONG).show()
+        }
     }
 }
