@@ -64,34 +64,9 @@ class SyncEngine(private val context: Context) {
             return stats
         }
 
-        // A separate Kuroha installation is NOT a prerequisite for Pixiv.
-        // The former synchronous SAF scan held the Pixiv sync lease and the
-        // missing-folder gate rejected every historical run. Keep verified
-        // per-page deduplication, but refresh old inventory asynchronously.
-        val legacy=if(mode==SyncMode.BACKFILL)runCatching {
-            LegacyPixivInventory.status(context)
-        }else null
-        val status=legacy?.getOrNull()
-        val inventory=PixivLegacySyncGate.evaluate(
-            mode=mode,
-            kurohaInstalled=if(mode==SyncMode.BACKFILL)
-                LegacyPixivInventory.legacyKurohaInstalled(context) else false,
-            linkedFolders=status?.linkedFolders?:0,
-            scanning=status?.scanning?:false,
-            lastError=status?.lastError,
-            refreshError=legacy?.exceptionOrNull()?.message)
-        if(inventory.warning!=null){
-            val note="Pixiv backfill continues; optional legacy duplicate index: "+
-                inventory.warning.take(150)
-            SyncControl.updateMessage(note)
-            progress(note)
-        }
-        if(mode==SyncMode.BACKFILL){
-            // Do not wait for a historical folder scan before contacting Pixiv.
-            // Failed/missing SAF access must not be counted as a Pixiv error.
-            runCatching{LegacyPixivInventory.refreshAsyncIfDue(context)}
-                .onFailure{progress("Optional Kuroha inventory refresh unavailable")}
-        }
+        // Historical Kuroha file scanning has been superseded by the
+        // planned Nexus Fusion inventory. Pixiv runs immediately against
+        // its own durable work/page database; never delay Backfill on SAF.
         // The sync lease is already acquired above. Any failure while opening
         // the database or restoring Pixiv authentication MUST release that lease;
         // otherwise every subsequent Sync now / backfill reports "already running".
@@ -853,9 +828,7 @@ class SyncEngine(private val context: Context) {
             val filename = "${id}_p${pageIndex}.$ext"
             val savedHere = runCatching{FileStore.exists(context, filename)}
                 .getOrDefault(false)
-            val savedInKuroha = if(savedHere)false else
-                LegacyPixivInventory.hasPage(context,id,pageIndex)
-            val onDisk = savedHere || savedInKuroha
+            val onDisk = savedHere
 
             if (db.isPageSaved(id, pageIndex) && onDisk) {
                 continue
@@ -931,10 +904,7 @@ class SyncEngine(private val context: Context) {
         }
 
         return files.all { filename ->
-            val page=LegacyPixivFilename.parse(filename)
-            runCatching{FileStore.exists(context,filename)}.getOrDefault(false) ||
-                (page!=null && page.illustId==illustId &&
-                    LegacyPixivInventory.hasPage(context,illustId,page.index))
+            runCatching{FileStore.exists(context,filename)}.getOrDefault(false)
         }
     }
 
