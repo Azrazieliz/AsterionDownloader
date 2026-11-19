@@ -23,6 +23,7 @@ object TeraboxSettings {
     private const val ENABLED_KEY = "cloud_enabled"
 
     fun enabled(context: Context): Boolean =
+        NduSettings.cloudOnly(context) &&
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(ENABLED_KEY, false)
 
