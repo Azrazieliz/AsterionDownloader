@@ -662,7 +662,14 @@ object VideoEngine {
             val selected=selectedHostCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:connectedCookies?.takeIf{it.isFile&&it.length()>0}
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
-            val proxy=NetworkRoute.extractorProxy(context,item.url)
+            // Preserve the publisher route unless the selected external
+            // player/CDN has its own owner-approved HTTP/SOCKS/VPN route.
+            val routeSelectedHost=NetworkRoute.siteKey(item.url) in setOf(
+                "jav.guru","javideo.net","helloporn.com",
+                "uncensoredhentai.xxx")
+            val proxy=if(routeSelectedHost)
+                NetworkRoute.extractorProxyForSelected(context,item.url,link)
+                else NetworkRoute.extractorProxy(context,item.url)
             val quality=prefs.getString("quality","best[ext=mp4]/best")
                 ?: "best[ext=mp4]/best"
             // Direct, browser-accessible media uses the Kotlin/Android HTTP
@@ -684,7 +691,7 @@ object VideoEngine {
                     JavGuruJkNativeHls.download(
                         item.url,link,referer,parent,
                         item.title+" ["+item.id+"]",
-                        NetworkRoute.javaProxy(context,item.url),
+                        NetworkRoute.javaProxyForSelected(context,item.url,link),
                         progress={percent,verifiedBytes,fragmentsDone,fragmentsTotal->
                             if(!db.progressClaim(item.id,item.lease,percent))
                                 throw java.util.concurrent.CancellationException(
@@ -726,7 +733,9 @@ object VideoEngine {
                         cookieHeader=if(SiteSession.bound(context,link))
                             SiteSession.cookie(context,link) else null,
                         filenameStem=item.title+" ["+item.id+"]",
-                        proxy=NetworkRoute.javaProxy(context,item.url),
+                        proxy=if(routeSelectedHost)
+                            NetworkRoute.javaProxyForSelected(context,item.url,link)
+                            else NetworkRoute.javaProxy(context,item.url),
                         progress={percent->
                             if(!db.progressClaim(item.id,item.lease,percent))
                                 throw java.util.concurrent.CancellationException(
