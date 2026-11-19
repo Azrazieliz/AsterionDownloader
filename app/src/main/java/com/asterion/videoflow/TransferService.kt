@@ -812,6 +812,7 @@ object VideoEngine {
             extractionJobs[item.id]=future
             val start=android.os.SystemClock.elapsedRealtime()
             val attemptWallStart=System.currentTimeMillis()
+            var lastAssemblyTick=attemptWallStart-1L
             var latestBytes=VideoPayloadBytes.count(parent)
             var lastByteTick=start
             var lastLeaseTick=0L
