@@ -40,6 +40,14 @@ internal object VideoErrorDetail {
         val raw=(root.message?:root.javaClass.simpleName).trim()
         val lower=raw.lowercase(Locale.ROOT)
         val clear=when {
+            // A public publisher host resolving to 127.0.0.1 cannot reach its
+            // genuine HTTPS server. This is a phone DNS/blocker/route issue,
+            // not Python unsupported URL or an entitlement to fabricate media.
+            Regex("""(?i)(?:failed to connect to|connectexception).{0,180}/(?:127\.0\.0\.1|0\.0\.0\.0):443""")
+                .containsMatchIn(raw)->
+                "Selected publisher host is blocked by this Android network route "+
+                "(resolved to local loopback). Check DNS/site filtering or an "+
+                "authorized per-site route before retrying; zero original bytes"
             Regex("""\b(401|403)\b|forbidden|access denied|sign.?in|authentication required""")
                 .containsMatchIn(lower)->
                 "Provider denied playback or transfer (HTTP 401/403); verify direct browser access and connected account"
