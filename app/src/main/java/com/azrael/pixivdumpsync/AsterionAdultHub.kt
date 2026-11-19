@@ -125,6 +125,52 @@ object AsterionAdultHub {
         val first=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         renderContents(a,first,area,repaint)
         surface.addView(first)
+
+        // Indexed cards can be updated by external foreground/background
+        // workers which never call this Activity's refresh callback. Observe
+        // lightweight source/cached-cover revisions while VISIBLE; do not
+        // rescan the network and do not reconstruct the whole Activity.
+        val generation=java.util.concurrent.atomic.AtomicLong()
+        fun fingerprint():Int {
+            val sources=SourceIndexDb(a).use{db->
+                db.sources().filter{it.area==area}.map{
+                    listOf(it.url,it.lastCheck.toString(),
+                        it.discovered.toString(),it.error.orEmpty())
+                }
+            }
+            val covers=sites(a,area).map{site->
+                val cached=KyoraCreatorPreviews.cached(a,site.url)
+                listOf(site.host,cached?.updated.toString(),
+                    cached?.entries?.size.toString(),cached?.error.orEmpty())
+            }
+            return (sources+covers).hashCode()
+        }
+        var observed=runCatching{fingerprint()}.getOrNull()
+        fun observe(token:Long){
+            if(token!=generation.get() || a.isFinishing || a.isDestroyed ||
+                surface.parent!==parent || !surface.isAttachedToWindow)return
+            val latest=runCatching{fingerprint()}.getOrNull()
+            if(latest!=null && observed!=null && latest!=observed){
+                observed=latest
+                repaint()
+            }else if(latest!=null)observed=latest
+            surface.postDelayed({observe(token)},5_000L)
+        }
+        fun arm(){
+            val token=generation.incrementAndGet()
+            surface.postDelayed({observe(token)},5_000L)
+        }
+        surface.addOnAttachStateChangeListener(
+            object:View.OnAttachStateChangeListener{
+                override fun onViewAttachedToWindow(v:View){arm()}
+                override fun onViewDetachedFromWindow(v:View){
+                    generation.incrementAndGet()
+                }
+            })
+        surface.post{
+            if(generation.get()==0L && surface.isAttachedToWindow &&
+                surface.parent===parent)arm()
+        }
     }
 
     private fun renderContents(a:Activity,parent:LinearLayout,area:String,
