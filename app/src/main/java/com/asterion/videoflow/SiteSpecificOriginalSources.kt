@@ -316,7 +316,8 @@ internal object SiteSpecificOriginalSources {
                         .ignoreHttpErrors(true).followRedirects(false)
                         .timeout(14_000).maxBodySize(1_600_000)
                         .apply {
-                            NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                            NetworkRoute.javaProxyForSelected(context,selected,exactServer)
+                                ?.let{proxy(it)}
                             SiteSession.cookie(context,exactServer)
                                 ?.takeIf{it.isNotBlank()}
                                 ?.let{header("Cookie",it)}
@@ -663,7 +664,8 @@ internal object SiteSpecificOriginalSources {
                     // publisher's cookies to a third-party embed or ad.
                     SiteSession.cookie(context,frame.url)?.takeIf{it.isNotBlank()}
                         ?.let{header("Cookie",it)}
-                    NetworkRoute.javaProxy(context,selected)?.let{proxy(it)}
+                    NetworkRoute.javaProxyForSelected(context,selected,frame.url)
+                        ?.let{proxy(it)}
                 }
                 .execute()
         }.onFailure{hostFailure=it}.getOrNull()
