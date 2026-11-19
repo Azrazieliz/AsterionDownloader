@@ -457,19 +457,26 @@ object UnifiedDownloadsUi {
             // DownloadManager can save a provider login page, redirect notice
             // or truncated archive and still report STATUS_SUCCESSFUL. Check
             // persisted bytes before showing a saved original in the queue.
-            val receipt=if(item.status==DownloadManager.STATUS_SUCCESSFUL && present)
+            // Successful files are checked once at receipt time, not
+            // re-read in full on EVERY 3-second screen refresh. An invalid
+            // receipt stays invalid until a new real transfer is completed.
+            val cachedReceipt=OriginalReceiptState.get(a,item.job.id)
+            val receipt=if(item.status==DownloadManager.STATUS_SUCCESSFUL &&
+                present && cachedReceipt !in setOf("VERIFIED","INVALID"))
                 OriginalFileReceipt.verify(a,dm,item.job.id,
                     item.job.filename,item.total)
                 else null
-            if(receipt!=null){
-                val next=if(receipt.valid)"VERIFIED" else "INVALID"
-                if(OriginalReceiptState.get(a,item.job.id)!=next)
-                    OriginalReceiptState.set(a,item.job.id,next)
+            if(receipt!=null)OriginalReceiptState.set(a,item.job.id,
+                if(receipt.valid)"VERIFIED" else "INVALID")
+            val validReceipt=present && when{
+                cachedReceipt=="VERIFIED"->true
+                cachedReceipt=="INVALID"->false
+                else->receipt?.valid==true
             }
             val state=when {
                 item.status==DownloadManager.STATUS_FAILED -> State.FAILED
                 item.status==DownloadManager.STATUS_SUCCESSFUL &&
-                    receipt?.valid==true -> State.DONE
+                    validReceipt -> State.DONE
                 item.status==DownloadManager.STATUS_SUCCESSFUL -> State.FAILED
                 item.status==DownloadManager.STATUS_RUNNING->State.ACTIVE
                 item.status==DownloadManager.STATUS_PAUSED->State.HELD
@@ -485,8 +492,9 @@ object UnifiedDownloadsUi {
                             "No bytes received for 150s · Stopped stalled OS request · Retry"
                         OriginalReceiptState.get(a,item.job.id)=="MISSING" ->
                             "Android request disappeared · Original unverified · Manual retry"
-                        receipt!=null && !receipt.valid ->
-                            "Rejected invalid original · "+receipt.reason.take(100)
+                        cachedReceipt=="INVALID" || receipt?.valid==false ->
+                            "Rejected invalid original · "+
+                                (receipt?.reason?.take(100)?:"Original integrity failed")
                         item.reason in 400..599->
                             "Provider HTTP "+item.reason+" · Connect account or retry"
                         item.reason>0 ->
