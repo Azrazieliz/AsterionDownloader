@@ -598,12 +598,13 @@ object UnifiedDownloadsUi {
                                 Toast.LENGTH_LONG).show()
                         })
                         State.FAILED->({
-                            // Explicitly discard this failure card, retaining
-                            // its persisted diagnostic / retry evidence.
-                            hideRow(a,Row(item.job.folder,item.job.filename,
-                                "",State.FAILED,null,0L,{},
-                                key="android:"+item.job.id))
-                            DownloadStateSignals.changed(a)
+                            // Acknowledgement is durable across app restarts
+                            // and stops automatic retries. Existing partial
+                            // bytes and any completed original are not erased.
+                            if(!DirectDownloadRetry.clearFailed(a,item.job.id))
+                                Toast.makeText(a,
+                                    "Transfer changed; refresh before clearing",
+                                    Toast.LENGTH_LONG).show()
                         })
                         else->null
                     },
