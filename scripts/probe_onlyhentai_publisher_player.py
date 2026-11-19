@@ -59,7 +59,18 @@ def main():
   print(json.dumps({"probe":"ONLYHENTAI_HOME",**structure(ROOT,code,mime,raw),
       "selected_permalink_count":len(links)}),flush=True)
   if not links:
-   print(json.dumps({"result":"NO_SELECTED_LINK","publisher_original_verified":False}),flush=True)
+   from collections import Counter
+   own=[urlsplit(urljoin(ROOT,x)).path for x in home.links
+        if urlsplit(urljoin(ROOT,x)).hostname in
+           ("onlyhentaistuff.com","www.onlyhentaistuff.com")]
+   kinds=Counter((p.strip("/").split("/")[0][:32] or "root",
+                  len([x for x in p.split("/") if x])) for p in own)
+   print(json.dumps({"probe":"ONLYHENTAI_LINK_SHAPES",
+       "first_segment_path_depth_counts":[
+          {"section":k[0],"depth":k[1],"count":v}
+          for k,v in kinds.most_common(35)],
+       "total_own_links":len(own),
+       "publisher_original_verified":False}),flush=True)
    return 2
   for url in links[:2]:
    try:
