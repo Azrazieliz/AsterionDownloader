@@ -566,7 +566,8 @@ object UnifiedDownloadsUi {
         // it never creates another libtorrent engine or fake file success.
         for(torrent in TorrentTransfers.snapshots(a,200)){
             val state=when(torrent.stage){
-                "TRANSFERRING"->State.ACTIVE
+                "TRANSFERRING","EXPORTING"->State.ACTIVE
+                "EXPORTED"->State.DONE
                 "FAILED"->State.FAILED
                 "PAUSED"->State.PAUSED
                 "QUARANTINED"->State.HELD
@@ -576,6 +577,8 @@ object UnifiedDownloadsUi {
                 "TRANSFERRING"->"Verified torrent pieces · "+
                     torrent.verifiedBytes+" / "+torrent.wantedBytes+
                     " bytes · "+torrent.peers+" peers"
+                "EXPORTING"->"Copying piece-verified selected files to Downloads"
+                "EXPORTED"->"Selected originals available in Downloads"
                 "WAITING_PEERS"->"Waiting for peers · "+
                     torrent.peers+" connected; partial pieces preserved"
                 "VERIFYING"->"Checking selected pieces in quarantine"
@@ -585,6 +588,11 @@ object UnifiedDownloadsUi {
                     .take(250)
             }
             val onAction:()->Unit={
+                if(torrent.stage=="QUARANTINED"){
+                    TorrentVerifiedExport.request(a,torrent.id)
+                }else if(torrent.stage=="EXPORTED"){
+                    TorrentVerifiedExport.open(a,torrent.id)
+                }else{
                 val action=when(torrent.stage){
                     "TRANSFERRING"->TorrentTransferService.PAUSE
                     "PAUSED","FAILED"->TorrentTransferService.RESUME
@@ -602,6 +610,7 @@ object UnifiedDownloadsUi {
                             Toast.LENGTH_LONG).show()
                     }
                 }
+                }
             }
             rows+=Row("Torrents","Torrent "+torrent.id.take(8),
                 info,state,
@@ -615,11 +624,13 @@ object UnifiedDownloadsUi {
                 actionText=when(torrent.stage){
                     "TRANSFERRING"->"PAUSE"
                     "PAUSED","FAILED"->"RESUME"
+                    "QUARANTINED"->"EXPORT VERIFIED FILES"
+                    "EXPORTED"->"OPEN"
                     else->null
                 },
                 receivedBytes=torrent.verifiedBytes,
                 hasPrimaryAction=torrent.stage in setOf(
-                    "TRANSFERRING","PAUSED","FAILED"),
+                    "TRANSFERRING","PAUSED","FAILED","QUARANTINED","EXPORTED"),
                 key="torrent:"+torrent.id,
                 transferStage=torrent.stage,
                 transferUpdated=torrent.updated)
