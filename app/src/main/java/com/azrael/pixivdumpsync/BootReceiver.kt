@@ -55,25 +55,39 @@ class RestoreDownloadSchedulesJob:JobService() {
             try {
                 val app=applicationContext
                 if(AppPower.enabled(app) && !stopped.get()){
-                    if(SessionStore.autoSync(app)){
-                        Scheduler.ensure(app)
-                        Scheduler.runSoon(app)
+                    // One broken provider must never crash or starve the
+                    // whole headless restore job. Keep all independent module
+                    // schedules alive and log each failure separately.
+                    fun restore(name:String,operation:()->Unit){
+                        if(stopped.get() || !AppPower.enabled(app))return
+                        runCatching{operation()}.onFailure{error->
+                            if(error is VirtualMachineError || error is ThreadDeath)
+                                throw error
+                            Log.e("AsterionRestore",
+                                "Background scheduler restore failed: "+name,error)
+                        }
                     }
-                    SourceIndex.ensure(app)
-                    CreatorArchiveScheduler.ensure(app)
-                    KoikatsuFollowing.ensure(app)
-                    RounderDispatch.ensure(app)
-                    DirectDownloadRetry.ensure(app)
-                    AsterionDownloadWorker.ensure(app)
-                    NovelEpubService.ensure(app)
-                    Mp4SeriesSync.ensure(app)
+                    if(SessionStore.autoSync(app)){
+                        restore("pixiv"){Scheduler.ensure(app)}
+                        restore("pixiv-resume"){Scheduler.runSoon(app)}
+                    }
+                    restore("source-index"){SourceIndex.ensure(app)}
+                    restore("creators"){CreatorArchiveScheduler.ensure(app)}
+                    restore("koikatsu"){KoikatsuFollowing.ensure(app)}
+                    restore("rounder"){RounderDispatch.ensure(app)}
+                    restore("direct-retry"){DirectDownloadRetry.ensure(app)}
+                    restore("selected-originals"){AsterionDownloadWorker.ensure(app)}
+                    restore("epub"){NovelEpubService.ensure(app)}
+                    restore("mp4-series"){Mp4SeriesSync.ensure(app)}
                     if(RounderTreeScanner.tree(app)!=null)
-                        RounderTreeScanner.scanAsync(app)
-                    ChapterRecovery.ensure(app)
-                    XPhotoScheduler.ensure(app)
-                    NduCloudScheduler.configure(app,NduSettings.enabled(app))
-                    com.azrael.galleryflow.Scheduler.ensure(app)
-                    com.asterion.videoflow.Scheduling.ensure(app)
+                        restore("rounder-tree"){RounderTreeScanner.scanAsync(app)}
+                    restore("comics"){ChapterRecovery.ensure(app)}
+                    restore("x"){XPhotoScheduler.ensure(app)}
+                    restore("terabox"){
+                        NduCloudScheduler.configure(app,NduSettings.enabled(app))
+                    }
+                    restore("cosplay"){com.azrael.galleryflow.Scheduler.ensure(app)}
+                    restore("video"){com.asterion.videoflow.Scheduling.ensure(app)}
                 }
                 completed=true
             } catch(t:Exception) {
