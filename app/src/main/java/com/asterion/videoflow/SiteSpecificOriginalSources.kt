@@ -765,9 +765,19 @@ internal object SiteSpecificOriginalSources {
         if(frames.size!=1)return emptyList()
         val exact=selectedIframeMedia(context,selected,frames.single())
         return exact.ifEmpty {
-            frames.filter{selectedExtractorFrame(selected,it.url)}
+            // The real play.javideo.net /embed/<id> currently responds
+            // HTTP 200 but its selected video has no src, duration or
+            // initialized media even after the genuine Play gesture.
+            // yt-dlp's generic extractor reports Unsupported URL for that
+            // HTML page, and repeated fallback only burns retries. Return
+            // it ONLY after its genuine original media is resolved above;
+            // other publisher-selected supported hosters remain eligible.
+            frames.filter{javideoSupportedExtractorFrame(selected,it.url)}
         }
     }
+
+    internal fun javideoSupportedExtractorFrame(article:String,frame:String):Boolean =
+        selectedExtractorFrame(article,frame) && host(frame)!="play.javideo.net"
 
     /**
      * 3DHentaiX previously downloaded a playable OTHER scene from a nearby
