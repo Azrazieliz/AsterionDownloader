@@ -249,6 +249,19 @@ internal object JavGuruJkNativeHls {
     internal fun reusableFragment(file:File):Boolean = runCatching {
         if(!file.isFile || file.length() !in 1504L..MAX_FRAGMENT.toLong() ||
             file.length()%188L!=0L)return@runCatching false
+        // An intact receipt alone is not proof of MPEG-TS media;
+        // require the same sync shape checked on initial AES decryption.
+        val header=ByteArray(188*4)
+        file.inputStream().use{input->
+            var read=0
+            while(read<header.size){
+                val count=input.read(header,read,header.size-read)
+                if(count<=0)return@runCatching false
+                read+=count
+            }
+        }
+        if((0..3).any{(header[it*188].toInt() and 255)!=0x47})
+            return@runCatching false
         val sign=File(file.parentFile,file.name+".sha256")
         if(!sign.isFile)return@runCatching false
         val expected=sign.readText().trim()
@@ -366,6 +379,7 @@ internal object JavGuruJkNativeHls {
                             it.fd.sync()
                         }
                         pendingHash.writeText(hex(sha256(clear)))
+                        checkCancel() // Retired attempts cannot publish stale fragments.
                         if(fragment.exists() && !fragment.delete())
                             throw IOException("Cannot replace corrupt JK fragment")
                         if(digest.exists() && !digest.delete())
@@ -396,6 +410,12 @@ internal object JavGuruJkNativeHls {
             checkCancel()
             if(total<30_000_000L)
                 throw IOException("JK selected VOD failed whole-media size threshold")
+            // Preserve every verified fragment if the full second copy
+            // cannot fit. Never exhaust Android storage during assembly.
+            val reserve=max(150_000_000L,total/10L)
+            if(directory.usableSpace<total+reserve)
+                throw IOException("Not enough storage to assemble selected JK "+
+                    "original; verified fragments retained for resume")
             val digest=MessageDigest.getInstance("SHA-256")
             FileOutputStream(tempFinal).use{out->
                 for(index in plan.segments.indices){
