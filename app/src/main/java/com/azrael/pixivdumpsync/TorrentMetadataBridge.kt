@@ -78,41 +78,148 @@ internal object TorrentMetadataBridge {
             }
         }
     }
-    fun prepareMagnet(a:Activity,magnet:String,folder:String) {
-        val safety=TorrentSafetyGate.assess(a)
-        if(!safety.allowed){
-            AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
-                .setMessage(safety.reason)
-                .setPositiveButton("Close",null).show()
-            return
+    private fun normalizedHexInfoHash(magnet:String):String? {
+        val hash=CloudTorrentPolicy.infoHash(magnet)?:return null
+        if(hash.length==40)return hash.lowercase(java.util.Locale.ROOT)
+        if(hash.length!=32)return null
+        val alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        val bytes=java.io.ByteArrayOutputStream(20)
+        var value=0
+        var bits=0
+        for(letter in hash){
+            val digit=alphabet.indexOf(letter)
+            if(digit<0)return null
+            value=(value shl 5) or digit
+            bits+=5
+            if(bits>=8){
+                bits-=8
+                bytes.write((value shr bits) and 255)
+                value=value and ((1 shl bits)-1)
+            }
         }
+        return bytes.toByteArray().takeIf{it.size==20}
+            ?.joinToString(""){"%02x".format(it)}
+    }
+    /**
+     * Metadata caches reduce risky peer/JNI metadata sessions, but are
+     * UNTRUSTED. The exact SHA-1 of the raw info dictionary must match the
+     * selected magnet before a file selection is offered.
+     */
+    private fun cachedDescriptor(hash:String):ByteArray? {
+        val urls=listOf(
+            "https://torrage.info/torrent.php?h="+hash.uppercase(java.util.Locale.ROOT),
+            "https://itorrents.net/torrent/"+
+                hash.uppercase(java.util.Locale.ROOT)+".torrent"
+        )
+        for(url in urls){
+            val connection=runCatching{
+                java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            }.getOrNull()?:continue
+            try{
+                connection.connectTimeout=7_000
+                connection.readTimeout=9_000
+                connection.instanceFollowRedirects=false
+                connection.setRequestProperty("Accept","application/x-bittorrent")
+                connection.setRequestProperty("User-Agent","AsterionDownloader/1.3")
+                if(connection.responseCode!=200)continue
+                if(connection.contentLengthLong>8_388_608L)continue
+                val source=connection.inputStream
+                val input=if(connection.contentEncoding.equals("gzip",true))
+                    java.util.zip.GZIPInputStream(source) else source
+                val output=java.io.ByteArrayOutputStream()
+                input.use { stream ->
+                    val block=ByteArray(16_384)
+                    while(true){
+                        val count=stream.read(block)
+                        if(count<0)break
+                        if(output.size()+count>8_388_608)
+                            throw java.io.IOException("Metadata exceeds size limit")
+                        output.write(block,0,count)
+                    }
+                }
+                val candidate=output.toByteArray()
+                val manifest=BencodedTorrentManifest.parse(candidate)
+                if(manifest.infoHashHex.equals(hash,true))return candidate
+            }catch(_:Exception){
+                // The cache is not authoritative. Continue to the next
+                // HTTPS source, then use the guarded native path if necessary.
+            }finally{connection.disconnect()}
+        }
+        return null
+    }
+    fun prepareMagnet(a:Activity,magnet:String,folder:String) {
         if(!(magnet.startsWith("magnet:?xt=urn:btih:",true) ||
                 magnet.startsWith("magnet:?xt=urn:btmh:",true))){
             Toast.makeText(a,"Invalid magnet info hash",Toast.LENGTH_LONG).show()
             return
         }
+        val hash=normalizedHexInfoHash(magnet)
         val request=requestKey(magnet)
         if(!claimRequest(request,android.os.SystemClock.elapsedRealtime())){
             Toast.makeText(a,"Already retrieving this release's file list",
                 Toast.LENGTH_SHORT).show()
             return
         }
-        val intent=Intent(a,TorrentTransferService::class.java).apply{
-            action=TorrentTransferService.PREPARE_MAGNET
-            putExtra("magnet",magnet)
-            putExtra("folder",folder)
-            putExtra(RECEIVER,callback(a,folder,request))
-        }
-        runCatching{a.startForegroundService(intent)}
-            .onSuccess{Toast.makeText(a,
-                "Waiting for peer metadata (up to 100 seconds)",
-                Toast.LENGTH_LONG).show()}
-            .onFailure{
+        // Reopen a previously authenticated, validated local descriptor
+        // immediately. The pointer is advisory; the manifest and exact hash
+        // were verified when stored, never from untrusted search poster data.
+        if(hash!=null){
+            val pointer=File(root(a),"cache-$hash.pointer")
+            val existing=runCatching{pointer.readText().trim()}.getOrNull()
+            if(existing!=null && idPattern.matches(existing) &&
+                File(root(a),"$existing.manifest.json").isFile){
                 releaseRequest(request)
-                AlertDialog.Builder(a).setTitle("Torrent engine unavailable")
-                    .setMessage(it.message?:"Android could not start torrent metadata")
-                    .setPositiveButton("Close",null).show()
+                runCatching{showPreparedFiles(a,existing,folder)}
+                    .onFailure{pointer.delete()}
+                return
             }
+        }
+        Toast.makeText(a,"Checking authenticated torrent metadata cache first",
+            Toast.LENGTH_LONG).show()
+        kotlin.concurrent.thread(name="asterion-torrent-https-metadata"){
+            val bytes=hash?.let{cachedDescriptor(it)}
+            a.runOnUiThread {
+                if(a.isFinishing || a.isDestroyed){
+                    releaseRequest(request)
+                    return@runOnUiThread
+                }
+                if(bytes!=null){
+                    releaseRequest(request)
+                    prepareDescriptor(a,bytes,folder)
+                    val descriptorId=id(bytes)
+                    if(hash!=null &&
+                        File(root(a),"$descriptorId.manifest.json").isFile)
+                        runCatching{File(root(a),"cache-$hash.pointer")
+                            .writeText(descriptorId)}
+                    return@runOnUiThread
+                }
+                val safety=TorrentSafetyGate.assess(a)
+                if(!safety.allowed){
+                    releaseRequest(request)
+                    AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
+                        .setMessage(safety.reason+
+                            "\nNo validated cached file list was available.")
+                        .setPositiveButton("Close",null).show()
+                    return@runOnUiThread
+                }
+                val intent=Intent(a,TorrentTransferService::class.java).apply{
+                    action=TorrentTransferService.PREPARE_MAGNET
+                    putExtra("magnet",magnet)
+                    putExtra("folder",folder)
+                    putExtra(RECEIVER,callback(a,folder,request))
+                }
+                runCatching{a.startForegroundService(intent)}
+                    .onSuccess{Toast.makeText(a,
+                        "Waiting for peer metadata (up to 100 seconds)",
+                        Toast.LENGTH_LONG).show()}
+                    .onFailure{
+                        releaseRequest(request)
+                        AlertDialog.Builder(a).setTitle("Torrent engine unavailable")
+                            .setMessage(it.message?:"Android could not start torrent metadata")
+                            .setPositiveButton("Close",null).show()
+                    }
+            }
+        }
     }
     fun prepareDescriptor(a:Activity,bytes:ByteArray,folder:String) {
         // Descriptor inspection is ordinary bounded bencode parsing and
