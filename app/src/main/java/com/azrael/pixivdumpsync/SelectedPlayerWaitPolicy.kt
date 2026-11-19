@@ -11,6 +11,7 @@ internal object SelectedPlayerWaitPolicy {
     fun maxPolls(host:String):Int = when(host){
         "3dhentaix.com" -> 11  // ~35 s of browser/player startup at most
         "javideo.net" -> 11 // Active Play iframe may attach late
+        "onlyhentaistuff.com" -> 11 // KVS player initializes source asynchronously
         "voe.sx","kamehaus.net" -> 9
         else -> 6
     }
