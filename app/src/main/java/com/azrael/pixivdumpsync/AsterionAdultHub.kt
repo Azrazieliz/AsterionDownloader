@@ -336,28 +336,21 @@ object AsterionAdultHub {
                     }else{
                         val hit=searches.firstOrNull{it.url==tile.url}
                         if(hit!=null){
-                            val created=VideoDb(a).use{
-                                it.addVideo(hit.url,hit.title)
+                            if(!SelectedVideoRouter.request(
+                                    a,hit.url,hit.title,area)){
+                                Toast.makeText(a,
+                                    "This result is not a verified selected video page",
+                                    Toast.LENGTH_LONG).show()
                             }
-                            if(created)VideoEngine.launch(a,false)
-                            Toast.makeText(a,
-                                if(created)"Selected video queued for verification · "+hit.title.take(45)
-                                else "Already in Downloads · "+hit.title.take(45),
-                                Toast.LENGTH_SHORT).show()
                         }else if(public.any{it.url==tile.url}){
                             // A cover is not a downloaded original. However,
                             // tapping a confirmed video page must enqueue THAT
                             // exact original, not start an unrelated site-wide
                             // backfill and misleadingly claim download progress.
-                            if(SelectedVideoRouter.isSelectedVideo(area,tile.url,"video")){
-                                val created=VideoDb(a).use{
-                                    it.addVideo(tile.url,tile.title)
-                                }
-                                if(created)VideoEngine.launch(a,false)
-                                Toast.makeText(a,
-                                    if(created)"Selected video queued for verification · "+tile.title.take(45)
-                                    else "Already in Downloads · "+tile.title.take(45),
-                                    Toast.LENGTH_SHORT).show()
+                            if(SelectedVideoRouter.request(
+                                    a,tile.url,tile.title,area)){
+                                // Only an exact user-selected episode enters
+                                // VideoFlow, not a series page or recommendation.
                             }else{
                                 thread(name="asterion-adult-public-gallery"){
                                     val message=runCatching{
