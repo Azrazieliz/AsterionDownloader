@@ -21,11 +21,18 @@ object NduSettings {
     private const val DOMAIN = "domain"
 
     fun enabled(ctx: Context) = ctx.getSharedPreferences(PREF,0).getBoolean(ENABLE,false)
-    /** Owner's canonical policy: final originals are cloud-owned, not phone
-     * Downloads files. Unsupported private streams must be held, never
-     * silently routed back to Android DownloadManager.
+    private const val CLOUD_ONLY = "cloud_only"
+    /** TEMPORARY ACCEPTANCE MODE: downloads go to phone internal/shared
+     * Downloads until the owner re-enables direct-to-cloud.
+     * Existing cloud reservations and encrypted NDUS are preserved.
      */
-    fun cloudOnly(ctx:Context):Boolean=true
+    fun cloudOnly(ctx:Context):Boolean =
+        ctx.getSharedPreferences(PREF,0).getBoolean(CLOUD_ONLY,false)
+    fun setCloudOnly(ctx:Context,cloud:Boolean){
+        ctx.getSharedPreferences(PREF,0).edit().putBoolean(CLOUD_ONLY,cloud).apply()
+        // Paused cloud receipts are retained in SQLite, never discarded.
+        NduCloudScheduler.configure(ctx,enabled(ctx))
+    }
     fun setEnabled(ctx: Context, yes: Boolean) {
         ctx.getSharedPreferences(PREF,0).edit().putBoolean(ENABLE,yes).apply()
         NduCloudScheduler.configure(ctx,yes)
