@@ -1066,7 +1066,7 @@ object VideoEngine {
         if(lightweight){
             val exact=publishedOriginals.single()
             execute(exact.url,exact.referer,
-                Rule34VideoOriginalSource.firstPartyDownload(
+                SecondaryLightNativeOriginal.verifiedFirstPartyMp4(
                     item.url,exact.url))
             downloaded=true
         }else if(nativeOnly){
