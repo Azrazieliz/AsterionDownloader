@@ -1040,13 +1040,25 @@ object UnifiedDownloadsUi {
         val resolving=rows.count{
             it.source=="Video" && it.state==State.ACTIVE && it !in live
         }
+        // A concurrent-thread count is not proof of parallel downloads.
+        // Only two independent IDs whose actual byte counters advanced
+        // since the preceding refresh count as measured parallel transfers.
+        val observedRates=live.associate{row->
+            rowId(row) to speedLabel(row)
+        }
+        val byteAdvancing=observedRates.values.count{it!=null}
         val liveHeader=ui.row(a)
         liveHeader.addView(ui.text(a,"Live transfers",16f,ui.white,true),
             LinearLayout.LayoutParams(0,-2,1f))
-        liveHeader.addView(ui.text(a,live.size.toString()+" transferring"+
+        liveHeader.addView(ui.text(a,byteAdvancing.toString()+" flowing"+
             (if(resolving>0)" · $resolving resolving" else ""),
             11f,ui.secondary),LinearLayout.LayoutParams(-2,-2))
         parent.addView(liveHeader,ui.lp(a,16,8))
+        if(byteAdvancing>=2)
+            parent.addView(ui.text(a,
+                "Parallel confirmed · "+byteAdvancing+
+                    " independent files gaining bytes",11f,ui.primary),
+                ui.lp(a,0,4))
         val livePanel=ui.card(a,14)
         if(live.isEmpty()){
             livePanel.addView(ui.text(a,"No file downloads running",
@@ -1124,7 +1136,7 @@ object UnifiedDownloadsUi {
                 livePanel.addView(bar,ui.lp(a,9).apply{
                     height=ui.px(a,5)
                 })
-                val speed=speedLabel(item)
+                val speed=observedRates[rowId(item)]
                 val details=ArrayList<String>()
                 if(validProgress!=null)
                     details.add(validProgress.toString()+"% of known file")
