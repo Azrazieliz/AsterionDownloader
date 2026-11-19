@@ -39,6 +39,15 @@ object TorrentTransfers {
         if (!running) { engine.start(); running = true }
         return engine
     }
+    /** libtorrent owns native threads, sockets and piece buffers. Android
+     * does not reclaim them just because the foreground service stops.
+     * Release the session only after the FINAL metadata/transfer worker has
+     * returned from JNI, and never from the Activity main thread.
+     */
+    @Synchronized internal fun stopSessionWhenIdle() {
+        if(!running)return
+        try{engine.stop()}finally{running=false}
+    }
     private fun statusDir(context:Context)=
         File(context.filesDir,"torrent-jobs").apply{mkdirs()}
     private fun validJob(id:String)=id.matches(Regex("[a-f0-9]{24}"))
@@ -265,6 +274,11 @@ class TorrentTransferService : Service() {
                 workers.remove(id)
                 inFlight.remove(id)
                 if(inFlight.isEmpty() && metadataWorkers.isEmpty()){
+                    // Native libtorrent's alerts loop otherwise survives
+                    // stopped Service instances and may keep the phone busy.
+                    runCatching{TorrentTransfers.stopSessionWhenIdle()}
+                        .onFailure{android.util.Log.e("AsterionTorrent",
+                            "Native session shutdown failed",it)}
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
@@ -333,6 +347,9 @@ class TorrentTransferService : Service() {
                     TorrentSafetyGate.finished(applicationContext)
                     metadataWorkers.remove(Thread.currentThread())
                     if(metadataWorkers.isEmpty() && inFlight.isEmpty()){
+                        runCatching{TorrentTransfers.stopSessionWhenIdle()}
+                            .onFailure{android.util.Log.e("AsterionTorrent",
+                                "Native session shutdown failed",it)}
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }
