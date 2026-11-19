@@ -94,6 +94,51 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                       val retryAfter:Long)
     data class Summary(val pending:Int,val active:Int,
                        val verified:Int,val failed:Int)
+
+    /** Safe display metadata: signed origin URLs never appear in UI. */
+    data class Display(val id:String,val category:String,val filename:String,
+                       val state:String,val error:String?,val updatedAt:Long)
+    fun recent(limit:Int=100):List<Display>{
+        val found=ArrayList<Display>()
+        readableDatabase.rawQuery(
+            "SELECT id,category,filename,state,last_error,updated_at "+
+                "FROM remote_originals WHERE state!='CANCELLED' "+
+                "ORDER BY updated_at DESC LIMIT ?",
+            arrayOf(limit.coerceIn(1,300).toString())).use{c->
+            while(c.moveToNext())found.add(Display(c.getString(0),
+                c.getString(1),c.getString(2),c.getString(3),
+                c.getString(4),c.getLong(5)))
+        }
+        return found
+    }
+    /** Claim remains unique across all modules before any TeraBox import. */
+    fun pauseQueued(id:String):Boolean =
+        writableDatabase.update("remote_originals",
+            ContentValues().apply{
+                put("state","PAUSED");put("updated_at",System.currentTimeMillis())
+            },"id=? AND state='QUEUED'",arrayOf(id))>0
+    fun resume(id:String):Boolean =
+        writableDatabase.update("remote_originals",
+            ContentValues().apply{
+                put("state","QUEUED");put("retry_after",0L)
+                putNull("last_error");put("updated_at",System.currentTimeMillis())
+            },"id=? AND state IN ('PAUSED','ERROR')",arrayOf(id))>0
+    /** Already SUBMITTED remote tasks cannot honestly be cancelled here.
+     * Cancelling local queue rows would only hide ongoing cloud work.
+     */
+    fun cancelUnsubmitted(id:String):Boolean =
+        writableDatabase.update("remote_originals",
+            ContentValues().apply{
+                put("state","CANCELLED");put("updated_at",System.currentTimeMillis())
+            },"id=? AND state IN ('QUEUED','PAUSED','ERROR')",
+            arrayOf(id))>0
+    fun nextDueDelayMs(now:Long=System.currentTimeMillis()):Long? =
+        readableDatabase.rawQuery(
+            "SELECT MIN(retry_after) FROM remote_originals "+
+                "WHERE state IN ('QUEUED','SUBMITTED')",null).use{c->
+            if(!c.moveToFirst()||c.isNull(0))null
+            else (c.getLong(0)-now).coerceAtLeast(1000L)
+        }
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE remote_originals(
             id TEXT PRIMARY KEY,
@@ -129,7 +174,9 @@ internal class TeraBoxRemoteQueue(ctx:Context):
         // URL-based reservation occurs *before* the backend downloads bytes,
         // even when two modules request the same original simultaneously.
         val id=TeraBoxRemoteOriginals.identity(url)
-        val name=TeraBoxRemoteOriginals.safeName(url,explicitName)
+        // Remote TeraBox chooses the source filename; an unrelated article
+        // title cannot rename the remote task's output or verify its receipt.
+        val name=TeraBoxRemoteOriginals.safeName(url)
         val encrypted=DirectRetryVault.protect(url)
         val destination=NduSettings.destination(ctx,category)+"/"+id.take(12)
         val row=ContentValues().apply{
@@ -138,8 +185,18 @@ internal class TeraBoxRemoteQueue(ctx:Context):
             put("state","QUEUED");put("created_at",System.currentTimeMillis())
             put("updated_at",System.currentTimeMillis())
         }
-        return writableDatabase.insertWithOnConflict("remote_originals",
+        val inserted=writableDatabase.insertWithOnConflict("remote_originals",
             null,row,SQLiteDatabase.CONFLICT_IGNORE)>0
+        if(!inserted){
+            // Explicitly re-selecting a cancelled original reuses its
+            // canonical reservation. Never duplicate an in-flight task.
+            writableDatabase.update("remote_originals",
+                ContentValues().apply{
+                    put("state","QUEUED");put("retry_after",0L)
+                    put("updated_at",System.currentTimeMillis())
+                },"id=? AND state='CANCELLED'",arrayOf(id))
+        }
+        return inserted
     }
     fun summary():Summary{
         val found=HashMap<String,Int>()
