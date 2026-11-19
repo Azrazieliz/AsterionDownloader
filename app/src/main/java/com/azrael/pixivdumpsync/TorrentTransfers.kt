@@ -46,6 +46,68 @@ object TorrentTransfers {
         require(validJob(id)){"Invalid torrent job id"}
         return File(statusDir(context),"$id.status")
     }
+    private fun metricsFile(context:Context,id:String):File {
+        require(validJob(id)){"Invalid torrent job id"}
+        return File(statusDir(context),"$id.metrics")
+    }
+    data class Snapshot(val id:String,val text:String,val stage:String,
+        val verifiedBytes:Long=0L,val wantedBytes:Long=0L,
+        val speedBytesPerSec:Long=0L,val peers:Int=0,val updated:Long=0L)
+    /** Cross-process authoritative original bytes from the native torrent
+     * engine. Never treat torrent metadata or unchecked partial pieces as
+     * verified saved media; this file is an observation only.
+     */
+    internal fun recordMetrics(c:Context,id:String,verified:Long,
+        wanted:Long,rate:Long,peers:Int) {
+        val file=metricsFile(c,id)
+        val atomic=android.util.AtomicFile(file)
+        val out=atomic.startWrite()
+        try{
+            out.write(listOf(System.currentTimeMillis(),
+                verified.coerceAtLeast(0L),wanted.coerceAtLeast(0L),
+                rate.coerceAtLeast(0L),peers.coerceAtLeast(0)
+            ).joinToString("|").toByteArray(Charsets.UTF_8))
+            atomic.finishWrite(out)
+        }catch(t:Throwable){atomic.failWrite(out);throw t}
+    }
+    /** Read ONLY existing isolated torrent ledger; do not create/launch
+     * another native torrent engine from the main Android process.
+     */
+    fun snapshots(c:Context,limit:Int=100):List<Snapshot> {
+        val prefs=c.getSharedPreferences("torrent_transfers",Context.MODE_PRIVATE)
+        val ids=(prefs.all.keys.asSequence()
+            .filter{it.startsWith("job_")}.map{it.removePrefix("job_")}
+            .filter(::validJob).toList()+
+            statusDir(c).listFiles().orEmpty().asSequence()
+                .filter{it.isFile && it.name.endsWith(".status")}
+                .map{it.name.removeSuffix(".status")}.filter(::validJob)
+                .toList()).distinct().take(limit.coerceIn(1,200))
+        return ids.map{id->
+            val value=status(c,id,prefs)
+            val values=runCatching{
+                val file=metricsFile(c,id)
+                if(!file.isFile)return@runCatching emptyList<Long>()
+                String(android.util.AtomicFile(file).readFully(),
+                    Charsets.UTF_8).split('|').mapNotNull{it.toLongOrNull()}
+            }.getOrDefault(emptyList())
+            val updated=values.getOrNull(0)?:0L
+            val age=System.currentTimeMillis()-updated
+            val raw=value.lowercase(java.util.Locale.ROOT)
+            val stage=when{
+                "quarantin" in raw || "security review" in raw->"QUARANTINED"
+                "failed:" in raw || "stalled:" in raw->"FAILED"
+                "pause" in raw->"PAUSED"
+                "verify" in raw || "review" in raw->"VERIFYING"
+                updated>0L && age in 0..15_000L &&
+                    (values.getOrNull(3)?:0L)>0L->"TRANSFERRING"
+                updated>0L && age in 0..15_000L->"WAITING_PEERS"
+                else->"QUEUED"
+            }
+            Snapshot(id,value,stage,values.getOrNull(1)?:0L,
+                values.getOrNull(2)?:0L,values.getOrNull(3)?:0L,
+                values.getOrNull(4)?.toInt()?:0,updated)
+        }
+    }
     /** SharedPreferences is cached per Android process and is NOT a reliable
      * interprocess progress ledger. A small atomic status file is shared
      * across the main UI and isolated libtorrent engine processes.
@@ -401,6 +463,9 @@ class TorrentTransferService : Service() {
                     "Connected to $connected peers ($seeds seeders, $leechers leechers) "+
                     "but no verified piece advanced for seven minutes; "+
                     "torrent stalled; partials quarantined")
+            TorrentTransfers.recordMetrics(this,id,checkedBytes,wantedBytes,
+                status.downloadPayloadRate().toLong().coerceAtLeast(0L),
+                connected)
             val percent = (currentProgress * 100).toInt().coerceIn(0, 100)
             val speed=status.downloadPayloadRate().coerceAtLeast(0)/1024
             val detail=TorrentPeerDiagnostics.describe(
