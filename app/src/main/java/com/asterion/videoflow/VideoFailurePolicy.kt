@@ -8,6 +8,10 @@ internal object VideoFailurePolicy {
     fun classify(reason:String):Kind {
         val text=reason.lowercase(Locale.ROOT)
         return when {
+            // Public HTTPS publisher host unexpectedly pointed at loopback:
+            // fail as route/DNS failure rather than spending a Python retry.
+            Regex("""(?:failed to connect to|connectexception).{0,180}/(?:127\.0\.0\.1|0\.0\.0\.0):443""")
+                .containsMatchIn(text)->Kind.DNS
             Regex("""(?:no address associated with hostname|unknownhostexception|name or service not known|dns lookup failed|unable to resolve host|temporary failure in name resolution)""")
                 .containsMatchIn(text)->Kind.DNS
             Regex("""(?:\b401\b|\b403\b|forbidden|unauthorized|login required|sign in|authentication required|access denied|captcha|verify you are human|browser verification required|website verification page|site verification|authorized browser session|short preview clips|still exits in france|requires a real remote exit|active android vpn required|selected public exit country could not be verified)""").containsMatchIn(text)->Kind.AUTH
