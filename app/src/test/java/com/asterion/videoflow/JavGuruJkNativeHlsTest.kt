@@ -99,4 +99,68 @@ class JavGuruJkNativeHlsTest {
                 encrypted.copyOf(encrypted.size-1),key,iv)
         }
     }
+
+    @Test fun signedQueryRotationCannotMixDifferentSelectedOriginals() {
+        val variant="https://s4.maxstream.org/selected/720p.m3u8?sig=firstParty"
+        val body=vod()
+        val plan=JavGuruJkNativeHls.selectedPlan(variant,body)
+        val durations=body.lines().map{it.trim()}.filter{it.startsWith("#EXTINF:")}
+        val key=ByteArray(16){(it+1).toByte()}
+        fun fingerprint(
+            selected:String=article,
+            playlist:String=master,
+            mediaPlan:JavGuruJkNativeHls.Plan=plan,
+            mediaKey:ByteArray=key
+        )=JavGuruJkNativeHls.stageFingerprint(
+            selected,playlist,embed,variant,mediaPlan,mediaKey,durations)
+        val original=fingerprint()
+        assertEquals(original,fingerprint(
+            playlist=master.replace("firstParty","renewedSignature")))
+        assertNotEquals(original,fingerprint(
+            selected="https://jav.guru/1234568/other-selected-original/"))
+        assertNotEquals(original,fingerprint(
+            mediaPlan=plan.copy(mediaSequence=plan.mediaSequence+1)))
+        assertNotEquals(original,fingerprint(
+            mediaKey=ByteArray(16){(it+2).toByte()}))
+        assertNotEquals(original,fingerprint(
+            mediaPlan=plan.copy(segments=plan.segments.mapIndexed{index,uri->
+                if(index==2)uri.replace("segment-2.ts","new-segment-2.ts") else uri
+            })))
+    }
+
+    @Test fun interruptedSelectedHlsFragmentsRequireAnExactSavedChecksum(){
+        val dir=java.nio.file.Files.createTempDirectory("jk-source-fixture").toFile()
+        try {
+            val file=java.io.File(dir,"fragment-0000.ts")
+            val bytes=ByteArray(188*8){index->
+                if(index%188==0)0x47.toByte() else 0x10.toByte()
+            }
+            file.writeBytes(bytes)
+            assertFalse(JavGuruJkNativeHls.reusableFragment(file))
+            val digest=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes).joinToString(""){"%02x".format(it.toInt() and 0xff)}
+            val receipt=java.io.File(dir,file.name+".sha256")
+            receipt.writeText(digest)
+            assertTrue(JavGuruJkNativeHls.reusableFragment(file))
+            file.writeBytes(bytes.copyOf().apply{this[17]=0x55})
+            assertFalse(JavGuruJkNativeHls.reusableFragment(file))
+            file.writeBytes(bytes)
+            assertTrue(JavGuruJkNativeHls.reusableFragment(file))
+            receipt.writeText("bad-receipt")
+            assertFalse(JavGuruJkNativeHls.reusableFragment(file))
+        } finally {
+            dir.listFiles()?.forEach{it.delete()}
+            dir.delete()
+        }
+    }
+
+    @Test fun nativeSelectedHlsPercentageMeasuresCompletedSegmentsOnly(){
+        assertEquals(0,JavGuruJkNativeHls.fragmentPercent(0,751))
+        assertEquals(44,JavGuruJkNativeHls.fragmentPercent(375,751))
+        assertEquals(90,JavGuruJkNativeHls.fragmentPercent(751,751))
+        assertThrows(IllegalArgumentException::class.java) {
+            JavGuruJkNativeHls.fragmentPercent(752,751)
+        }
+    }
+
 }
