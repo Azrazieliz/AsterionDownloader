@@ -48,9 +48,9 @@ class OnlyHentaiKvsOriginalSourceTest {
     }
     @Test fun rejectsAmbiguousMultiplePlayers(){
         val one=rendered()
-        val duplicate=one.replace("</div></div></main>",
-            "<video src='https://media.example.org/another.mp4'></video>"+
-                "</div></div></main>")
+        val duplicate=one.replace(
+            "</video>",
+            "</video><video src='https://media.example.org/another.mp4'></video>")
         assertNull(OnlyHentaiKvsOriginalSource.rendered(selected,duplicate))
     }
 }
