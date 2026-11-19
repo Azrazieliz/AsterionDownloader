@@ -35,6 +35,20 @@ class DownloadLiveRateTest {
             .rateBytesPerSecond)
     }
 
+    @Test fun etaRequiresKnownRemainingBytesAndFreshMeasuredRate() {
+        assertEquals(15L,DownloadLiveRate.etaSeconds(
+            5_000_000L,8_000_000L,200_000L))
+        assertEquals("15s",DownloadLiveRate.etaLabel(15L))
+        assertEquals("2m 5s",DownloadLiveRate.etaLabel(125L))
+        assertEquals("1h 1m",DownloadLiveRate.etaLabel(3660L))
+        assertNull(DownloadLiveRate.etaSeconds(0L,8_000_000L,200_000L))
+        assertNull(DownloadLiveRate.etaSeconds(5_000_000L,-1L,200_000L))
+        assertNull(DownloadLiveRate.etaSeconds(5_000_000L,8_000_000L,null))
+        assertNull(DownloadLiveRate.etaSeconds(5_000_000L,8_000_000L,0L))
+        assertNull(DownloadLiveRate.etaSeconds(8_000_000L,8_000_000L,200_000L))
+        assertNull(DownloadLiveRate.etaSeconds(8_000_001L,8_000_000L,200_000L))
+    }
+
     @Test fun boundedMeasurementResetsAfterLongSuspension() {
         val old=DownloadLiveRate.Sample(1000L,1000L)
         val fresh=DownloadLiveRate.measure(old,5_000_000L,60_000L)
