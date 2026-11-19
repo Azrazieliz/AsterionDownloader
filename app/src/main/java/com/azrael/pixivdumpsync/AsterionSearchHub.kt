@@ -175,12 +175,22 @@ object AsterionSearchHub {
                             CatalogDiscovery.safeFilename(hit.title,"epub")
                         })
                     else->{
-                        val added=VideoDb(a).use{it.addVideo(hit.url,hit.title)}
-                        if(added)VideoEngine.launch(a,false)
-                        Toast.makeText(a,
-                            if(added)"Queued in Downloads" else
-                                "Already in Downloads · check its status",
-                            Toast.LENGTH_LONG).show()
+                        // A HentaiHaven /watch/<series> landing page is NOT
+                        // a file. Show its publisher's actual episode list,
+                        // rather than queuing a doomed series HTML response.
+                        if(com.asterion.videoflow.HentaiHavenEpisodeSource
+                                .isSeries(hit.url)){
+                            SelectedVideoRouter.request(a,hit.url,hit.title,"HENTAI")
+                        }else{
+                            val added=VideoDb(a).use{
+                                it.addVideo(hit.url,hit.title,origin="user")
+                            }
+                            if(added)VideoEngine.launch(a,false)
+                            Toast.makeText(a,
+                                if(added)"Resolving selected original in Downloads"
+                                else "Already in Downloads · check its status",
+                                Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
