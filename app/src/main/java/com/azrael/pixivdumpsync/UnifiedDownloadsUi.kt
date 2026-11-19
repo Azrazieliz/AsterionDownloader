@@ -531,6 +531,75 @@ object UnifiedDownloadsUi {
             }
         }.thenByDescending{it.updated})
     }
+    /**
+     * Full database counters are deliberately distinct from the bounded
+     * "recent jobs" detail slice. A device with 750 failures cannot display
+     * 70 as though 70 were the total. Keep the SQLite reads off the UI
+     * thread. Older heterogeneous providers without a reliable total remain
+     * visibly labelled "recent", not silently overcounted.
+     */
+    private data class Totals(val saved:Int=0,val failed:Int=0,
+                              val queued:Int=0,val active:Int=0,
+                              val paused:Int=0) {
+        operator fun plus(other:Totals)=Totals(
+            saved+other.saved,failed+other.failed,
+            queued+other.queued,active+other.active,paused+other.paused)
+    }
+    private fun exactModuleTotals(a:Activity):Map<String,Totals>{
+        val counts=LinkedHashMap<String,Totals>()
+        fun aggregate(count:Map<String,Int>, saved:Set<String>,
+                      failed:Set<String>,queued:Set<String>,
+                      active:Set<String>,paused:Set<String>):Totals=
+            Totals(saved.sumOf{count[it]?:0},failed.sumOf{count[it]?:0},
+                queued.sumOf{count[it]?:0},active.sumOf{count[it]?:0},
+                paused.sumOf{count[it]?:0})
+        fun query(db:android.database.sqlite.SQLiteDatabase,table:String,
+                  column:String):Map<String,Int>{
+            val items=LinkedHashMap<String,Int>()
+            db.rawQuery("SELECT "+column+",COUNT(*) FROM "+table+
+                " GROUP BY "+column,null).use{c->
+                while(c.moveToNext())items[c.getString(0).orEmpty()]=c.getInt(1)
+            }
+            return items
+        }
+        VideoDb(a).use{db->
+            val found=query(db.readableDatabase,"videos","state")
+            counts["Video"]=aggregate(found,
+                setOf("done"),setOf("error","full_only_hold"),
+                setOf("queued","retry_wait"),setOf("running"),setOf("paused"))
+        }
+        XPhotoQueue(a).use{db->
+            counts["X"]=aggregate(db.counts(),setOf("done"),
+                setOf("error"),setOf("queued","retry_wait"),
+                setOf("running"),setOf("paused"))
+        }
+        ChapterQueue(a).use{db->
+            val found=query(db.readableDatabase,"tasks","state")
+            counts["Comic ZIP"]=aggregate(found,setOf("done"),
+                setOf("error"),setOf("queued","retry"),
+                setOf("working"),setOf("paused"))
+        }
+        NovelEpubQueue(a).use{db->
+            val byType=LinkedHashMap<String,MutableMap<String,Int>>()
+            db.readableDatabase.rawQuery(
+                "SELECT url,state FROM novels",null).use{c->
+                while(c.moveToNext()){
+                    val kind=if(NovelEpubParser.readableZipSeries(
+                        c.getString(0)))"Novel ZIP" else "EPUB"
+                    val state=c.getString(1).orEmpty()
+                    val values=byType.getOrPut(kind){LinkedHashMap()}
+                    values[state]=(values[state]?:0)+1
+                }
+            }
+            for((kind,values) in byType){
+                counts[kind]=aggregate(values,setOf("DONE"),
+                    setOf("ERROR","WAIT_LOGIN"),setOf("PENDING","RETRY"),
+                    setOf("WORKING"),setOf("PAUSED"))
+            }
+        }
+        return counts
+    }
+
     /** Refresh the Downloads content in place. The Activity, its global
      * navigation, scroll view and the existing cards remain alive while the
      * database is read. A refresh must never restart transfers or remove the
@@ -550,17 +619,22 @@ object UnifiedDownloadsUi {
             kotlin.concurrent.thread(name="asterion-downloads-read"){
                 // A visual refresh is read-only: it must not reconcile or
                 // restart queue agents merely because a user taps Refresh.
-                val result=runCatching{collect(a)}
+                val result=runCatching{
+                    val rows=collect(a)
+                    Triple(rows,exactModuleTotals(a),
+                        NduCloudQueue(a).use{it.status()})
+                }
                 a.runOnUiThread{
                     inFlight.set(false)
                     if(a.isFinishing || a.isDestroyed || surface.parent!==parent)
                         return@runOnUiThread
-                    result.onSuccess{rows->
+                    result.onSuccess{snapshot->
+                        val(rows,totals,cloud)=snapshot
                         recoverIdleQueues(a,rows)
                         val next=LinearLayout(a).apply{
                             orientation=LinearLayout.VERTICAL
                         }
-                        show(a,next,reload,rows)
+                        show(a,next,reload,rows,totals,cloud)
                         // Replace only this module's view, in the same frame.
                         // This avoids blanking the whole Activity/scroller.
                         surface.removeAllViews()
@@ -613,7 +687,9 @@ object UnifiedDownloadsUi {
      * Item controls are available only after opening their own module.
      * Saved originals are excluded from bulk cancellation.
      */
-    private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,rows:List<Row>){
+    private fun show(a:Activity,parent:LinearLayout,refresh:()->Unit,
+                     rows:List<Row>,exact:Map<String,Totals>,
+                     cloud:NduCloudQueue.Status){
         val prefs=a.getSharedPreferences("asterion_downloads_ui",0)
         val expanded=prefs.getString("module",null)
         val groups=rows.groupBy{it.source}.entries.sortedWith(
@@ -623,14 +699,23 @@ object UnifiedDownloadsUi {
                 it.value.count{row->row.state==State.FAILED ||
                     row.state==State.HELD}
             }.thenBy{it.key.lowercase()})
-        val saved=rows.count{it.state==State.DONE}
-        val failed=rows.count{it.state in setOf(State.FAILED,State.HELD)}
-        val queued=rows.count{it.state==State.QUEUED}
-        val active=rows.count{it.state==State.ACTIVE}
+        val selected=groups.map{(module,items)->
+            exact[module]?:Totals(
+                saved=items.count{it.state==State.DONE},
+                failed=items.count{it.state in setOf(State.FAILED,State.HELD)},
+                queued=items.count{it.state==State.QUEUED},
+                active=items.count{it.state==State.ACTIVE},
+                paused=items.count{it.state==State.PAUSED})
+        }.fold(Totals()){acc,next->acc+next}
         parent.addView(ui.text(a,"Downloads",23f,ui.white,true),ui.lp(a,10))
         parent.addView(ui.text(a,
-            "$saved saved · $failed failing / needs action · $queued queued · "+
-                "$active transferring",12f,ui.secondary),ui.lp(a,6))
+            "${selected.saved} saved · ${selected.failed} failed / needs action · "+
+                "${selected.queued} queued · ${selected.active} active",
+            12f,ui.secondary),ui.lp(a,6))
+        parent.addView(ui.text(a,
+            "TeraBox: ${cloud.completed} remotely verified · "+
+                "${cloud.pending} awaiting cloud proof",
+            12f,ui.secondary),ui.lp(a,4))
         if(!AppPower.enabled(a))parent.addView(
             ui.action(a,"RESUME TRANSFERS",true){
                 AppPower.set(a,true);refresh()
@@ -642,17 +727,24 @@ object UnifiedDownloadsUi {
         }
         for((source,items) in groups){
             val opened=source==expanded
-            val savedCount=items.count{it.state==State.DONE}
-            val failingCount=items.count{it.state==State.FAILED ||
-                it.state==State.HELD}
-            val queuedCount=items.count{it.state==State.QUEUED}
-            val activeCount=items.count{it.state==State.ACTIVE}
-            val pausedCount=items.count{it.state==State.PAUSED}
+            val totals=exact[source]?:Totals(
+                saved=items.count{it.state==State.DONE},
+                failed=items.count{it.state==State.FAILED ||
+                    it.state==State.HELD},
+                queued=items.count{it.state==State.QUEUED},
+                active=items.count{it.state==State.ACTIVE},
+                paused=items.count{it.state==State.PAUSED})
+            val savedCount=totals.saved
+            val failingCount=totals.failed
+            val queuedCount=totals.queued
+            val activeCount=totals.active
+            val pausedCount=totals.paused
             val card=ui.card(a,10)
             val line=ui.row(a)
             val summary=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             summary.addView(ui.text(a,source,16f,ui.white,true))
             summary.addView(ui.text(a,
+                (if(source in exact)"" else "Recent: ")+
                 "$savedCount saved · $failingCount failed · $queuedCount queued"+
                     (if(activeCount>0)" · $activeCount active" else "")+
                     (if(pausedCount>0)" · $pausedCount paused" else ""),
