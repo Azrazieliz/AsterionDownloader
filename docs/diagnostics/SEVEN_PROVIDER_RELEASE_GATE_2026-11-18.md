@@ -1,6 +1,34 @@
 # Seven-provider final-build gate — 18 November 2026
 
 
+## 19 November continuation — exact-site reachability, in-place JAVIDEO probe and interactive MP4Hentai recovery
+
+**Strict gate remains 4/7 full same-selected PC original files.** The current repairs were source-tested, not Android-file-accepted. No signed final APK was built, published, installed or transferred. Do not weaken the owner-approved single-final-build gate.
+
+### Actual owner Windows/phone network evidence
+- Normal read-only Control PC command `dl-final3-netroutes-pc-20261119-0826-gpt6-a01` ended `status=complete`, `ok=true`, `exit_code=0`: `voe.sx` DNS A present but TCP443 false, `rapidgator.net` DNS A present but TCP443 false. `frdl.hk`, `play.javideo.net` and `javideo.net` TCP443 true; HTTP HEAD on `play.javideo.net/` returned ordinary 404, not evidence against the exact selected iframe. This establishes owner **PC** network status only, not a global outage.
+- Read-only Control receipts `dl-final3-phone-net-20261119-0826-gpt6-a02` and `dl-final3-phone-bridge-20261119-0826-gpt6-a03` show the Samsung SM-S948B Android 17 paired/reachable, existing authenticated native bridge connected, ordinary Wi-Fi active, screen capture disabled. No phone website/video, app installation, VPN route or PC remote-exit access was thereby verified.
+
+### JAVIDEO: corrected player frame inspection, source still empty
+- Added `scripts/inspect_javideo_inplace_frame_cdp.py`, obtaining the exact first-party selected `play.javideo.net/embed/<opaque>` through a bounded genuine Chromium Play gesture in the owner-selected article, then using `Page.getFrameTree` and `Page.createIsolatedWorld` to read the **actual in-place selected iframe**, not an independent top-level navigation. Prior tests incorrectly treated `0 OOPIF targets` as if the iframe did not exist.
+- First run `dl-final3-javideo-inplace-frame-pc-20261119-0826-gpt6-a04` did not get the selected iframe before the publisher Play handler; a corrected bounded genuine reactivation `a05` found exactly one first-party frame and confirmed its document referrer was `javideo.net`, but inspected it during loading. Corrected DOM-ready follow-up `a07` found one selected first-party iframe with `ready=interactive`, one video element, `videoReady=0`, `videoNetwork=0`, **no source**, no duration, no video error. Exit 4, full-file **NOT** verified. Do not claim an Android parser repair has generated media; require the publisher player to publish the selected original.
+
+### MP4Hentai: selected file-hoster human verification now actionable in app
+- Earlier same-file official Mirrored.to hoster fallback and Rapidgator filename normalization remain preserved. The actual owner PC Rapidgator alternative is blocked at TCP443; the reachable `frdl.hk` official FREE POST still yields real interactive CAPTCHA. Neither is a whole-file pass.
+- Source commits `6d5c559`, `a135a60`, `a8caa1b`, `4429dbf`, `ed889a5` implement a **selected-item-only** recovery route: failed video rows containing CAPTCHA now open the exact selected MP4Hentai publisher post in the existing `SiteLoginActivity`, rather than retrying blindly. The user follows the publisher's actual Mirror into a bounded valid official file host, completes the host's own ordinary interactive verification and taps SAVE CONNECTION. The app checks current HTTPS host/path, rejects unrelated/ad or suspicious path and visible CAPTCHA pages, saves only that host's own authorized WebView session, then retries exactly the already-tracked selected VideoDb ID (not other items). Downstream same-file and full-media checks are unchanged; no challenges solved automatically.
+- Exact Windows source and regression receipt `dl-final3-user-session-source-tests-20261119-0826-gpt6-a08` tested pinned source SHA **`ed889a544ae627e1f6aaa2697adabc53b78980ed`** via `:app:verifyFrozenVideoProviders :app:testAcceptanceUnitTest`. Final `status=complete`, `ok=true`, exit **0**, **BUILD SUCCESSFUL in 1m44s**, 24 actionable Gradle tasks (6 executed, 18 up to date). Only nonfatal existing Android back-navigation deprecated-override warning observed. No APK assembly and no Android end-to-end CAPTCHA/media transfer.
+- This is meaningful code recovery, but the site still requires a real owner-human verification or an actually reachable publisher-attested same-file host before a complete selected original can be counted.
+
+### HelloPorn: external access gate retained
+- Only one exact selected VOE player exists in the owner-selected first-party HelloPorn article; previous inventory of article HTML found no matching alternate playable original. The PC direct VOE socket is refused; no app code can generate a missing media file from an unreachable, exact selected player. Existing per-site authorized network route support remains available if the owner supplies a legitimate reachable route; no new tunnel, guessed alias, unrelated site copy or hidden network mutation is implemented.
+
+### Continuation conditions
+1. Reinspect **only actual publisher-verified selected sources** through available authorized network and browser access. MP4Hentai human-completed host verification can now be resumed as a single selected app queue job once the final app reaches Android, but cannot be claimed verified from source tests.
+2. Re-run strict whole-file proof for the three remaining original files: actual transferred bytes, valid FFprobe video+audio and full duration, independent SHA and same publisher-selected identity.
+3. Only after seven genuine PC passes, frozen-provider/JVM regression, correct retained package identity/signature, create exactly ONE owner-signed APK and transfer it with existing Asterion Control. Preserve Kuroha data, other frozen providers and original queue. Status must distinguish implementation, compilation, real PC originals and Android verification.
+
+
+
 ## LATEST CONTINUATION — selected Mirror multi-hoster workaround, no substituted media
 
 **Actual seven-provider PC complete-file gate remains 4/7; final APK remains forbidden.**
