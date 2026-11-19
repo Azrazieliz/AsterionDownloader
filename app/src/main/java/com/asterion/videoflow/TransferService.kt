@@ -696,6 +696,9 @@ object VideoEngine {
                             if(verifiedBytes>0L)
                                 VideoTransferJournal.record(context,item.id,
                                     "receiving",verifiedBytes.toString())
+                            if(percent>=90)
+                                VideoTransferJournal.record(context,item.id,
+                                    "verifying","Assembling selected HLS original")
                             status(percent)
                         },
                         cancelled={
