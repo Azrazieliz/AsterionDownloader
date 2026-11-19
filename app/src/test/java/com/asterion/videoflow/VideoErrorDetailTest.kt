@@ -37,6 +37,22 @@ class VideoErrorDetailTest {
             VideoFailurePolicy.classify(message))
     }
 
+    @Test fun helloPornLoopbackDnsIsNotMisreportedAsPythonOrGenericError(){
+        val error=java.net.ConnectException(
+            "Failed to connect to voe.sx/127.0.0.1:443")
+        val detail=VideoErrorDetail.summary(error)
+        assertTrue(detail.contains("network route",true))
+        assertTrue(detail.contains("DNS",true))
+        assertFalse(detail.contains("Python extractor",true))
+        assertEquals(VideoFailurePolicy.Kind.DNS,
+            VideoFailurePolicy.classify(detail))
+        assertEquals(VideoFailurePolicy.Kind.DNS,
+            VideoFailurePolicy.classify(
+                "helloporn.com: Failed to connect to voe.sx/127.0.0.1:443"))
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,
+            VideoFailurePolicy.classify("Python extractor: Unsupported URL"))
+    }
+
     @Test fun rateLimitingIsNotMisreportedAsAnAccountProblem(){
         val msg=VideoErrorDetail.summary(
             IllegalStateException("HTTP Error 429: Too Many Requests"))
