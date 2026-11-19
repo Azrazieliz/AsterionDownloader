@@ -91,6 +91,34 @@ internal object NetworkRoute {
             .apply{mkdirs()}
         return java.io.File(directory,digest+".json")
     }
+    /** Preserve the publisher's configured route for third-party players,
+     * but honor an independently configured HTTP/SOCKS/VPN route of the
+     * EXACT selected player/CDN. An unconfigured child defaults to direct;
+     * that default must NEVER silently bypass the publisher's proxy.
+     * No DNS bypass, invented exit or new proxy is ever installed.
+     */
+    internal fun selectedRouteSite(
+        publisher:String,selected:String,selectedMode:String?
+    ):String {
+        val owner=siteKey(publisher)
+        val source=siteKey(selected)
+        return if(owner.isNotBlank() && source.isNotBlank() &&
+            owner!=source && selectedMode in setOf("http","socks5","vpn"))
+            selected else publisher
+    }
+    fun javaProxyForSelected(
+        context:Context?,publisher:String,selected:String
+    ):Proxy? {
+        val mode=configured(context,selected)?.mode
+        return javaProxy(context,selectedRouteSite(publisher,selected,mode))
+    }
+    fun extractorProxyForSelected(
+        context:Context?,publisher:String,selected:String
+    ):String? {
+        val mode=configured(context,selected)?.mode
+        return extractorProxy(context,selectedRouteSite(publisher,selected,mode))
+    }
+
     fun javaProxy(context:Context?,url:String):Proxy? {
         val r=configured(context,url)?:return null
         if(r.mode=="vpn"){
