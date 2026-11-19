@@ -184,10 +184,10 @@ class XFollowingImportActivity:Activity(){
                 }
             }
             Toast.makeText(this,
-                "Saved "+discovered.size+" verified accounts ("+totalNew+" new).",
+                "Saving "+discovered.size+" verified accounts ("+totalNew+
+                    " new); finishing after pending records are committed.",
                 Toast.LENGTH_LONG).show()
-            setResult(RESULT_OK)
-            finish()
+            finishAfterVerifiedWrites()
         }
         layout.addView(importButton,ui.lp(this,8))
         layout.addView(ui.action(this,"PAUSE / RESUME AUTOMATIC IMPORT",false){
@@ -202,6 +202,24 @@ class XFollowingImportActivity:Activity(){
         setContentView(layout)
         browser.loadUrl("https://x.com/home")
     }
+    /** Do not return from X before serial imports already queued in the
+     * same worker have finished writing their durable subscription records.
+     * This avoids a "513 saved" toast before some rows reached SQLite. */
+    private fun finishAfterVerifiedWrites(){
+        scanning=false
+        handler.removeCallbacks(scanner)
+        importButton.text="SAVING VERIFIED FOLLOWING…"
+        importButton.isEnabled=false
+        importWorker.execute{
+            runOnUiThread{
+                if(!isFinishing && !isDestroyed){
+                    setResult(RESULT_OK)
+                    finish()
+                }
+            }
+        }
+    }
+
     private data class FollowingScan(
         val users:List<String>,val position:Int,val extent:Int,
         val loggedInProfileHref:String,val declaredFollowingCount:Int?
