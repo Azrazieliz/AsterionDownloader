@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONObject
 import java.io.InputStream
+import java.io.ByteArrayOutputStream
 
 /** Read-only confirmed inventory bridge. Does not interpret filenames.
  * Rounder may export this JSON structure without exposing cloud credentials:
@@ -16,6 +17,23 @@ import java.io.InputStream
  * No unverified or ambiguous entry can suppress an actual download.
  */
 object RounderInventoryIndex {
+    /** Reject oversized or hostile snapshots before allocating their full
+     * body. InputStream.readBytes() read unbounded data first and only then
+     * checked 16 MiB, risking OOM on a 12GB shared-device workload. */
+    internal fun boundedSnapshot(stream:InputStream):ByteArray=stream.use{input->
+        val output=ByteArrayOutputStream()
+        val chunk=ByteArray(64*1024)
+        while(true){
+            val n=input.read(chunk)
+            if(n<0)break
+            if(n==0)continue
+            require(output.size().toLong()+n<=16_000_000L){
+                "Rounder inventory exceeds 16 MiB"
+            }
+            output.write(chunk,0,n)
+        }
+        output.toByteArray()
+    }
     private class Db(ctx:Context):
         SQLiteOpenHelper(ctx,"asterion_rounder_inventory.sqlite",null,1){
         override fun onCreate(db:SQLiteDatabase){
@@ -44,8 +62,8 @@ object RounderInventoryIndex {
         }
     }
     fun importSnapshot(ctx:Context,stream:InputStream):Int{
-        val bytes=stream.use{it.readBytes()}
-        require(bytes.size in 2..16_000_000){"Invalid or oversized inventory"}
+        val bytes=boundedSnapshot(stream)
+        require(bytes.size>=2){"Invalid or empty inventory"}
         val root=JSONObject(String(bytes,Charsets.UTF_8))
         require(root.optString("source")=="asterion-rounder" &&
             root.optInt("version")==1){"Expected Rounder inventory v1"}
