@@ -126,12 +126,15 @@ object AsterionAdultHub {
         renderContents(a,first,area,repaint)
         surface.addView(first)
 
-        // Indexed cards can be updated by external foreground/background
-        // workers which never call this Activity's refresh callback. Observe
-        // lightweight source/cached-cover revisions while VISIBLE; do not
-        // rescan the network and do not reconstruct the whole Activity.
+        // SourceIndexDb and KyoraCreatorPreviews now notify a shared
+        // cross-process URI after durable source/poster cache commits.
+        // Listen for those events continuously; only the affected adult
+        // section is repainted. Periodic reconciliation is a safety net,
+        // not the primary content update mechanism.
         val generation=java.util.concurrent.atomic.AtomicLong()
-        fun fingerprint():Int {
+        val listening=java.util.concurrent.atomic.AtomicBoolean()
+        val scheduled=java.util.concurrent.atomic.AtomicBoolean()
+        fun fingerprint():Int{
             val sources=SourceIndexDb(a).use{db->
                 db.sources().filter{it.area==area}.map{
                     listOf(it.url,it.lastCheck.toString(),
@@ -146,30 +149,54 @@ object AsterionAdultHub {
             return (sources+covers).hashCode()
         }
         var observed=runCatching{fingerprint()}.getOrNull()
-        fun observe(token:Long){
-            if(token!=generation.get() || a.isFinishing || a.isDestroyed ||
-                surface.parent!==parent || !surface.isAttachedToWindow)return
+        val pump=Runnable{
+            scheduled.set(false)
+            if(a.isFinishing || a.isDestroyed || surface.parent!==parent ||
+                !surface.isAttachedToWindow)return@Runnable
             val latest=runCatching{fingerprint()}.getOrNull()
-            if(latest!=null && observed!=null && latest!=observed){
+            if(latest!=null && latest!=observed){
                 observed=latest
                 repaint()
             }else if(latest!=null)observed=latest
-            surface.postDelayed({observe(token)},5_000L)
+        }
+        val observer=object:android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())){
+            override fun onChange(selfChange:Boolean){
+                if(surface.parent===parent && surface.isAttachedToWindow &&
+                    scheduled.compareAndSet(false,true))
+                    surface.postDelayed(pump,300L)
+            }
+        }
+        fun reconcile(token:Long){
+            if(token!=generation.get() || a.isFinishing || a.isDestroyed ||
+                surface.parent!==parent || !surface.isAttachedToWindow)return
+            pump.run()
+            surface.postDelayed({reconcile(token)},20_000L)
         }
         fun arm(){
+            if(!listening.compareAndSet(false,true))return
+            runCatching {
+                a.contentResolver.registerContentObserver(
+                    DownloadStateSignals.uri(a),false,observer)
+            }.onFailure{listening.set(false)}
             val token=generation.incrementAndGet()
-            surface.postDelayed({observe(token)},5_000L)
+            surface.postDelayed({reconcile(token)},20_000L)
+        }
+        fun disarm(){
+            generation.incrementAndGet()
+            scheduled.set(false)
+            surface.removeCallbacks(pump)
+            if(listening.getAndSet(false))runCatching {
+                a.contentResolver.unregisterContentObserver(observer)
+            }
         }
         surface.addOnAttachStateChangeListener(
             object:View.OnAttachStateChangeListener{
                 override fun onViewAttachedToWindow(v:View){arm()}
-                override fun onViewDetachedFromWindow(v:View){
-                    generation.incrementAndGet()
-                }
+                override fun onViewDetachedFromWindow(v:View){disarm()}
             })
         surface.post{
-            if(generation.get()==0L && surface.isAttachedToWindow &&
-                surface.parent===parent)arm()
+            if(surface.isAttachedToWindow && surface.parent===parent)arm()
         }
     }
 
