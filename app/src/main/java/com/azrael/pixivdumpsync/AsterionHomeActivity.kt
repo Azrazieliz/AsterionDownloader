@@ -233,7 +233,7 @@ class AsterionHomeActivity:Activity(){
         }.getOrNull()?.takeIf{it.isNotBlank()}
             ?:source.lastPathSegment.orEmpty()
 
-    private val pages=listOf("Home","Search","Queue")
+    private val pages=listOf("Home","Add","Search","Queue","Recommend")
     private val navButtons=linkedMapOf<String,TextView>()
     private val navIcons=linkedMapOf<String,ImageView>()
     private val navSurfaces=linkedMapOf<String,LinearLayout>()
@@ -284,7 +284,7 @@ class AsterionHomeActivity:Activity(){
         window.navigationBarColor=theme.background
         val requested=intent?.getStringExtra("asterion_page")
         page=requested?.takeIf{it in setOf(
-            "Home","Pixiv","Site","Porn","Hentai","Sources","Queue","Settings")}
+            "Home","Add","Search","Recommend","Pixiv","Site","Porn","Hentai","Sources","Queue","Settings")}
             ?:getSharedPreferences("asterion_display",MODE_PRIVATE)
                 .getString("start_page","Home").orEmpty().takeIf{it in pages} ?: "Home"
         root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(theme.background)}
@@ -346,12 +346,14 @@ class AsterionHomeActivity:Activity(){
         }
         pages.forEach{tab->
             val title=when(tab){
-                "Home"->"Home";"Search"->"Search"
-                else->"Downloads"
+                "Add"->"Add";"Recommend"->"For You"
+                "Queue"->"Downloads";else->tab
             }
             val resource=when(tab){
                 "Home"->R.drawable.ic_nav_home
+                "Add"->R.drawable.ic_nav_add
                 "Search"->R.drawable.ic_nav_search
+                "Recommend"->R.drawable.ic_nav_suggest
                 else->R.drawable.ic_nav_downloads
             }
             val item=LinearLayout(this).apply{
@@ -438,7 +440,7 @@ class AsterionHomeActivity:Activity(){
         super.onNewIntent(next)
         setIntent(next)
         val requested=next.getStringExtra("asterion_page")
-        if(requested in setOf("Home","Pixiv","Site","Porn","Hentai",
+        if(requested in setOf("Home","Add","Search","Recommend","Pixiv","Site","Porn","Hentai",
                 "Sources","Queue","Settings")){
             history.clear()
             page=requested!!
@@ -508,6 +510,7 @@ class AsterionHomeActivity:Activity(){
         pageContext.text=when(page){
             "Queue"->"Downloads"
             "Add"->"Add source"
+            "Recommend"->"For You"
             "CreatorDiscovery"->"Creators"
             "Site"->"Cosplay"
             else->page
@@ -543,6 +546,7 @@ class AsterionHomeActivity:Activity(){
         }
         when(page){
             "Home"->renderHome()
+            "Add"->renderAdd()
             "Pixiv"->AsterionAccountPanels.pixiv(this,body){render()}
             "X"->AsterionUnifiedFollowing.x(this,body){render()}
             "Site"->AsterionCosplayGallery.render(this,body){render()}
@@ -1263,10 +1267,11 @@ class AsterionHomeActivity:Activity(){
         appearanceSwitch("Larger preview covers","large_covers",false)
         val start=appearance.getString("start_page","Home").orEmpty()
         put(visual,button("START PAGE: "+when(start){
-            "Queue"->"Downloads";"Search"->"Search";else->"Home"
+            "Queue"->"Downloads";"Recommend"->"For You"
+            "Add"->"Add";"Search"->"Search";else->"Home"
         }){
-            val choices=arrayOf("Home","Search","Downloads")
-            val keys=arrayOf("Home","Search","Queue")
+            val choices=arrayOf("Home","Add","Search","Downloads","For You")
+            val keys=arrayOf("Home","Add","Search","Queue","Recommend")
             AlertDialog.Builder(this).setTitle("Open Asterion on")
                 .setSingleChoiceItems(choices,keys.indexOf(start).coerceAtLeast(0)){dialog,index->
                     appearance.edit().putString("start_page",keys[index]).apply()
