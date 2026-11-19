@@ -37,7 +37,10 @@ class SecondaryLightNativeOriginalTest {
             selected,direct))
         assertTrue(NativeMediaDownloader.isNativeEligible(
             selected,direct,true))
-        assertFalse(NativeMediaDownloader.isNativeEligible(
+        // This publisher's /get_file/...mp4/ URL is also recognized
+        // by the existing native media-extension matcher. The identity
+        // check above must still bind it to the *selected* video ID.
+        assertTrue(NativeMediaDownloader.isNativeEligible(
             selected,direct,false))
         assertFalse(SecondaryLightNativeOriginal.verifiedFirstPartyMp4(
             selected,direct.replace("93823084_2160m","93823083_2160m")))
