@@ -243,6 +243,16 @@ object ResourceDownloads {
             }else note(a,"Video already queued, held or saved in VideoFlow")
             return
         }
+        if(NduSettings.cloudOnly(a)){
+            runCatching{
+                CloudOriginalRouting.enqueue(a,url,folder,filename)
+            }.onSuccess{
+                note(a,"Original queued directly to TeraBox; remote proof pending")
+            }.onFailure{
+                note(a,"TeraBox original not queued: "+it.message.orEmpty().take(130))
+            }
+            return
+        }
         if(!CrossSourceDedup(a).use{it.reserve(url)}){
             note(a,"This exact original is already queued or recorded · Downloads")
             return
