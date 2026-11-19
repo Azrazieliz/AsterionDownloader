@@ -28,6 +28,7 @@ class SelectedPlayerWaitPolicyTest {
             "chosen.mp4?verify=token'></video></html>"))
         assertEquals(9,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com"))
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("javideo.net"))
+        assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("play.javideo.net"))
     }
     @Test fun workingRule34VideoKeepsItsExistingFastPath(){
         assertEquals(6,SelectedPlayerWaitPolicy.maxPolls("rule34video.com"))
