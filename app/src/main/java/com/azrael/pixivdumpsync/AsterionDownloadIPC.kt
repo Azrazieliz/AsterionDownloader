@@ -45,7 +45,7 @@ object AsterionDownloadIPC {
 data class InterAppRequest(val id:String,val url:String,val category:String,
     val name:String,val sender:String,val attempts:Int)
 class InterAppDownloadDb(context:Context):
-    SQLiteOpenHelper(context,"asterion_interapp_downloads.sqlite",null,3){
+    SQLiteOpenHelper(context,"asterion_interapp_downloads.sqlite",null,4){
     override fun onCreate(db:SQLiteDatabase){
         db.execSQL("""CREATE TABLE requests(
             id TEXT PRIMARY KEY,secret TEXT NOT NULL,
@@ -53,17 +53,38 @@ class InterAppDownloadDb(context:Context):
             state TEXT NOT NULL DEFAULT 'PENDING',attempts INTEGER NOT NULL DEFAULT 0,
             retry_after INTEGER NOT NULL DEFAULT 0,last_update INTEGER NOT NULL,
             message TEXT,download_id INTEGER NOT NULL DEFAULT 0,
-            video_transfer_secret TEXT)""")
+            video_transfer_secret TEXT,cloud_original_id TEXT)""")
     }
     override fun onUpgrade(db:SQLiteDatabase,a:Int,b:Int){
         if(a<2)db.execSQL(
             "ALTER TABLE requests ADD COLUMN download_id INTEGER NOT NULL DEFAULT 0")
         if(a<3)db.execSQL(
             "ALTER TABLE requests ADD COLUMN video_transfer_secret TEXT")
+        if(a<4)db.execSQL(
+            "ALTER TABLE requests ADD COLUMN cloud_original_id TEXT")
     }
     fun attachTransfer(id:String,downloadId:Long){
         val cv=ContentValues().apply{put("download_id",downloadId)}
         writableDatabase.update("requests",cv,"id=? AND state IN ('PENDING','RETRY')",arrayOf(id))
+    }
+    fun attachCloud(id:String,originalId:String){
+        require(originalId.matches(Regex("[0-9a-f]{64}")))
+        writableDatabase.update("requests",ContentValues().apply{
+            put("cloud_original_id",originalId)
+        },"id=? AND state IN ('PENDING','RETRY')",arrayOf(id))
+    }
+    data class CloudTransfer(val requestId:String,val originalId:String,
+                             val sender:String)
+    fun inFlightCloud(limit:Int=500):List<CloudTransfer>{
+        val results=ArrayList<CloudTransfer>()
+        readableDatabase.rawQuery(
+            "SELECT id,cloud_original_id,sender FROM requests WHERE "+
+                "state='QUEUED' AND cloud_original_id IS NOT NULL LIMIT ?",
+            arrayOf(limit.coerceIn(1,1000).toString())).use{c->
+            while(c.moveToNext())results+=CloudTransfer(
+                c.getString(0),c.getString(1),c.getString(2))
+        }
+        return results
     }
     fun attachVideo(id:String,url:String){
         val cv=ContentValues().apply{
@@ -127,6 +148,7 @@ class InterAppDownloadDb(context:Context):
                 remove("id")
                 put("attempts",0);put("retry_after",0);put("download_id",0)
                 putNull("message");putNull("video_transfer_secret")
+                putNull("cloud_original_id")
             }
             db.update("requests",retry,
                 "id=? AND state IN ('NEEDS_AUTH','ERROR','WAITING_APPROVAL')",
