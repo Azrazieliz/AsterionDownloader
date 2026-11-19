@@ -833,7 +833,12 @@ object UnifiedDownloadsUi {
                 saved=count("SELECT COUNT(*) FROM pages WHERE saved=1"),
                 failed=count("SELECT COUNT(*) FROM works "+
                     "WHERE state IN ('ERROR','FAILED')"),
-                queued=count("SELECT COUNT(*) FROM pages WHERE saved=0"),
+                // Unsaved Pixiv pages are inventory, NOT queued transfers.
+                // Only the existing SyncEngine owns acquisition; it has no
+                // independently persisted per-page queue to count as jobs.
+                // Reporting pages.saved=0 as "queued" fabricated thousands of
+                // stuck downloads when sync was idle or disabled.
+                queued=0,
                 active=if(sync.running && !sync.paused &&
                     sync.mode!=SyncMode.CLOUD)1 else 0,
                 paused=if(sync.running && sync.paused)1 else 0)
