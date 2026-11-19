@@ -115,47 +115,54 @@ internal object TorrentMetadataBridge {
             }
     }
     fun prepareDescriptor(a:Activity,bytes:ByteArray,folder:String) {
-        val safety=TorrentSafetyGate.assess(a)
-        if(!safety.allowed){
-            AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
-                .setMessage(safety.reason)
-                .setPositiveButton("Close",null).show()
-            return
-        }
-        runCatching{
-            require(bytes.size in 33..8_388_608){"Invalid torrent descriptor size"}
+        // Descriptor inspection is ordinary bounded bencode parsing and
+        // must not start libtorrent/JNI. A previous device-wide crash during
+        // a native request cannot prevent safe local file-tree inspection.
+        runCatching {
+            require(folder in setOf("Games","Books","Videos","Assets")){
+                "Unknown torrent destination"
+            }
             val hash=id(bytes)
-            // Reuse the verified immutable descriptor/manifest instead of
-            // launching JNI peer metadata work for every repeated FILES tap.
             val manifest=File(root(a),"$hash.manifest.json")
             if(manifest.isFile){
                 showPreparedFiles(a,hash,folder)
                 return
             }
-            val request="descriptor:"+hash
-            if(!claimRequest(request,android.os.SystemClock.elapsedRealtime())){
-                Toast.makeText(a,"Already preparing this file list",
-                    Toast.LENGTH_SHORT).show()
-                return
+            val inspected=BencodedTorrentManifest.parse(bytes)
+            val names=inspected.files.map{it.path}
+            if(folder=="Games")require(GameTorrentPolicy.hasGamePayload(names)){
+                "This torrent contains no identifiable game files"
             }
-            try{
-                File(root(a),"$hash.torrent").writeBytes(bytes)
-                a.startForegroundService(
-                    Intent(a,TorrentTransferService::class.java).apply{
-                        action=TorrentTransferService.PREPARE_DESCRIPTOR
-                        putExtra("job",hash)
-                        putExtra("folder",folder)
-                        putExtra(RECEIVER,callback(a,folder,request))
+            val payload=JSONObject().apply{
+                put("id",hash)
+                put("name",inspected.name)
+                put("files",JSONArray().apply{
+                    for(file in inspected.files)put(JSONObject().apply{
+                        put("path",file.path)
+                        put("size",file.size)
                     })
-                Toast.makeText(a,"Checking selected torrent files",
-                    Toast.LENGTH_LONG).show()
-            }catch(e:Exception){
-                releaseRequest(request)
-                throw e
+                })
+            }.toString()
+            // AtomicFile is used for both descriptor and manifest so an
+            // interrupted write never exposes a half-valid file list.
+            fun writeAtomic(file:File,source:ByteArray){
+                val atomic=android.util.AtomicFile(file)
+                val output=atomic.startWrite()
+                try{
+                    output.write(source)
+                    atomic.finishWrite(output)
+                }catch(t:Throwable){
+                    atomic.failWrite(output)
+                    throw t
+                }
             }
+            writeAtomic(File(root(a),"$hash.torrent"),bytes)
+            writeAtomic(manifest,payload.toByteArray(Charsets.UTF_8))
+            showPreparedFiles(a,hash,folder)
         }.onFailure{
-            AlertDialog.Builder(a).setTitle("Torrent metadata error")
-                .setMessage(it.message).setPositiveButton("Close",null).show()
+            AlertDialog.Builder(a).setTitle("Torrent file-list error")
+                .setMessage(it.message?:"Unable to inspect selected torrent")
+                .setPositiveButton("Close",null).show()
         }
     }
     /** Runs only inside TorrentTransferService's :torrent process. */
