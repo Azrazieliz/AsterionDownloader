@@ -80,6 +80,7 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         val officialArchives=linkedSetOf<String>()
         var next: String? = url
         var title: String? = null
+        var declaredAlbumPhotos: Int? = null
         var tags: List<String> = emptyList()
         var creator: String? = null
         var publishedAt: String? = gallery.publishedAt
@@ -91,6 +92,15 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             if (title == null) {
                 title = doc.selectFirst("h1")?.text()?.takeIf(String::isNotBlank)
                     ?: doc.title().ifBlank { gallery.title }
+                if(SelectedAlbumScope.owns(url)){
+                    // Publisher-selected OG description is article metadata,
+                    // unlike related-card counts and pagination sidebars.
+                    val description=doc.selectFirst(
+                        "meta[property=og:description],meta[name=description]"
+                    )?.attr("content").orEmpty()
+                    declaredAlbumPhotos=SelectedAlbumScope.advertisedCount(
+                        gallery.title,title.orEmpty(),description)
+                }
                 tags = extractTags(doc)
                 creator=doc.selectFirst(
                     "meta[name=author],meta[property=article:author]")?.attr("content")
@@ -135,7 +145,10 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                     ?:AlbumImageExtractor.directImages(doc)
             }
             for (image in originals) {
-                inlineImages.putIfAbsent(image.url, image)
+                val key=if(SelectedAlbumScope.owns(url))
+                    SelectedAlbumScope.originalIdentity(image.url)
+                    else image.url
+                inlineImages.putIfAbsent(key,image)
             }
             next = nextListingPage(doc, current, visitedAlbumPages)
         }
@@ -194,8 +207,9 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         }
         if(SelectedAlbumScope.owns(url))
             SelectedAlbumScope.verifyAdvertisedCount(
-                SelectedAlbumScope.advertisedCount(gallery.title,title.orEmpty(),
-                    gallery.canonicalUrl),images.size)
+                declaredAlbumPhotos ?: SelectedAlbumScope.advertisedCount(
+                    gallery.title,title.orEmpty(),gallery.canonicalUrl),
+                images.size)
         val meta = GalleryMeta(source, gallery.stableId, gallery.entityStableId, url,
             title ?: gallery.title, tags, publishedAt, visitedAlbumPages.toList() +
                 photoLinks.toList(),creator)
