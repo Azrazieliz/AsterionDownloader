@@ -165,7 +165,14 @@ object UnifiedDownloadsUi {
                 val retired=ProviderRetirement.isRetired(item.url)
                 val verifySelectedHoster=
                     com.asterion.videoflow.NetworkRoute.siteKey(item.url)=="mp4hentai.com" &&
-                    item.error.orEmpty().contains("CAPTCHA",ignoreCase=true)
+                    item.error.orEmpty().let{reason->
+                        reason.contains("CAPTCHA",ignoreCase=true) ||
+                        reason.contains("host did not expose a verified download",
+                            ignoreCase=true) ||
+                        reason.contains("interactive verification",
+                            ignoreCase=true) ||
+                        reason.contains("file hoster",ignoreCase=true)
+                    }
                 val info=when(state){
                     State.DONE->"Video · Saved on device"
                     State.FAILED->"Video · "+(item.error?:"Saved file is missing")
