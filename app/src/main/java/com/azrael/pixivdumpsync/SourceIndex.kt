@@ -1506,6 +1506,38 @@ object SourceIndex {
             return false
         }
         if(!SourceIndexParser.autoOriginal(item))return false
+        if(NduSettings.cloudOnly(context)){
+            // The owner explicitly requires direct cloud acquisition; no
+            // Android DownloadManager fallback or hidden local file saves.
+            // Only already-resolved, publicly fetchable HTTPS original
+            // candidates can be handed to TeraBox's remote-import backend.
+            // A private/opaque source remains unqueued until a verified
+            // cloud-capable original is available.
+            if(!NduSettings.configured(context) ||
+                !TeraBoxRemoteOriginals.verifiedPublicFileLink(item.url))
+                return false
+            val destination=when(item.area){
+                "ADULT","HENTAI","VIDEOS"->"videos"
+                "COSPLAY"->"kyora"
+                "ARTWORK","PIXIV","X","REFERENCE"->"images"
+                "COMICS"->"comics";"BOOKS"->"books"
+                "GAMES","MODS"->"games"
+                "CREATORS"->"creators"
+                "ASSETS","STUDIO","MMD","LIVE2D","ANIMATION"->"assets"
+                "VOICE"->"originals"
+                else->"originals"
+            }
+            val explicit=item.title.takeIf{title->
+                title.matches(Regex("""(?i)[^/\\\\]{1,150}\\.(?:mp4|mkv|webm|mov|png|jpg|jpeg|gif|webp|avif|zip|epub|cbz|7z|rar|pdf|apk|blend|fbx|obj|glb|gltf|pmx|pmd|vmd|vrm|mp3|flac|m4a|wav)"""))
+            }
+            TeraBoxRemoteQueue(context).use{queue->
+                queue.enqueue(context,item.url,destination,explicit)
+            }
+            // A prior identical reservation is success: duplicates must
+            // not open a second remote task or leave source-index stuck.
+            NduCloudScheduler.requestImmediate(context)
+            return true
+        }
         if(item.area=="COMICS" && (NhentaiChapters.isGallery(item.url) ||
             MangaDexChapters.isSeries(item.url))){
             ChapterQueue(context).use{it.enqueue(item.url,item.title)}
