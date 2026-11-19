@@ -1519,7 +1519,8 @@ object SourceIndex {
             val destination=when(item.area){
                 "ADULT","HENTAI","VIDEOS"->"videos"
                 "COSPLAY"->"kyora"
-                "ARTWORK","PIXIV","X","REFERENCE"->"images"
+                "PIXIV"->"kuroha";"X"->"x"
+                "ARTWORK","REFERENCE"->"images"
                 "COMICS"->"comics";"BOOKS"->"books"
                 "GAMES","MODS"->"games"
                 "CREATORS"->"creators"
