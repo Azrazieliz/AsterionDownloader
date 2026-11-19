@@ -255,20 +255,58 @@ object AsterionDownloadWorker {
                 val byId=jobs.groupBy{it.downloadId}
                 val query=DownloadManager.Query()
                     .setFilterById(*jobs.map{it.downloadId}.toLongArray())
+                // A successful OS HTTP job can contain an HTML login page,
+                // truncated archive or mismatched file. An inter-app
+                // COMPLETED receipt must match the same on-device original
+                // validation required by the standalone Download Center.
+                val knownFiles=DirectDownloadTracker.states(context,250)
+                    .associateBy{it.job.id}
                 dm.query(query)?.use{cursor->
                     val idColumn=cursor.getColumnIndex(DownloadManager.COLUMN_ID)
                     val statusColumn=cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val nameColumn=cursor.getColumnIndex(DownloadManager.COLUMN_TITLE)
+                    val totalColumn=cursor.getColumnIndex(
+                        DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
                     if(idColumn>=0 && statusColumn>=0)while(cursor.moveToNext()){
-                        val requests=byId[cursor.getLong(idColumn)].orEmpty()
-                        val result=when(cursor.getInt(statusColumn)){
-                            DownloadManager.STATUS_SUCCESSFUL->"COMPLETED"
-                            DownloadManager.STATUS_FAILED->"ERROR"
-                            else->null
-                        }?:continue
+                        val transferId=cursor.getLong(idColumn)
+                        val requests=byId[transferId].orEmpty()
+                        if(requests.isEmpty())continue
+                        val systemStatus=cursor.getInt(statusColumn)
+                        if(systemStatus !in setOf(
+                                DownloadManager.STATUS_SUCCESSFUL,
+                                DownloadManager.STATUS_FAILED))continue
+                        val oldReceipt=OriginalReceiptState.get(context,transferId)
+                        val selectedName=knownFiles[transferId]?.job?.filename
+                            ?.takeIf{it.isNotBlank()}
+                            ?:if(nameColumn>=0)cursor.getString(nameColumn)
+                                .orEmpty().takeIf{it.isNotBlank()} else null
+                        val expectedBytes=if(totalColumn>=0)
+                            cursor.getLong(totalColumn) else -1L
+                        val check=if(systemStatus==DownloadManager.STATUS_SUCCESSFUL &&
+                            selectedName!=null && oldReceipt !in setOf(
+                                "INVALID","DISMISSED","STALLED"))
+                            OriginalFileReceipt.verify(context,dm,transferId,
+                                selectedName,expectedBytes)
+                        else null
+                        val result=InterAppOriginalCompletionPolicy.resolve(
+                            systemStatus,oldReceipt,check?.valid)
+                        if(result==null)continue
+                        if(systemStatus==DownloadManager.STATUS_SUCCESSFUL &&
+                            result=="COMPLETED"){
+                            OriginalReceiptState.set(context,transferId,"VERIFIED")
+                            CrossSourceDedup(context).use{
+                                it.completeById(transferId)
+                            }
+                        }else if(systemStatus==DownloadManager.STATUS_SUCCESSFUL){
+                            OriginalReceiptState.set(context,transferId,"INVALID")
+                        }
                         for(job in requests){
                             db.status(job.requestId,result,
-                                if(result=="COMPLETED")"Local original downloaded" else
-                                    "DownloadManager reported a failed transfer")
+                                if(result=="COMPLETED")
+                                    "Saved original verified on this device"
+                                else if(systemStatus==DownloadManager.STATUS_FAILED)
+                                    "DownloadManager reported a failed transfer"
+                                else "Original failed format, size or receipt verification")
                             report(context,job.requestId,job.sender,result)
                         }
                     }
