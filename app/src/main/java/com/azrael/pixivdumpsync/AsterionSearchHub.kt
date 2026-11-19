@@ -69,10 +69,24 @@ object AsterionSearchHub {
         }
         val errors=ArrayList<String>();val items=ArrayList<RankedHit>()
         var checked=0
-        for(area in areas){
-            runCatching{KeywordSources.searchDetailed(ctx,term,area)}
-                .onSuccess{items+=it.hits;errors+=it.failures;checked+=it.checked}
-                .onFailure{errors+=area.name+": "+it.message}
+        val workers=java.util.concurrent.Executors.newFixedThreadPool(areas.size)
+        try{
+            val requests=areas.map{area->
+                area to workers.submit<SearchOutcome>{
+                    KeywordSources.searchDetailed(ctx,term,area)
+                }
+            }
+            // The All tab is concurrent across PORN and HENTAI categories;
+            // one blocked source category no longer delays the other one.
+            for((area,future) in requests){
+                runCatching{
+                    future.get(35L,java.util.concurrent.TimeUnit.SECONDS)
+                }.onSuccess{items+=it.hits;errors+=it.failures;checked+=it.checked}
+                    .onFailure{errors+=area.name+": "+
+                        (it.cause?.message?:it.message?:"Search timed out")}
+            }
+        }finally{
+            workers.shutdownNow()
         }
         val ranked=SearchRanking.deduplicate(term,items).map{
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
@@ -90,7 +104,9 @@ object AsterionSearchHub {
     fun render(a:Activity,p:LinearLayout,refresh:()->Unit,
                addSource:()->Unit={}){
         p.addView(ui.text(a,"Search",23f,ui.white,true),ui.lp(a,14))
-        p.addView(ui.text(a,"Find original media across connected sites.",
+        p.addView(ui.text(a,
+            "Searches multiple independent web sources. Unavailable sources "+
+                "are reported; a single provider is never the entire web.",
             12f,ui.secondary),ui.lp(a,4))
 
         val prefs=preferences(a)
@@ -132,9 +148,25 @@ object AsterionSearchHub {
                     })
                 }
             }
-            val filtered=found.filter{chosen=="ALL" || it.source==chosen}
-                .filter{!IndexedMediaQuality.navigationTitle(it.title)}
-                .take(75)
+            val matching=found.filter{
+                (chosen=="ALL" || it.source==chosen) &&
+                    !IndexedMediaQuality.navigationTitle(it.title)
+            }
+            // Mixed discovery is not a single website's gallery.
+            // Round-robin actual independent publishers and keep original
+            // provider identity. Never invent a result to fill empty sites.
+            val bySource=matching.groupBy{it.source}.values.map{it.iterator()}
+            val filtered=ArrayList<Found>()
+            while(filtered.size<75){
+                var advanced=false
+                for(cursor in bySource){
+                    if(cursor.hasNext() && filtered.size<75){
+                        filtered+=cursor.next()
+                        advanced=true
+                    }
+                }
+                if(!advanced)break
+            }
             fun saveHit(hit:Found){
                 when(selected){
                     3->ResourceDownloads.route(a,hit.url,"Games")
@@ -196,7 +228,10 @@ object AsterionSearchHub {
             }
             // No fake globe/card thumbnails: clearly identify unpreviewed
             // candidates as text-only results with a separate file action.
-            val showTextOnly=prefs.getBoolean("show_text_results_"+selected,false)
+            // Unpreviewed genuine publisher links are useful results too.
+            // Previously they were hidden by default, leaving the impression
+            // that every result came from the one site with thumbnail URLs.
+            val showTextOnly=prefs.getBoolean("show_text_results_"+selected,true)
             if(withoutPreviews.isNotEmpty()){
                 results.addView(ui.action(a,
                     if(showTextOnly)"HIDE UNPREVIEWED RESULTS" else
@@ -271,9 +306,11 @@ object AsterionSearchHub {
                         if(selected!=selectedAtStart)return@onSuccess
                         draw(reply.results)
                         status.text=reply.results.size.toString()+" results · "+
-                            reply.searched+" providers"+
+                            reply.searched+" checked sources"+
                             if(reply.errors.isEmpty())"" else
-                                " · "+reply.errors.size+" provider errors"
+                                "\nUnavailable sources ("+reply.errors.size+"): "+
+                                    reply.errors.take(3).joinToString("; ")
+                                        .take(350)
                     }.onFailure{status.text=it.message?:"Search failed"}
                 }
             }
