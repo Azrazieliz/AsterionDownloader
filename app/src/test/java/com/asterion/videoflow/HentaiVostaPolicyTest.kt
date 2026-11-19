@@ -4,28 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HentaiVostaPolicyTest {
-    @Test fun allAudioSelectionsRequireExplicitJapaneseOriginalLanguage(){
+    @Test fun japaneseAudioPreferredButSoleSourceAudioIsNotForbidden(){
         val options=HentaiVostaPolicy.selectedAudioFormat.split('/')
-        assertEquals(4,options.size)
-        assertTrue(options.all{
-            it.contains("+ba[language=ja]") ||
-            it.contains("+ba[language=jpn]")
-        })
-        assertFalse(options.any{
-            it.contains("ba[language=en]") ||
-            it.endsWith("+ba") || it=="b"
-        })
+        assertTrue(options[0].contains("+ba[language=ja]"))
+        assertTrue(options[1].contains("+ba[language=jpn]"))
+        assertTrue(options.any{it.endsWith("+ba")})
         assertEquals("en",HentaiVostaPolicy.englishSubtitleLanguage)
     }
 
-    @Test fun observedEnglishOnlyAudioIsNotAClaimOfVosta(){
-        val available=setOf("audio-English")
-        val required=setOf("ja","jpn")
-        assertFalse(available.any{item->
-            required.any{lang->item.equals("audio-"+lang,ignoreCase=true)}
-        })
-        // The publisher's current only audio label is English,
-        // though the actual spoken language remains unverified.
-        // A label is never enough to claim Japanese-original voices.
+    @Test fun observedOnlyPublisherAudioLabelDoesNotClaimEnglishDub(){
+        val manifestAudioTracks=listOf("audio-English")
+        assertEquals(1,manifestAudioTracks.size)
+        // The label cannot establish whether the dialogue is English or
+        // Japanese; it must not make the only real original undownloadable.
+        assertTrue(HentaiVostaPolicy.selectedAudioFormat.contains("+ba"))
     }
 }
