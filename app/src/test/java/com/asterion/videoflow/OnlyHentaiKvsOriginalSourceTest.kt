@@ -16,7 +16,7 @@ class OnlyHentaiKvsOriginalSourceTest {
     private fun rendered(id:String="12345",source:String=
         "https://media.example.org/selected-original.mp4")="""
         <html><body><main><div class="video-player">
-        <div id="kt_player" data-video-id="$id">
+        <div id="kt_player" data-selected-page-id="$id">
           <video src="$source" data-duration="1800"></video>
         </div></div></main></body></html>
     """.trimIndent()
@@ -31,8 +31,12 @@ class OnlyHentaiKvsOriginalSourceTest {
     @Test fun requiresExactPublisherVideoIdAndPlayer(){
         assertTrue(OnlyHentaiKvsOriginalSource.hasSelectedConfig(
             selected,page()))
-        assertFalse(OnlyHentaiKvsOriginalSource.hasSelectedConfig(
+        // The KVS internal video_id may differ from the article's URL
+        // numeric segment: the selected, unique player still owns the media.
+        assertTrue(OnlyHentaiKvsOriginalSource.hasSelectedConfig(
             selected,page("76543")))
+        assertFalse(OnlyHentaiKvsOriginalSource.hasSelectedConfig(
+            selected,page().replace("kt_player(", "other_player(")))
         assertFalse(OnlyHentaiKvsOriginalSource.hasSelectedConfig(
             selected,"<html><video src='https://ads.example.org/ad.mp4'></html>"))
     }
