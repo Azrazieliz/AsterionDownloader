@@ -258,6 +258,7 @@ object KyoraCreatorPreviews {
                 })
             }
             a.getSharedPreferences(PREF,0).edit().putString(url,obj.toString()).apply()
+            DownloadStateSignals.changed(a)
             inflight.remove(url)
             deliver(a,snapshot,onReady)
         }
