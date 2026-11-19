@@ -404,10 +404,13 @@ internal object JavGuruJkNativeHls {
                     throw IOException("Selected JK fragment checksum/ledger inconsistent")
                 total+=size
                 completedFragments++
-                if(completedFragments%8==0 ||
-                    completedFragments==plan.segments.size)
-                    progress(fragmentPercent(completedFragments,plan.segments.size),total,
-                        completedFragments,plan.segments.size)
+                // A fragment is published only after its SHA sidecar was
+                // verified. Emit each completed-fragment delta; the existing
+                // cross-process UI observer coalesces bursts at 240ms. The
+                // older every-eight-fragments gate concealed real transfers
+                // (and speed) for long periods on slower connections.
+                progress(fragmentPercent(completedFragments,plan.segments.size),total,
+                    completedFragments,plan.segments.size)
             }
             checkCancel()
             if(total<30_000_000L)
