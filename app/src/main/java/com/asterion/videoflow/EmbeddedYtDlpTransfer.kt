@@ -98,7 +98,20 @@ internal object EmbeddedYtDlpTransfer {
         try{
             val urls=builtins.callAttr("list")
             urls.callAttr("append",url)
-            val result=ydl.callAttr("download",urls)
+            val result=try {
+                ydl.callAttr("download",urls)
+            }catch(error:Exception){
+                if(havenEpisodeHls && Regex(
+                        """(?i)requested format is not available|requested format not available"""
+                    ).containsMatchIn(error.toString()))
+                    throw IOException(
+                        "VOSTA required: selected episode has no compatible "+
+                        "publisher-declared Japanese original-audio rendition. "+
+                        "English-labelled audio is not an automatic fallback; "+
+                        "keep this video on hold for verified original audio.",
+                        error)
+                throw error
+            }
             return result?.toString()?.toIntOrNull()
                 ?:throw IOException("Video extractor returned no exit status")
         }finally{
