@@ -694,10 +694,10 @@ internal object SiteSpecificOriginalSources {
             val status=raw?.statusCode()
             if(hostFailure!=null || status !in 200..299){
                 val reason=when(status){
-                    401,403->"VOE player requires its own authorized session"
-                    429->"VOE player rate-limited this network"
-                    in 500..599->"VOE player is temporarily unavailable"
-                    else->"Selected VOE player is unreachable from this "+
+                    401,403->"Authentication required: VOE player requires its own authorized session"
+                    429->"HTTP 429 rate limit from the selected VOE host"
+                    in 500..599->"Temporary HTTP "+status+" from selected VOE host"
+                    else->"Network unreachable: selected VOE host cannot be accessed from this "+
                         "configured Android network route"
                 }
                 throw java.io.IOException(
@@ -705,7 +705,7 @@ internal object SiteSpecificOriginalSources {
                     ". No original bytes transferred.",hostFailure)
             }
             throw java.io.IOException(
-                "HelloPorn selected VOE player loaded but did not publish "+
+                "HelloPorn selected VOE player metadata unavailable: it did not publish "+
                 "one attributable original. The iframe page is not media.")
         }
         return originals.values.toList().takeIf{it.size==1}.orEmpty()
