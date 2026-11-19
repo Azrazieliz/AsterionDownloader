@@ -412,15 +412,16 @@ internal object SiteSpecificOriginalSources {
             }.getOrDefault(emptyList())
         }
         val found=LinkedHashMap<String,Source>()
-        // The owner's MXGS-1452 post publishes VO, SB, DD and JK.
-        // Previous take(3) *never even attempted* its final, stable JK
-        // original. Preserve LU preference when available, then try JK
-        // before unstable SB/other hosters; stay bounded to six official
-        // same-post STREAM controls. No unrelated result fallback.
+        // The owner's MXGS-1452 selected original completed on PC
+        // through the JK/Maxstream first-party source (751/751 fragments),
+        // while LU/SB first attempts on Android consumed the signed-source
+        // window or failed with HTTP 403. Prefer that verified JK contract
+        // before other buttons published by the SAME selected article.
+        // Unavailable JK falls through to LU/SB/VO/DD without substitution.
         val order=streams.sortedBy { stream ->
             when(stream.server) {
-                "LU" -> 0
-                "JK" -> 1
+                "JK" -> 0
+                "LU" -> 1
                 else -> 2
             }
         }
