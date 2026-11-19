@@ -758,20 +758,32 @@ object UnifiedDownloadsUi {
             }
         }
         reload()
-        // In-place polling tracks actual SQLite/MediaStore state; no user
-        // "Refresh" press is required, and leaving Downloads stops it.
-        fun poll(){
-            if(a.isFinishing||a.isDestroyed||surface.parent!==parent ||
-                !surface.isAttachedToWindow)return
+        // A child inserted into an already-attached Activity can receive
+        // onViewAttachedToWindow BEFORE the listener is registered. Always
+        // arm an initial tick after insertion. A generation token prevents
+        // duplicate polling on detach/reattach and stops offscreen work.
+        val pollGeneration=java.util.concurrent.atomic.AtomicLong(0L)
+        fun poll(token:Long){
+            if(token!=pollGeneration.get() || a.isFinishing || a.isDestroyed ||
+                surface.parent!==parent || !surface.isAttachedToWindow)return
             reload()
-            surface.postDelayed({poll()},VISIBLE_REFRESH_MS)
+            surface.postDelayed({poll(token)},VISIBLE_REFRESH_MS)
+        }
+        fun armPoll(){
+            val token=pollGeneration.incrementAndGet()
+            surface.postDelayed({poll(token)},VISIBLE_REFRESH_MS)
         }
         surface.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener{
-            override fun onViewAttachedToWindow(v:View){
-                surface.postDelayed({poll()},VISIBLE_REFRESH_MS)
+            override fun onViewAttachedToWindow(v:View){armPoll()}
+            override fun onViewDetachedFromWindow(v:View){
+                pollGeneration.incrementAndGet()
             }
-            override fun onViewDetachedFromWindow(v:View){}
         })
+        // Works whether or not Android already delivered the attach event.
+        surface.post{
+            if(pollGeneration.get()==0L && surface.isAttachedToWindow &&
+                surface.parent===parent)armPoll()
+        }
     }
     private fun thumbnail(a:Activity,view:ImageView,row:Row){
         val uri=row.saved
@@ -889,7 +901,9 @@ object UnifiedDownloadsUi {
         parent.addView(ui.text(a,"Downloads",23f,ui.white,true),
             ui.lp(a,8))
         val metrics=ui.row(a).apply{gravity=Gravity.TOP}
-        val topLeft=metric(a,"Downloading",all.active)
+        // A claimed video can be resolving a publisher, not transferring.
+        // The overview reports work; the live panel requires actual bytes.
+        val topLeft=metric(a,"In progress",all.active)
         val topRight=metric(a,"Queued",all.queued)
         metrics.addView(topLeft,LinearLayout.LayoutParams(0,-2,1f).apply{
             rightMargin=ui.px(a,5)
@@ -985,9 +999,11 @@ object UnifiedDownloadsUi {
                 livePanel.addView(heading)
                 // Progress reflects the actual worker report. For unmeasured
                 // media, an indeterminate bar is more honest than fake 0%.
-                val validProgress=item.percent?.coerceIn(0,100)
-                    ?.takeUnless{item.source=="Video" &&
-                        item.receivedBytes<=0L}
+                // VideoDb.progress is extractor/stage percentage, NOT
+                // received bytes / verified expected length. Do not render
+                // it as a file progress percentage or invent an ETA.
+                val validProgress=if(item.source=="Video")null
+                    else item.percent?.coerceIn(0,100)
                 val bar=ProgressBar(a,null,
                     android.R.attr.progressBarStyleHorizontal).apply{
                     max=100
@@ -1065,7 +1081,8 @@ object UnifiedDownloadsUi {
                     it.state==State.PAUSED && it.actionText=="RESUME"
                 }
                 val cancellable=items.filter{
-                    it.state!=State.DONE && it.onRemove!=null
+                    it.state in setOf(State.ACTIVE,State.QUEUED,State.PAUSED) &&
+                        it.onRemove!=null
                 }
                 if(pausable.isNotEmpty() || resumable.isNotEmpty() ||
                     cancellable.isNotEmpty()){
@@ -1107,12 +1124,43 @@ object UnifiedDownloadsUi {
                         },LinearLayout.LayoutParams(0,-2,1f))
                     card.addView(actions,ui.lp(a,9))
                 }
-                items.firstOrNull{it.state in setOf(State.FAILED,State.HELD)}
-                    ?.let{failure->
-                    card.addView(ui.text(a,
-                        "Latest issue: "+
-                            failure.info.substringAfter(" · ",failure.info)
-                                .take(110),11f,ui.danger),ui.lp(a,9))
+                val failures=items.filter{
+                    it.state in setOf(State.FAILED,State.HELD)
+                }
+                if(failures.isNotEmpty()){
+                    card.addView(ui.action(a,
+                        "ISSUES · "+totals.failed,true){
+                        val options=failures.map{item->
+                            item.filename.take(70)+" · "+
+                                item.info.substringAfter(" · ",item.info).take(75)
+                        }.toTypedArray()
+                        android.app.AlertDialog.Builder(a)
+                            .setTitle(source+" · needs attention")
+                            .setItems(options){_,selected->
+                                val failure=failures[selected]
+                                val reason=failure.info.substringAfter(" · ",
+                                    failure.info).take(2000)
+                                val choices=ArrayList<String>()
+                                if(failure.hasPrimaryAction)choices.add(
+                                    failure.actionText?:"Retry original")
+                                choices.add("Keep for later")
+                                if(failure.onRemove!=null)
+                                    choices.add("Discard failed job")
+                                android.app.AlertDialog.Builder(a)
+                                    .setTitle(failure.filename.take(110))
+                                    .setMessage(reason)
+                                    .setItems(choices.toTypedArray()){_,i->
+                                        when(choices[i]){
+                                            "Discard failed job"->{
+                                                failure.onRemove?.invoke()
+                                                refresh()
+                                            }
+                                            "Keep for later"->{}
+                                            else->{failure.action();refresh()}
+                                        }
+                                    }.setNegativeButton("Close",null).show()
+                            }.setNegativeButton("Close",null).show()
+                    },ui.lp(a,9))
                 }
             }
             parent.addView(card,ui.lp(a,0,7))
