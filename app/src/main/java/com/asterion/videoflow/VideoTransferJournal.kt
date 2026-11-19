@@ -65,6 +65,7 @@ internal object VideoTransferJournal {
             // Persist a small cross-process timeline after the existing
             // atomic stage receipt is durable, never before the disk write.
             DownloaderEventJournal.record(context,id,phase,"stage_update",bytes)
+            com.azrael.pixivdumpsync.DownloadStateSignals.changed(context)
         }catch(t:Throwable){
             atomic.failWrite(out)
             throw t
