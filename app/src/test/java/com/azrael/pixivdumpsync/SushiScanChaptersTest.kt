@@ -21,7 +21,7 @@ class SushiScanChaptersTest {
         assertTrue(links[0].url.endsWith("vinland-saga-volume-24/"))
         assertTrue(links[1].url.endsWith("vinland-saga-chapitre-176.5/"))
         assertTrue(links[2].url.endsWith("vinland-saga-chapitre-220/"))
-        assertTrue(SourceIndexParser.autoOriginal(IndexedItem(
+        assertFalse(SourceIndexParser.autoOriginal(IndexedItem(
             url,"Vinland Saga",null,url,"COMICS","comics",1L,false)))
     }
     @Test fun onlyExactSeriesPagesAndReaderUrlsAreSupported(){
