@@ -308,6 +308,21 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "SELECT 1 FROM videos WHERE id=? AND lease=? AND state='running' LIMIT 1",
             arrayOf(id.toString(),lease.toString())).use{it.moveToFirst()}
 
+    /** Cloud import is pending until TeraBox confirms its real file.
+     * The selected video cannot be marked locally saved or re-claimed.
+     */
+    fun completeCloudClaim(id:Long,lease:Long,cloudId:String):Boolean{
+        require(cloudId.matches(Regex("[0-9a-f]{64}")))
+        return writableDatabase.update("videos",ContentValues().apply{
+            put("state","cloud_pending")
+            put("progress",0)
+            put("saved_uri","terabox-pending:"+cloudId)
+            putNull("error")
+            put("retry_after",0L)
+            put("updated",System.currentTimeMillis())
+        },"id=? AND lease=? AND state='running'",
+            arrayOf(id.toString(),lease.toString()))==1
+    }
     fun completeClaim(id:Long,lease:Long,uri:String):Boolean{
         val values=ContentValues().apply{
             put("state","done");put("progress",100);put("saved_uri",uri)
