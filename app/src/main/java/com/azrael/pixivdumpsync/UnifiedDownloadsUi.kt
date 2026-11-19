@@ -1058,7 +1058,7 @@ object UnifiedDownloadsUi {
     // Actual byte deltas between visible refreshes. Speed and ETA are never
     // invented from a progress percentage, file title, or expected bitrate.
     private val liveSamples=java.util.concurrent.ConcurrentHashMap<
-        String,Pair<Long,Long>>()
+        String,DownloadLiveRate.Sample>()
 
     private fun sizeLabel(bytes:Long):String {
         if(bytes<1_024L)return bytes.toString()+" B"
@@ -1072,15 +1072,20 @@ object UnifiedDownloadsUi {
     }
 
     private fun speedLabel(item:Row):String? {
-        if(item.receivedBytes<=0L)return null
+        val key=rowId(item)
+        if(item.receivedBytes<=0L){
+            liveSamples.remove(key)
+            return null
+        }
         if(liveSamples.size>80)liveSamples.clear()
         val now=android.os.SystemClock.elapsedRealtime()
-        val previous=liveSamples.put(rowId(item),item.receivedBytes to now)
-            ?:return null
-        val elapsed=now-previous.second
-        val added=item.receivedBytes-previous.first
-        if(elapsed<600L || elapsed>30_000L || added<=0L)return null
-        return sizeLabel((added.toDouble()*1000.0/elapsed).toLong())+"/s"
+        // Preserve the baseline through 240 ms ContentObserver events.
+        // Replacing it on EVERY event made elapsed<600 ms indefinitely,
+        // suppressing real transfer speeds and parallel-progress evidence.
+        val next=DownloadLiveRate.measure(
+            liveSamples[key],item.receivedBytes,now)
+        liveSamples[key]=next
+        return next.rateBytesPerSecond?.let{sizeLabel(it)+"/s"}
     }
 
     /** Perform queue commands on the Activity thread in bounded batches.
@@ -1566,5 +1571,39 @@ object UnifiedDownloadsUi {
                     cloud.pending+" awaiting proof",
                 11f,ui.secondary),ui.lp(a,8))
         }
+    }
+}
+
+/** Pure byte-rate sampler for the existing event-driven Downloads screen.
+ * Sub-second observer bursts must not reset its measurement window.
+ * A stalled, restarted or rolled-back transfer cannot display stale speed.
+ */
+internal object DownloadLiveRate {
+    data class Sample(
+        val bytes:Long,
+        val baselineTimeMs:Long,
+        val rateBytesPerSecond:Long?=null,
+        val rateMeasuredAtMs:Long=0L
+    )
+    internal fun measure(previous:Sample?,bytes:Long,nowMs:Long):Sample {
+        require(bytes>=0L && nowMs>=0L)
+        if(previous==null || bytes<previous.bytes ||
+            nowMs<previous.baselineTimeMs)
+            return Sample(bytes,nowMs)
+        val elapsed=nowMs-previous.baselineTimeMs
+        if(elapsed<800L) {
+            // An already measured rate can remain visible between UI
+            // frames, but expires if the download stops advancing.
+            return if(previous.rateBytesPerSecond!=null &&
+                nowMs-previous.rateMeasuredAtMs>2_000L)
+                previous.copy(rateBytesPerSecond=null)
+            else previous
+        }
+        val gained=bytes-previous.bytes
+        if(gained<=0L || elapsed>30_000L)
+            return Sample(bytes,nowMs)
+        val rate=(gained.toDouble()*1_000.0/elapsed).toLong()
+        return if(rate>0L) Sample(bytes,nowMs,rate,nowMs)
+            else Sample(bytes,nowMs)
     }
 }
