@@ -571,6 +571,7 @@ object NovelEpubService {
             }
             require(part.length()>2000){"Book archive content unexpectedly empty"}
             part.inputStream().use{ArchiveIntegrity.inspect(it,"EPUB")}
+            check(!stop()){"EPUB job paused or cancelled before publishing"}
             val saved=commit(context,part,title,false)
             if(!scan.cacheReused)saveCatalog(context,task.url,scan)
             // Successful local export is authoritative. A separate cloud
@@ -609,9 +610,17 @@ object NovelEpubService {
                         repeat(2){
                             if(stop()||!AppPower.enabled(context))return@use
                             val task=db.claimNext()?:return@use
+                            // An active book may be paused or cancelled from
+                            // its own module without stopping unrelated books.
+                            // Check SQLite between every chapter, including
+                            // across process restarts.
+                            val stopTask={
+                                stop() || !AppPower.enabled(context) ||
+                                    db.wasStopped(task.url)
+                            }
                             try{
-                                val (saved,signature)=generate(context,task,stop,db)
-                                db.completed(task.url,saved,signature)
+                                val (saved,signature)=generate(context,task,stopTask,db)
+                                if(!stopTask())db.completed(task.url,saved,signature)
                             }catch(t:ContinueNovel){
                                 db.continueLater(task.url,t.cached)
                             }catch(t:NovelRateLimited){
