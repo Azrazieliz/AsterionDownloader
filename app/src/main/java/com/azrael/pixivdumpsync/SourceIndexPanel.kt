@@ -13,8 +13,77 @@ import kotlin.concurrent.thread
 /** Kuroha-style thumbnails and one set of controls per content module, never per web site. */
 object SourceIndexPanel {
     private val ui=NocturneDesign
-    fun render(a:Activity,parent:LinearLayout,area:String)=render(a,parent,listOf(area),area)
+    fun render(a:Activity,parent:LinearLayout,area:String)=
+        render(a,parent,listOf(area),area)
+
+    /** One live provider panel, driven by the SAME cross-process journal
+     * notifications used by Downloads. Preserve global navigation and
+     * throttle catalog bursts so a 500-item backfill cannot thrash Android
+     * layout or repeatedly load thumbnails on every source record.
+     */
     fun render(a:Activity,parent:LinearLayout,areas:List<String>,label:String){
+        val surface=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        parent.addView(surface)
+        renderSnapshot(a,surface,areas,label)
+        val pending=java.util.concurrent.atomic.AtomicBoolean(false)
+        val armed=java.util.concurrent.atomic.AtomicBoolean(false)
+        var lastRefresh=android.os.SystemClock.elapsedRealtime()
+        val pump=object:Runnable{
+            override fun run(){
+                if(a.isFinishing || a.isDestroyed ||
+                    surface.parent!==parent || !surface.isAttachedToWindow){
+                    pending.set(false)
+                    return
+                }
+                val now=android.os.SystemClock.elapsedRealtime()
+                val remaining=2500L-(now-lastRefresh)
+                if(remaining>0L){
+                    surface.postDelayed(this,remaining)
+                    return
+                }
+                pending.set(false)
+                lastRefresh=now
+                surface.removeAllViews()
+                renderSnapshot(a,surface,areas,label)
+            }
+        }
+        val observer=object:android.database.ContentObserver(
+            android.os.Handler(android.os.Looper.getMainLooper())){
+            override fun onChange(selfChange:Boolean){
+                if(armed.get() && pending.compareAndSet(false,true))
+                    surface.postDelayed(pump,450L)
+            }
+        }
+        fun arm(){
+            if(!armed.compareAndSet(false,true))return
+            runCatching{
+                a.contentResolver.registerContentObserver(
+                    DownloadStateSignals.uri(a),false,observer)
+            }.onFailure{
+                armed.set(false)
+                android.util.Log.w("AsterionSources",
+                    "Catalog live observer registration unavailable",it)
+            }
+        }
+        fun disarm(){
+            surface.removeCallbacks(pump)
+            pending.set(false)
+            if(armed.getAndSet(false))runCatching{
+                a.contentResolver.unregisterContentObserver(observer)
+            }
+        }
+        surface.addOnAttachStateChangeListener(
+            object:android.view.View.OnAttachStateChangeListener{
+                override fun onViewAttachedToWindow(view:android.view.View){arm()}
+                override fun onViewDetachedFromWindow(view:android.view.View){disarm()}
+            })
+        // Attached-before-listener pages still receive the event feed.
+        surface.post{if(surface.isAttachedToWindow)arm()}
+    }
+
+    private fun renderSnapshot(
+        a:Activity,parent:LinearLayout,areas:List<String>,label:String
+    ){
         val sources=areas.flatMap{SourceIndex.status(a,it)}.distinctBy{it.url}
         val items=areas.flatMap{SourceIndex.items(a,it,500)}
             .filter{AsterionAdultHub.realMedia(it)}
@@ -35,8 +104,8 @@ object SourceIndexPanel {
         card.addView(ui.text(a,
             sources.distinctBy{SiteControls.key(it.url)}.size.toString()+
                 " sites · "+checked+" index-checked · "+problems+
-                " errors · "+items.size+" indexed items"+
-                " · native coverage not assumed",
+                " catalog errors · "+items.size+" indexed items"+
+                " · transfer failures are shown in Downloads",
             12f,if(problems>0)ui.secondary else ui.primary),ui.lp(a,4))
         if("BOOKS" in areas){
             val epub=NovelEpubQueue(a).use{it.snapshot()}
