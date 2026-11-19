@@ -164,46 +164,6 @@ class AsterionHomeActivity:Activity(){
             }
             return
         }
-        if(requestCode==5222){
-            if(resultCode==RESULT_OK && data?.data!=null){
-                val uri=data.data!!
-                runCatching{LegacyPixivInventory.addTree(this,uri)}
-                    .onSuccess{
-                        toast("Kuroha folder linked read-only; indexing saved Pixiv pages")
-                        LegacyPixivInventory.refreshAsync(applicationContext){count,error->
-                            runOnUiThread{
-                                if(isFinishing||isDestroyed)return@runOnUiThread
-                                toast(if(error==null)
-                                    "$count existing Pixiv pages indexed; no files moved"
-                                else "Pixiv inventory scan failed: "+error.message)
-                                if(::body.isInitialized)render()
-                                // Resume the exact requested backfill ONLY after
-                                // Kuroha's inventory scan completed successfully.
-                                val pending=getSharedPreferences(
-                                    "asterion_pending_pixiv_legacy",MODE_PRIVATE)
-                                val mode=pending.getString("mode",null)
-                                if(error==null && mode==SyncMode.BACKFILL.name &&
-                                    AppPower.enabled(this) &&
-                                    SessionStore.isLoggedIn(this)){
-                                    val artist=pending.getString("artist",null)
-                                    pending.edit().clear().apply()
-                                    val resume=Intent(this,SyncForegroundService::class.java)
-                                        .setAction(SyncForegroundService.ACTION_START)
-                                        .putExtra(SyncForegroundService.EXTRA_MODE,mode)
-                                        .putExtra(SyncForegroundService.EXTRA_SELECTED_ONLY,
-                                            artist.isNullOrBlank())
-                                    if(!artist.isNullOrBlank())resume.putExtra(
-                                        SyncForegroundService.EXTRA_TARGET_ARTIST_ID,artist)
-                                    runCatching{startForegroundService(resume)}
-                                        .onSuccess{toast("Pixiv backfill resumed after Kuroha indexing")}
-                                        .onFailure{toast("Pixiv backfill could not start: "+it.message)}
-                                }
-                            }
-                        }
-                    }.onFailure{toast("Kuroha folder unavailable: "+it.message)}
-            }
-            return
-        }
         if(requestCode==5221){
             if(resultCode==RESULT_OK && data?.data!=null){
                 val result=runCatching{
@@ -489,7 +449,6 @@ class AsterionHomeActivity:Activity(){
         super.onResume()
         if(::body.isInitialized){
             if(firstResume)firstResume=false else render()
-            updateOverview()
             AuthenticatedItemDownloader.resumeIfConnected(this)
         }
     }
@@ -514,7 +473,6 @@ class AsterionHomeActivity:Activity(){
         page=target
         if(::body.isInitialized){
             render()
-            if(target=="Home")updateOverview()
             scroller.post{scroller.scrollTo(0,pageScroll[target]?:0)}
         }
     }
@@ -661,49 +619,6 @@ class AsterionHomeActivity:Activity(){
             sourceTile("3D Assets","Koikatsu · MMD · Live2D",
                 R.drawable.ic_source_koikatsu,theme.assetsLilac,"Assets")
         )
-        val summary=card()
-        countsLabel=text(if(overview.loaded)
-            "${overview.artists} Pixiv artists · ${overview.x} X accounts · ${overview.gallery} cosplay sources"
-            else "Loading saved library counts…",12f,theme.secondary)
-        put(summary,countsLabel!!,0)
-        val c=overview.coverage
-        providerLabel=text(if(c==null)"Loading source health…"
-            else "${c.registered} registered providers · ${c.specialized} native-managed · ${c.checkedGeneric} index-checked · ${c.awaitingFirstCheck} awaiting first scan · ${c.errors} errors",
-            11f,theme.secondary)
-        put(summary,providerLabel!!,5)
-        put(body,summary,12)
-        // Owner-only, signed two-sided authorization. No Control access until
-        // expressly enabled here AND independently approved in Control.
-        val diagnostics=card()
-        put(diagnostics,text("Asterion Control diagnostics",15f,theme.white,true),0)
-        val enabled=AsterionControlDiagnosticsProvider.approved(this)
-        put(diagnostics,text(if(enabled)
-            "Authorized: Control may inspect read-only failures, job queues, worker stages and verified bytes."
-            else "Disabled: no other app may inspect your Downloader engine. No media or credentials are exported.",
-            11f,theme.secondary),6)
-        put(diagnostics,button(if(enabled)"REVOKE CONTROL DIAGNOSTICS" else "AUTHORIZE CONTROL DIAGNOSTICS"){
-            if(enabled){
-                AlertDialog.Builder(this).setTitle("Revoke Control diagnostics?")
-                    .setMessage("All future cross-app requests will be denied. Downloads and saved files remain untouched.")
-                    .setNegativeButton("Cancel",null)
-                    .setPositiveButton("Revoke"){_,_->
-                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,false)}
-                            .onSuccess{toast("Control diagnostic access revoked");render()}
-                            .onFailure{toast("Authorization change failed: "+it.javaClass.simpleName)}
-                    }.show()
-            }else{
-                AlertDialog.Builder(this).setTitle("Authorize Asterion Control?")
-                    .setMessage("Pin the installed Control application's current signing certificate. Only its authenticated, approved requests may read sanitized crash, queue and worker diagnostics. No URLs, cookies, media files, private keys or download commands are exposed. You must separately approve Downloader in Control.")
-                    .setNegativeButton("Cancel",null)
-                    .setPositiveButton("Authorize"){_,_->
-                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,true)}
-                            .onSuccess{toast("Read-only diagnostics authorized for installed Control signer");render()}
-                            .onFailure{toast("Control authorization unavailable: "+it.javaClass.simpleName)}
-                    }.show()
-            }
-        },9)
-        put(body,diagnostics,12)
-        AsterionSuggestedUi.render(this,body)
     }
     private fun renderBooks(){
         section("Books","EPUB novels · comics and doujin galleries as ZIP.")
@@ -1335,44 +1250,38 @@ class AsterionHomeActivity:Activity(){
                 }.setNegativeButton("Cancel",null).show()
         },9)
         put(body,visual,10)
-        section("Storage & cloud backup","Local saved files and confirmed cloud inventory.")
-        val oldPixiv=LegacyPixivInventory.status(this)
-        val pixivInventory=card()
-        put(pixivInventory,text("KUROHA · EXISTING PIXIV DOWNLOADS",
-            15f,theme.white,true),0)
-        put(pixivInventory,text(
-            oldPixiv.savedPages.toString()+" indexed pages · "+
-                oldPixiv.linkedFolders+" linked folder(s)"+
-                (if(oldPixiv.scanning)" · scanning" else ""),
-            12f,theme.secondary),6)
-        put(pixivInventory,text(
-            "Link Downloads/Kuroha (and old PixiFlow if used). "+
-                "This is read-only. The original is checked again before "+
-                "skipping a download; Kuroha's app data is unchanged.",
-            12f,theme.secondary),6)
-        put(pixivInventory,button("LINK KUROHA / PIXIFLOW FOLDER"){
-            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply{
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            },5222)
-        },8)
-        if(oldPixiv.linkedFolders>0)put(pixivInventory,button(
-            if(oldPixiv.scanning)"INDEXING..." else "REFRESH SAVED PIXIV INVENTORY"){
-            LegacyPixivInventory.refreshAsync(applicationContext){_,error->
-                runOnUiThread{
-                    if(!isDestroyed && !isFinishing){
-                        toast(if(error==null)"Pixiv saved-file inventory updated"
-                            else "Inventory refresh error: "+error.message)
-                        render()
-                    }
-                }
+        // Owner-only, signed two-sided authorization. No Control access until
+        // expressly enabled here AND independently approved in Control.
+        val diagnostics=card()
+        put(diagnostics,text("Asterion Control diagnostics",15f,theme.white,true),0)
+        val enabled=AsterionControlDiagnosticsProvider.approved(this)
+        put(diagnostics,text(if(enabled)
+            "Authorized: Control may inspect read-only failures, job queues, worker stages and verified bytes."
+            else "Disabled: no other app may inspect your Downloader engine. No media or credentials are exported.",
+            11f,theme.secondary),6)
+        put(diagnostics,button(if(enabled)"REVOKE CONTROL DIAGNOSTICS" else "AUTHORIZE CONTROL DIAGNOSTICS"){
+            if(enabled){
+                AlertDialog.Builder(this).setTitle("Revoke Control diagnostics?")
+                    .setMessage("All future cross-app requests will be denied. Downloads and saved files remain untouched.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Revoke"){_,_->
+                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,false)}
+                            .onSuccess{toast("Control diagnostic access revoked");render()}
+                            .onFailure{toast("Authorization change failed: "+it.javaClass.simpleName)}
+                    }.show()
+            }else{
+                AlertDialog.Builder(this).setTitle("Authorize Asterion Control?")
+                    .setMessage("Pin the installed Control application's current signing certificate. Only its authenticated, approved requests may read sanitized crash, queue and worker diagnostics. No URLs, cookies, media files, private keys or download commands are exposed. You must separately approve Downloader in Control.")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Authorize"){_,_->
+                        runCatching{AsterionControlDiagnosticsProvider.authorizeLocally(this,true)}
+                            .onSuccess{toast("Read-only diagnostics authorized for installed Control signer");render()}
+                            .onFailure{toast("Control authorization unavailable: "+it.javaClass.simpleName)}
+                    }.show()
             }
-            render()
-        },5)
-        if(oldPixiv.lastError!=null)
-            put(pixivInventory,text(oldPixiv.lastError.take(180),
-                11f,theme.danger),5)
-        put(body,pixivInventory,10)
+        },9)
+        put(body,diagnostics,12)
+        section("Storage & cloud backup","Local saved files and confirmed cloud inventory.")
         RounderDispatch.render(this,body)
         val inventory=card()
         put(inventory,text("ROUNDER INVENTORY",14f,theme.white,true),0)
