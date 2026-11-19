@@ -246,16 +246,25 @@ internal object PixivUnifiedFeatures {
             a.startActivity(Intent(Intent.ACTION_VIEW,
                 Uri.parse("https://www.pixiv.net/users/"+artist.userId)))
         },LinearLayout.LayoutParams(0,-2,1f))
-        row.addView(ui.action(a,actionLabel,false){
-            if(SyncControl.snapshot().running || status=="RUNNING"){
-                notice(a,"Pixiv sync is already active")
-            }else{
-                if(hasPartial)AppDb(a).use{it.clearArtistError(artist.userId)}
-                val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
-                    else SyncMode.LIVE
-                service(a,mode,artist=artist.userId)
-            }
-        },LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=ui.px(a,6)})
+        if(status=="RUNNING" && SyncControl.snapshot().running){
+            row.addView(ui.text(a,"SYNC RUNNING",11f,ui.primary,true),
+                LinearLayout.LayoutParams(0,-2,1f).apply{
+                    leftMargin=ui.px(a,6)
+                })
+        }else{
+            row.addView(ui.action(a,actionLabel,false){
+                if(SyncControl.snapshot().running){
+                    notice(a,"Pixiv sync is already active")
+                }else{
+                    if(hasPartial)AppDb(a).use{it.clearArtistError(artist.userId)}
+                    val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
+                        else SyncMode.LIVE
+                    service(a,mode,artist=artist.userId)
+                }
+            },LinearLayout.LayoutParams(0,-2,1f).apply{
+                leftMargin=ui.px(a,6)
+            })
+        }
         row.addView(ui.action(a,"REMOVE",false){
             AlertDialog.Builder(a).setTitle("Remove followed Pixiv artist?")
                 .setMessage("Only the artist subscription is removed. Existing images, bookmarks and download history are retained.")
