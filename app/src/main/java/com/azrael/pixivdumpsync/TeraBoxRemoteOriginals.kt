@@ -92,6 +92,9 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                       val destination:String,val state:String,
                       val taskId:String?,val attempts:Int,
                       val retryAfter:Long)
+    /** Conservative TeraBox server-side transfer admission; URL imports are
+     * truly remote, not simultaneously buffered on the Android device. */
+    companion object { const val MAX_REMOTE_IMPORTS=4 }
     data class Summary(val pending:Int,val active:Int,
                        val verified:Int,val failed:Int)
 
@@ -265,6 +268,9 @@ internal class TeraBoxRemoteQueue(ctx:Context):
             val client=NduTeraboxClient(cookie,NduSettings.domain(ctx))
             client.connect()
             val records=runCatching{client.remoteImportRecords()}.getOrNull()
+            var submitted=readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM remote_originals WHERE state='SUBMITTED'",
+                null).use{c->if(c.moveToFirst())c.getInt(0)else 0}
             for(job in list){
                 if(stop())break
                 try{
@@ -275,6 +281,7 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                     }
                     val remotePath=job.destination+"/"+job.filename
                     if(job.state=="QUEUED"){
+                        if(submitted>=MAX_REMOTE_IMPORTS)continue
                         // An existing unknown cloud file is NOT evidence of
                         // this selected URL. Never overwrite or duplicate it.
                         check(client.remoteOriginalReceipt(remotePath)==null){
@@ -285,6 +292,7 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                         update(job.id,"SUBMITTED",ticket.taskId,
                             attempt=job.attempts,
                             retryAfter=System.currentTimeMillis()+60_000L)
+                        submitted++
                         continue
                     }
                     // Full cloud receipt needs a matching server-side task
@@ -304,8 +312,11 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                         update(job.id,"SUBMITTED",job.taskId,
                             attempt=job.attempts,
                             retryAfter=System.currentTimeMillis()+60_000L)
-                    }else update(job.id,"VERIFIED",job.taskId,
-                        receipt=receipt,attempt=job.attempts)
+                    }else{
+                        update(job.id,"VERIFIED",job.taskId,
+                            receipt=receipt,attempt=job.attempts)
+                        submitted=(submitted-1).coerceAtLeast(0)
+                    }
                 }catch(e:Exception){
                     val n=job.attempts+1
                     val retry=minorNetwork(e) && n<=5
@@ -314,6 +325,8 @@ internal class TeraBoxRemoteQueue(ctx:Context):
                     // When submission has possibly succeeded, never send
                     // the same original twice after a network failure. A
                     // submitted task is queried, not re-submitted.
+                    if(job.state=="SUBMITTED" && !retry)
+                        submitted=(submitted-1).coerceAtLeast(0)
                     update(job.id,if(job.state=="SUBMITTED" && retry)
                             "SUBMITTED" else if(retry)"QUEUED" else "ERROR",
                         job.taskId,error=e.message?:e.javaClass.simpleName,
