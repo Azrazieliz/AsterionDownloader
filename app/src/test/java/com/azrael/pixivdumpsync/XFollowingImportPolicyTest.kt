@@ -18,6 +18,14 @@ class XFollowingImportPolicyTest {
         assertFalse(XFollowingImportPolicy.isOwnFollowingPage("/owner_42/followers","owner_42"))
         assertFalse(XFollowingImportPolicy.isOwnFollowingPage("/owner_42/following",""))
     }
+    @Test fun partialOrUnknownFollowingCannotDeleteExistingSubscriptions(){
+        assertFalse(XFollowingImportPolicy.canReconcile(true,20,513))
+        assertFalse(XFollowingImportPolicy.canReconcile(true,513,null))
+        assertFalse(XFollowingImportPolicy.canReconcile(false,513,513))
+        assertFalse(XFollowingImportPolicy.canReconcile(true,514,513))
+        assertFalse(XFollowingImportPolicy.canReconcile(true,0,0))
+        assertTrue(XFollowingImportPolicy.canReconcile(true,513,513))
+    }
     @Test fun followingPageMustAlsoBelongToAuthenticatedXProfile(){
         assertTrue(XFollowingImportPolicy.isAuthenticatedOwnFollowingPage(
             "/owner_42/following","owner_42","/owner_42"))
