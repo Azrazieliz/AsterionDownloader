@@ -22,6 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 internal object ModuleOriginalAgents {
     const val AGENTS_PER_MODULE=2
+    // Two independently running OS-owned direct originals across all modules,
+    // rather than two PER module (which spawned dozens at once).
+    const val MAX_GLOBAL_DIRECT_DOWNLOADS=2
+    private val globalDirectAdmission=Any()
+    private val moduleRoundRobin=AtomicInteger(0)
     val MODULES=setOf(
         "ADULT","HENTAI","VIDEOS","CREATORS","COSPLAY","ARTWORK",
         "BOOKS","COMICS","GAMES","ASSETS","STUDIO","MMD",
@@ -114,6 +119,10 @@ internal object ModuleOriginalAgents {
             state.job.folder==category && occupiesActiveSlot(state.status)
         }
     }
+    private fun activeDirectGlobal(context:Context):Int=
+        DirectDownloadTracker.states(context,1000).count{
+            occupiesActiveSlot(it.status)
+        }
     private fun monitor(context:Context,area:String,slot:Int,id:Long){
         val manager=context.getSystemService(DownloadManager::class.java)
         val startTick=SystemClock.elapsedRealtime()
@@ -231,9 +240,15 @@ internal object ModuleOriginalAgents {
                                 // Enforce at most two active DownloadManager
                                 // HTTP transfers per module. The media SDK may
                                 // use its own scheduler; we do not overfill it.
-                                synchronized(lane){
+                                // One admission lock for all media modules:
+                                // newly queued OS transfers count as real work.
+                                // VideoFlow has its own two process-isolated
+                                // original agents and is not a DownloadManager job.
+                                synchronized(globalDirectAdmission){
                                     val isVideo=item.kind=="video"
-                                    if(isVideo || activeDirect(app,area)<AGENTS_PER_MODULE){
+                                    if(isVideo || (activeDirect(app,area)<AGENTS_PER_MODULE
+                                         && activeDirectGlobal(app)<
+                                            MAX_GLOBAL_DIRECT_DOWNLOADS)){
                                         accepted=SourceIndex.submitOriginal(app,item){id->
                                             downloadId=id
                                         }
@@ -242,6 +257,8 @@ internal object ModuleOriginalAgents {
                                         }else SourceIndexDb(app).use{
                                             it.defer(item.url)
                                         }
+                                    }else{
+                                        SourceIndexDb(app).use{it.defer(item.url)}
                                     }
                                 }
                             }catch(_:Exception){
@@ -266,12 +283,13 @@ internal object ModuleOriginalAgents {
                                         // Wake the durable queue when a slot
                                         // becomes available, rather than waiting
                                         // for another periodic background scan.
-                                        if(AppPower.enabled(app)) start(app,area)
+                                        if(AppPower.enabled(app)) startAll(app)
                                     }
                                 }
                             }else if(!accepted && downloadId==null &&
-                                activeDirect(app,area)>=AGENTS_PER_MODULE){
-                                status(app,area,slot,"TWO_DOWNLOADS_ALREADY_ACTIVE")
+                                (activeDirect(app,area)>=AGENTS_PER_MODULE ||
+                                    activeDirectGlobal(app)>=MAX_GLOBAL_DIRECT_DOWNLOADS)){
+                                status(app,area,slot,"GLOBAL_DIRECT_LIMIT_REACHED")
                                 break
                             }
                             if(handled>=40)break
@@ -295,6 +313,13 @@ internal object ModuleOriginalAgents {
         val areas=SourceIndexDb(context).use{db->
             MODULES.filter{m->db.pendingDirect(1,m).isNotEmpty()}
         }
-        for(m in areas)start(context,m)
+        if(areas.isEmpty())return
+        // Fairly rotate candidates. At most two modules are activated per
+        // pass, rather than constructing 2 x N worker and monitor pools.
+        val start=(moduleRoundRobin.getAndIncrement() and Int.MAX_VALUE)%areas.size
+        val targets=(0 until minOf(2,areas.size)).map{
+            areas[(start+it)%areas.size]
+        }
+        for(m in targets)start(context,m)
     }
 }
