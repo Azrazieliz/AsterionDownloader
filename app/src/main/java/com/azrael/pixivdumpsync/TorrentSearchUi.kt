@@ -13,7 +13,7 @@ object TorrentSearchUi {
     fun render(a:Activity,body:LinearLayout,area:TorrentArea,
                refresh:()->Unit){
         val ui=NocturneDesign
-        val name=when(area){TorrentArea.GAMES->"GAMES";TorrentArea.BOOKS->"BOOKS";TorrentArea.ADULT->"ADULT VIDEO"}
+        val name=when(area){TorrentArea.GAMES->"GAMES";TorrentArea.BOOKS->"BOOKS";TorrentArea.ADULT->"ADULT VIDEOS & IMAGE GALLERIES"}
         val card=ui.card(a)
         card.addView(ui.text(a,"Find a release · "+name,17f,ui.white,true),ui.lp(a,3))
         card.addView(ui.text(a,"Search by title, then choose the actual files.",12f,ui.secondary),ui.lp(a,5))
@@ -69,9 +69,19 @@ object TorrentSearchUi {
         val searchGeneration=java.util.concurrent.atomic.AtomicLong()
         var searchWorker:Thread?=null
         var visibleCount=40
+        var galleriesOnly=area==TorrentArea.ADULT &&
+            pref.getBoolean("photo_galleries_only",false)
         fun draw(){
             results.removeAllViews()
-            for(hit in records.take(visibleCount)){
+            val shown=if(galleriesOnly)records.filter{
+                TorrentGalleryClassifier.likelyGallery(it.title,it.details)
+            }else records.toList()
+            if(galleriesOnly && shown.isEmpty() && records.isNotEmpty())
+                results.addView(ui.text(a,
+                    "No photo galleries identifiable in these indexed releases. "+
+                        "Try a creator, album title or gallery-specific keywords.",
+                    12f,ui.secondary),ui.lp(a,7))
+            for(hit in shown.take(visibleCount)){
                 val item=ui.row(a).apply{
                     gravity=android.view.Gravity.CENTER_VERTICAL
                     setPadding(ui.px(a,12),ui.px(a,9),ui.px(a,10),ui.px(a,9))
@@ -118,13 +128,27 @@ object TorrentSearchUi {
                 })
                 results.addView(item,ui.lp(a,5))
             }
-            if(records.size>visibleCount){
+            if(shown.size>visibleCount){
                 results.addView(ui.action(a,
-                    "SHOW MORE MATCHES · "+(records.size-visibleCount),false){
-                    visibleCount=(visibleCount+40).coerceAtMost(records.size)
+                    "SHOW MORE MATCHES · "+(shown.size-visibleCount),false){
+                    visibleCount=(visibleCount+40).coerceAtMost(shown.size)
                     draw()
                 },ui.lp(a,7))
             }
+        }
+        if(area==TorrentArea.ADULT){
+            card.addView(Switch(a).apply{
+                text="Only photo / cosplay gallery torrents"
+                textSize=13f
+                setTextColor(ui.white)
+                isChecked=galleriesOnly
+                setOnCheckedChangeListener{_,enabled->
+                    galleriesOnly=enabled
+                    pref.edit().putBoolean("photo_galleries_only",enabled).apply()
+                    visibleCount=40
+                    draw()
+                }
+            },ui.lp(a,7))
         }
         card.addView(ui.action(a,"SEARCH "+name+" TORRENTS",true){
             val term=field.text.toString().trim()
@@ -144,7 +168,13 @@ object TorrentSearchUi {
                         records+=hits.filter{
                             SearchExactness.matches(term,it.title)
                         }
-                        status.text=records.size.toString()+" results"+
+                        val galleries=records.count{
+                            TorrentGalleryClassifier.likelyGallery(it.title,it.details)
+                        }
+                        status.text=records.size.toString()+" indexed releases"+
+                            if(area==TorrentArea.ADULT)
+                                " · "+galleries+" identified photo galleries"
+                            else ""+
                             if(errors.isEmpty())"" else
                                 "\nUnavailable: "+
                                     errors.take(2).joinToString(" | ").take(160)
