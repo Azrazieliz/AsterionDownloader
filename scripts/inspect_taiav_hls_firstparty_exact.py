@@ -19,7 +19,7 @@ def mask(s):
  s=re.sub(r"https?(?:\\/\\/|://)[^\\s\"'<>{}]{1,350}",
           lambda x:"{URL_HOST:"+str(urllib.parse.urlsplit(x.group().replace("\\/","/")).hostname)+"}",s)
  s=re.sub(r"[A-Za-z0-9+/=_-]{42,}","{opaque}",s)
- return " ".join(s.split())[:1180]
+ return " ".join(s.split())[:2400]
 def main():
  url,html=get("https://taiav.com/cn/")
  tags=Links();tags.feed(html)
@@ -30,12 +30,13 @@ def main():
   if u.scheme=="https" and u.hostname in ("taiav.com","www.taiav.com") and re.fullmatch(r"/(?:cn|tw|en)/movie/[a-f0-9]{24}/?",u.path,re.I) and a not in selected:selected.append(a)
  if not selected:print(json.dumps({"error":"NO_SELECTED"}));return
  page,html=get(selected[0]);print(json.dumps({"selected_path":urllib.parse.urlsplit(page).path,"html_bytes":len(html)}),flush=True)
- for label,needle in (("HLS","data.m3u8"),("AJAX","$.ajax("),
-                      ("FETCH","fetch("),("PLAY","player.load(")):
-  pos=html.lower().find(needle.lower())
-  preceding=1200 if label=="HLS" else 240
-  following=180 if label=="HLS" else 380
-  excerpt=mask(html[max(0,pos-preceding):pos+len(needle)+following]) if pos>=0 else ""
-  print(json.dumps({"kind":label,"found":pos>=0,
-      "context":excerpt},ensure_ascii=True),flush=True)
+ position=html.lower().find("if(data.m3u8)")
+ if position<0:position=html.lower().find("data.m3u8")
+ ajax=html.rfind("$.ajax",0,position) if position>=0 else -1
+ begin=ajax if ajax>=0 and position-ajax<2500 else max(0,position-1400)
+ context=mask(html[begin:position+125]) if position>=0 else ""
+ print(json.dumps({"stage":"TAIAV_SELECTED_FULL_HLS_AJAX",
+    "hls_response_reference":position>=0,
+    "nearby_ajax_request":ajax>=0 and position-ajax<2500,
+    "context":context},ensure_ascii=True),flush=True)
 if __name__=="__main__":main()
