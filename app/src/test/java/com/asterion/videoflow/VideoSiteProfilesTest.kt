@@ -83,7 +83,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(23,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(24,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -161,6 +161,21 @@ class VideoSiteProfilesTest {
             .fromHtml(porneec,confirmedOriginal).size)
         assertEquals(1,PublisherOriginalExtractors
             .fromHtml(taiav,confirmedOriginal).size)
+    }
+    @Test fun liveCamRipsRecognizesOnlyActualRecording(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://livecamrips.to/video/11248256"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://livecamrips.to/model/372083/whoiswale/1"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://livecamrips.to/models"))
+        assertEquals(listOf("https://mdzsmutpcvykb.net/e/z1j1rlr6ie71z0"),
+            PublisherOriginalExtractors.fromHtml(
+                "https://livecamrips.to/video/11248256",
+                """<main><iframe id="iframe-video"
+                src="https://mdzsmutpcvykb.net/e/z1j1rlr6ie71z0"
+                ></iframe><iframe src="https://ads.example/e/bad111"></iframe></main>"""
+            ).map{it.url})
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.eporner.com/"
