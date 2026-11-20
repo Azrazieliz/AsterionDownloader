@@ -107,7 +107,12 @@ object KyoraCreatorPreviews {
         val directVideo=if(provider=="rule34video.com")
             doc.select("a[href*='/video/'],a[href*='/videos/']") else emptyList()
         val anchors=if(sections.isEmpty())doc.select("a:has(img)") else sections
-        for(anchor in (anchors+rich+directVideo).distinct().take(1500)){
+        // TaiAV's actual movie-card header is a sibling of its <img>, not
+        // always an ancestor. Parse those real /cn/movie/<id> anchors too;
+        // acceptedVideoCard is unchanged for other providers.
+        val taiavMovies=if(provider=="taiav.com")
+            doc.select("a[href*='/movie/']") else emptyList()
+        for(anchor in (anchors+rich+directVideo+taiavMovies).distinct().take(1500)){
             val page=anchor.absUrl("href")
             if(!SearchRanking.validUrl(page) ||
                 !acceptedVideoCard(base,page))continue
