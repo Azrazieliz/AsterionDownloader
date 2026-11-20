@@ -14,7 +14,6 @@ class PublisherOriginalExtractorsTest {
         "cums.net" to "https://cums.net/video/example",
         "watchporn.to" to "https://watchporn.to/video/1782/title",
         "archivebate.com" to "https://archivebate.com/watch/16458050",
-        "onscreens.me" to "https://www.onscreens.me/9ab25484-e457-11f1-abd3-c93d3519df0e/sofiasantora-11-19-2026-20-02-40-stripchat",
         "livecamrips.to" to "https://livecamrips.to/video/11248256",
         "xxxi.porn" to "https://xxxi.porn/video/example",
         "notfans.com" to "https://notfans.com/video/example",
@@ -30,7 +29,12 @@ class PublisherOriginalExtractorsTest {
         "uncensoredhentai.xxx" to "https://uncensoredhentai.xxx/watch/episode-3/",
         "3dhentaix.com" to "https://3dhentaix.com/ntr-compilation/",
         "rule34video.com" to "https://rule34video.com/video/4727221/",
-        "camstreams.tv" to "https://camstreams.tv/video/example"
+        "avple.tv" to "https://avple.tv/video/sample-123",
+        "pimpbunny.com" to "https://pimpbunny.com/videos/selected-scene-123",
+        "xchina.co" to "https://en.xchina.co/video/6b00b2b6032b1",
+        "bubblecum.lol" to "https://www.bubblecum.lol/video/selected-scene-title/",
+        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/",
+        "camstreams.tv" to "https://camstreams.tv/videos/1363858/selected-cam-recording/"
     )
 
     @Test fun eachExistingVideoPublisherHasItsOwnNamedParser(){
