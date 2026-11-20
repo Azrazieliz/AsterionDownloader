@@ -23,7 +23,8 @@ class SyncEngine(private val context: Context) {
             progress: (String) -> Unit = {}): Stats {
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
-        if (!SyncControl.tryStart(mode, queueLiveIfBusy = false)) {
+        if (!SyncControl.tryStart(mode, queueLiveIfBusy =
+            targetEntityId==null && targetSiteHost==null && targetGalleryUrl==null)) {
             // A targeted Kyora request must not be marked "completed" when
             // another sync owns the global lock. Its durable request ledger
             // will retry it after the active run. Never turn a busy worker
