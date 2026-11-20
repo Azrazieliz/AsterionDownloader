@@ -142,17 +142,27 @@ object AssetsPanel {
                 "available public file indexes (not the entire internet).",
             12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
+        var modelWorker:Thread?=null
+        val stopSearch=ui.action(a,"STOP MODEL SEARCH",false){
+            // Invalidating the view token also prevents a late provider
+            // response from repainting a search the owner cancelled.
+            results.tag=Any()
+            modelWorker?.interrupt()
+            status.text="Model search stopped · previously saved files retained"
+        }.apply{visibility=android.view.View.GONE}
         body.addView(ui.action(a,"SEARCH MODELS",true){
             val q=input.text.toString().trim().lowercase()
             CreatorNames.remember(a,q,"ASSETS",true)
             if(q.length<2){status.text="Enter a model name";return@action}
+            modelWorker?.interrupt()
             results.removeAllViews()
             status.text="Checking original file catalogs and public indexes…"
+            stopSearch.visibility=android.view.View.VISIBLE
             // Each search owns its view token. A later query or navigation
             // cannot be overwritten by a stale asynchronous response.
             val requestToken=Any()
             results.tag=requestToken
-            thread(name="asset-search"){
+            modelWorker=thread(name="asset-search"){
                 // The earlier serial fetches could keep the first source's
                 // successful result hidden behind a 19-second second-source
                 // timeout. Fetch both approved public catalogs concurrently.
@@ -188,6 +198,7 @@ object AssetsPanel {
                     if(a.isDestroyed || a.isFinishing ||
                         results.parent==null || results.tag!==requestToken)
                         return@runOnUiThread
+                    stopSearch.visibility=android.view.View.GONE
                     var polyCount=0
                     var ambientCount=0
                     val errors=ArrayList<String>()
@@ -311,6 +322,7 @@ object AssetsPanel {
                 }
             }
         },ui.lp(a,8))
+        body.addView(stopSearch,ui.lp(a,5))
         body.addView(status,ui.lp(a,6));body.addView(results,ui.lp(a,6))
     }
     private fun renderFilesAndSources(
