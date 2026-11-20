@@ -37,6 +37,7 @@ internal object PublisherOriginalExtractors {
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
         // Only the selected article's own main player is eligible. No sidebar,
         // thumbnail MP4s, related posts, or guessed off-site player domains.
+        Site("pornbuz.com","a[href^='https://streamtape.com/v/'],a[href^='https://streamtape.to/v/']"),
         Site("porneec.com","main .video-player video[src],main .video-player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
             "video[src][data-duration],video source[src][data-duration]",
@@ -129,6 +130,14 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        if(host=="pornbuz.com"){
+            // PornBuz's second server is a publisher-labelled selected
+            // Streamtape watch URL. Never infer the original from generic
+            // MP4s embedded in sidebar/recommendation blocks.
+            return PornBuzOriginalSource.published(selected,html).map{
+                Candidate(it,selected,host)
+            }
+        }
         // Rule34Video publishes quality-labelled download=true links in the
         // selected page, not <video> sources. Its own first-party resolver
         // checks the selected ID and anchor label before admission.
