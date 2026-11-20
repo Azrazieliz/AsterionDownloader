@@ -262,7 +262,7 @@ object AssetsPanel {
                                     URI(file.url).path.substringAfterLast('/')
                                 }.getOrDefault("model."+file.format.lowercase())
                                 ResourceDownloads.downloadFile(
-                                    a,file.url,"Assets",filename)
+                                    a,file.url,"Assets",filename,file.referer)
                             },ui.lp(a,8))
                             results.addView(tile,ui.lp(a,9))
                             webCount++
