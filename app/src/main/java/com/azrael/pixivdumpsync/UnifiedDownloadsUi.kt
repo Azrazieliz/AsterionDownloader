@@ -116,7 +116,9 @@ object UnifiedDownloadsUi {
         val key:String?=null,
         val transferStage:String?=null,
         val transferUpdated:Long=0L,
-        val totalBytes:Long=-1L
+        val totalBytes:Long=-1L,
+        val posterPage:String?=null,
+        val reportedProgress:Int?=null
     )
     private fun open(a:Activity,uri:String,mime:String){
         runCatching{
@@ -320,7 +322,10 @@ object UnifiedDownloadsUi {
                     }),hasPrimaryAction=!retired || state==State.DONE,
                     key="video:"+item.id,
                     transferStage=journal?.stage,
-                    transferUpdated=journal?.updated?:0L)
+                    transferUpdated=journal?.updated?:0L,
+                    posterPage=item.url,
+                    reportedProgress=if(state==State.ACTIVE)
+                        item.progress.coerceIn(0,100) else null)
             }
         }
         ChapterQueue(a).use{db->
@@ -673,16 +678,16 @@ object UnifiedDownloadsUi {
                     TorrentVerifiedExport.request(a,torrent.id)
                 }else if(torrent.stage=="EXPORTED"){
                     TorrentVerifiedExport.open(a,torrent.id)
-                }else if(torrent.stage in setOf("QUEUED","WAITING_PEERS")){
-                    // Read the existing isolated torrent ledger and let the
-                    // owner inspect/choose an explicit recovery. Merely opening
-                    // Manage MUST NOT load libtorrent or resume a torrent that
-                    // previously coincided with a whole-device crash.
+                }else if(torrent.stage in setOf("QUEUED","WAITING_PEERS") &&
+                    TorrentSafetyGate.incidentHold(a)){
+                    // Only an actual previous reboot requires a separate
+                    // owner-reviewed recovery dialog.
                     TorrentTransfers.showQueue(a)
                 }else{
                 val action=when(torrent.stage){
                     "TRANSFERRING"->TorrentTransferService.PAUSE
-                    "PAUSED","FAILED"->TorrentTransferService.RESUME
+                    "PAUSED","FAILED","QUEUED","WAITING_PEERS"->
+                        TorrentTransferService.RESUME
                     else->null
                 }
                 if(action!=null){
@@ -711,7 +716,7 @@ object UnifiedDownloadsUi {
                 actionText=when(torrent.stage){
                     "TRANSFERRING"->"PAUSE"
                     "PAUSED","FAILED"->"RESUME"
-                    "QUEUED","WAITING_PEERS"->"INSPECT / RECOVER"
+                    "QUEUED","WAITING_PEERS"->"RESUME"
                     "QUARANTINED"->"EXPORT VERIFIED FILES"
                     "EXPORTED"->"OPEN"
                     else->null
@@ -1332,6 +1337,19 @@ object UnifiedDownloadsUi {
                     })
                 }
                 val heading=ui.row(a)
+                // Load only the selected publisher page's real OG poster.
+                // Never use random search images or the video URL as an image.
+                item.posterPage?.let{page->
+                    val preview=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_INSIDE
+                        setBackgroundColor(ui.raised)
+                    }
+                    heading.addView(preview,LinearLayout.LayoutParams(
+                        ui.px(a,64),ui.px(a,64)).apply{
+                        rightMargin=ui.px(a,9)
+                    })
+                    VideoSearchPreviews.display(a,preview,null,page)
+                }
                 val name=LinearLayout(a).apply{
                     orientation=LinearLayout.VERTICAL
                 }
@@ -1396,6 +1414,10 @@ object UnifiedDownloadsUi {
                 val details=ArrayList<String>()
                 if(validProgress!=null)
                     details.add(validProgress.toString()+"% of known file")
+                else if(item.reportedProgress!=null &&
+                    item.reportedProgress>0)
+                    details.add(item.reportedProgress.toString()+
+                        "% reported by extractor · final size unknown")
                 if(item.receivedBytes>0L)
                     details.add(sizeLabel(item.receivedBytes)+" received")
                 if(speed!=null){
