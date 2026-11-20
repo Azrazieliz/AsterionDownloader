@@ -56,7 +56,9 @@ object KyoraCreatorPreviews {
      */
     internal fun acceptedVideoCard(source:String,page:String):Boolean {
         val provider=SiteControls.key(source)
-        return provider !in com.asterion.videoflow.VideoSiteProfiles.coveredHosts ||
+        // Scope to the observed OnScreens profile-card regression; other
+        // publishers keep their existing approved media-path behavior.
+        return provider!="onscreens.me" ||
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
     }
 
