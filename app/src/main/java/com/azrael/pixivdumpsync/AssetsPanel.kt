@@ -242,7 +242,7 @@ object AssetsPanel {
                     var webCount=0
                     web.onSuccess{(candidates,failures)->
                         errors.addAll(failures)
-                        for(file in candidates.take(36)){
+                        for(file in candidates.take(72)){
                             val tile=ui.card(a)
                             // An indexed file may carry a genuine OG image
                             // from its own model detail page. Older web
@@ -270,9 +270,14 @@ object AssetsPanel {
                                 // guessed from an unrelated landing page.
                                 val filename=runCatching{
                                     URI(file.url).path.substringAfterLast('/')
-                                }.getOrDefault("model."+file.format.lowercase())
+                                }.getOrDefault("")
+                                val preferred=if(filename.endsWith(
+                                    "."+file.format.lowercase(),true))filename
+                                else file.title.replace(
+                                    Regex("[^A-Za-z0-9._-]"),"_").take(95)+
+                                    "."+file.format.lowercase()
                                 ResourceDownloads.downloadFile(
-                                    a,file.url,"Assets",filename,file.referer)
+                                    a,file.url,"Assets",preferred,file.referer)
                             },ui.lp(a,8))
                             results.addView(tile,ui.lp(a,9))
                             webCount++
@@ -282,7 +287,7 @@ object AssetsPanel {
                     status.text=buildString{
                         append(polyCount).append(" Poly Haven · ")
                         append(ambientCount).append(" ambientCG · ")
-                        append(webCount).append(" web-indexed original files")
+                        append(webCount).append(" verified public model-file links")
                         if(polyCount+ambientCount+webCount==0 && errors.isEmpty())
                             append(" · No matching originals")
                         if(errors.isNotEmpty())

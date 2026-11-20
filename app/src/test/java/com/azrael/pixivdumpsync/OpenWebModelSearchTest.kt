@@ -34,4 +34,42 @@ class OpenWebModelSearchTest {
         assertEquals("https://models.example.org/character.glb",
             results.single().url)
     }
+
+    @Test fun federatedSearchAcceptsOnlyFreeDownloadableActualGlbFormats(){
+        val data="""{"results":[
+          {"id":"threedassets:bastard-sword","title":"Bastard Sword",
+           "provider":"threedassets","downloadable":true,"price":{"free":true},
+           "formats":["glb"],"thumbnailUrl":"https://cdn.3dassets.dev/sword.webp",
+           "url":"https://3dassets.dev/assets/bastard-sword"},
+          {"id":"store:paid-sword","title":"Paid Sword","downloadable":true,
+           "price":{"free":false},"formats":["glb"]},
+          {"id":"locked:broken-sword","title":"Broken Sword",
+           "downloadable":false,"price":{"free":true},"formats":["glb"]},
+          {"id":"other:sword-obj","title":"Sword OBJ",
+           "downloadable":true,"price":{"free":true},"formats":["obj"]}
+        ]}"""
+        val found=OpenWebModelSearch.parseFederatedModels(data,"sword")
+        assertEquals(1,found.size)
+        assertTrue(found.single().url.startsWith(
+            "https://3d.shep.bot/v1/assets/threedassets%3Abastard-sword/download"))
+        assertEquals("GLB",found.single().format)
+    }
+    @Test fun grab3dUsesOnlyPublishedFullGlbNotPreviewOrMarketingPage(){
+        val data="""{"models":[{
+          "slug":"sword-prop","name":{"en":"Sword Prop"},
+          "tags":["sword","medieval"],
+          "media":{"thumbnail":"https://grab3d.com/m/sword.png"},
+          "files":[
+            {"format":"glb","variant":"light",
+             "url":"https://grab3d.com/dl/sword-prop/sword-light.glb"},
+            {"format":"glb","variant":"full",
+             "url":"https://grab3d.com/dl/sword-prop/sword-full.glb"}
+          ]
+        }]}"""
+        val found=OpenWebModelSearch.parseGrab3DModels(data,"sword")
+        assertEquals(1,found.size)
+        assertEquals("https://grab3d.com/dl/sword-prop/sword-full.glb",
+            found.single().url)
+    }
 }
+
