@@ -17,6 +17,20 @@ internal object GalleryRequestLedger {
     private const val MAX_REQUESTS=256
     private val lock=Any()
 
+    /** Legacy jobs predate provider-source identity. Their saved site host
+     * still identifies Kyora's original native adapter unambiguously.
+     * Keep user-selected requests and downloaded files; never create a
+     * duplicate generic replay after migration.
+     */
+    private fun legacySource(host:String?):String?=when(host){
+        "4khd.com"->"4khd"
+        "buondua.com","buondua.net"->"buondua"
+        "cosplaytele.com"->"cosplaytele"
+        "kiutaku.com"->"kiutaku"
+        "pornpics.com","celeb.st"->"generic"
+        else->null
+    }
+
     data class Request(val mode:SyncMode,val entityId:String?=null,
                        val siteHost:String?=null,
                        val albumUrl:String?=null,
@@ -42,6 +56,7 @@ internal object GalleryRequestLedger {
                     val album=value.optString("album").takeIf{it.isNotBlank()}
                     val title=value.optString("title").takeIf{it.isNotBlank()}
                     val source=value.optString("source").takeIf{it.isNotBlank()}
+                        ?:legacySource(host)
                     val req=Request(mode,entity,host,album,title,source)
                     if(req.targeted && none{it.signature()==req.signature()})
                         add(req)
