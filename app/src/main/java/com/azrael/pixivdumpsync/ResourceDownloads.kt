@@ -226,6 +226,44 @@ object ResourceDownloads {
     }
     fun downloadFile(a:Activity,url:String,folder:String,filename:String,
                      referer:String?=null){
+        // Kyora regression: public cosplay article images were passed to
+        // Android DownloadManager as isolated .jpg files. Their original
+        // server expects the native GalleryFlow session/referer and often
+        // rejects DownloadManager with HTTP 403. A selected GALLERY page
+        // must use the existing Kyora album transaction instead.
+        if(folder=="Images" && !referer.isNullOrBlank()){
+            val source=AlohaSources.by(AlohaArea.COSPLAY).firstOrNull{
+                SiteControls.key(it.url)==SiteControls.key(referer)
+            }
+            val page=runCatching{URI(referer).path.orEmpty()}.getOrDefault("")
+            val exact=when(source?.host){
+                "4khd.com"->page.startsWith("/content/") &&
+                    page.endsWith(".html",true)
+                "buondua.com","buondua.net"->page.startsWith("/albums/") &&
+                    page.trim('/').split('/').size==2
+                "cosplaytele.com"->page.trim('/').let{
+                    it.isNotBlank() && '/' !in it &&
+                        it !in setOf("page","category","tag","search")
+                }
+                "kiutaku.com"->page.matches(Regex("/[0-9]{1,9}/?"))
+                "pornpics.com"->page.startsWith("/galleries/") &&
+                    page.trim('/').split('/').size==2
+                else->false
+            }
+            if(source!=null && exact){
+                thread(name="asterion-kyora-gallery-original"){
+                    val result=runCatching{
+                        ApprovedCosplayActions.selectedGallery(a,source.url,
+                            KurohaMediaPreview.Tile(referer,filename,url,
+                                source.name,referer))
+                    }.getOrElse{it.message?:"Gallery original unavailable"}
+                    a.runOnUiThread{
+                        if(!a.isFinishing && !a.isDestroyed)note(a,result)
+                    }
+                }
+                return
+            }
+        }
         http(a,url,folder,filename,referer)
     }
     private fun http(a:Activity,url:String,folder:String,filename:String?=null,
