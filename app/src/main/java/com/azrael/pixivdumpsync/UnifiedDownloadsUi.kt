@@ -506,6 +506,56 @@ object UnifiedDownloadsUi {
                     },key="x:"+item.id)
             }
         }
+        // The Gallery counts come from its durable media table. Previously
+        // this Downloads screen loaded only SAVED Gallery thumbnails from
+        // MediaStore, so a genuine 3-active/1-queued module always said
+        // "No unfinished jobs in the recent queue sample". Show actual
+        // nonterminal records without changing their state or canceling sync.
+        runCatching {
+            com.azrael.galleryflow.GalleryDb(a.applicationContext).use { store ->
+                store.readableDatabase.query("media",
+                    arrayOf("source","media_id","filename","url","state",
+                        "updated_at"),
+                    "state IN ('downloading','pending','retrying',"+
+                        "'permanent_error','inaccessible')",
+                    null,null,null,"updated_at DESC","80").use { cursor ->
+                    while(cursor.moveToNext()){
+                        val publisher=cursor.getString(0).orEmpty()
+                        val mediaId=cursor.getString(1).orEmpty()
+                        val file=cursor.getString(2).orEmpty().ifBlank{
+                            cursor.getString(3).orEmpty()
+                                .substringBefore('?').substringAfterLast('/')
+                                .ifBlank{mediaId}
+                        }
+                        val raw=cursor.getString(4).orEmpty()
+                        val state=when(raw){
+                            "downloading"->State.ACTIVE
+                            "pending","retrying"->State.QUEUED
+                            else->State.FAILED
+                        }
+                        val updated=cursor.getLong(5)
+                        rows+=Row("Gallery",file,
+                            "Gallery · "+publisher+" · "+when(state){
+                                State.ACTIVE->"Acquiring original"
+                                State.QUEUED->"Waiting for Gallery sync"
+                                else->"Original unavailable; saved files kept"
+                            },state,null,updated,{
+                                (a as? AsterionHomeActivity)
+                                    ?.openDownloadsModule("Gallery")
+                            },mime="image/*",hasPrimaryAction=false,
+                            onRemove=if(state==State.FAILED) ({
+                                com.azrael.galleryflow.GalleryDb(
+                                    a.applicationContext).use{db->
+                                    db.acknowledgeTerminalMediaFailure(
+                                        publisher,mediaId)
+                                }
+                            }) else null,
+                            key="gallery:"+publisher+":"+mediaId)
+                    }
+                }
+            }
+        }.onFailure { android.util.Log.w(
+            "AsterionDownloads","Gallery job listing unavailable",it) }
         // Pixiv and Kyora store successful originals in MediaStore rather
         // than the smaller transfer-job queues. Include recent native media
         // without loading the entire archive into memory.
@@ -1730,7 +1780,11 @@ object UnifiedDownloadsUi {
                     it.state in setOf(State.ACTIVE,State.QUEUED,State.PAUSED) &&
                         it.onRemove!=null
                 }
-                if(pausable.isNotEmpty() || resumable.isNotEmpty() ||
+                // A single visible job already exposes RESUME on its row.
+                // Rendering the same operation again as a full-width bulk
+                // button caused the duplicated Torrent RESUME in the report.
+                val bulkResumable=resumable.size>1
+                if(pausable.isNotEmpty() || bulkResumable ||
                     cancellable.isNotEmpty()){
                     val actions=ui.row(a)
                     if(pausable.isNotEmpty())
@@ -1740,7 +1794,7 @@ object UnifiedDownloadsUi {
                             // unsafe raw worker thread.
                             applyModuleActions(a,pausable.map{it.action},refresh)
                         },LinearLayout.LayoutParams(0,-2,1f))
-                    if(resumable.isNotEmpty())
+                    if(bulkResumable)
                         actions.addView(ui.action(a,"RESUME",true){
                             if(source=="Video"){
                                 VideoDb(a).use{db->
