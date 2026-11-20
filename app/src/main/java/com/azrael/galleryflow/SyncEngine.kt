@@ -95,6 +95,11 @@ class SyncEngine(private val context: Context) {
         val entity=KyoraSelectedGalleryIdentity.parent(db.listEntities(),
             entityId,rawUrl,siteHost,siteSource) ?:throw AdapterException(
                 "Selected album's exact parent provider is not registered")
+        // This is ONE resolved native source entity, even though the work
+        // is deliberately scoped to a single album. The old code left the
+        // entity count at zero, so EVERY successful selected album was treated
+        // as unverified and replayed indefinitely from the durable ledger.
+        stats.entities=maxOf(stats.entities,1)
         // Preserve Kyora's original native stable IDs. The unified
         // selection path formerly synthesized a generic hash for every
         // non-Kiutaku album; BuonDua then looked for /photos/<hash>/

@@ -10,6 +10,23 @@ import android.os.IBinder
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
+/** Completion must be judged by the OWNED original-file transaction.
+ * Targeted requests never become automatic site-wide subscriptions.
+ * Replaying an already completed selected album stalls all other providers.
+ */
+internal object GalleryCompletionPolicy {
+    fun completed(job:GalleryRequestLedger.Request,
+                  result:SyncEngine.Stats,stopping:Boolean):Boolean {
+        if(stopping || result.errors>0 || result.incompleteGalleries>0)
+            return false
+        if(job.albumUrl!=null)
+            return result.galleriesCompleted>0
+        if(result.entities<=0)return false
+        return if(job.mode==SyncMode.BACKFILL)
+            result.galleriesSeen>0 else true
+    }
+}
+
 class SyncForegroundService : Service() {
     companion object {
         const val ACTION_START = "com.azrael.galleryflow.START"
@@ -134,15 +151,8 @@ class SyncForegroundService : Service() {
                             // resolved no album, or every transfer failed.
                             // Retain failed requests and expose an error,
                             // not a false "scheduled successfully" receipt.
-                            val healthy=result.errors==0 &&
-                                result.incompleteGalleries==0 &&
-                                !SyncControl.isStopping() &&
-                                result.entities>0
-                            val verified=healthy && if(job.albumUrl!=null)
-                                result.galleriesCompleted>0
-                            else if(job.mode==SyncMode.BACKFILL)
-                                result.galleriesSeen>0
-                            else true // A LIVE check may genuinely find nothing new.
+                            val verified=GalleryCompletionPolicy.completed(
+                                job,result,SyncControl.isStopping())
                             if(verified){
                                 GalleryRequestLedger.completed(applicationContext,job)
                             }else{
