@@ -82,6 +82,14 @@ internal object PublisherOriginalExtractors {
             "article video[src],meta[itemprop=contentUrl]")
     ).associateBy { it.host }
 
+    // These six newly added publishers have no independently verified
+    // page-wide JSON-LD media attribution contract. Only their selected
+    // article/HTML5 player can attest an original; recommendation VideoObject
+    // data and global contentUrl meta fields are not selected-player evidence.
+    private val selectedPlayerOnlyHosts=setOf(
+        "avple.tv","pimpbunny.com","xchina.co",
+        "bubblecum.lol","pornavhd.com","camstreams.tv")
+
     val coveredHosts:Set<String> get()=sites.keys
 
     private fun domain(raw:String):String? {
@@ -187,7 +195,7 @@ internal object PublisherOriginalExtractors {
             }
             found.putIfAbsent(link,Candidate(link,selected,host))
         }
-        if(!site.requireDuration){
+        if(!site.requireDuration && host !in selectedPlayerOnlyHosts){
             for(raw in structured(doc))add(raw)
         }
         for(element in doc.select(site.selectors).take(25)){
@@ -197,6 +205,9 @@ internal object PublisherOriginalExtractors {
                     ".ads,.advertisement,.sidebar,.more-videos,[data-ad]")!=null)
                 continue
             val tag=element.tagName()
+            // A global metadata element can describe a recommendation, not
+            // the selected scene. Only actual selected-player markup qualifies.
+            if(host in selectedPlayerOnlyHosts && tag=="meta")continue
             val isFrame=tag=="iframe"
             val duration=element.attr("data-duration").toLongOrNull()
                 ?:element.closest("[data-duration]")?.attr("data-duration")?.toLongOrNull()

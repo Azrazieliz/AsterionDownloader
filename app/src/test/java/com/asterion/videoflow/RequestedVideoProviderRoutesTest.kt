@@ -64,6 +64,37 @@ class RequestedVideoProviderRoutesTest {
         }
     }
 
+    @Test fun newPublishersRejectUnattributedJsonLdAndGlobalMediaMetadata(){
+        val selected=listOf(
+            "https://pimpbunny.com/videos/selected-scene-123",
+            "https://en.xchina.co/video/6b00b2b6032b1",
+            "https://www.bubblecum.lol/video/selected-scene-example/",
+            "https://pornavhd.com/2026/11/14/selected_20261114/",
+            "https://camstreams.tv/videos/1363858/selected-recording/",
+            "https://avple.tv/watch/selected-scene-123")
+        val unrelatedMeta="""<head>
+          <script type="application/ld+json">{
+            "@type":"VideoObject",
+            "name":"Suggested video",
+            "contentUrl":"https://media.example.net/unrelated-full.mp4"
+          }</script>
+          <meta itemprop="contentUrl"
+            content="https://media.example.net/unrelated-recommendation.mp4">
+          </head>"""
+        for(page in selected){
+            assertTrue("Never download a recommendation as the selected video: "+page,
+                PublisherOriginalExtractors.fromHtml(page,
+                    unrelatedMeta+"<main><aside class='recommended'>"+
+                    "<video src='https://media.example.net/sidebar.mp4'>"+
+                    "</video></aside></main>").isEmpty())
+            assertEquals(listOf("https://media.example.net/selected-full.mp4"),
+                PublisherOriginalExtractors.fromHtml(page,
+                    unrelatedMeta+"<main><div class='video-player'>"+
+                    "<video src='https://media.example.net/selected-full.mp4'>"+
+                    "</video></div></main>").map{it.url})
+        }
+    }
+
     @Test fun providerHtmlParsingCannotTreatAProfileOrThumbnailAsOriginal(){
         val selected="https://www.bubblecum.lol/video/selected-scene-example/"
         assertTrue(PublisherOriginalExtractors.owns(selected))
