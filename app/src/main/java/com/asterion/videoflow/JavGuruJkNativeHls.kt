@@ -313,9 +313,7 @@ internal object JavGuruJkNativeHls {
 
     fun download(article:String,media:String,referer:String?,
                  directory:File,filenameStem:String,proxy:Proxy?=null,
-                 progress:(Int,Long,Int,Int)->Unit={_,_,_,_->},
-                 cancelled:()->Boolean={false},
-                 renewSelectedSource:(()->Pair<String,String>?)?=null):File {
+                 progress:(Int,Long,Int,Int)->Unit={_,_,_,_->},cancelled:()->Boolean={false}):File {
         require(eligible(article,media,referer)){
             "Not the exact selected Jav Guru JK original HLS"
         }
@@ -345,61 +343,6 @@ internal object JavGuruJkNativeHls {
         // previous random /selected-jk-* temp directory deleted on ANY error.
         val fingerprint=stageFingerprint(
             article,media,frame,variant,plan,key,durations)
-        // A valid selected JK signature can expire mid-VOD. Refresh ONLY
-        // the same owner-selected track after CDN 401/403, preserving
-        // SHA-verified fragments and rejecting different episode/media bytes.
-        data class SignedState(val media:String,val variant:String,val plan:Plan)
-        val active=java.util.concurrent.atomic.AtomicReference(
-            SignedState(media,variant,plan))
-        val renewalLock=Any()
-        var renewalAttempts=0
-        fun renewAfterRejection(observed:SignedState,failure:IOException):Boolean {
-            val reason=failure.message.orEmpty()
-            if(renewSelectedSource==null ||
-                !(reason.contains("HTTP 401") || reason.contains("HTTP 403")))
-                return false
-            synchronized(renewalLock) {
-                if(active.get()!==observed)return true
-                if(renewalAttempts>=2)return false
-                renewalAttempts++
-                val refreshed=runCatching {
-                    checkCancel()
-                    val (nextMedia,nextFrame)=renewSelectedSource.invoke()
-                        ?:return@runCatching null
-                    if(nextFrame!=frame ||
-                        !eligible(article,nextMedia,nextFrame) ||
-                        parsed(nextMedia)?.path!=parsed(media)?.path)
-                        return@runCatching null
-                    val nextMaster=String(fetch(nextMedia,nextFrame,MAX_PLAYLIST,proxy),
-                        Charsets.UTF_8)
-                    val nextVariant=selectedVariant(nextMedia,nextMaster)
-                    if(parsed(nextVariant)?.path!=parsed(variant)?.path)
-                        return@runCatching null
-                    val nextVod=String(fetch(nextVariant,nextMedia,MAX_PLAYLIST,proxy),
-                        Charsets.UTF_8)
-                    val nextPlan=selectedPlan(nextVariant,nextVod)
-                    val nextKey=fetch(nextPlan.keyUrl,nextVariant,128,proxy)
-                    val nextDurations=nextVod.lines().map{it.trim()}.filter{
-                        it.startsWith("#EXTINF:")
-                    }
-                    if(nextKey.size!=16 || !nextKey.contentEquals(key) ||
-                        nextDurations!=durations ||
-                        nextPlan.mediaSequence!=plan.mediaSequence ||
-                        nextPlan.durationSeconds!=plan.durationSeconds ||
-                        !(nextPlan.explicitIv?.contentEquals(
-                            plan.explicitIv?:ByteArray(0))
-                            ?: (plan.explicitIv==null)) ||
-                        nextPlan.segments.size!=plan.segments.size ||
-                        nextPlan.segments.indices.any {
-                            parsed(nextPlan.segments[it])?.path!=
-                                parsed(plan.segments[it])?.path
-                        })return@runCatching null
-                    SignedState(nextMedia,nextVariant,nextPlan)
-                }.getOrNull()?:return false
-                active.set(refreshed)
-                return true
-            }
-        }
         val scratch=File(directory,"selected-jk-$fingerprint.stage")
         if(!scratch.isDirectory && !scratch.mkdirs())
             throw IOException("Cannot create selected JK durable staging")
@@ -431,17 +374,7 @@ internal object JavGuruJkNativeHls {
             for((index,url) in missing){
                 queue.submit(Callable{
                     checkCancel()
-                    val observed=active.get()
-                    val ciphertext=try {
-                        fetch(observed.plan.segments[index],observed.variant,
-                            MAX_FRAGMENT,proxy)
-                    }catch(rejected:IOException){
-                        if(!renewAfterRejection(observed,rejected))throw rejected
-                        checkCancel()
-                        val latest=active.get()
-                        fetch(latest.plan.segments[index],latest.variant,
-                            MAX_FRAGMENT,proxy)
-                    }
+                    val ciphertext=fetch(url,variant,MAX_FRAGMENT,proxy)
                     val clear=decodeSegment(ciphertext,key,segmentIv(plan,index))
                     val fragment=File(scratch,"fragment-%04d.ts".format(Locale.ROOT,index))
                     val digest=File(scratch,fragment.name+".sha256")
