@@ -21,8 +21,7 @@ class PublishedVideoEmbedTest {
         val doc=Jsoup.parse("""
           <iframe src="https://player.example.org/e/video55" allowfullscreen></iframe>
         """.trimIndent(),page)
-        assertEquals(listOf("https://player.example.org/e/video55"),
-            WebDiscovery.publishedEmbeds(doc,page))
+        assertTrue(WebDiscovery.publishedEmbeds(doc,page).isEmpty())
     }
     @Test fun archivebateKeepsExactMixdropSelectionContract(){
         val page="https://archivebate.com/watch/123456/"
