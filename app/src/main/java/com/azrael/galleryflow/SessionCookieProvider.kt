@@ -55,12 +55,20 @@ class SessionCookieProvider:ContentProvider() {
                         it.message.orEmpty().take(180))}
             }
         }
-        if(!connected)return Bundle()
+        if(!connected &&
+            !(method=="read_site_html" &&
+                com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url)))
+            return Bundle()
         if(method=="read_site_html") {
-            // Connected browser verification can only be resumed in the main
-            // process, which owns the login's WebView cookie jar. Binder has
-            // a bounded transaction size; fail rather than truncating HTML.
-            val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(ctx,url)
+            // Exact public selected players also need the owner's main
+            // process WebView cookie jar. The isolated VideoFlow processes
+            // have separate Android P+ WebView storage partitions.
+            val referer=extras?.getString("referer")?.takeIf{
+                com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(it) ||
+                    SiteSession.bound(ctx,it)
+            }
+            val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                ctx,url,playerReferer=referer)
             return Bundle().apply {
                 if(html.toByteArray(Charsets.UTF_8).size<=SessionHtmlEnvelope.RAW_LIMIT)
                     putString("html",html)
