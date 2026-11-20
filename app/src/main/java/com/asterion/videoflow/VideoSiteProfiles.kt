@@ -28,6 +28,8 @@ internal object VideoSiteProfiles {
         // OnScreens identifies a single saved recording with a UUID and a
         // descriptive slug; /videos, /models, /t/* are LISTING routes only.
         Route("onscreens.me",Regex("""(?i)^/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/[a-z0-9][a-z0-9-]{8,250}/?$""")),
+        // Model directories and categories are not recordings.
+        Route("livecamrips.to",Regex("""(?i)^/video/[0-9]{5,12}/?$""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         // Real HelloPorn selected videos are /video-<id>-<slug>, NOT
         // /video/<slug>. The former route dropped every live catalog card.
