@@ -691,7 +691,11 @@ object VideoEngine {
                     JavGuruJkNativeHls.download(
                         item.url,link,referer,parent,
                         item.title+" ["+item.id+"]",
-                        NetworkRoute.javaProxyForSelected(context,item.url,link),
+                        // Restore the last known byte-transferring Android JK
+                        // transport introduced by da0fffcb. Commit 3b410f3
+                        // silently changed its publisher route selection,
+                        // while restoring the HLS parser left that regression.
+                        NetworkRoute.javaProxy(context,item.url),
                         progress={percent,verifiedBytes,fragmentsDone,fragmentsTotal->
                             if(!db.progressClaim(item.id,item.lease,percent))
                                 throw java.util.concurrent.CancellationException(
