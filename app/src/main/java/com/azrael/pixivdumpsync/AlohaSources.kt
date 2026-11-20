@@ -33,6 +33,7 @@ NotFans|https://notfans.com/|ADULT
 Archivebate|https://archivebate.com/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
+Porneec|https://porneec.com/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
 FullPorner|https://fullporner.com/|ADULT
 Pornhub|https://www.pornhub.com/|ADULT
@@ -41,6 +42,7 @@ XXXi|https://xxxi.porn/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
+TaiAV Chinese Studios|https://taiav.com/cn/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 XXXClub|https://xxxclub.to/|TORRENTS
 OneJAV|https://onejav.com/|TORRENTS
@@ -64,7 +66,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==34 && sites.distinctBy{it.url}.size==34){"Incorrect approved Aloha source set"}
+            require(sites.size==36 && sites.distinctBy{it.url}.size==36){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
