@@ -9,7 +9,8 @@ import java.util.zip.ZipFile
 /**
  * Fail-closed preliminary quarantine inspection, NOT an antivirus scanner.
  * Even a file with no findings must remain private until a trusted malware
- * scanner verifies it. No public export or install is permitted here.
+ * scanner verifies it. User-confirmed export is a separate guarded action;
+ * quarantine review never automatically publishes or installs any file.
  */
 internal object TorrentQuarantineGate {
     private val archive=setOf("zip","jar","apk","epub","xpi","docx","xlsx","pptx")
