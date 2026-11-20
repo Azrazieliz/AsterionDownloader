@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AlohaProviderSearchTest {
+    @Test fun independentWebSourcesRunBeforeSlowSiteSearchTasks(){
+        val providers=listOf(
+            "JAV Guru" to "slow", "Porneec" to "slow",
+            "Bing Web" to "broad", "Pornhub" to "publisher",
+            "DuckDuckGo Web" to "broad")
+        val scheduled=KeywordSources.prioritizedTasks(providers)
+        assertEquals(listOf("Bing Web","DuckDuckGo Web"),
+            scheduled.take(2).map{it.first})
+        assertEquals(providers.size,scheduled.size)
+        assertEquals(providers.toSet(),scheduled.toSet())
+        assertTrue(KeywordSources.SEARCH_SOURCE_TIMEOUT_MS<10_000)
+    }
     @Test fun directSiteGetFormUsedWithoutCrossSiteQueryLeak(){
         val page="""<html><form action="/?sort=recent" method="GET">
           <input type="hidden" name="lang" value="en">
