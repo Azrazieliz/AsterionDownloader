@@ -92,8 +92,12 @@ object AsterionSearchHub {
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
         val all=if(mode==0)ranked+peertube(term) else ranked
+        // Names are ordered identities: "Bella Alice" must not include
+        // "Barbara Bella and Alice Marshall" merely because both tokens
+        // appeared in unrelated parts of a title. Descriptive torrent/game
+        // searches keep their existing broader word matching elsewhere.
         val unique=all.filter{
-            SearchExactness.matches(term,it.title) &&
+            SearchExactness.matchesPhrase(term,it.title) &&
                 !IndexedMediaQuality.navigationTitle(it.title)
         }.distinctBy{SearchRanking.canonicalKey(it.url)}
         SearchResultsDb(ctx).use{db->
