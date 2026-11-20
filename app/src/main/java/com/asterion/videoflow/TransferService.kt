@@ -713,9 +713,15 @@ object VideoEngine {
                 ?:cookie.takeIf{it.isFile&&it.length()>0}
             // Preserve the publisher route unless the selected external
             // player/CDN has its own owner-approved HTTP/SOCKS/VPN route.
+            // Publisher-selected VOE/Mixdrop player hosts may have a
+            // separately configured owner route. Earlier only JAV/nhplayer
+            // got selected-host routing: OnScreens/LiveCamRips silently sent
+            // the genuine selected player through the publisher's exit,
+            // causing child host connection-refused/403 on Android.
+            // An unconfigured child still inherits the publisher's route.
             val routeSelectedHost=NetworkRoute.siteKey(item.url) in setOf(
                 "jav.guru","javideo.net","helloporn.com",
-                "uncensoredhentai.xxx")
+                "uncensoredhentai.xxx","onscreens.me","livecamrips.to")
             val proxy=if(routeSelectedHost)
                 NetworkRoute.extractorProxyForSelected(context,item.url,link)
                 else NetworkRoute.extractorProxy(context,item.url)
