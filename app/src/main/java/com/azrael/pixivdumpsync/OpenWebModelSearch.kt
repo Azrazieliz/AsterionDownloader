@@ -122,19 +122,38 @@ internal object OpenWebModelSearch {
         val gathered=ArrayList<Candidate>()
         val pool=Executors.newFixedThreadPool(4)
         try{
-            val futures=names.flatMap{engine->
-                (0..1).map{mode->
-                    (engine+"-"+mode) to pool.submit<List<Candidate>>{
-                        searchOne(term,engine,mode)
-                    }
-                }
+            val completion=java.util.concurrent.ExecutorCompletionService<
+                Triple<String,List<Candidate>,String?>>(pool)
+            var submitted=0
+            for(engine in names)for(mode in 0..1){
+                submitted++
+                completion.submit(java.util.concurrent.Callable{
+                    val label=engine+"-"+mode
+                    runCatching{searchOne(term,engine,mode)}
+                        .fold({Triple(label,it,null)},{
+                            Triple(label,emptyList<Candidate>(),
+                                (it.message?:it.javaClass.simpleName).take(120))
+                        })
+                })
             }
-            for((name,future) in futures){
-                runCatching{future.get(22,TimeUnit.SECONDS)}
-                    .onSuccess{gathered.addAll(it)}
-                    .onFailure{errors.add(name+": "+
-                        (it.cause?.message?:it.message?:"Unavailable").take(120))}
+            // The old code waited 22 seconds for EACH of four futures in
+            // submission order (up to 88 seconds) and could miss a faster
+            // provider simply because the first request was blocked.
+            // Collect whichever independent engine completes first inside
+            // ONE global search deadline.
+            val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(22)
+            var finished=0
+            while(finished<submitted){
+                val remaining=deadline-System.nanoTime()
+                if(remaining<=0L)break
+                val result=completion.poll(remaining,TimeUnit.NANOSECONDS)?:break
+                finished++
+                val (label,candidates,error)=result.get()
+                gathered.addAll(candidates)
+                if(error!=null)errors.add(label+": "+error)
             }
+            if(finished<submitted)errors.add(
+                (submitted-finished).toString()+" model-index requests timed out")
         }finally{pool.shutdownNow()}
         val result=gathered.asSequence().filter{
             SearchExactness.matches(term,it.title+" "+
