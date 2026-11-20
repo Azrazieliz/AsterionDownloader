@@ -109,7 +109,7 @@ object KeywordSources {
             site->site.host!="onejav.com" &&
                 !ProviderRetirement.isRetired(site.url)
         }.map{SearchProvider(SearchProviderKind.HTML,
-            it.url,"Aloha · "+it.name)}}.orEmpty()
+            it.url,it.name)}}.orEmpty()
         // Deduplicate identical source templates, not all hosts: one
         // publisher may expose independent video / gallery / search routes.
         return (direct+extraTemplates+saved+integrated).filter{provider->
