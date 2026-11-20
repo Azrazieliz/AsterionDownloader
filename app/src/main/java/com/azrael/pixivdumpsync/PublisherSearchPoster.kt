@@ -39,7 +39,8 @@ internal object PublisherSearchPoster {
     fun fetch(context:Context,page:String):String? {
         if(!page.startsWith("https://") ||
             !SearchRanking.validUrl(page) ||
-            !SearchRanking.isVideoUrl(page))return null
+            !(SearchRanking.isVideoUrl(page) ||
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)))return null
         val connection=Jsoup.connect(page).timeout(8_000).maxBodySize(850_000)
             .ignoreHttpErrors(true).followRedirects(false)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
