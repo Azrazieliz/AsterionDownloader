@@ -76,17 +76,48 @@ class FullLengthVideoPolicyTest {
                 FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,result.verdict)
         }
     }
-    @Test fun trustedProviderAcceptsUnreportedRuntimeButRejectsExplicitExcerpt(){
+    @Test fun trustedProviderHoldsUnreportedRuntimeRatherThanBlindlyAcceptingShortClips(){
         assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
             FullLengthVideoPolicy.assess("Studio Actress teaser",
                 "Studio Actress","https://watchporn.to/video/12/a",3000,null).verdict)
-        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,
+        assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
             FullLengthVideoPolicy.assess("Studio Actress",
                 "Studio Actress","https://watchporn.to/video/12/a",null,null).verdict)
         assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
             FullLengthVideoPolicy.assess("Example clip",
                 "Example clip","https://www.eporner.com/video-ABC12345/",null,null).verdict)
     }
+    @Test fun completedSyncedPreviewMustNotBePublishedAsSavedOriginal(){
+        for(seconds in listOf(25L,39L,75L,119L)){
+            val result=FullLengthVideoPolicy.completedOriginalVerdict(
+                seconds*1000,referenceSeconds=null,explicitlyRequested=false)
+            assertEquals(FullLengthVideoPolicy.Verdict.HOLD_FOR_REFERENCE,
+                result.verdict)
+            assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,
+                FullLengthVideoPolicy.completedOriginalVerdict(
+                    seconds*1000,null,explicitlyRequested=true).verdict)
+        }
+        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,
+            FullLengthVideoPolicy.completedOriginalVerdict(1800*1000L,
+                null,explicitlyRequested=false).verdict)
+    }
+
+    @Test fun selectedAndPreferredHostCannotOverrideKnownFullDuration(){
+        val page="https://watchporn.to/videos/full-scene"
+        val known=35*60L
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.assess(
+                "Actor Studio Scene","Actor Studio Scene",page,30L,
+                known).verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.assess(
+                "Actor Studio Scene","Actor Studio Scene",page,30L,
+                known,userExplicitlyRequested=true).verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            FullLengthVideoPolicy.completedOriginalVerdict(
+                31*1000L,known,explicitlyRequested=true).verdict)
+    }
+
     @Test fun tinyCutIsRejectedAgainstVerifiedOriginal(){
         val result=FullLengthVideoPolicy.assess("Studio Actress Scene",
             "Studio Actress Scene","https://www.porngo.com/scene/ab",49*60L,50*60L)
