@@ -40,6 +40,8 @@ internal object VideoSiteProfiles {
         // Porneec's real posts are root-level multiword scene slugs, not /video.
         // Never admit ordinary category, performer, tracking or menu paths.
         Route("porneec.com",Regex("""(?i)^/[a-z0-9]{2,40}(?:-[a-z0-9]{2,45}){3,12}/?$""")),
+        // PornBuz selected article IDs end in a unique numeric release key.
+        Route("pornbuz.com",Regex("""(?i)^/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?$""")),
         // TaiAV publishes identifiable Mandarin studio movies under /cn/movie/<hex>.
         Route("taiav.com",Regex("""(?i)^/(?:cn|tw|en)/movie/[a-f0-9]{24}/?$""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
