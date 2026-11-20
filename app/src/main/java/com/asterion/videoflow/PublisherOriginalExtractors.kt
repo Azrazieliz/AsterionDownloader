@@ -57,10 +57,13 @@ internal object PublisherOriginalExtractors {
             "main #player video[src],main #player source[src],"+
             "article video[src],meta[itemprop=contentUrl]"),
         Site("pornavhd.com",
+            "main .video-player video[src],main .video-player source[src],"+
+            "main #player video[src],main #player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
             "article #player video[src],article #player source[src],"+
             "meta[itemprop=contentUrl]"),
         Site("avple.tv",
+            "main .video-player video[src],main .video-player source[src],"+
             "main #player video[src],main #player source[src],"+
             "article video[src],meta[itemprop=contentUrl]"),
         Site("taiav.com","main .video-player video[src],main .video-player source[src],"+

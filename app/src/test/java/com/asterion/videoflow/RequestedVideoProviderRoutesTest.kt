@@ -47,7 +47,8 @@ class RequestedVideoProviderRoutesTest {
             "https://en.xchina.co/video/6b00b2b6032b1",
             "https://www.bubblecum.lol/video/selected-scene-example/",
             "https://pornavhd.com/2026/11/14/selected_20261114/",
-            "https://camstreams.tv/videos/1363858/selected-recording/"
+            "https://camstreams.tv/videos/1363858/selected-recording/",
+            "https://avple.tv/watch/selected-scene-123"
         )
         val player="""<main>
             <div class="video-player">
