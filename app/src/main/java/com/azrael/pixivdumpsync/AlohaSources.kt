@@ -31,12 +31,12 @@ Kiutaku|https://kiutaku.com/|COSPLAY
 Porn Pics|https://www.pornpics.com/|COSPLAY
 NotFans|https://notfans.com/|ADULT
 Archivebate|https://archivebate.com/|ADULT
-OnScreens Webcam Replays|https://www.onscreens.me/|ADULT
-LiveCamRips recordings|https://livecamrips.to/|ADULT
+OnScreens|https://www.onscreens.me/|ADULT
+LiveCamRips|https://livecamrips.to/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 Porneec|https://porneec.com/|ADULT
-PornBuz curated channels|https://pornbuz.com/|ADULT
+PornBuz|https://pornbuz.com/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
 FullPorner|https://fullporner.com/|ADULT
 Pornhub|https://www.pornhub.com/|ADULT
@@ -45,7 +45,7 @@ XXXi|https://xxxi.porn/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
-TaiAV Chinese Studios|https://taiav.com/cn/|ADULT
+TaiAV|https://taiav.com/cn/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 XXXClub|https://xxxclub.to/|TORRENTS
 OneJAV|https://onejav.com/|TORRENTS
