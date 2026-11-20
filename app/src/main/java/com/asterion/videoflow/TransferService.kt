@@ -1675,6 +1675,21 @@ object VideoEngine {
             }
             val known=listOfNotNull(reference,expectedDuration)
                 .filter{it>0L}.maxOrNull()
+            // Selected full-video providers may return a complete, valid
+            // 20-second PREVIEW when the full original player is missing.
+            // These affected-provider clips must not be published as Saved
+            // merely because the owner explicitly tapped the full video.
+            // Working Jav Guru/Pornhub and verified short originals stay
+            // unchanged. Keep failed media private for diagnosis.
+            if(UnverifiedSelectedPreviewGuard.shouldHold(
+                    item.url,actual,known)){
+                val detail="Selected publisher returned "+
+                    (actual/1000L)+"s, without independent full-runtime "+
+                    "evidence. Possible preview; original not verified."
+                VideoTransferJournal.record(context,item.id,
+                    "short_original_held",detail)
+                throw FullVersionUnavailable(detail)
+            }
             val fullness=FullLengthVideoPolicy.completedOriginalVerdict(
                 actual,known,userRequested)
             if(fullness.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
