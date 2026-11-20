@@ -22,6 +22,7 @@ class PublisherOriginalExtractorsTest {
 
         "freepornvideos.xxx" to "https://www.freepornvideos.xxx/videos/example",
         "porneec.com" to "https://porneec.com/sexmex-andrea-castro-my-nympho-wife/",
+        "pornbuz.com" to "https://pornbuz.com/video/milfty-deliah-grace-you-think-youll-be-able-to-resist-me-cute-the-hunt-is-on-91071/",
         "taiav.com" to "https://taiav.com/cn/movie/654424d67b410d2615db16e5",
         "omg.porn" to "https://omg.porn/video/example",
         "hentaibros.net" to "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
