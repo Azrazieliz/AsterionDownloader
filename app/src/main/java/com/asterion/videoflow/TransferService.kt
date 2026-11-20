@@ -1168,14 +1168,12 @@ object VideoEngine {
         // real player/API failure. Never substitute /previewvideo.
         val strictTaiAv=NetworkRoute.siteKey(item.url)=="taiav.com" &&
             VideoSiteProfiles.isVideoPage(item.url)
-        val strictIframe=NetworkRoute.siteKey(item.url) in
-            setOf("javideo.net","helloporn.com","uncensoredhentai.xxx",
-                // New owner-approved sources require an exact selected
-                // player original. Generic article yt-dlp, arbitrary
-                // iframe fallback or first unrelated preview/ad is not
-                // a substitute for a complete recording.
-                "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
+        val strictNewProvider=NetworkRoute.siteKey(item.url) in
+            setOf("avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
                 "bubblecum.lol","pornavhd.com","camstreams.tv")
+        val strictIframe=NetworkRoute.siteKey(item.url) in
+            setOf("javideo.net","helloporn.com","uncensoredhentai.xxx") ||
+            strictNewProvider
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
@@ -1196,8 +1194,11 @@ object VideoEngine {
                     "the HTML page and recommended media are not downloads"))
         if(strictIframe && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
-                IllegalStateException(
-                    "Selected publisher iframe exposed no attributable direct media; "+
+                IllegalStateException(if(strictNewProvider)
+                    "Selected provider page had no UNIQUE first-party "+
+                    "original stream after authorized browser inspection. "+
+                    "No thumbnail, unrelated iframe or HTML page was saved."
+                else "Selected publisher iframe exposed no attributable direct media; "+
                     "a player webpage is not a downloadable original"))
         val strictJavGuru=NetworkRoute.siteKey(item.url)=="jav.guru"
         if(strictTaiAv && publishedOriginals.isEmpty())
@@ -1436,8 +1437,10 @@ object VideoEngine {
                 throw (last?:IllegalStateException(
                     "Selected article file host or player exposed no transferable original"))
             if(strictIframe && !downloaded)
-                throw (last?:IllegalStateException(
-                    "Selected external player did not transfer the original media"))
+                throw (last?:IllegalStateException(if(strictNewProvider)
+                    "Selected provider original could not transfer; "+
+                    "no preview or unrelated media substituted"
+                else "Selected external player did not transfer the original media"))
             if(strictRule34 && !downloaded)
                 throw (last?:IllegalStateException(
                     "Rule34Video published original failed the verified first-party transfer"))
