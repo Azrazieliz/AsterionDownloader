@@ -53,16 +53,41 @@ object FullLengthVideoPolicy {
         }
         return false
     }
+    /**
+     * Auto sync must NEVER publish a complete, playable 20-50 second teaser
+     * as a full-length original merely because the byte transfer succeeded.
+     * A file's own published duration is not independent proof of fullness.
+     * Manual owner-selected shorts remain permitted, but automated sync
+     * keeps uncorroborated short videos out of the Saved Originals ledger.
+     */
+    internal const val MIN_UNCORROBORATED_AUTO_SECONDS=120L
+    fun completedOriginalVerdict(actualDurationMs:Long,referenceSeconds:Long?,
+                                 explicitlyRequested:Boolean):Decision {
+        if(actualDurationMs<=0L)return Decision(
+            Verdict.REJECT_SHORT_VERSION,"Container has no observed playable duration")
+        val seconds=actualDurationMs/1000L
+        if(referenceSeconds!=null && referenceSeconds>0L &&
+            seconds+5L<referenceSeconds)
+            return Decision(Verdict.REJECT_SHORT_VERSION,
+                "Saved media is shorter than independently established original")
+        if(!explicitlyRequested &&
+            seconds<MIN_UNCORROBORATED_AUTO_SECONDS)
+            return Decision(Verdict.HOLD_FOR_REFERENCE,
+                "Automated sync resolved a short clip; the full original was not verified")
+        return Decision(Verdict.ACCEPT,
+            if(explicitlyRequested)"User-selected media verified playable"
+            else "Automated original passed duration sanity gate")
+    }
+
     fun assess(pageTitle:String,extractedTitle:String,url:String,durationSec:Long?,
                referenceSec:Long?,publisherVerified:Boolean=false,
                userExplicitlyRequested:Boolean=false):Decision {
         if(isExplicitPreview(pageTitle,url) || isExplicitPreview(extractedTitle,url))
             return Decision(Verdict.REJECT_SHORT_VERSION,"Explicit preview or excerpt")
-        if(knownFullReferenceHost(url))
-            return Decision(Verdict.ACCEPT,"User-designated full-video provider")
-        if(userExplicitlyRequested)
-            return Decision(Verdict.ACCEPT,"Individually selected original")
         val observed=durationSec?.takeIf{it>0}
+        // Reference comparisons must precede provider reputation and user
+        // selection. Previously a preferred host ACCEPTED a proven 30-second
+        // preview even when a 40-minute original runtime was already known.
         if(referenceSec!=null && referenceSec>0 && observed!=null){
             if(observed+5L<referenceSec)
                 return Decision(Verdict.REJECT_SHORT_VERSION,
@@ -70,6 +95,15 @@ object FullLengthVideoPolicy {
             return Decision(Verdict.ACCEPT,
                 if(publisherVerified)"Publisher-provided original" else "Reference matched")
         }
+        if(userExplicitlyRequested)
+            return Decision(Verdict.ACCEPT,"Individually selected original")
+        if(knownFullReferenceHost(url) && observed!=null &&
+            observed>=MIN_UNCORROBORATED_AUTO_SECONDS)
+            return Decision(Verdict.ACCEPT,"Preferred publisher's candidate for runtime verification")
+        if(knownFullReferenceHost(url) && (observed==null ||
+            observed<MIN_UNCORROBORATED_AUTO_SECONDS))
+            return Decision(Verdict.HOLD_FOR_REFERENCE,
+                "Preferred host supplied no full-runtime evidence for automated sync")
         return Decision(Verdict.HOLD_FOR_REFERENCE,
             "Automatic source lacks trusted original confidence")
     }
