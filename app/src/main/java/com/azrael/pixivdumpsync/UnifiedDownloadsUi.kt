@@ -44,6 +44,36 @@ object UnifiedDownloadsUi {
      */
     private fun recoverIdleQueues(a:Activity,rows:List<Row>) {
         if(!AppPower.enabled(a))return
+        // An Android low-memory/service kill can leave a leased video shown
+        // as "Connecting to source" after its process is gone. The normal
+        // queue recovery below excludes a module with an ACTIVE row and
+        // therefore never wakes the missing worker. Inspect only expired
+        // leases, on a bounded background cadence, and rearm the same engine.
+        // VideoDb.recover() checks live heartbeat_at atomically and leaves
+        // saved files, paused jobs and resumable .part bytes untouched.
+        if(rows.any{it.source=="Video" && it.state==State.ACTIVE}){
+            val now=android.os.SystemClock.elapsedRealtime()
+            val permitted=synchronized(lastQueueRecovery){
+                val prior=lastQueueRecovery["Video:stale"]?:0L
+                if(prior>0L && now-prior<RECOVERY_INTERVAL_MS)false
+                else{
+                    lastQueueRecovery["Video:stale"]=now
+                    true
+                }
+            }
+            if(permitted){
+                val app=a.applicationContext
+                kotlin.concurrent.thread(name="asterion-video-stale-lease-recovery"){
+                    val reclaimed=runCatching{
+                        VideoDb(app).use{it.recover()}
+                    }.getOrDefault(0)
+                    if(reclaimed>0){
+                        DownloadStateSignals.changed(app)
+                        runCatching{VideoEngine.launch(app,false)}
+                    }
+                }
+            }
+        }
         // A VIDEO extractor may be resolving for minutes while X, comics or
         // books have queued work. Never let that unrelated active row starve
         // their persisted queues. Equally, never start a second worker for a
