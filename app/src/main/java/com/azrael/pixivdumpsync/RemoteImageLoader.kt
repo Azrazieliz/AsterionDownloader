@@ -12,7 +12,50 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 import kotlin.math.max
 
+/**
+ * The cache contains re-fetchable *previews only*, never original downloaded
+ * media. Prune by last use; files recently created by concurrent preview
+ * requests are retained to avoid interfering with active writes. No other
+ * application directory or resumable transfer is ever touched.
+ */
+internal object ThumbnailCacheRetention {
+    private val hashedName=Regex("^[a-f0-9]{64}$")
+    fun prune(dir:File,protected:File,maxBytes:Long=256L*1024*1024,
+              maxEntries:Int=2500,now:Long=System.currentTimeMillis()):Int {
+        if(!dir.isDirectory)return 0
+        val entries=dir.listFiles()?.filter{
+            it.isFile && hashedName.matches(it.name)
+        }?.sortedWith(compareBy<File>{it.lastModified()}.thenBy{it.name})
+            ?:return 0
+        var total=entries.sumOf{it.length().coerceAtLeast(0L)}
+        var count=entries.size
+        var removed=0
+        for(entry in entries){
+            if(total<=maxBytes && count<=maxEntries)break
+            if(entry.absolutePath==protected.absolutePath ||
+                now-entry.lastModified()<120_000L)continue
+            val size=entry.length().coerceAtLeast(0L)
+            if(entry.delete()){
+                total=(total-size).coerceAtLeast(0L)
+                count--
+                removed++
+            }
+        }
+        return removed
+    }
+}
+
 object RemoteImageLoader {
+    private val trimLock=Any()
+    @Volatile private var lastTrimAt:Long=0L
+    private fun trimPreviewCache(dir:File,active:File){
+        val now=android.os.SystemClock.elapsedRealtime()
+        synchronized(trimLock){
+            if(lastTrimAt!=0L && now-lastTrimAt<90_000L)return
+            lastTrimAt=now
+            runCatching{ThumbnailCacheRetention.prune(dir,active)}
+        }
+    }
     // Creator/gallery screens also present more than 96 cards. Never evict
     // the earliest visible thumbnails merely because later rows are queued.
     private val executor = PreviewLoadExecutor.create(4)
@@ -118,7 +161,10 @@ object RemoteImageLoader {
                 }
 
                 decodeSampled(file, if(preserveOriginal) 1024 else 256)
-                    .also { decoded -> if(decoded==null)file.delete() }
+                    .also { decoded ->
+                        if(decoded==null)file.delete()
+                        else trimPreviewCache(dir,file)
+                    }
                 }.getOrNull().also { ready ->
                     // Publish the successful bitmap before releasing the
                     // per-URL lock so other cards never redownload it.
