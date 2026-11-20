@@ -45,8 +45,37 @@ internal object VisibleMediaSupport {
     fun queue(context:Context,source:String,files:List<VisibleMedia>,
               categoryHint:String?=null):VisibleMediaResult {
         var queued=0;var already=0;var failed=0
+        val cosplaySource=AlohaSources.by(AlohaArea.COSPLAY).firstOrNull{
+            SiteControls.key(it.url)==SiteControls.key(source)
+        }
+        val exactCosplayPage=cosplaySource?.let{
+            SiteBackfillProfiles.recognizesGalleryPage(it.url,source)
+        }==true
+        var kyoraScheduled=false
         for(media in files.distinctBy{it.url}.take(150)){
             if(!accepted(source,media)){failed++;continue}
+            // The signed-in browser's Cosplay photo set must produce ONE
+            // original Kyora album request, not 150 isolated DownloadManager
+            // jobs. Its HTTP 403 errors were never handled by the native
+            // gallery parser. When no album is attributable, do not pretend
+            // a third-party image URL is a completed original.
+            if(cosplaySource!=null){
+                if(exactCosplayPage){
+                    if(kyoraScheduled){already++;continue}
+                    val started=runCatching{
+                        ApprovedCosplayActions.enqueueExactOriginal(
+                            context,cosplaySource.url,source,
+                            "Selected Cosplay gallery")
+                    }.getOrDefault(false)
+                    if(started){queued++;kyoraScheduled=true}
+                    else failed++
+                    continue
+                }
+                if(media.kind=="image"){
+                    failed++ // Select the source's actual album first.
+                    continue
+                }
+            }
             // EPUB forum/novel shelves should not silently download video,
             // cover images or HTML as a book. Other modules retain their routes.
             if(categoryHint=="Books" && !isEpubOriginal(media)){
