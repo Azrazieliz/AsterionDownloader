@@ -79,6 +79,31 @@ class SearchResultsDb(context:Context):
         }
         return records
     }
+    /** Paging/count for only publisher-profile-attributed evidence.
+     * Historical plain-title web hits are deliberately excluded. */
+    fun countVerifiedProfile(query:String,profile:String):Int =
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM results WHERE query=? AND source=?",
+            arrayOf(query.trim(),"Verified profile: "+profile)
+        ).use{cursor->if(cursor.moveToFirst())cursor.getInt(0) else 0}
+
+    fun listVerifiedProfile(query:String,profile:String,limit:Int=100,
+                            offset:Int=0):List<SavedSearchHit>{
+        val results=ArrayList<SavedSearchHit>()
+        readableDatabase.rawQuery(
+            """SELECT query,title,url,source,score,queued,checked_at,thumbnail
+            FROM results WHERE query=? AND source=?
+            ORDER BY score DESC, checked_at DESC LIMIT ? OFFSET ?""",
+            arrayOf(query.trim(),"Verified profile: "+profile,
+                limit.coerceIn(1,1000).toString(),offset.coerceAtLeast(0).toString())
+        ).use{c->
+            while(c.moveToNext())results.add(SavedSearchHit(
+                c.getString(0),c.getString(1),c.getString(2),c.getString(3),
+                c.getInt(4),c.getInt(5)==1,c.getLong(6),c.getString(7)))
+        }
+        return results
+    }
+
     fun list(limit:Int=100):List<SavedSearchHit> {
         val records=ArrayList<SavedSearchHit>()
         readableDatabase.rawQuery("""SELECT query,title,url,source,score,queued,checked_at,thumbnail
