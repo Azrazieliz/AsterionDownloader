@@ -21,7 +21,7 @@ class LiveSearchParserTest {
             SearchRanking.deduplicate("kanojo",hits).first().url)
     }
 
-    @Test fun hentaiHavenWatchCardsAreRelevant() {
+    @Test fun retiredHentaiHavenWatchCardsNeverEnterLiveResults() {
         val url = "https://hentaihaven.xxx/?s=kanojo"
         val page = Jsoup.parse("""
             <div><a href="/watch/kanojo-no-tomodachi/"
@@ -31,6 +31,8 @@ class LiveSearchParserTest {
         """.trimIndent(),url)
         val provider = SearchProvider(SearchProviderKind.HTML,url,"HentaiHaven")
         val hits = KeywordSources.htmlPageHits(page,url,provider,"kanojo",VideoSearchArea.HENTAI)
-        assertEquals(1,SearchRanking.deduplicate("kanojo",hits).size)
+        assertTrue(SearchRanking.deduplicate("kanojo",hits).isEmpty())
+        assertFalse(KeywordSources.siteDefinitions(VideoSearchArea.HENTAI)
+            .any{it.contains("hentaihaven.xxx")})
     }
 }
