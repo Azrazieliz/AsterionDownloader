@@ -88,10 +88,35 @@ internal object ApprovedCosplayActions {
     fun checkNew(a:Activity,address:String):String{
         if(!AppPower.enabled(a))return "Resume downloads first"
         val enrolled=source(a.applicationContext,address)
-        val entity=albumRoot(SiteControls.key(enrolled.url),enrolled.name)
-            ?:return "Use this provider's existing Check New scanner"
-        enqueueAlbumRun(a,entity,enrolled.url,SyncMode.LIVE)
-        return "New original albums check queued · "+enrolled.name
+        val host=SiteControls.key(enrolled.url)
+        // CHECK NEW must reach the native GalleryFlow reader for every
+        // approved site, not merely refresh covers for four out of six
+        // providers. Reuse the historical native entity and saved cursor.
+        val root=runCatching{
+            albumRoot(host,enrolled.name) ?: run{
+                val adapter=com.azrael.galleryflow.AdapterRegistry.forUrl(
+                    enrolled.url,a.applicationContext)
+                val existing=GalleryDb(a).use{db->
+                    db.listEntities().firstOrNull{
+                        it.kind=="site" && SiteControls.key(it.canonicalUrl)==host &&
+                            it.source==adapter.source
+                    }
+                }
+                existing?.let{
+                    SourceEntity(it.source,it.entityId,it.displayName,
+                        it.canonicalUrl,"site")
+                }?:adapter.resolveEntity(enrolled.url)
+            }
+        }.getOrNull()
+        if(root!=null){
+            enqueueAlbumRun(a,root,enrolled.url,SyncMode.LIVE)
+            return "New original albums check queued · "+enrolled.name
+        }
+        // A provider without a native adapter can still use its existing
+        // source-specific scanner. Never claim a preview refresh downloaded.
+        val started=SiteRunControl.start(a.applicationContext,enrolled.url,"COSPLAY")
+        return if(started)"Source-owned gallery history check started · "+enrolled.name
+            else "Gallery adapter unavailable or source already checking · "+enrolled.name
     }
 
     fun backfill(a:Activity,address:String):String {
