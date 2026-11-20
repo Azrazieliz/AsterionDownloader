@@ -222,6 +222,8 @@ internal object TorrentMetadataBridge {
                     action=TorrentTransferService.PREPARE_MAGNET
                     putExtra("magnet",magnet)
                     putExtra("folder",folder)
+                    putExtra(TorrentTransferService.OWNER_REVIEWED_RETRY,
+                        ownerReviewed)
                     putExtra(RECEIVER,callback(a,folder,request))
                 }
                 runCatching{a.startForegroundService(intent)}
