@@ -76,13 +76,18 @@ def main():
     result["media_ext"]=u.path.rsplit(".",1)[-1] if "." in u.path else "none"
     if u.scheme=="https" and re.search(r"\.m3u8$",u.path,re.I):
      try:
-      playlist_status,_,body=fetch(absolute,page,12000)
+      playlist_status,_,body=fetch(absolute,page,260000)
       playlist=body.decode("utf8","replace")
       result["playlist_status"]=playlist_status
       result["valid_m3u8"]=playlist.lstrip().startswith("#EXTM3U")
       result["master_playlist"]="#EXT-X-STREAM-INF:" in playlist
       result["vod_endlist"]="#EXT-X-ENDLIST" in playlist
       result["duration_tags"]=len(re.findall(r"(?m)^#EXTINF:",playlist))
+      result["total_hls_seconds"]=round(sum(
+        float(m.group(1)) for m in re.finditer(
+         r"(?m)^#EXTINF:([0-9.]+)",playlist)),2)
+      result["playlist_type_vod"]="#EXT-X-PLAYLIST-TYPE:VOD" in playlist
+      result["playlist_bytes_observed"]=len(body)
      except Exception as exc:
       result["playlist_error"]=exc.__class__.__name__
    print(json.dumps(result),flush=True)
