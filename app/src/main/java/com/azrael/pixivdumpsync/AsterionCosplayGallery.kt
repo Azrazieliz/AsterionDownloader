@@ -115,16 +115,15 @@ object AsterionCosplayGallery {
             val galleries=GalleryDb(a).use{db->
                 galleryEntities.flatMap{db.galleryCards(it.entityId,5)}
             }.distinctBy{it.galleryId}.take(12)
-            // 4KHD has navigation/category covers alongside actual
-            // /content/<id>/<slug>.html albums. Only those specific album
-            // pages may be offered as downloadable gallery cards.
+            // Gallery thumbnails must link to an actual album for EVERY
+            // provider, not category/profile/navigation pages. The old
+            // screen only checked 4KHD, leaving PornPics, Celeb.st and
+            // other approved sources with non-downloadable fake albums.
             val indexedItems=bySite[host].orEmpty().filter{item->
-                host!="4khd.com" ||
-                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
+                SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
             }
             val public=snapshots[host]?.entries.orEmpty().filter{item->
-                host!="4khd.com" ||
-                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
+                SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
             }
 
             val nativeTiles=galleries.mapNotNull{item->
@@ -206,10 +205,8 @@ object AsterionCosplayGallery {
                         // generic download file. The old branch bypassed the
                         // functioning Kyora GalleryFlow selected-album parser.
                         if(ApprovedCosplayActions.isGalleryPage(item.url) &&
-                            (SiteBackfillProfiles.recognizesGalleryPage(
-                                site.url,item.url) ||
-                                (host=="buondua.net" &&
-                                    item.url!=site.url))){
+                            SiteBackfillProfiles.recognizesGalleryPage(
+                                site.url,item.url)){
                             thread(name="asterion-cosplay-selected-indexed-album"){
                                 val result=runCatching{
                                     ApprovedCosplayActions.selectedGallery(
