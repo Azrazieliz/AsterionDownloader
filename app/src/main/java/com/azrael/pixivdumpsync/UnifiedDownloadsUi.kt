@@ -23,8 +23,10 @@ import java.util.concurrent.Executors
 object UnifiedDownloadsUi {
     private val ui=NocturneDesign
     private val thumbnails=Executors.newFixedThreadPool(2)
-    private val lastQueueRecovery=java.util.concurrent.atomic.AtomicLong(0L)
-    private const val RECOVERY_INTERVAL_MS=180_000L
+    // Recovery cooldowns are per download module. A newly idle EPUB queue
+    // must not wait three minutes merely because Video was rearmed first.
+    private val lastQueueRecovery=java.util.concurrent.ConcurrentHashMap<String,Long>()
+    private const val RECOVERY_INTERVAL_MS=25_000L
     private const val RECONCILE_REFRESH_MS=20_000L
     private const val EVENT_COALESCE_MS=240L
     private fun rowId(row:Row):String =
@@ -51,19 +53,27 @@ object UnifiedDownloadsUi {
             rows.filter{it.state==State.ACTIVE}.map{it.source}.toSet())
         if(queued.isEmpty())return
         val now=android.os.SystemClock.elapsedRealtime()
-        val previous=lastQueueRecovery.get()
-        if(previous>0 && now-previous<RECOVERY_INTERVAL_MS)return
-        if(!lastQueueRecovery.compareAndSet(previous,now))return
+        val due=synchronized(lastQueueRecovery) {
+            queued.filter { source->
+                val previous=lastQueueRecovery[source]?:0L
+                if(previous>0L && now-previous<RECOVERY_INTERVAL_MS)false
+                else {
+                    lastQueueRecovery[source]=now
+                    true
+                }
+            }.toSet()
+        }
+        if(due.isEmpty())return
         kotlin.concurrent.thread(name="asterion-queued-worker-rearm"){
             val app=a.applicationContext
-            if("Video" in queued){
+            if("Video" in due){
                 runCatching{VideoEngine.launch(app,false)}
             }
-            if("X" in queued)runCatching{XPhotoEngine.start(app)}
-            if("Comic ZIP" in queued)runCatching{ChapterArchives.start(app)}
-            if("EPUB" in queued || "Novel ZIP" in queued)
+            if("X" in due)runCatching{XPhotoEngine.start(app)}
+            if("Comic ZIP" in due)runCatching{ChapterArchives.start(app)}
+            if("EPUB" in due || "Novel ZIP" in due)
                 runCatching{NovelEpubService.schedule(app)}
-            if(queued.any{it !in setOf("Video","X","Comic ZIP","EPUB","Novel ZIP")})
+            if(due.any{it !in setOf("Video","X","Comic ZIP","EPUB","Novel ZIP")})
                 runCatching{DirectDownloadRetry.ensure(app)}
         }
     }
