@@ -13,22 +13,22 @@ class PublisherCatalogCardRegressionTest {
     private val taiav="https://taiav.com/cn/"
     private val movie="https://taiav.com/cn/movie/654424d67b410d2615db16e5"
 
-    @Test fun onScreensUuidProfileIsNotRecordingEvenWithAnImage() {
+    @Test fun onScreensRetirementBlocksProfileAndPreviouslySelectedVideo() {
         assertFalse(VideoSiteProfiles.isVideoPage(profile))
         assertFalse(AsterionAdultHub.publicMedia(
             profile,"sagnic profile","https://www.onscreens.me/covers/sagnic.webp"))
         assertFalse(KyoraCreatorPreviews.acceptedVideoCard(onscreens,profile))
-        assertTrue(VideoSiteProfiles.isVideoPage(selected))
-        assertTrue(KyoraCreatorPreviews.acceptedVideoCard(onscreens,selected))
+        assertFalse(VideoSiteProfiles.isVideoPage(selected))
+        assertFalse(KyoraCreatorPreviews.acceptedVideoCard(onscreens,selected))
     }
 
-    @Test fun cachedOnScreensProfileNeverReappearsFromGenericNameOrCover() {
+    @Test fun retiredOnScreensCardsNeverReappearFromGenericNameOrCover() {
         val html="""<main><div class="video-card">
           <a href="$profile"><img src="/assets/profile.webp" alt="sagnic profile"></a>
           <a href="$selected"><img src="/assets/video.webp" alt="sagnic recording"></a>
           </div></main>"""
         val items=KyoraCreatorPreviews.parse(html,onscreens)
-        assertEquals(listOf(selected),items.map{it.url})
+        assertTrue(items.isEmpty())
     }
 
     @Test fun taiAvSiblingsSupplyRealPosterForExactMovieCard() {
