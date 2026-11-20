@@ -117,13 +117,33 @@ class SyncForegroundService : Service() {
                             // exact original request through network errors,
                             // mismatched counts and partial files. The retry
                             // ledger preserves individual failed originals.
-                            val verified=job.albumUrl==null ||
-                                (result.galleriesCompleted>0 &&
-                                    result.incompleteGalleries==0 &&
-                                    result.errors==0 &&
-                                    !SyncControl.isStopping())
-                            if(verified)GalleryRequestLedger.completed(
-                                applicationContext,job)
+                            // A previously queued SITE-WIDE check used
+                            // to be marked complete unconditionally, even
+                            // when the native engine never acquired its lock,
+                            // resolved no album, or every transfer failed.
+                            // Retain failed requests and expose an error,
+                            // not a false "scheduled successfully" receipt.
+                            val healthy=result.errors==0 &&
+                                result.incompleteGalleries==0 &&
+                                !SyncControl.isStopping() &&
+                                result.entities>0
+                            val verified=healthy && if(job.albumUrl!=null)
+                                result.galleriesCompleted>0
+                            else if(job.mode==SyncMode.BACKFILL)
+                                result.galleriesSeen>0
+                            else true // A LIVE check may genuinely find nothing new.
+                            if(verified){
+                                GalleryRequestLedger.completed(applicationContext,job)
+                            }else{
+                                android.util.Log.w("AsterionGallerySync",
+                                    "Kyora request retained: "+
+                                    job.siteHost.orEmpty()+" "+
+                                    "entities="+result.entities+
+                                    " galleries="+result.galleriesSeen+
+                                    " completed="+result.galleriesCompleted+
+                                    " errors="+result.errors+
+                                    " incomplete="+result.incompleteGalleries)
+                            }
                         }
                         next=synchronized(pending){
                             val following=if(pending.isEmpty())null
