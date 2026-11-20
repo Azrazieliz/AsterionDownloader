@@ -184,12 +184,12 @@ object TorrentTransfers {
                     add("Pause transfer");add("Resume transfer")
                     add("Show current status")
                     add("Quarantine security report")
-                    if(quarantined)add("Export selected verified files")
+                    if(quarantined)add("Review & export selected files")
                     if(finished)add("Open exported originals")
                 }.toTypedArray()
                 AlertDialog.Builder(a).setTitle(labels[index])
                     .setItems(controls){_,which->
-                        if(controls[which]=="Export selected verified files"){
+                        if(controls[which]=="Review & export selected files"){
                             TorrentVerifiedExport.request(a,id)
                         }else if(controls[which]=="Open exported originals"){
                             TorrentVerifiedExport.open(a,id)
