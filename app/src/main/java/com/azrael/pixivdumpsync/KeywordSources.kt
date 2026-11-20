@@ -54,54 +54,58 @@ object KeywordSources {
         line.contains("search.brave.com/search",true)
     fun sources(context:Context):String {
         // Search does not depend on choosing or configuring a search provider.
-        return (hentaiSites+pornSites+clearnetIndexes).joinToString("\n")
+        return (hentaiSites+pornSites+clearnetIndexes)
+            .joinToString("\n")+
+            preferences(context).getString("providers","")
+                .orEmpty().takeIf{it.isNotBlank()}?.let{"\n"+it}.orEmpty()
     }
     private fun searchProviders(context:Context,area:VideoSearchArea):List<SearchProvider> {
-        val direct=SearchRanking.parseProviders(siteDefinitions(area).joinToString("\n")).toMutableList()
+        val direct=SearchRanking.parseProviders(
+            siteDefinitions(area).joinToString("\n")).toMutableList()
         val configured=endpoint(context).trim().trimEnd('/')
-        if(SearchRanking.validUrl(configured) && configured.startsWith("https://")){
+        if(SearchRanking.validUrl(configured) &&
+            configured.startsWith("https://")){
             direct.add(SearchProvider(SearchProviderKind.SEARXNG,configured,
                 "Federated web index"))
         }
-        if(area!=VideoSearchArea.PIRACY_DARKWEB){
-            val category=if(area==VideoSearchArea.PORN)AlohaArea.ADULT else AlohaArea.HENTAI
-            val nativeHosts=direct.mapNotNull{runCatching{
-                URI(it.url.replace("{query}","search")).host.orEmpty().lowercase()
-                    .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
-            }.getOrNull()}.toSet()
-            val disabled=runCatching{com.asterion.videoflow.VideoDb(context).use{db->
-                db.listWatches().filter{!it.enabled}.mapNotNull{runCatching{
-                    URI(it.address).host.orEmpty().lowercase()
-                        .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
-                }.getOrNull()}.toSet()
-            }}.getOrDefault(emptySet())
-            val extras=AlohaSources.by(category).filter{
-                it.host.removePrefix("m.").removePrefix("fr.") !in nativeHosts &&
-                it.host.removePrefix("m.").removePrefix("fr.") !in disabled &&
-                it.host!="onejav.com" // OneJAV is torrent-only, not a streaming search.
-            }.map{SearchProvider(SearchProviderKind.HTML,it.url,"Aloha · "+it.name)}
-            return (direct+extras).distinctBy{
-                URI(it.url.replace("{query}","search")).host.orEmpty().lowercase()
-                    .removePrefix("www.").removePrefix("m.").removePrefix("fr.")
-            }
-        }
-        // Saved user-supplied search templates are included without a new
-        // provider settings screen. Hidden sites need an existing local proxy.
-        val torEnabled=context.getSharedPreferences("video_options",Context.MODE_PRIVATE)
-            .getBoolean("tor_proxy",false)
-        val saved=runCatching { com.asterion.videoflow.VideoDb(context).use { db->
-            db.listWatches().filter{it.enabled}.mapNotNull { watch->
+        val torEnabled=context.getSharedPreferences(
+            "video_options",Context.MODE_PRIVATE).getBoolean("tor_proxy",false)
+        val extraTemplates=runCatching{
+            SearchRanking.parseProviders(
+                preferences(context).getString("providers","").orEmpty())
+        }.getOrDefault(emptyList())
+        // User-selected providers are SEARCHABLE in every category; the old
+        // early return prevented saved sources from ever joining adult search.
+        val saved=runCatching {com.asterion.videoflow.VideoDb(context).use{db->
+            db.listWatches().filter{it.enabled}.mapNotNull{watch->
                 val url=watch.address
                 val host=runCatching{URI(url.replace("{query}","test"))
                     .host.orEmpty().lowercase()}.getOrDefault("")
-                if((!url.contains("{query}") && !url.contains("{name}")) ||
-                    (host.endsWith(".onion") && !torEnabled))null
+                if(host.endsWith(".onion") && !torEnabled)null
                 else runCatching{
-                    SearchRanking.parseProviders("html|"+url+"|"+watch.label).first()
+                    SearchRanking.parseProviders(
+                        "html|"+url+"|"+watch.label).first()
                 }.getOrNull()
             }
         }}.getOrDefault(emptyList())
-        return (direct+saved).distinctBy{it.url}
+        val category=when(area){
+            VideoSearchArea.PORN->AlohaArea.ADULT
+            VideoSearchArea.HENTAI->AlohaArea.HENTAI
+            else->null
+        }
+        val integrated=category?.let{AlohaSources.by(it).filter{
+            site->site.host!="onejav.com" &&
+                !ProviderRetirement.isRetired(site.url)
+        }.map{SearchProvider(SearchProviderKind.HTML,
+            it.url,"Aloha · "+it.name)}}.orEmpty()
+        // Deduplicate identical source templates, not all hosts: one
+        // publisher may expose independent video / gallery / search routes.
+        return (direct+extraTemplates+saved+integrated).filter{provider->
+            val host=runCatching{URI(provider.url.replace("{query}","sample")
+                .replace("{name}","sample")).host.orEmpty().lowercase()}
+                .getOrDefault("")
+            host.isNotBlank() && (!host.endsWith(".onion") || torEnabled)
+        }.distinctBy{it.kind.name+"|"+it.url.trimEnd('/')}
     }
     fun setSources(context:Context,lines:String){
         SearchRanking.parseProviders(lines) // Reject invalid values before persistence.
