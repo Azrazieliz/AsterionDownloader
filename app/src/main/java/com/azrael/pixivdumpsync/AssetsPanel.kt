@@ -99,10 +99,10 @@ object AssetsPanel {
         // administration panels stacked on the same phone screen.
         val pref=a.getSharedPreferences("asterion_asset_workspace_v2",0)
         val section=pref.getString("section","CARDS").orEmpty()
-            .takeIf{it in setOf("CARDS","MODELS","FILES")} ?:"CARDS"
+            .takeIf{it in setOf("CARDS","MODELS")} ?:"CARDS"
         val tabs=ui.row(a)
         for((name,key) in listOf("Koikatsu" to "CARDS",
-            "3D models" to "MODELS","Files & sources" to "FILES")){
+            "3D models" to "MODELS")){
             tabs.addView(ui.chip(a,name,section==key){
                 pref.edit().putString("section",key).apply()
                 refresh()
@@ -117,20 +117,22 @@ object AssetsPanel {
                 KoikatsuInlineSearch.render(a,body)
                 return
             }
-            "FILES"->{renderFilesAndSources(a,body,refresh);return}
         }
         body.addView(ui.text(a,"3D models & materials",19f,ui.white,true),ui.lp(a,12))
         body.addView(ui.text(a,"Download original model files and their textures. Blender and Windows assets require compatible tools, not automatic Android conversion.",12f,ui.secondary),ui.lp(a,7))
         val input=CreatorNames.input(a,"Search model or material","ASSETS")
         body.addView(input,ui.lp(a,8))
-        val status=ui.text(a,"Poly Haven · public CC0 model library",12f,ui.secondary)
+        val status=ui.text(a,
+            "Search genuine model originals from Poly Haven, ambientCG and "+
+                "available public file indexes (not the entire internet).",
+            12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         body.addView(ui.action(a,"SEARCH MODELS",true){
             val q=input.text.toString().trim().lowercase()
             CreatorNames.remember(a,q,"ASSETS",true)
             if(q.length<2){status.text="Enter a model name";return@action}
             results.removeAllViews()
-            status.text="Searching model libraries and the public web…"
+            status.text="Checking original file catalogs and public indexes…"
             // Each search owns its view token. A later query or navigation
             // cannot be overwritten by a stale asynchronous response.
             val requestToken=Any()
