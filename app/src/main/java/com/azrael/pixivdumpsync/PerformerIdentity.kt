@@ -5,6 +5,8 @@ import org.jsoup.nodes.Document
 import android.content.Context
 import com.azrael.galleryflow.SiteSession
 import java.net.URI
+import java.net.URLEncoder
+import java.net.URLDecoder
 import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -95,6 +97,59 @@ internal object PerformerIdentity {
         }.distinct()
     }
 
+    /**
+     * Search multiple independent general web indexes for already-approved
+     * first-party performer profiles. The old implementation guessed only four
+     * URL slugs, so valid real models with provider-assigned profile paths
+     * were categorically rejected. Search snippets NEVER establish identity:
+     * every discovered URL still needs a live first-party profile with a
+     * matching visible heading and canonical identity.
+     */
+    internal fun discoveredProfileUrls(name:String,html:String,base:String):List<String>{
+        val doc=Jsoup.parse(html,base)
+        val results=LinkedHashSet<String>()
+        for(a in doc.select("a[href]").take(500)){
+            val href=a.absUrl("href")
+            val uri=runCatching{URI(href)}.getOrNull()?:continue
+            val query=uri.rawQuery.orEmpty()
+            val wrapped=query.split('&').firstOrNull{
+                it.startsWith("uddg=") || it.startsWith("url=")
+            }?.substringAfter('=')
+            val candidate=when{
+                wrapped!=null->runCatching{
+                    URLDecoder.decode(wrapped,"UTF-8")
+                }.getOrNull().orEmpty()
+                else->href
+            }
+            if(isProfileUrl(name,candidate))results+=candidate
+            if(results.size>=30)break
+        }
+        return results.toList()
+    }
+
+    private fun searchProfileCandidates(name:String):List<String>{
+        val query=URLEncoder.encode("\""+name.trim()+"\" performer model profile","UTF-8")
+        val engines=listOf(
+            "https://www.bing.com/search?q="+query,
+            "https://html.duckduckgo.com/html/?q="+query)
+        val pool=Executors.newFixedThreadPool(2)
+        try{
+            val tasks=engines.map{address->pool.submit<List<String>>{
+                runCatching {
+                    val response=Jsoup.connect(address)
+                        .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
+                        .followRedirects(true).ignoreHttpErrors(true)
+                        .timeout(4_500).maxBodySize(1_500_000).execute()
+                    if(response.statusCode() !in 200..299)emptyList()
+                    else discoveredProfileUrls(name,response.body(),address)
+                }.getOrDefault(emptyList())
+            }}
+            return tasks.flatMap{runCatching{
+                it.get(5,TimeUnit.SECONDS)
+            }.getOrDefault(emptyList())}.distinct().take(30)
+        }finally{pool.shutdownNow()}
+    }
+
     /** Only official profile patterns grounded in provider documentation are
      * candidates; each must pass HTTP, canonical-path and visible-name checks.
      */
@@ -107,7 +162,7 @@ internal object PerformerIdentity {
             "https://www.pornhub.com/pornstar/$handle",
             "https://watchporn.to/models/$handle/",
             "https://fullporner.com/pornstar/$handle"
-        ) + discoverCumsProfileUrls(needle,context)
+) + discoverCumsProfileUrls(needle,context) + searchProfileCandidates(needle)
         val pool=Executors.newFixedThreadPool(4)
         val completion=ExecutorCompletionService<Proof?>(pool)
         try{
