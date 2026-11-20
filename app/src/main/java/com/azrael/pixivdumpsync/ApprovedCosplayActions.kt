@@ -160,12 +160,16 @@ internal object ApprovedCosplayActions {
             // through GenericSiteAdapter when its original native parser is
             // already installed. That discarded provider-specific archives,
             // full-image routing and the original download ledger.
-            val sourceId=com.azrael.galleryflow.AdapterRegistry.forUrl(
+            val nativeSource=com.azrael.galleryflow.AdapterRegistry.forUrl(
                 site.url,a.applicationContext).source
-            val existing=db.listEntities().firstOrNull{
-                it.kind=="site" && it.source==sourceId &&
-                SiteControls.key(it.canonicalUrl)==site.host
-            }
+            val existing=db.listEntities().filter{
+                it.kind=="site" &&
+                    SiteControls.key(it.canonicalUrl)==site.host
+            }.sortedByDescending{it.source==nativeSource}.firstOrNull()
+            // Reuse any existing root before allocating a new one. A user
+            // with historical generic receipts must not get a duplicate
+            // 4KHD subscription or lose its existing gallery identifiers.
+            val sourceId=existing?.source?:nativeSource
             val root=existing?.let{record->
                 SourceEntity(record.source,record.entityId,record.displayName,
                     record.canonicalUrl,"site")
