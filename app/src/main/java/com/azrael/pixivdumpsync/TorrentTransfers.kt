@@ -205,12 +205,43 @@ object TorrentTransfers {
                                 .setMessage(details)
                                 .setPositiveButton("Close",null).show()
                         }else{
-                            a.startForegroundService(
-                                Intent(a,TorrentTransferService::class.java).apply{
-                                    action=if(which==0)TorrentTransferService.PAUSE
-                                        else TorrentTransferService.RESUME
-                                    putExtra("job",id)
-                                })
+                            fun dispatch(reviewed:Boolean){
+                                runCatching {
+                                    a.startForegroundService(
+                                        Intent(a,TorrentTransferService::class.java).apply{
+                                            action=if(which==0)
+                                                TorrentTransferService.PAUSE
+                                                else TorrentTransferService.RESUME
+                                            putExtra("job",id)
+                                            putExtra(
+                                                TorrentTransferService.OWNER_REVIEWED_RETRY,
+                                                reviewed)
+                                        })
+                                }.onFailure {
+                                    Toast.makeText(a,
+                                        "Torrent service unavailable: "+
+                                        it.message.orEmpty().take(90),
+                                        Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            if(which==1 && TorrentSafetyGate.incidentHold(a)){
+                                AlertDialog.Builder(a)
+                                    .setTitle("Resume isolated torrent?")
+                                    .setMessage("A previous native request "+
+                                        "may have interrupted the phone. "+
+                                        "Only this torrent's isolated worker "+
+                                        "will retry; existing pieces are kept.")
+                                    .setNegativeButton("Keep paused",null)
+                                    .setPositiveButton("Retry"){_,_->
+                                        val admitted=runCatching {
+                                            TorrentSafetyGate.ownerReviewedRetry(a)
+                                        }.getOrElse {TorrentSafetyGate.Admission(
+                                            false,it.message?:"Recovery failed")}
+                                        if(admitted.allowed)dispatch(true)
+                                        else Toast.makeText(a,
+                                            admitted.reason,Toast.LENGTH_LONG).show()
+                                    }.show()
+                            }else dispatch(false)
                         }
                     }.setNegativeButton("Close",null).show()
             }.setPositiveButton("Refresh"){_,_->showQueue(a)}
@@ -233,6 +264,9 @@ class TorrentTransferService : Service() {
         const val PREPARE_MAGNET = "asterion.torrent.PREPARE_MAGNET"
         const val PREPARE_DESCRIPTOR = "asterion.torrent.PREPARE_DESCRIPTOR"
         const val EXPORT = "asterion.torrent.EXPORT"
+        // Accepted only after the user explicitly acknowledges an incident
+        // dialog; the isolated service rechecks admission in its own process.
+        const val OWNER_REVIEWED_RETRY="asterion.torrent.owner_reviewed_retry"
         private const val CHANNEL = "asterion_peer_transfers"
         private const val NOTIFICATION = 56823
         private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -357,7 +391,10 @@ class TorrentTransferService : Service() {
             return START_NOT_STICKY
         }
         if(intent?.action!=PAUSE){
-            val admitted=TorrentSafetyGate.assess(applicationContext)
+            val admitted=if(intent?.getBooleanExtra(
+                    OWNER_REVIEWED_RETRY,false)==true)
+                TorrentSafetyGate.ownerReviewedRetry(applicationContext)
+                else TorrentSafetyGate.assess(applicationContext)
             if(!admitted.allowed){
                 @Suppress("DEPRECATION")
                 val receiver=if(Build.VERSION.SDK_INT>=33)
