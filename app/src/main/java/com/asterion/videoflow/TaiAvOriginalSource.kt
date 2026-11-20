@@ -25,7 +25,7 @@ internal object TaiAvOriginalSource {
         """(?i)\bvar\s+id\s*=\s*["']([a-f0-9]{24})["']""")
     private val quality=Regex("""[A-Za-z0-9_-]{1,20}""")
     private val badMedia=Regex(
-        """(?i)(?:^|[/_-])(?:preview|trailer|teaser|sample|thumb)(?:[/_.-]|$)""")
+        """(?i)(?:^|[/_-])(?:preview(?:video)?|trailer|teaser|sample|thumb(?:nail)?)(?:[/_.-]|$)""")
 
     data class Request(val selected:String,val endpoint:String,
                        val quality:String,val movieId:String)
@@ -71,6 +71,10 @@ internal object TaiAvOriginalSource {
             URI(request.selected).resolve(URI(raw))
         }.getOrNull()?:return null
         val host=link.host.orEmpty().lowercase(Locale.ROOT)
+        // Observed /api/getmovie on the exact selected TaiAV movie returns
+        // a first-party relative HLS playlist; no off-site/preview mirror
+        // is authenticated by this JSON field.
+        if(host!="taiav.com")return null
         if(link.scheme!="https" || host.isBlank() ||
             host=="localhost" || host=="127.0.0.1" ||
             link.userInfo!=null || link.port!=-1 ||
