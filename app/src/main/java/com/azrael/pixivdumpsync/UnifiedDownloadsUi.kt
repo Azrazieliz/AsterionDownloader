@@ -706,8 +706,7 @@ object UnifiedDownloadsUi {
             }
             rows+=Row("Torrents","Torrent "+torrent.id.take(8),
                 info,state,
-                if(torrent.stage=="TRANSFERRING" &&
-                    torrent.wantedBytes>0L)
+                if(torrent.wantedBytes>0L)
                     ((torrent.verifiedBytes.toDouble()/
                         torrent.wantedBytes)*100).toInt().coerceIn(0,100)
                 else null,
@@ -1521,26 +1520,29 @@ object UnifiedDownloadsUi {
                 val chosenFilter=selectedFilter(prefs,source)
                 val available=items.filter{matchesFilter(it.state,chosenFilter)}
                 val stateCounts=items.groupingBy{it.state}.eachCount()
-                val filterChips=ui.row(a)
-                for(filter in Filter.entries){
-                    val visible=filter==Filter.ALL || (if(filter==Filter.DONE)
+                // One compact filter selector replaces six full-size
+                // horizontal chips while keeping every existing state.
+                val availableFilters=Filter.entries.filter{filter->
+                    filter==Filter.ALL || (if(filter==Filter.DONE)
                         totals.saved>0 else
                         (stateCounts[State.valueOf(filter.name)]?:0)>0)
-                    if(!visible)continue
-                    filterChips.addView(ui.chip(a,filter.label,
-                        chosenFilter==filter){
-                        prefs.edit().putString("filter:"+source,filter.name).apply()
-                        refresh()
-                    },LinearLayout.LayoutParams(-2,-2).apply{
-                        rightMargin=ui.px(a,6)
-                    })
                 }
-                card.addView(HorizontalScrollView(a).apply{
-                    isHorizontalScrollBarEnabled=false
-                    addView(filterChips)
-                },ui.lp(a,8))
+                card.addView(ui.action(a,
+                    "SHOW: "+chosenFilter.label.uppercase(java.util.Locale.ROOT)+
+                    " · CHANGE FILTER",false){
+                    android.app.AlertDialog.Builder(a)
+                        .setTitle(source+" downloads")
+                        .setSingleChoiceItems(
+                            availableFilters.map{it.label}.toTypedArray(),
+                            availableFilters.indexOf(chosenFilter)){dialog,index->
+                            prefs.edit().putString("filter:"+source,
+                                availableFilters[index].name).apply()
+                            dialog.dismiss()
+                            refresh()
+                        }.setNegativeButton("Close",null).show()
+                },ui.lp(a,5))
                 val pageKey="page:"+source+":"+chosenFilter.name
-                val pageSize=prefs.getInt(pageKey,16).coerceIn(8,180)
+                val pageSize=prefs.getInt(pageKey,8).coerceIn(6,180)
                 val managed=available.take(pageSize)
                 if(source=="Video" && totals.failed>0){
                     card.addView(ui.action(a,
@@ -1609,11 +1611,28 @@ object UnifiedDownloadsUi {
                             orientation=LinearLayout.VERTICAL
                             setPadding(0,ui.px(a,8),0,ui.px(a,8))
                         }
-                        panel.addView(ui.text(a,job.filename.take(95),
+                        val name=ui.text(a,job.filename.take(95),
                             13f,ui.white,true).apply{
                             maxLines=2
                             ellipsize=android.text.TextUtils.TruncateAt.END
-                        })
+                        }
+                        val poster=job.posterPage
+                        if(poster!=null){
+                            val heading=ui.row(a).apply{
+                                gravity=Gravity.CENTER_VERTICAL
+                            }
+                            val thumbnail=ImageView(a).apply{
+                                scaleType=ImageView.ScaleType.CENTER_INSIDE
+                                setBackgroundColor(ui.raised)
+                            }
+                            heading.addView(thumbnail,LinearLayout.LayoutParams(
+                                ui.px(a,58),ui.px(a,58)).apply{
+                                rightMargin=ui.px(a,8)
+                            })
+                            heading.addView(name,LinearLayout.LayoutParams(0,-2,1f))
+                            panel.addView(heading)
+                            VideoSearchPreviews.display(a,thumbnail,null,poster)
+                        }else panel.addView(name)
                         val stateDescription=when(job.state){
                             State.ACTIVE->"Working"
                             State.QUEUED->"Queued"
@@ -1622,7 +1641,15 @@ object UnifiedDownloadsUi {
                             State.HELD->"Needs action"
                             State.DONE->"Saved"
                         }
-                        val progress=job.percent?.let{" · $it%"}.orEmpty()
+                        val progress=job.percent?.let{" · $it% original" }
+                            ?:job.reportedProgress?.takeIf{it>0}
+                                ?.let{" · $it% extractor progress"}
+                            ?:if(job.source=="Torrents" &&
+                                job.totalBytes>0L)
+                                " · "+((job.receivedBytes.toDouble()/
+                                    job.totalBytes)*100).toInt()
+                                    .coerceIn(0,100)+"% verified"
+                            else ""
                         val bytes=if(job.receivedBytes>0)
                             " · "+sizeLabel(job.receivedBytes) else ""
                         panel.addView(ui.text(a,
