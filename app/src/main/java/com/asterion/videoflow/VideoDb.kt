@@ -168,6 +168,27 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
     /** Per-row authorization: crawling a followed website is not an
      * explicit selection by the user, even if the crawl found a valid page.
      */
+    /** Explicit cancellation state and retained incomplete storage are
+     * different things. Only dismissed, long-idle jobs may be reclaimed.
+     * Paused/failed/retry originals are never eligible for this sweep.
+     */
+    fun stateAndUpdated(id:Long):Pair<String,Long>? =
+        readableDatabase.rawQuery(
+            "SELECT state,updated FROM videos WHERE id=? LIMIT 1",
+            arrayOf(id.toString())).use{c->
+            if(c.moveToFirst())c.getString(0) to c.getLong(1) else null
+        }
+
+    fun longDismissedIds(cutoffMs:Long,limit:Int=60):List<Long>{
+        val ids=ArrayList<Long>()
+        readableDatabase.rawQuery(
+            "SELECT id FROM videos WHERE state='dismissed' "+
+                "AND updated>0 AND updated<=? ORDER BY updated ASC LIMIT ?",
+            arrayOf(cutoffMs.toString(),limit.coerceIn(1,100).toString())
+        ).use{cursor->while(cursor.moveToNext())ids+=cursor.getLong(0)}
+        return ids
+    }
+
     fun requestOrigin(id:Long):String? =
         readableDatabase.rawQuery(
             "SELECT request_origin FROM videos WHERE id=? LIMIT 1",
