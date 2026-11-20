@@ -31,6 +31,15 @@ internal object PublisherOriginalExtractors {
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
 
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
+        // Only the selected article's own main player is eligible. No sidebar,
+        // thumbnail MP4s, related posts, or guessed off-site player domains.
+        Site("porneec.com","article video[src],article video source[src],"+
+            "main .video-player video[src],main .video-player source[src],"+
+            "main #player video[src],main #player source[src],meta[itemprop=contentUrl]"),
+        Site("taiav.com","main video[src],main video source[src],"+
+            "main #player video[src],main #player source[src],"+
+            "article .video-player video[src],article .video-player source[src],"+
+            "meta[itemprop=contentUrl]"),
         Site("omg.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("hentaibros.net","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
         Site("onlyhentaistuff.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
