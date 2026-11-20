@@ -82,6 +82,14 @@ internal object VideoSiteProfiles {
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
         val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+        // OnScreens uses UUID + slug for both recordings and profile landing
+        // cards. A strict UUID route alone incorrectly admitted "sagnic profile"
+        // as a selected video; those cards cannot expose a recording player.
+        if(domain(url)=="onscreens.me" &&
+            cleanPath.substringAfterLast('/').let{slug->
+                slug=="profile" || slug.endsWith("-profile") ||
+                    slug.endsWith("-profile-page")
+            })return false
         if(domain(url)=="porneec.com" && cleanPath in setOf(
                 "privacy-policy","contact-us","terms-and-conditions",
                 "all-videos","all-categories","video-collection",
