@@ -16,11 +16,13 @@ import java.util.concurrent.TimeUnit
  * disguised as model downloads.
  */
 internal object OpenWebModelSearch {
-    data class Candidate(val title:String,val url:String,val format:String,val host:String)
+    data class Candidate(val title:String,val url:String,val format:String,
+                         val host:String,val thumbnail:String?=null)
 
     private val modelExtensions=setOf(
         "blend","fbx","obj","stl","gltf","glb","dae",
-        "usd","usdz","abc","ply","3mf","x3d","unitypackage")
+        "usd","usdz","abc","ply","3mf","x3d","unitypackage",
+        "vrm","pmx")
     private fun extension(url:String):String? = runCatching{
         val path=URI(url).path.orEmpty()
         path.substringAfterLast('/').substringAfterLast('.',missingDelimiterValue="")
@@ -83,19 +85,29 @@ internal object OpenWebModelSearch {
         // pages for actual linked originals; never present the page itself
         // as an asset, subscription or paid-store redirect.
         val pages=OpenWebModelPageDiscovery.landingLinks(
-            html,response.url().toString(),engine,term).take(3)
-        val recovered=pages.flatMap{page->
-            runCatching {
-                val detail=Jsoup.connect(page)
-                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
-                    .timeout(3_500).maxBodySize(1_800_000)
-                    .ignoreHttpErrors(true).followRedirects(false).execute()
-                if(detail.statusCode() !in 200..299 ||
-                    !detail.contentType().orEmpty().contains("html",true))
-                    emptyList() else OpenWebModelPageDiscovery.originals(
-                        detail.body(),page,term)
-            }.getOrDefault(emptyList())
-        }
+            html,response.url().toString(),engine,term).take(12)
+        // Previous search inspected just THREE model pages serially,
+        // reducing a common query such as "sword" to almost no originals.
+        // Check more authentic result pages in bounded parallel lanes,
+        // rather than increasing network time or showing paid storefronts.
+        val pool=Executors.newFixedThreadPool(6)
+        val recovered=try{
+            val jobs=pages.map{page->pool.submit<List<Candidate>>{
+                runCatching{
+                    val detail=Jsoup.connect(page)
+                        .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
+                        .timeout(4_500).maxBodySize(1_800_000)
+                        .ignoreHttpErrors(true).followRedirects(false).execute()
+                    if(detail.statusCode() !in 200..299 ||
+                        !detail.contentType().orEmpty().contains("html",true))
+                        emptyList() else OpenWebModelPageDiscovery.originals(
+                            detail.body(),page,term)
+                }.getOrDefault(emptyList())
+            }}
+            jobs.flatMap{runCatching{
+                it.get(9,TimeUnit.SECONDS)
+            }.getOrDefault(emptyList())}
+        }finally{pool.shutdownNow()}
         return (direct+recovered).distinctBy{
             SearchRanking.canonicalKey(it.url)
         }
