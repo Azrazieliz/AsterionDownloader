@@ -9,8 +9,9 @@ import java.net.URI
 internal object GalleryOriginalUrl {
     fun requestTarget(source:String):String {
         val uri=URI(source)
-        require(uri.scheme=="https" && !uri.host.isNullOrBlank() &&
-            uri.userInfo==null){"Expected publisher HTTPS original"}
+        require(uri.scheme in setOf("https","http") &&
+            !uri.host.isNullOrBlank() &&
+            uri.userInfo==null){"Expected public HTTP(S) gallery original"}
         return uri.toASCIIString()
     }
 }
