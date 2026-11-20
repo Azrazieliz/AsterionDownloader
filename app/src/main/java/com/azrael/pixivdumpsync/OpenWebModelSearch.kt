@@ -61,21 +61,44 @@ internal object OpenWebModelSearch {
         return discovered.values.toList()
     }
 
-    private fun searchOne(term:String,engine:String):List<Candidate> {
-        val q=URLEncoder.encode(term.trim()+
-            " 3d model filetype:glb OR filetype:fbx OR filetype:obj OR filetype:blend",
-            "UTF-8")
+    private fun searchOne(term:String,engine:String,mode:Int):List<Candidate> {
+        val phrase=if(mode==0)
+            term.trim()+" 3d model filetype:glb OR filetype:fbx OR filetype:obj OR filetype:blend"
+        else term.trim()+" free 3d model download original glb fbx obj"
+        val q=URLEncoder.encode(phrase,"UTF-8")
         val target=if(engine=="DuckDuckGo")
             "https://html.duckduckgo.com/html/?q="+q
         else "https://www.bing.com/search?q="+q+"&count=50"
         val response=Jsoup.connect(target)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
-            .timeout(15_000).maxBodySize(2_000_000)
+            .timeout(9_000).maxBodySize(2_000_000)
             .ignoreHttpErrors(true).followRedirects(false).execute()
         require(response.statusCode() in 200..299){
             "$engine search returned HTTP "+response.statusCode()
         }
-        return parseWebIndex(response.body(),response.url().toString(),engine)
+        val html=response.body()
+        val direct=parseWebIndex(html,response.url().toString(),engine)
+        // Search engines generally return HTML model detail pages, not
+        // URLs ending .glb/.obj. Inspect only a few independently indexed
+        // pages for actual linked originals; never present the page itself
+        // as an asset, subscription or paid-store redirect.
+        val pages=OpenWebModelPageDiscovery.landingLinks(
+            html,response.url().toString(),engine,term).take(3)
+        val recovered=pages.flatMap{page->
+            runCatching {
+                val detail=Jsoup.connect(page)
+                    .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
+                    .timeout(3_500).maxBodySize(1_800_000)
+                    .ignoreHttpErrors(true).followRedirects(false).execute()
+                if(detail.statusCode() !in 200..299 ||
+                    !detail.contentType().orEmpty().contains("html",true))
+                    emptyList() else OpenWebModelPageDiscovery.originals(
+                        detail.body(),page,term)
+            }.getOrDefault(emptyList())
+        }
+        return (direct+recovered).distinctBy{
+            SearchRanking.canonicalKey(it.url)
+        }
     }
 
     /** Errors stay visible, never substituted with paid pages or fake assets. */
@@ -84,13 +107,17 @@ internal object OpenWebModelSearch {
         val names=listOf("DuckDuckGo","Bing")
         val errors=ArrayList<String>()
         val gathered=ArrayList<Candidate>()
-        val pool=Executors.newFixedThreadPool(names.size)
+        val pool=Executors.newFixedThreadPool(4)
         try{
-            val futures=names.map{engine->engine to pool.submit<List<Candidate>>{
-                searchOne(term,engine)
-            }}
+            val futures=names.flatMap{engine->
+                (0..1).map{mode->
+                    (engine+"-"+mode) to pool.submit<List<Candidate>>{
+                        searchOne(term,engine,mode)
+                    }
+                }
+            }
             for((name,future) in futures){
-                runCatching{future.get(17,TimeUnit.SECONDS)}
+                runCatching{future.get(22,TimeUnit.SECONDS)}
                     .onSuccess{gathered.addAll(it)}
                     .onFailure{errors.add(name+": "+
                         (it.cause?.message?:it.message?:"Unavailable").take(120))}
