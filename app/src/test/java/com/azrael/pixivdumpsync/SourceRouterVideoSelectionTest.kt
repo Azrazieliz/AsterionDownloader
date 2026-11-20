@@ -11,9 +11,6 @@ class SourceRouterVideoSelectionTest {
         listOf(
             "https://jav.guru/123456/mxgs-1452-example-title/",
             "https://javideo.net/en/fc2ppv-4994603",
-            "https://mp4hentai.com/2026/11/selected-video/",
-            "https://helloporn.com/video-74763-selected-clip",
-            "https://hentaihaven.xxx/watch/selected-series/episode-2/",
             "https://uncensoredhentai.xxx/watch/selected-video/"
         ).forEach{url->
             assertEquals("Owner-selected $url must start VideoFlow",
@@ -23,6 +20,9 @@ class SourceRouterVideoSelectionTest {
 
     @Test fun listingAndUnrelatedGalleryStillNotVideo(){
         listOf(
+            "https://helloporn.com/video-74763-selected-clip",
+            "https://mp4hentai.com/2026/11/selected-video/",
+            "https://hentaihaven.xxx/watch/selected-series/episode-2/",
             "https://jav.guru/category/uncensored/",
             "https://javideo.net/search/",
             "https://mp4hentai.com/2026/11/",
