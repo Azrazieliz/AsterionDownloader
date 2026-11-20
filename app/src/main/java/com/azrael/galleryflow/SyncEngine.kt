@@ -7,9 +7,12 @@ import android.content.Context
  * from receiving transfer time. Budgets never delete existing originals.
  */
 internal object GalleryBackfillBudget {
-    const val PRIOR_RETRIES=2
+    const val PRIOR_RETRIES=1
     const val NEW_GALLERIES_PER_PASS=4
-    fun hasMore(visited:Int):Boolean=visited>=NEW_GALLERIES_PER_PASS
+    // Once even one original fails, give the NEXT provider a turn instead
+    // of adding another large unsuccessful batch to the retry database.
+    fun hasMore(visited:Int,previousFailure:Boolean=false):Boolean =
+        visited>=if(previousFailure)1 else NEW_GALLERIES_PER_PASS
 }
 
 class SyncEngine(private val context: Context) {
@@ -289,7 +292,7 @@ class SyncEngine(private val context: Context) {
                     }
                 }
                 for (gallery in pages) {
-                    if(GalleryBackfillBudget.hasMore(inspected)){
+                    if(GalleryBackfillBudget.hasMore(inspected,failedCount>0)){
                         stats.incompleteGalleries++
                         progress("Backfill slice completed for "+entity.displayName+
                             "; continuing on the next pass. Other providers can proceed.")
