@@ -131,9 +131,12 @@ object DirectDownloadTracker {
                 DownloadManager.STATUS_RUNNING->"Downloading"+progress
                 DownloadManager.STATUS_PENDING->"Queued"
                 DownloadManager.STATUS_PAUSED->"Paused"+progress
-                DownloadManager.STATUS_FAILED->
-                    if(receipt=="MISSING")"Android transfer record missing · manual retry"
-                    else "Failed · system reason "+item.reason
+                DownloadManager.STATUS_FAILED->when(receipt){
+                    "NEEDS_GALLERY"->"Old standalone JPEG blocked · "+
+                        "select its original album in Cosplay"
+                    "MISSING"->"Android transfer record missing · manual retry"
+                    else->"Failed · system reason "+item.reason
+                }
                 else->"Waiting"
             }
             card.addView(ui.text(a,item.job.folder+" · "+item.job.sourceHost+
@@ -142,10 +145,11 @@ object DirectDownloadTracker {
             // The encrypted retry vault already retains the original URL,
             // referer and dedup claim. Expose its real recovery operation in
             // Downloads instead of leaving failed/stalled rows as dead ends.
-            if(item.status==DownloadManager.STATUS_FAILED ||
-                item.status==DownloadManager.STATUS_PAUSED ||
-                (item.status==DownloadManager.STATUS_SUCCESSFUL &&
-                    receipt=="INVALID")) {
+            if(receipt!="NEEDS_GALLERY" &&
+                (item.status==DownloadManager.STATUS_FAILED ||
+                 item.status==DownloadManager.STATUS_PAUSED ||
+                 (item.status==DownloadManager.STATUS_SUCCESSFUL &&
+                    receipt=="INVALID"))) {
                 card.addView(ui.action(a,"RETRY DOWNLOAD",false){
                     val scheduled=DirectDownloadRetry.retryNow(a,item.job.id)
                     Toast.makeText(a,if(scheduled)
