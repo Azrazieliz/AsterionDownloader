@@ -1497,6 +1497,7 @@ object SourceIndex {
      * books, comics, games or media from an auto-seeded provider.
      */
     internal fun originalRequested(context:Context,item:IndexedItem):Boolean =
+        item.area!="COSPLAY" &&
         DownloadConsentPolicy.automaticAllowed(item.area,
             SiteControls.explicitlyEnabled(context,item.source)) &&
         SourceIndexParser.autoOriginal(item)
@@ -1504,6 +1505,21 @@ object SourceIndex {
     internal fun submitOriginal(context:Context,item:IndexedItem,
                                  onDirectEnqueued:(Long)->Unit={}):Boolean=runCatching{
         if(!SourceIndexParser.safe(item.url))return false
+        if(item.area=="COSPLAY"){
+            // SourceIndex owns only gallery *discovery*. Previously it sent
+            // individual publisher .jpg links to Android DownloadManager,
+            // yielding HTTP 403 for entire Kyora publishers. The native
+            // GalleryFlow scanner owns album originals and media receipts.
+            val parent=when {
+                SiteBackfillProfiles.recognizesGalleryPage(
+                    item.source,item.url)->item.url
+                SiteBackfillProfiles.recognizesGalleryPage(
+                    item.source,item.source)->item.source
+                else->null
+            }?:return false // No verifiable album: never fake a file transfer.
+            return ApprovedCosplayActions.enqueueExactOriginal(
+                context,item.source,parent,item.title)
+        }
         if(item.kind=="video"){
             // No automatic video transfers. Explicit user-tapped video cards
             // are queued by their own UI action, not by catalog traversal.
