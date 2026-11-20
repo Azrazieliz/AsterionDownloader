@@ -1170,7 +1170,12 @@ object VideoEngine {
             VideoSiteProfiles.isVideoPage(item.url)
         val strictIframe=NetworkRoute.siteKey(item.url) in
             setOf("javideo.net","helloporn.com","uncensoredhentai.xxx",
-                "onscreens.me")
+                // New owner-approved sources require an exact selected
+                // player original. Generic article yt-dlp, arbitrary
+                // iframe fallback or first unrelated preview/ad is not
+                // a substitute for a complete recording.
+                "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
+                "bubblecum.lol","pornavhd.com","camstreams.tv")
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
