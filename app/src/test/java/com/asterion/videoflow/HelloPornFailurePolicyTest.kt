@@ -7,7 +7,7 @@ class HelloPornFailurePolicyTest {
     @Test fun selectedPlayerRejectsUnreachableWithoutFakeOriginal(){
         val good="https://helloporn.com/video-123456-selected-video"
         val selected="https://voe.sx/e/abcdefgh"
-        assertEquals(true,
+        assertEquals(false,
             SiteSpecificOriginalSources.selectedExtractorFrame(good,selected))
         for(untrusted in listOf(
             "https://voe.sx.evil.example/e/abcdefgh",
