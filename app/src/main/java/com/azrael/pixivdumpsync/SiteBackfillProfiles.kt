@@ -41,6 +41,12 @@ internal object SiteBackfillProfiles {
             cosplay+",main article a[href],.post-list a[href]",
             Regex("^/content/[0-9]{1,8}/[a-z0-9][a-z0-9_-]{2,180}\\.html/?$"),
             "cosplay"),
+        Profile("buondua.com","COSPLAY",
+            cosplay+",main a[href*=/albums/],.gallery-item a[href]",
+            Regex("^/albums/[A-Za-z0-9][A-Za-z0-9_-]{0,200}/?$"),"cosplay"),
+        Profile("buondua.net","COSPLAY",
+            cosplay+",main a[href*=/albums/],.gallery-item a[href]",
+            Regex("^/albums/[A-Za-z0-9][A-Za-z0-9_-]{0,200}/?$"),"cosplay"),
         Profile("kiutaku.com","COSPLAY",
             cosplay+",main a[href],.gallery-grid a[href]",
             Regex("^/[0-9]{1,9}/?$"),"cosplay"),
@@ -66,9 +72,15 @@ internal object SiteBackfillProfiles {
         val url=runCatching{URI(target)}.getOrNull()?:return false
         val host=origin.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
         val profile=profiles[host]?.takeIf{it.area=="COSPLAY"}?:return false
-        return url.scheme=="https" && url.userInfo==null &&
-            url.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==host &&
+        val matched=SiteControls.key(source)==SiteControls.key(target) &&
             profile.path.matches(url.path.orEmpty().lowercase(Locale.ROOT))
+        val reserved=host=="cosplaytele.com" &&
+            url.path.orEmpty().trim('/').lowercase(Locale.ROOT) in
+                setOf("home","page","category","categories","tag","tags",
+                    "search","model","models","gallery","galleries",
+                    "login","register","about","contact","privacy","terms")
+        return url.scheme=="https" && url.userInfo==null &&
+            matched && !reserved
     }
 
     fun entries(doc:Document,base:String,area:String,now:Long):
