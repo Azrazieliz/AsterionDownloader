@@ -36,6 +36,7 @@ LiveCamRips recordings|https://livecamrips.to/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 Porneec|https://porneec.com/|ADULT
+PornBuz curated channels|https://pornbuz.com/|ADULT
 WatchPorn|https://watchporn.to/|ADULT
 FullPorner|https://fullporner.com/|ADULT
 Pornhub|https://www.pornhub.com/|ADULT
@@ -68,7 +69,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==38 && sites.distinctBy{it.url}.size==38){"Incorrect approved Aloha source set"}
+            require(sites.size==39 && sites.distinctBy{it.url}.size==39){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
