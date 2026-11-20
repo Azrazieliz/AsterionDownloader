@@ -103,7 +103,9 @@ class PixivApi(private val context: Context) {
             }.getOrDefault(emptyMap())
 
             previews = previews.map { preview ->
-                hydrated[preview.id] ?: preview
+                hydrated[preview.id]?.takeIf{
+                    !it.thumbnailUrl.isNullOrBlank()
+                } ?: preview
             }
         }
 
