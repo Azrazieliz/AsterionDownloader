@@ -41,7 +41,7 @@ def main():
     u=urllib.parse.urlsplit(str(r.get("url") or ""))
     host=u.hostname or ""
     if not any(x in host for x in ("jav.guru","javideo.net","helloporn.com","hentaihaven.xxx","mp4hentai.com","uncensoredhentai.xxx","pornhub.com","roshy.tv")):continue
-    if r["id"] not in {22,37,77,78,80,85,87,88,89,90,93,94} and r["state"] in ("dismissed","done","completed","saved"):continue
+    if r["state"] in ("dismissed","done","completed","saved"):continue
     path=u.path
     source_type=("hentai_episode" if "/episode-" in path else
       "hentai_series" if "/watch/" in path else
@@ -60,7 +60,7 @@ def main():
       "has_saved_uri":bool(r.get("saved_uri"))
     })
    print(json.dumps({"stage":"ACTUAL_SELECTED_ANDROID_VIDEO_JOBS",
-     "matching_count":len(out),"jobs":out[:25],
+     "matching_count":len(out),"jobs":out[:12],
      "selected_urls_exported":False,"credentials_exported":False}),flush=True)
    return 0
   finally:
