@@ -24,6 +24,21 @@ class OpenWebModelPageDiscoveryTest {
         assertTrue(models.all{it.url.startsWith("https://creator.example.org/models/")})
     }
 
+    @Test fun indexedModelRetainsOnlyItsOwnPublishedPoster(){
+        val detail="https://models.example.org/free-sword"
+        val html="""<html><head>
+          <meta property="og:image" content="/preview/sword.webp"/>
+          </head><body><main><h1>Free sword 3D model</h1>
+          <a href="/objects/sword.vrm" download>Original VRM</a>
+          <a href="/objects/sword.pmx" download>Original PMX</a>
+          </main></body></html>"""
+        val models=OpenWebModelPageDiscovery.originals(html,detail,"sword")
+        assertEquals(setOf("VRM","PMX"),models.map{it.format}.toSet())
+        assertTrue(models.all{
+            it.thumbnail=="https://models.example.org/preview/sword.webp"
+        })
+    }
+
     @Test fun unrelatedDetailPagesAndHtmlLinksAreNotDownloaded(){
         val body="""<html><h1>Car model</h1><main>
             <a href="/sword.obj">Unrelated sword file</a></main></html>"""
