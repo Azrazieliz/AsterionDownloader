@@ -71,20 +71,37 @@ object AsterionSearchHub {
         var checked=0
         val workers=java.util.concurrent.Executors.newFixedThreadPool(areas.size)
         try{
-            val requests=areas.map{area->
-                area to workers.submit<SearchOutcome>{
-                    KeywordSources.searchDetailed(ctx,term,area)
+            val completion=java.util.concurrent.ExecutorCompletionService<
+                Triple<VideoSearchArea,SearchOutcome?,String?>>(workers)
+            for(area in areas)completion.submit(java.util.concurrent.Callable{
+                runCatching{KeywordSources.searchDetailed(ctx,term,area)}
+                    .fold({Triple(area,it,null)},{
+                        Triple(area,null,(it.message?:it.javaClass.simpleName).take(130))
+                    })
+            })
+            // One overall 35s budget for combined category search. Waiting
+            // 35s per future in order could stall All for 70 seconds and
+            // discard the fast category when another provider was blocked.
+            val deadline=System.nanoTime()+
+                java.util.concurrent.TimeUnit.SECONDS.toNanos(35)
+            var finished=0
+            while(finished<areas.size){
+                val remaining=deadline-System.nanoTime()
+                if(remaining<=0L)break
+                val ready=completion.poll(remaining,
+                    java.util.concurrent.TimeUnit.NANOSECONDS)?:break
+                finished++
+                val (area,outcome,error)=ready.get()
+                if(outcome!=null){
+                    items+=outcome.hits
+                    errors+=outcome.failures
+                    checked+=outcome.checked
                 }
+                if(error!=null)errors+=area.name+": "+error
             }
-            // The All tab is concurrent across PORN and HENTAI categories;
-            // one blocked source category no longer delays the other one.
-            for((area,future) in requests){
-                runCatching{
-                    future.get(35L,java.util.concurrent.TimeUnit.SECONDS)
-                }.onSuccess{items+=it.hits;errors+=it.failures;checked+=it.checked}
-                    .onFailure{errors+=area.name+": "+
-                        (it.cause?.message?:it.message?:"Search timed out")}
-            }
+            if(finished<areas.size)
+                errors+=(areas.size-finished).toString()+
+                    " search categories exceeded the combined deadline"
         }finally{
             workers.shutdownNow()
         }
