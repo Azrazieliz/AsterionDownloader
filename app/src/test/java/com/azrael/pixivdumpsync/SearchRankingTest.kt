@@ -12,6 +12,30 @@ class SearchRankingTest {
         assertEquals(3,list.size)
         assertEquals(SearchProviderKind.HTML,list[1].kind)
     }
+    @Test fun rejectedPublishersNeverReturnViaOpenWebIndex(){
+        assertFalse(KeywordSources.siteDefinitions(VideoSearchArea.PORN)
+            .any{it.contains("spankbang.com",true)})
+        for(url in listOf(
+            "https://spankbang.com/abc/video/name",
+            "https://www.thisvid.com/videos/name/",
+            "https://manyvids.com/video/12345",
+            "https://spankbang.com.evil.example/watch/1"
+        )){
+            if(url.contains("evil.example"))assertTrue(
+                KeywordSources.eligibleDiscoveryUrl(url))
+            else assertFalse(KeywordSources.eligibleDiscoveryUrl(url))
+        }
+        assertTrue(KeywordSources.eligibleDiscoveryUrl(
+            "https://porneec.com/video/example-video"))
+        val web="""<div class="result"><a class="result__a"
+            href="https://spankbang.com/abc/video/creator">Creator video</a></div>
+            <div class="result"><a class="result__a"
+            href="https://porneec.com/video/creator">Creator video</a></div>"""
+        val hits=KeywordSources.parseWebIndex(web,
+            "https://html.duckduckgo.com/html/","DuckDuckGo Web")
+        assertTrue(hits.any{it.url.contains("porneec.com")})
+        assertFalse(hits.any{it.url.contains("spankbang.com")})
+    }
     @Test fun dedicatedThreeSearchCategoriesHaveDifferentActualSources(){
         val categories=VideoSearchArea.values().toList()
         assertEquals(listOf(VideoSearchArea.HENTAI,VideoSearchArea.PORN,
