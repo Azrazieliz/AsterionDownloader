@@ -132,6 +132,13 @@ object KeywordSources {
         return Proxy(Proxy.Type.SOCKS,InetSocketAddress.createUnresolved(
             "127.0.0.1",settings.getInt("tor_port",9050).coerceIn(1,65535)))
     }
+    // Search is interactive. A 25-second per-source socket timeout with
+    // eight workers meant the first configured sites consumed the entire
+    // global 38-second budget and all later owner-approved sources NEVER
+    // got an attempt. Short source-local connect/read deadlines preserve
+    // a multi-site result set while long downloads remain unaffected.
+    internal const val SEARCH_SOURCE_TIMEOUT_MS=8_500
+
     private fun connection(context:Context,url:String):org.jsoup.Connection {
         require(SearchRanking.validUrl(url)){"Invalid search source address"}
         val host=URI(url).host.orEmpty().lowercase()
@@ -139,7 +146,8 @@ object KeywordSources {
         require(!host.endsWith(".onion")||route!=null){
             "Enable a running local SOCKS5/Tor proxy for .onion search sources"
         }
-        val call=Jsoup.connect(url).timeout(25000).maxBodySize(4_000_000)
+        val call=Jsoup.connect(url).timeout(SEARCH_SOURCE_TIMEOUT_MS)
+            .maxBodySize(4_000_000)
             .followRedirects(true).userAgent("Mozilla/5.0 (Linux; Android 16; Mobile)")
         // Do not silently fall back to an unproxied request when the proxy is enabled.
         if(route!=null)call.proxy(route)
@@ -394,6 +402,17 @@ object KeywordSources {
             if(duck)"DuckDuckGo Web" else "Bing Web")
     }
 
+    /** Broad web indexes must start in the FIRST search batch. The old
+     * task order put them after every site (many of which had no form),
+     * so an interactive search regularly returned zero useful results
+     * even though the independent indexes had publisher results.
+     */
+    internal fun <T> prioritizedTasks(
+        tasks:List<Pair<String,T>>):List<Pair<String,T>> =
+        tasks.sortedWith(compareBy<Pair<String,T>>{
+            if(it.first=="Bing Web" || it.first=="DuckDuckGo Web")0 else 1
+        })
+
     fun searchDetailed(context:Context,keyword:String,
                        area:VideoSearchArea=VideoSearchArea.PORN):SearchOutcome {
         require(keyword.trim().isNotBlank()){"Enter a search term"}
@@ -407,13 +426,15 @@ object KeywordSources {
         }
         tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
         tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true)}
-        val pool=java.util.concurrent.Executors.newFixedThreadPool(minOf(8,tasks.size))
+        val scheduled=prioritizedTasks(tasks)
+        val pool=java.util.concurrent.Executors.newFixedThreadPool(
+            minOf(8,scheduled.size))
         val completion=java.util.concurrent.ExecutorCompletionService<
             Triple<String,List<RankedHit>,String?>>(pool)
         val collected=ArrayList<RankedHit>()
         val errors=ArrayList<String>()
         try {
-            for((label,task) in tasks)completion.submit(java.util.concurrent.Callable {
+            for((label,task) in scheduled)completion.submit(java.util.concurrent.Callable {
                 try {
                     Triple(label,task(),null)
                 }catch(t:Exception){
