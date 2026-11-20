@@ -437,6 +437,14 @@ class AsterionHomeActivity:Activity(){
     override fun onNewIntent(next:Intent){
         super.onNewIntent(next)
         setIntent(next)
+        // When Downloader is already open, Android delivers shared video URLs
+        // to this existing task through onNewIntent, not onCreate. Without
+        // this branch the Share action silently does nothing and genuine
+        // owner-selected retries never reach VideoDb/VideoEngine.
+        if(next.action==Intent.ACTION_SEND) {
+            next.getStringExtra(Intent.EXTRA_TEXT)?.let{submitInput(it)}
+            return
+        }
         val requested=next.getStringExtra("asterion_page")
         if(requested in setOf("Home","Pixiv","Site","Porn","Hentai",
                 "Sources","Queue","Settings")){
