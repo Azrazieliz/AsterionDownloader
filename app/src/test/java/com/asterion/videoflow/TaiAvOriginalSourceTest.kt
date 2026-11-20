@@ -65,5 +65,10 @@ class TaiAvOriginalSourceTest {
             """{"m3u8":"https://taiav.com/trailer.mp4"}"""))
         assertNull(TaiAvOriginalSource.verifiedHls(request,
             """{"m3u8":"http://taiav.com/media/full.m3u8"}"""))
+        assertEquals("https://www.taiav.com/media/full.m3u8",
+            TaiAvOriginalSource.verifiedHls(request,
+                """{"m3u8":"https://www.taiav.com/media/full.m3u8"}"""))
+        assertNull(TaiAvOriginalSource.verifiedHls(request,
+            """{"m3u8":"https://taiav.com.evil.example/full.m3u8"}"""))
     }
 }
