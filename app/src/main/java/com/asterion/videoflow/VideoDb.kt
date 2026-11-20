@@ -736,21 +736,27 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             return it.executeUpdateDelete()
         }
     }
-    fun recover() {
-        // Never reset another live agent's download merely because a second
-        // service starts. Only crashed workers with stale heartbeats recover.
-        val deadline=System.currentTimeMillis()-staleLeaseMs
-        // Recover a killed transfer once without losing partial files. A
-        // repeated Android low-memory kill cannot cycle this row forever.
-        writableDatabase.execSQL(
+    fun recover():Int {
+        // This is safe to invoke from either worker OR the Downloads monitor:
+        // only leases whose heartbeat truly expired can be reclaimed. New
+        // active lease owners update heartbeat every few seconds. A recovered
+        // row must not keep reporting an endless "Connecting to source".
+        val now=System.currentTimeMillis()
+        val deadline=now-staleLeaseMs
+        val statement=writableDatabase.compileStatement(
             """UPDATE videos SET
                 state=CASE WHEN attempts>=1 THEN 'error' ELSE 'queued' END,
                 progress=0, attempts=attempts+1, lease=lease+1,
+                retry_after=0, updated=?,
                 error=CASE WHEN attempts>=1 THEN
                   'Transfer process repeatedly terminated; retry manually'
-                  ELSE error END
-                WHERE state='running' AND heartbeat_at<?""",
-            arrayOf(deadline))
+                  ELSE 'Source worker stopped; retrying retained original' END
+                WHERE state='running' AND heartbeat_at<?""")
+        statement.use{
+            it.bindLong(1,now)
+            it.bindLong(2,deadline)
+            return it.executeUpdateDelete()
+        }
     }
     /** Permanent, reversible-from-manual-selection tombstone: auto backfill
      * cannot recreate a dismissed video. Never erase saved media or history.
