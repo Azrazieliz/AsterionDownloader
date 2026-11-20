@@ -406,6 +406,45 @@ class BuonDuaAdapter(private val http: HttpClient) : SourceAdapter {
                 .find(doc.body().text())?.value
 }
 
+/**
+ * Keeps direct CosplayTele photos and videos AND the owner-selected
+ * source's published archive when an album still advertises missing videos.
+ * The existing archive engine supports video-only extraction; this avoids
+ * saving duplicate photo sets merely to obtain the missing videos.
+ * Neither mirrors nor new providers are added or synthesized here.
+ */
+internal fun planCosplayTeleAlbumMedia(
+    galleryId:String,article:String,direct:List<DirectPageAsset>,
+    archive:Pair<String,String>?,password:String?,declaredVideos:Int
+):List<MediaRef> {
+    val directItems=mediaRefs(SourceId.COSPLAYTELE,galleryId,direct)
+    val foundVideos=direct.count{it.kind==MediaKind.VIDEO}
+    val missingAdvertisedVideo=declaredVideos>foundVideos
+    if(directItems.isNotEmpty() && (!missingAdvertisedVideo || archive==null))
+        return directItems
+    if(archive==null) {
+        if(directItems.isEmpty())throw AdapterException(
+            "CosplayTele album exposed neither direct media nor a published archive")
+        return directItems
+    }
+    val (address,provider)=archive
+    val archiveItem=MediaRef(
+        source=SourceId.COSPLAYTELE,
+        stableId=shaText("archive:"+address).take(24),
+        galleryStableId=galleryId,
+        index=directItems.size,
+        url=address,
+        normalizedUrl=normalizedUrl(address),
+        referer=article,
+        mimeHint=null,
+        kind=MediaKind.ARCHIVE,
+        provider=provider,
+        archivePassword=password,
+        archiveVideosOnly=directItems.isNotEmpty()
+    )
+    return directItems+archiveItem
+}
+
 class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
     override val source = SourceId.COSPLAYTELE
     override val enabled = true
@@ -485,32 +524,17 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
         val candidates = providerLinks(first)
         val chosen = candidates.sortedBy { providerPriority(it.second) }.firstOrNull()
         val password = extractPassword(first)
-
-        if (direct.isNotEmpty()) {
-            // Direct site media is authoritative for normal CosplayTele sync.
-            // Some posts advertise videos that only exist behind third-party archive
-            // providers; those are intentionally best-effort and no longer make an
-            // otherwise complete image gallery partial.
-            return meta to mediaRefs(source, gallery.stableId, direct)
-        }
-
-        // If nothing is browsable directly, fall back to the complete provider archive.
-        chosen ?: throw AdapterException("CosplayTele post exposed neither direct media nor a supported archive mirror.")
-        return meta to listOf(
-            MediaRef(
-                source = source,
-                stableId = shaText("archive:" + chosen.first).take(24),
-                galleryStableId = gallery.stableId,
-                index = 0,
-                url = chosen.first,
-                normalizedUrl = normalizedUrl(chosen.first),
-                referer = gallery.canonicalUrl,
-                mimeHint = null,
-                kind = MediaKind.ARCHIVE,
-                provider = chosen.second,
-                archivePassword = password
-            )
-        )
+        // An album's image thumbnails do NOT prove that its separately
+        // advertised videos were downloaded. This formerly returned as soon
+        // as any image was found and silently omitted archive-only videos.
+        // Read only the selected article's declared video count, not related
+        // recommendations elsewhere on the page.
+        val selectedText = first.selectFirst(
+            "article,.entry-content,.post-content,main")?.text().orEmpty()
+        val expectedVideos = maxOf(advertisedVideoCount(title),
+            advertisedVideoCount(selectedText.take(20000)))
+        return meta to planCosplayTeleAlbumMedia(gallery.stableId,
+            gallery.canonicalUrl,direct,chosen,password,expectedVideos)
     }
 
     private fun postPages(first: Document, baseUrl: String): List<String> {
