@@ -27,8 +27,7 @@ object KeywordSources {
     /** Separate actual search sources for each of the three requested categories. */
     private val hentaiSites=listOf(
         "html|https://hanime.tv/search?query={query}|Hanime",
-        "html|https://hentai.tv/series?search={query}|HentaiTV",
-        "html|https://hentaihaven.xxx/?s={query}|HentaiHaven"
+        "html|https://hentai.tv/series?search={query}|HentaiTV"
     )
     private val pornSites=listOf(
         "html|https://watchporn.to/search/{query}/|WatchPorn",
