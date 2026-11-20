@@ -7,6 +7,40 @@ import org.junit.Test
 
 class DirectGalleryParserTest {
     @Test
+    fun cosplayTeleMixedAlbumRetainsImagesAndArchiveOnlyVideos() {
+        val article="https://cosplaytele.com/approved-album/"
+        val direct=listOf(DirectPageAsset(
+            "https://cosplaytele.com/files/original.jpg",article,
+            MediaKind.IMAGE,"image/jpeg"))
+        val archive="https://gofile.io/d/verified" to "Gofile"
+        val planned=planCosplayTeleAlbumMedia(
+            "approved-album",article,direct,archive,null,3)
+        assertEquals(2,planned.size)
+        assertEquals(MediaKind.IMAGE,planned[0].kind)
+        assertEquals(MediaKind.ARCHIVE,planned[1].kind)
+        assertTrue(planned[1].archiveVideosOnly)
+        assertEquals("Gofile",planned[1].provider)
+        assertEquals(article,planned[1].referer)
+        assertEquals(1,planned[1].index)
+        // A published direct video is not silently replaced by a duplicate archive.
+        val video=DirectPageAsset(
+            "https://cosplaytele.com/files/original.mp4",article,
+            MediaKind.VIDEO,"video/mp4")
+        val alreadyCovered=planCosplayTeleAlbumMedia(
+            "approved-album",article,direct+video,archive,null,1)
+        assertEquals(2,alreadyCovered.size)
+        assertTrue(alreadyCovered.none{it.kind==MediaKind.ARCHIVE})
+        val imagesOnly=planCosplayTeleAlbumMedia(
+            "approved-album",article,direct,archive,null,0)
+        assertEquals(1,imagesOnly.size)
+        assertEquals(MediaKind.IMAGE,imagesOnly.single().kind)
+        val archiveOnly=planCosplayTeleAlbumMedia(
+            "approved-album",article,emptyList(),archive,null,2)
+        assertEquals(1,archiveOnly.size)
+        assertFalse(archiveOnly.single().archiveVideosOnly)
+    }
+
+    @Test
     fun extractsLinkedImagesLazyImagesAndVideosButNotProviderLinks() {
         val html = """
             <html><body>
