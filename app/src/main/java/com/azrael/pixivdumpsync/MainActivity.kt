@@ -1117,7 +1117,7 @@ class MainActivity : Activity() {
                         val needsArtwork =
                             artist.liveCursor.isNullOrBlank() ||
                                 artist.previewJson.isNullOrBlank() ||
-                                storedPreviews.none { !it.thumbnailUrl.isNullOrBlank() }
+                                ArtworkPreviewCodec.needsThumbnailRecovery(storedPreviews)
 
                         if (needsProfile || needsArtwork) {
                             val profile = if (needsProfile) {
