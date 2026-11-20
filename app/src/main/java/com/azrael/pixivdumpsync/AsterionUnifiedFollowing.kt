@@ -347,12 +347,12 @@ object AsterionUnifiedFollowing {
                         // previously let gibberish and misleading video title
                         // matches appear exactly like real performers.
                         android.app.AlertDialog.Builder(a)
-                            .setTitle("No verified performer profile")
-                            .setMessage("A real first-party profile for \""+
-                                name.take(80)+"\" was not confirmed by "+
-                                "the connected publishers or web indexes. "+
-                                "Nothing was followed. Video title matches "+
-                                "alone cannot establish performer identity.")
+                            .setTitle("No verified source reached")
+                            .setMessage("No accessible supported video-performer profile "+
+                                "or independent creator publication was confirmed for \""+
+                                name.take(80)+"\". This does NOT mean the "+
+                                "person does not exist. Nothing was followed; "+
+                                "third-party video title matches need review.")
                             .setPositiveButton("CLOSE",null).show()
                     }else{
                         val id=NameWatchDb(a).use{
@@ -360,7 +360,10 @@ object AsterionUnifiedFollowing {
                         }
                         CreatorNames.remember(a,proof.displayName,"PERFORMERS",true)
                         NameCrawler.scanCreator(a.applicationContext,id)
-                        notice(a,"Verified "+proof.displayName+" on "+proof.provider)
+                        notice(a,if(proof.videoProfile)
+                            "Video performer profile verified · "+proof.provider
+                            else "Public creator verified · "+proof.provider+
+                                " · third-party videos still require attribution")
                     }
                     refresh()
                 }
@@ -375,6 +378,7 @@ object AsterionUnifiedFollowing {
             val perPage=24
             val verified=PerformerFollowPolicy.permittedName(creator.name) &&
                 PerformerIdentity.isProfileUrl(creator.name,creator.source)
+            val publicIdentity=PublicCreatorEvidence.isPublisherPage(creator.source)
             // A title containing a person's name never proves that the
             // thumbnail actually depicts that person. The old UI treated
             // all title-only hits as a performer gallery, even when they
@@ -419,6 +423,7 @@ object AsterionUnifiedFollowing {
             labels.addView(name)
             labels.addView(ui.text(a,
                 hits.size.toString()+if(verified)" indexed profile matches · "
+                    else if(publicIdentity)" public identity verified · review only · "
                     else " title matches to review · "+
                     if(full)"page "+(pageIndex+1)+" · "+totalMatches+
                         " total saved matches" else "tap name to expand",
@@ -468,23 +473,31 @@ object AsterionUnifiedFollowing {
             if(hits.isEmpty()){
                 put(a,c,ui.text(a,if(verified)
                     "Verified profile · no attributable original videos indexed yet"
-                    else "No verified profile · old title matches are not attributed to this performer",
+                    else if(publicIdentity)
+                        "Real creator confirmed by an independent publisher. "+
+                            "No third-party videos have been verified as hers."
+                    else "No verified video profile · title matches do not prove ownership",
                     12f,ui.secondary),6)
             }
             if(!creator.lastError.isNullOrBlank())
                 put(a,c,ui.text(a,"Source errors: "+creator.lastError.take(160),
                     11f,ui.danger),5)
+            if(publicIdentity)action(a,c,"VIEW PUBLIC IDENTITY EVIDENCE",false){
+                a.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(creator.source)))
+            }
             toggle(a,c,if(verified)"Sync new videos"
-                else "Track new name matches",creator.enabled){enabled->
+                else "Track name matches · review required",creator.enabled){enabled->
                 if(enabled && !PerformerFollowPolicy.permittedName(creator.name))
                     notice(a,"This name is too ambiguous; enter a distinctive identity")
                 else NameWatchDb(a).use{it.setEnabled(creator.id,enabled)}
             }
             pair(a,c,if(verified)"CHECK THIS MODEL" else "CHECK NAME MATCHES","REMOVE",{
-                if(verified){
+                if(verified || publicIdentity){
                     NameWatchDb(a).use{it.setEnabled(creator.id,true)}
                     NameCrawler.scanCreator(a.applicationContext,creator.id)
-                    notice(a,"Checking verified performer profile: "+creator.name)
+                    notice(a,if(verified)
+                        "Checking verified video profile: "+creator.name
+                        else "Searching creator name · every video needs review")
                 }else{
                     notice(a,"Verifying performer identity…")
                     thread(name="asterion-existing-performer-verify"){
