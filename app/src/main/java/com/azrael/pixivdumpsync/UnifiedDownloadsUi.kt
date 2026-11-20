@@ -166,6 +166,10 @@ object UnifiedDownloadsUi {
                     tracked.putIfAbsent(video.id,video)
             }
             for(item in tracked.values){
+                // The owner has explicitly deleted these providers. Retain
+                // previously saved bytes and diagnostic history, but do not
+                // recreate their failed, paused or saved cards in Downloads.
+                if(ProviderRetirement.isRetired(item.url))continue
                 val present=readable(a,item.savedUri)
                 // A failed HLS extraction must not make received original
                 // bytes disappear from the UI. The durable stage journal
