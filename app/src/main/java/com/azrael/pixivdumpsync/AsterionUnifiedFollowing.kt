@@ -381,15 +381,16 @@ object AsterionUnifiedFollowing {
             // came from unrelated sources. Retain those indexed records
             // but do not present or auto-download them as actor content.
             val hits=if(verified)SearchResultsDb(a).use{
-                it.listForQuery(creator.name,perPage,
+                it.listVerifiedProfile(creator.name,creator.source,perPage,
                     if(full)pageIndex*perPage else 0)
             }.filter{
                 SearchExactness.matches(creator.name,it.title) &&
                     !IndexedMediaQuality.navigationTitle(it.title) &&
-                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
-                    it.source=="Verified profile: "+creator.source
+                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)
             } else emptyList()
-            val totalMatches=if(verified)hits.size else 0
+            val totalMatches=if(verified)SearchResultsDb(a).use{
+                it.countVerifiedProfile(creator.name,creator.source)
+            } else 0
             val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
                 SearchRanking.validUrl(it.thumbnail)}
             val head=ui.row(a)
