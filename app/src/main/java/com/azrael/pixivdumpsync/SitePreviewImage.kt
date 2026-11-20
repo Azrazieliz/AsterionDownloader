@@ -37,6 +37,22 @@ internal object SitePreviewImage {
     }
 
     fun best(image:Element):String? {
+        // 4KHD's listing frequently supplies a placeholder/low-resolution
+        // data-thumb alongside genuine responsive picture variants. Prefer
+        // its highest source-declared image only, not a guessed CDN path.
+        if(runCatching{URI(image.baseUri()).host.orEmpty().lowercase()
+                .removePrefix("www.")=="4khd.com"}.getOrDefault(false)){
+            for(attribute in listOf("data-original","data-full",
+                    "data-large","data-srcset","srcset")){
+                val value=image.attr(attribute)
+                val selected=if(attribute.endsWith("srcset"))
+                    srcset(image,value) else resolve(image,value)
+                if(selected!=null)return selected
+            }
+            image.closest("picture")?.select("source[srcset]")?.forEach{
+                srcset(image,it.attr("srcset"))?.let{return it}
+            }
+        }
         for(attribute in listOf("data-original","data-full","data-large",
                 "data-lazy","data-lazyload","data-thumb","data-thumbnail",
                 "data-preview","data-preview-src","data-poster",
