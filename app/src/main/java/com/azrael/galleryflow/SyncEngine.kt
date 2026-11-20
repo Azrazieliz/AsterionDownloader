@@ -75,28 +75,18 @@ class SyncEngine(private val context: Context) {
         val entity=db.listEntities().firstOrNull{it.entityId==entityId &&
             it.kind=="site"} ?:throw AdapterException(
                 "Selected album's parent site is not registered")
-        val origin=java.net.URI(entity.canonicalUrl)
-        val selected=java.net.URI(rawUrl)
-        fun hostname(uri:java.net.URI)=uri.host.orEmpty().lowercase(
-            java.util.Locale.ROOT).removePrefix("www.")
-        require(selected.scheme=="https" && selected.userInfo==null &&
-            hostname(origin)==hostname(selected)){
+        // Preserve Kyora's original native stable IDs. The unified
+        // selection path formerly synthesized a generic hash for every
+        // non-Kiutaku album; BuonDua then looked for /photos/<hash>/
+        // instead of /photos/<real-id>/ and found no originals.
+        val selected=KyoraSelectedGalleryIdentity.canonicalUrl(
+            entity.source,rawUrl)
+        require(KyoraSelectedGalleryIdentity.sameApprovedSite(
+                entity.canonicalUrl,selected)){
             "The album URL must belong to its own registered provider"
         }
-        val path=selected.path.orEmpty().trimEnd('/')
-        val id=if(entity.source==SourceId.KIUTAKU){
-            require(path.matches(Regex("/[0-9]{1,9}"))){
-                "Kiutaku selected album must be a numeric detail page"
-            }
-            path.removePrefix("/")
-        }else{
-            // GenericSiteAdapter uses SHA-256 of the canonical selected URL
-            // as the stable gallery ID; preserve prior gallery receipts.
-            java.security.MessageDigest.getInstance("SHA-256")
-                .digest(rawUrl.toByteArray(Charsets.UTF_8))
-                .joinToString(""){"%02x".format(it)}.take(32)
-        }
-        val ref=GalleryRef(entity.source,id,entity.entityId,rawUrl,
+        val id=KyoraSelectedGalleryIdentity.galleryId(entity.source,selected)
+        val ref=GalleryRef(entity.source,id,entity.entityId,selected,
             title?.take(160)?.ifBlank{rawUrl}.orEmpty().ifBlank{rawUrl})
         val adapter=AdapterRegistry.forSource(entity.source,context)
         progress("Downloading only selected gallery: "+ref.title)
