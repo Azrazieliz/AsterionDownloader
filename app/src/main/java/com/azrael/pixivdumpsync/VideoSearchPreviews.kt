@@ -32,7 +32,8 @@ object VideoSearchPreviews {
         }
         val selectedPage=referer?.takeIf{
             it.startsWith("https://") && SearchRanking.validUrl(it) &&
-                SearchRanking.isVideoUrl(it)
+                (SearchRanking.isVideoUrl(it) ||
+                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it))
         }
         // OnScreens listing cards have repeatedly attributed a shared
         // thumbnail to different recordings. The genuine selected article
@@ -43,13 +44,15 @@ object VideoSearchPreviews {
         }
         val key=if(exactOnScreens!=null)
             "onscreens:selected:"+exactOnScreens else validUrl?:selectedPage?:return
+        // Tag before consulting the memory cache. A recycled view with a
+        // cached new poster must reject an older in-flight image callback.
+        image.tag=key
         synchronized(lock){memory.get(key)}?.let{
             image.scaleType=ImageView.ScaleType.CENTER_CROP
             image.setImageBitmap(it)
             image.contentDescription="Video thumbnail"
             return
         }
-        image.tag=key
         val app=a.applicationContext
         val view=java.lang.ref.WeakReference(image)
         // Do not retain Activity/ImageView references in the unbounded
