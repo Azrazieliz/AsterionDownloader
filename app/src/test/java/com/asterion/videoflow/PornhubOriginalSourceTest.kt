@@ -47,6 +47,20 @@ class PornhubOriginalSourceTest {
         assertEquals(1,PornhubOriginalSource.published(
             selected,published(unverified)).size)
     }
+    @Test fun verifiedImhCdnMasterWithSignedCommaEqualsPathDoesNotDropSource(){
+        // Observed on the Windows PC 2026-11-20: the selected publisher HLS
+        // playlist returned HTTP 200/#EXTM3U on im-h and contains ',' and '='.
+        val observed="https://im-h.phncdn.com/videos/abc123/quality=1080,audio=1/selected_master_1080.m3u8?token=publisher"
+        val parsed=PornhubOriginalSource.published(selected,published(observed))
+        assertEquals(2,parsed.size)
+        assertEquals(observed,parsed.first().url)
+        assertTrue(PornhubOriginalSource.selectedHlsTransfer(selected,observed))
+        val unrelated="https://im-h.phncdn.com.evil.example/videos/abc123/quality=1080,audio=1/selected_master_1080.m3u8"
+        assertFalse(PornhubOriginalSource.selectedHlsTransfer(selected,unrelated))
+        assertEquals(1,PornhubOriginalSource.published(selected,published(unrelated)).size)
+        val illegalPath="https://im-h.phncdn.com/videos/abc123/evil?src=/master.m3u8"
+        assertFalse(PornhubOriginalSource.selectedHlsTransfer(selected,illegalPath))
+    }
     @Test fun publisherSelectedHlsMasterIsAcceptedWithoutRelaxingHostValidation(){
         val master="https://hm-h.phncdn.com/videos/abc123/original_480.m3u8?token=selected"
         val page=published(extra="")
