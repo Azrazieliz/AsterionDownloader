@@ -21,6 +21,12 @@ class VideoHlsDispatchTest {
             "https://m.pornhub.com/view_video.php?viewkey=ph1234567"))
         assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://hentaihaven.xxx/watch/selected-series/episode-2"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://taiav.com/cn/movie/654424d67b410d2615db16e5"))
+        assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://taiav.com/cn/"))
+        assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://taiav.com/previewvideo?id=654424d67b410d2615db16e5"))
         for(url in listOf(
             "https://jav.guru/",
             "https://jav.guru/category/test/",
