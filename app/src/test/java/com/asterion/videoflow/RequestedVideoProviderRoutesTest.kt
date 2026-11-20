@@ -41,6 +41,28 @@ class RequestedVideoProviderRoutesTest {
             "https://www.onscreens.me/"))
     }
 
+    @Test fun newSelectedPublisherParsersRequireOneExactPlayerMedia(){
+        val selected=listOf(
+            "https://pimpbunny.com/videos/selected-scene-123",
+            "https://en.xchina.co/video/6b00b2b6032b1",
+            "https://www.bubblecum.lol/video/selected-scene-example/",
+            "https://pornavhd.com/2026/11/14/selected_20261114/",
+            "https://camstreams.tv/videos/1363858/selected-recording/"
+        )
+        val player="""<main>
+            <div class="video-player">
+              <video src="https://media.example.net/selected-full.mp4"
+                data-duration="1800"></video>
+            </div>
+            <aside class="recommended">
+              <video src="https://media.example.net/unrelated.mp4"></video>
+            </aside></main>"""
+        for(page in selected){
+            assertEquals(page,listOf("https://media.example.net/selected-full.mp4"),
+                PublisherOriginalExtractors.fromHtml(page,player).map{it.url})
+        }
+    }
+
     @Test fun providerHtmlParsingCannotTreatAProfileOrThumbnailAsOriginal(){
         val selected="https://www.bubblecum.lol/video/selected-scene-example/"
         assertTrue(PublisherOriginalExtractors.owns(selected))
