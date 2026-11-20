@@ -15,6 +15,7 @@ class PublisherOriginalExtractorsTest {
         "watchporn.to" to "https://watchporn.to/video/1782/title",
         "archivebate.com" to "https://archivebate.com/watch/16458050",
         "onscreens.me" to "https://www.onscreens.me/9ab25484-e457-11f1-abd3-c93d3519df0e/sofiasantora-11-19-2026-20-02-40-stripchat",
+        "livecamrips.to" to "https://livecamrips.to/video/11248256",
         "xxxi.porn" to "https://xxxi.porn/video/example",
         "notfans.com" to "https://notfans.com/video/example",
         "fullporner.com" to "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
