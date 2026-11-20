@@ -44,6 +44,12 @@ internal object PublisherSearchPoster {
         val connection=Jsoup.connect(page).timeout(8_000).maxBodySize(850_000)
             .ignoreHttpErrors(true).followRedirects(false)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
+        // Poster lookup must use the SAME publisher network route as that
+        // user's selected video. Direct Jsoup ignored the per-publisher
+        // authorized proxy and returned empty posters even during a working
+        // video transfer. This does not change any download engine.
+        com.asterion.videoflow.NetworkRoute.javaProxy(context,page)
+            ?.let{connection.proxy(it)}
         SiteSession.cookie(context,page)?.takeIf{it.isNotBlank()}
             ?.let{connection.header("Cookie",it)}
         val response=connection.execute()
