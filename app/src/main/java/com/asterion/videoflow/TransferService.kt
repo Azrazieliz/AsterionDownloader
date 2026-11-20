@@ -618,6 +618,27 @@ object VideoEngine {
         // an authorized site session. The public official API attests runtime.
         val publishedRuntime:Long?=null // Trusted-provider confidence; no online duration prerequisite
         val preparationStart=android.os.SystemClock.elapsedRealtime()
+        val watchdog=VideoConnectionWatchdog(preparationStart,
+            VideoPayloadBytes.count(parent))
+        val attemptStartWall=System.currentTimeMillis()
+        fun checkSourceConnectionBudget(){
+            val receipt=VideoTransferJournal.current(context,item.id)
+            // Nested JK HLS fragments are not in the top-level staging
+            // directory. Only this attempt's verified fragments qualify as
+            // forward progress, never an older attempt's journal snapshot.
+            val nested=if(receipt!=null &&
+                receipt.updated>=attemptStartWall &&
+                receipt.stage in setOf("receiving","fragments","verifying"))
+                receipt.verifiedBytes else 0L
+            if(watchdog.exhausted(android.os.SystemClock.elapsedRealtime(),
+                    VideoPayloadBytes.count(parent),nested)){
+                VideoTransferJournal.record(context,item.id,"source_timeout",
+                    "No new verified source bytes within total connection budget")
+                throw java.util.concurrent.TimeoutException(
+                    "Selected source connection stalled without NEW verified original "+
+                        "bytes; old resumable fragments retained for retry")
+            }
+        }
         check(db.touchClaim(item.id,item.lease)){
             "Download claim is no longer owned by this worker"
         }
@@ -631,6 +652,7 @@ object VideoEngine {
                         !db.touchClaim(item.id,item.lease))
                         throw java.util.concurrent.CancellationException("Transfer paused or superseded")
                     val now=android.os.SystemClock.elapsedRealtime()
+                    checkSourceConnectionBudget()
                     if(VideoTransferLimits.preparationBudgetExceeded(
                             now-preparationStart,
                             VideoPayloadBytes.count(parent)>0L))
@@ -676,6 +698,7 @@ object VideoEngine {
                               verifiedFirstPartyMp4:Boolean=false) {
             if(stopRequests.contains(item.id))
                 throw java.util.concurrent.CancellationException("Video paused")
+            checkSourceConnectionBudget()
             if(com.azrael.pixivdumpsync.NduSettings.cloudOnly(context)){
                 // Selected publisher URL only. Cloud-only NEVER transfers
                 // video files, HLS fragments or .part files to Android.
@@ -892,6 +915,7 @@ object VideoEngine {
                         Thread.currentThread().isInterrupted)
                         throw java.util.concurrent.CancellationException("Video paused")
                     val now=android.os.SystemClock.elapsedRealtime()
+                    checkSourceConnectionBudget()
                     if(now-lastLeaseTick>=4_000L){
                         if(!db.touchClaim(item.id,item.lease))
                             throw java.util.concurrent.CancellationException(
@@ -1006,6 +1030,7 @@ object VideoEngine {
                     if(!db.touchClaim(item.id,item.lease))
                         throw java.util.concurrent.CancellationException("Lease released")
                     val now=android.os.SystemClock.elapsedRealtime()
+                    checkSourceConnectionBudget()
                     if(VideoTransferLimits.resolvingStalled(now-started,
                             VideoPayloadBytes.count(parent)) ||
                         VideoTransferLimits.preparationBudgetExceeded(
@@ -1261,6 +1286,7 @@ object VideoEngine {
             // page extractors. A legal page, thumbnail or short teaser is
             // never accepted as a downloaded original.
             if(!downloaded)for(source in publisherOriginals.getOrDefault(emptyList())){
+                checkSourceConnectionBudget()
                 if(stopRequests.contains(item.id))
                     throw java.util.concurrent.CancellationException("Video paused")
                 if(FullLengthVideoPolicy.isExplicitPreview(item.title,source.url))
@@ -1389,6 +1415,7 @@ object VideoEngine {
                     "The publisher page and unrelated ads are not download candidates."))
             val publisherReferers=publishedOriginals.associate{it.url to it.referer}
             if(!downloaded) for(candidate in (publisherReferers.keys+variants)){
+                checkSourceConnectionBudget()
                 if(VideoTransferLimits.preparationBudgetExceeded(
                         android.os.SystemClock.elapsedRealtime()-preparationStart,
                         VideoPayloadBytes.count(parent)>0L))
@@ -1533,6 +1560,7 @@ object VideoEngine {
         if(stopRequests.contains(item.id))
             throw java.util.concurrent.CancellationException("Video paused")
         if(!downloaded){
+            checkSourceConnectionBudget()
             if(heldReason!=null)throw FullVersionUnavailable(heldReason!!)
             val attempted=last
             val category=attempted?.let{
