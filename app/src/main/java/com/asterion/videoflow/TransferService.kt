@@ -722,21 +722,6 @@ object VideoEngine {
                             stopRequests.contains(item.id) ||
                             Thread.currentThread().isInterrupted ||
                             !db.ownsClaim(item.id,item.lease)
-                        },
-                        renewSelectedSource={
-                            // Re-read ONLY the same JAV Guru article and its
-                            // explicitly selected JK player after signed-CDN
-                            // rejection. No alternate scene or provider.
-                            runCatching {
-                                val fresh=WebDiscovery.selectedDocument(
-                                    item.url,context)
-                                SiteSpecificOriginalSources.javGuru(
-                                    context,fresh,item.url,nativeJkOnly=true)
-                                    .singleOrNull{
-                                        JavGuruJkNativeHls.eligible(
-                                            item.url,it.url,it.referer)
-                                    }?.let{it.url to it.referer}
-                            }.getOrNull()
                         })
                     0
                 }else if(native) {
