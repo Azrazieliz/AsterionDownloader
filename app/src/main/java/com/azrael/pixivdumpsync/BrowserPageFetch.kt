@@ -37,7 +37,8 @@ object BrowserPageFetch {
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
-        val selectedPornhub=host=="pornhub.com" &&
+        val selectedPornhub=host in setOf(
+            "pornhub.com","m.pornhub.com","fr.pornhub.com","en.pornhub.com") &&
             uri.path=="/view_video.php" &&
             uri.rawQuery.orEmpty().split('&').count{
                 it.startsWith("viewkey=") &&
@@ -111,6 +112,7 @@ object BrowserPageFetch {
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","play.javideo.net","helloporn.com","mp4hentai.com",
             "roshy.tv","rule34video.com","pornhub.com",
+            "m.pornhub.com","fr.pornhub.com","en.pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com")
         val selectedPlayerPage=selectedPlayerHost && (
@@ -545,7 +547,8 @@ object BrowserPageFetch {
                             // configuration; never serialize ads, suggested
                             // video cards, tokens from unrelated sites, or
                             // an unverified external player.
-                            if(publisher==='pornhub.com' &&
+                            if(['pornhub.com','m.pornhub.com',
+                                'fr.pornhub.com','en.pornhub.com'].includes(publisher) &&
                                 currentPath==='/view_video.php' &&
                                 /^[A-Za-z0-9_-]{5,50}$/.test(
                                     new URLSearchParams(location.search).get('viewkey')||'')){
