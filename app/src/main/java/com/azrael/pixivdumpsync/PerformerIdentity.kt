@@ -23,7 +23,12 @@ internal object PerformerIdentity {
     // FullPorner publishes first-party /pornstar/<slug> profiles too.
     // Search discovery spans all approved providers separately; identity
     // verification requires an actual first-party person page.
-    private val acceptedHosts=setOf("pornhub.com","watchporn.to","fullporner.com","cums.net")
+    private val acceptedHosts=setOf(
+        "pornhub.com","watchporn.to","fullporner.com","cums.net",
+        // xChina publishes first-party model /model/id-<opaque>.html
+        // pages. The ID cannot be derived from a name; live profile
+        // search + visible heading verification are mandatory.
+        "xchina.co")
     private val namePath=Regex("""^/(?:model|pornstar|models|pornstars|profiles)/([a-z0-9-]+)/?$""",
         RegexOption.IGNORE_CASE)
 
@@ -32,7 +37,8 @@ internal object PerformerIdentity {
         .trim('-').take(90)
 
     private fun host(url:String):String=runCatching{
-        URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        URI(url).host.orEmpty().lowercase(Locale.ROOT)
+            .removePrefix("www.").removePrefix("en.")
     }.getOrDefault("")
 
     fun isProfileUrl(name:String,address:String):Boolean {
@@ -41,6 +47,13 @@ internal object PerformerIdentity {
             host(address) !in acceptedHosts)return false
         val wanted=slug(name)
         if(wanted.isBlank())return false
+        if(host(address)=="xchina.co"){
+            // Real 2026 publisher URL:
+            // https://en.xchina.co/model/id-5ff0cb8a616f1.html
+            // It is a PERSON page, not evidence of video ownership.
+            return Regex("""^/model/id-[a-f0-9]{8,24}\.html$""",
+                RegexOption.IGNORE_CASE).matches(uri.path.orEmpty())
+        }
         if(host(address)=="cums.net"){
             // First-party CUMS profiles use /model/<name>-<site-ID>/,
             // not a guessable /model/<name>/ address.
