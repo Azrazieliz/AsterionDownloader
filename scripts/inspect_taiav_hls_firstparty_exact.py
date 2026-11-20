@@ -30,10 +30,10 @@ def main():
   if u.scheme=="https" and u.hostname in ("taiav.com","www.taiav.com") and re.fullmatch(r"/(?:cn|tw|en)/movie/[a-f0-9]{24}/?",u.path,re.I) and a not in selected:selected.append(a)
  if not selected:print(json.dumps({"error":"NO_SELECTED"}));return
  page,html=get(selected[0]);print(json.dumps({"selected_path":urllib.parse.urlsplit(page).path,"html_bytes":len(html)}),flush=True)
- for label,rx in (("HLS_ASSIGN",r"data\\.m3u8"),
-                  ("AJAX",r"\\$\\.ajax\\s*\\("),
-                  ("FETCH",r"fetch\\s*\\("),
-                  ("VIDEO_INIT",r"var\\s+(?:player|isQuark|m3u8)\\b")):
+ for label,rx in (("HLS_ASSIGN",r"data\.m3u8"),
+                  ("AJAX",r"\$\.ajax\s*\("),
+                  ("FETCH",r"fetch\s*\("),
+                  ("VIDEO_INIT",r"var\s+(?:player|isQuark|m3u8)\b")):
   all=list(re.finditer(rx,html,re.I))
   contexts=[]
   for match in all[:3]:
