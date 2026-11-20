@@ -113,6 +113,7 @@ object TorrentTransfers {
                 "exported" in raw->"EXPORTED"
                 "exporting" in raw->"EXPORTING"
                 "quarantin" in raw || "security review" in raw->"QUARANTINED"
+                "cancelled" in raw->"CANCELLED"
                 "failed:" in raw || "stalled:" in raw->"FAILED"
                 "pause" in raw->"PAUSED"
                 "verify" in raw || "review" in raw->"VERIFYING"
@@ -168,6 +169,7 @@ object TorrentTransfers {
             .map{it.name.removeSuffix(".status")}
             .filter(::validJob)
         val keys=(existing+fileIds).distinct().sortedDescending()
+            .filterNot{status(a,it,prefs).contains("Cancelled",true)}
         if(keys.isEmpty()){
             Toast.makeText(a,"No torrent transfers yet",Toast.LENGTH_LONG).show()
             return
@@ -261,6 +263,7 @@ class TorrentTransferService : Service() {
         const val ADD = "asterion.torrent.ADD"
         const val PAUSE = "asterion.torrent.PAUSE"
         const val RESUME = "asterion.torrent.RESUME"
+        const val CANCEL = "asterion.torrent.CANCEL"
         const val PREPARE_MAGNET = "asterion.torrent.PREPARE_MAGNET"
         const val PREPARE_DESCRIPTOR = "asterion.torrent.PREPARE_DESCRIPTOR"
         const val EXPORT = "asterion.torrent.EXPORT"
@@ -294,6 +297,11 @@ class TorrentTransferService : Service() {
             .setProgress(100, percent.coerceIn(0, 100), false).build()
     }
     private fun startJob(id:String,folder:String,indices:String):Boolean {
+        if(getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+                .getBoolean("job_cancelled_$id",false)){
+            update(id,"Cancelled · user removed torrent from queue")
+            return false
+        }
         if(indices.isBlank()) {
             update(id,"FAILED: Previously selected files are unavailable")
             return false
@@ -318,7 +326,11 @@ class TorrentTransferService : Service() {
                     .remove("job_paused_$id").apply()
             }catch(e:Throwable){
                 if(e is VirtualMachineError || e is ThreadDeath)throw e
-                if(e is InterruptedException || stopRequests.contains(id))
+                if(getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+                        .getBoolean("job_cancelled_$id",false)){
+                    update(id,"Cancelled · selected torrent removed from queue; "+
+                        "private pieces retained for explicit security review")
+                }else if(e is InterruptedException || stopRequests.contains(id))
                     update(id,"Paused · original pieces preserved; resume to continue")
                 else if(e is java.io.IOException &&
                     e.message.orEmpty().contains("torrent stalled"))
@@ -390,7 +402,9 @@ class TorrentTransferService : Service() {
             worker.start()
             return START_NOT_STICKY
         }
-        if(intent?.action!=PAUSE){
+        // Cancellation is never a fresh native libtorrent request. It MUST
+        // remain available even after an Android OOM/quarantine incident.
+        if(intent?.action!=PAUSE && intent?.action!=CANCEL){
             val admitted=runCatching {
                 if(intent?.getBooleanExtra(OWNER_REVIEWED_RETRY,false)==true)
                     TorrentSafetyGate.ownerReviewedRetry(applicationContext)
@@ -471,7 +485,26 @@ class TorrentTransferService : Service() {
             return START_NOT_STICKY
         }
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        if(!id.matches(Regex("[a-f0-9]{24}"))){
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         when(intent.action){
+            CANCEL->{
+                // Do not unload the native engine on the UI process or erase
+                // resumable quarantine pieces while its writer is active.
+                // This durable tombstone blocks later automatic RESUME/ADD.
+                prefs.edit().putBoolean("job_cancelled_$id",true)
+                    .putBoolean("job_paused_$id",true).commit()
+                stopRequests.add(id)
+                paused.add(id)
+                workers[id]?.interrupt()
+                update(id,"Cancelled · selected torrent removed from queue; "+
+                    "private pieces retained for explicit security review")
+                if(inFlight.isEmpty() && exportWorkers.isEmpty())
+                    stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
             PAUSE->{
                 paused.add(id)
                 prefs.edit().putBoolean("job_paused_$id",true).apply()
@@ -481,6 +514,10 @@ class TorrentTransferService : Service() {
                 return START_NOT_STICKY
             }
             RESUME->{
+                if(prefs.getBoolean("job_cancelled_$id",false)){
+                    update(id,"Cancelled · select torrent again to restart")
+                    return START_NOT_STICKY
+                }
                 paused.remove(id)
                 prefs.edit().putBoolean("job_paused_$id",false).apply()
                 val folder=prefs.getString("job_folder_$id","Videos")?:"Videos"
@@ -490,6 +527,10 @@ class TorrentTransferService : Service() {
                 return START_NOT_STICKY
             }
             ADD->{
+                // Explicit user selection is the sole way to re-arm a
+                // previously cancelled infohash, never background polling.
+                prefs.edit().remove("job_cancelled_$id").commit()
+                stopRequests.remove(id)
                 val folder=intent.getStringExtra("folder")
                     ?.takeIf{it in setOf("Games","Books","Videos","Assets")}
                     ?:prefs.getString("job_folder_$id","Videos")?:"Videos"
