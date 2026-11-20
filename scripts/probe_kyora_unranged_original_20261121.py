@@ -32,7 +32,7 @@ def request(url,ua,referer=None,media=False):
  parts=urllib.parse.urlsplit(url)
  if any(ord(c)>127 for c in parts.path):
   url=urllib.parse.urlunsplit((parts.scheme,parts.netloc,
-   urllib.parse.quote(parts.path,safe="/%:@! if media:h["Range"]="bytes=0-0"'()*+,;=-._~"),
+   urllib.parse.quote(parts.path,safe="/%:@-._~"),
    parts.query,parts.fragment))
  try:
   with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=16) as r:
