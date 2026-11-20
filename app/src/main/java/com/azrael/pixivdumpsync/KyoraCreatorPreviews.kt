@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
  * The native GalleryFlow gallery DB remains authoritative once a site is backfilled.
  */
 object KyoraCreatorPreviews {
-    data class Preview(val url:String,val cover:String,val title:String)
+    data class Preview(val url:String,val cover:String,val title:String,val duration:String?=null)
     data class Snapshot(val entries:List<Preview>,val updated:Long,val error:String?)
     private const val PREF="asterion_kyora_site_previews"
     private val inflight=ConcurrentHashMap.newKeySet<String>()
@@ -65,7 +65,8 @@ object KyoraCreatorPreviews {
         val arr=obj.optJSONArray("entries")?:JSONArray()
         Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
             arr.optJSONObject(i)?.let{
-                Preview(it.optString("url"),it.optString("cover"),it.optString("title"))
+                Preview(it.optString("url"),it.optString("cover"),it.optString("title"),
+                    it.optString("duration").takeIf{v->v.isNotBlank()})
             }
         },obj.optLong("updated"),obj.optString("error").takeIf{it.isNotBlank()})
     }.getOrNull()
@@ -132,7 +133,14 @@ object KyoraCreatorPreviews {
                 }.getOrDefault("")}
                 .trim().take(100).ifBlank{"Untitled media"}
             if(IndexedMediaQuality.navigationTitle(title))continue
-            result.putIfAbsent(page,Preview(page,cover,title))
+            val rawDuration=(card?:anchor).selectFirst(
+                ".duration,.video-duration,.time,.length,time,[data-duration]")
+                ?.let{it.attr("data-duration").ifBlank{it.text()}}
+                ?.trim().orEmpty()
+            val duration=rawDuration.takeIf{
+                it.matches(Regex("""\\d{1,3}:\\d{2}(?::\\d{2})?"""))
+            }
+            result.putIfAbsent(page,Preview(page,cover,title,duration))
             if(result.size>=24)break
         }
         return result.values.toList()
@@ -280,6 +288,7 @@ object KyoraCreatorPreviews {
                 put("entries",JSONArray().apply{
                     for(item in snapshot.entries)put(JSONObject().apply{
                         put("url",item.url);put("cover",item.cover);put("title",item.title)
+                        item.duration?.let{put("duration",it)}
                     })
                 })
             }
