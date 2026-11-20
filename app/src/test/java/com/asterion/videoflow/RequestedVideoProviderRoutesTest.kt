@@ -1,0 +1,54 @@
+package com.asterion.videoflow
+
+import com.azrael.pixivdumpsync.AlohaSources
+import com.azrael.pixivdumpsync.ProviderRetirement
+import org.junit.Assert.*
+import org.junit.Test
+
+class RequestedVideoProviderRoutesTest {
+    @Test fun ownerRequestedProvidersRegisteredWithoutRetiredOnScreens(){
+        val sites=AlohaSources.all.map{it.host}.toSet()
+        assertTrue(sites.containsAll(setOf(
+            "avple.tv","pimpbunny.com","en.xchina.co",
+            "bubblecum.lol","pornavhd.com","camstreams.tv")))
+        assertFalse("OnScreens must not reappear in catalog",
+            "onscreens.me" in sites)
+        assertTrue(ProviderRetirement.isRetired(
+            "https://www.onscreens.me/profile"))
+        assertFalse(ProviderRetirement.isRetired(
+            "https://camstreams.tv/videos/1363858/example/"))
+    }
+
+    @Test fun genuineSelectedWatchRoutesAndListingsRemainDistinct(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://pimpbunny.com/videos/selected-scene-123/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://en.xchina.co/video/6b00b2b6032b1"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://www.bubblecum.lol/video/selected-scene-example/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://pornavhd.com/2026/11/14/selected_release_20261114/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://camstreams.tv/videos/1363858/selected-recording/"))
+        for(url in listOf("https://www.bubblecum.lol/models/",
+            "https://camstreams.tv/models/","https://pimpbunny.com/categories/",
+            "https://en.xchina.co/video-series/",
+            "https://pornavhd.com/category/onlyfans/")){
+            assertFalse("Not an original selected watch: "+url,
+                VideoSiteProfiles.isVideoPage(url))
+        }
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://www.onscreens.me/"))
+    }
+
+    @Test fun providerHtmlParsingCannotTreatAProfileOrThumbnailAsOriginal(){
+        val selected="https://www.bubblecum.lol/video/selected-scene-example/"
+        assertTrue(PublisherOriginalExtractors.owns(selected))
+        val html="""<main><aside class="recommended">
+          <video src="https://cdn.example.com/advertisement.mp4"></video>
+          </aside><div class="video-player">
+          <video poster="https://cdn.example.com/preview.jpg"></video>
+          </div></main>"""
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,html).isEmpty())
+    }
+}
