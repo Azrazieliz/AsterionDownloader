@@ -167,11 +167,8 @@ class SiteBackfillProfilesTest {
            <nav><a href="/category/upcoming-hentai-release/">Upcoming</a></nav>
            </main>"""
         val records=titles(html,base,"HENTAI")
-        assertEquals(1,records.size)
-        assertEquals("video",records.single().kind)
-        assertEquals(base+"2025/03/mari-bunny-bot-r18/",records.single().url)
-        assertTrue(com.asterion.videoflow.VideoSiteProfiles
-            .isVideoPage(records.single().url))
+        assertTrue("Retired MP4Hentai must never reappear via old backfill",records.isEmpty())
+        assertFalse(SiteBackfillProfiles.supports("mp4hentai.com"))
     }
 
     @Test fun mp4HentaiGridwpListingMatchesRealHomeMarkup(){
@@ -191,9 +188,7 @@ class SiteBackfillProfilesTest {
              Upcoming November 2026 Release</a></h3>
         </section>"""
         val cards=titles(html,base,"HENTAI")
-        assertEquals(1,cards.size)
-        assertEquals(1,cards.count{it.preview?.endsWith("cover.webp")==true})
-        assertEquals("video",cards.first().kind)
+        assertTrue("Retired MP4Hentai grid must not reseed video cards",cards.isEmpty())
     }
 
 }
