@@ -21,7 +21,8 @@ internal object KurohaMediaPreview {
         val thumbnail: String,
         val attribution: String,
         val referer: String,
-        val video: Boolean = false
+        val video: Boolean = false,
+        val duration: String? = null
     )
 
     internal fun usable(tiles: List<Tile>): List<Tile> =
@@ -68,9 +69,27 @@ internal object KurohaMediaPreview {
                     isFocusable = true
                     setOnClickListener { onClick(tile) }
                 }
-                strip.addView(thumb, LinearLayout.LayoutParams(
-                    ui.px(a, 85), ui.px(a, 85)
-                ).apply { rightMargin = ui.px(a, 7) })
+                // Owner-requested media identity under each thumbnail.
+                // Keep the original 85dp preview itself unchanged and retain
+                // the same horizontal strip and selected-original callback.
+                val tileColumn=LinearLayout(a).apply{
+                    orientation=LinearLayout.VERTICAL
+                    setPadding(0,0,ui.px(a,5),0)
+                }
+                tileColumn.addView(thumb,LinearLayout.LayoutParams(
+                    ui.px(a,85),ui.px(a,85)))
+                tileColumn.addView(ui.text(a,tile.title,11f,ui.white,true).apply{
+                    maxLines=2
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                    contentDescription=tile.title
+                    setOnClickListener{onClick(tile)}
+                },ui.lp(a,4))
+                tile.duration?.takeIf{it.isNotBlank()}?.let{duration->
+                    tileColumn.addView(ui.text(a,duration,10f,ui.secondary),
+                        ui.lp(a,2))
+                }
+                strip.addView(tileColumn,LinearLayout.LayoutParams(
+                    ui.px(a,124),-2).apply{rightMargin=ui.px(a,7)})
 
                 if (tile.thumbnail.startsWith("content://")) {
                     CreatorPreviews.galleryThumbnail(a, thumb, tile.thumbnail, null)
