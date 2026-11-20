@@ -9,6 +9,7 @@ import com.asterion.videoflow.VideoEngine
 import com.azrael.galleryflow.SiteLoginActivity
 import com.azrael.galleryflow.SiteSession
 import org.json.JSONObject
+import kotlin.concurrent.thread
 
 /** Shared authorized retrieval. Access checks never invent subscriber credentials. */
 object AuthenticatedItemDownloader {
@@ -27,6 +28,41 @@ object AuthenticatedItemDownloader {
     fun download(a:Activity,item:IndexedItem){
         if(XXXClubTorrentSource.isDetail(item.url)){
             ResourceDownloads.openTorrentSource(a,item.url,"Videos")
+            return
+        }
+        // All Cosplay entry points must use the proven Kyora gallery
+        // transaction. The generic original resolver extracted an isolated
+        // JPEG and handed it to Android DownloadManager (provider-wide 403).
+        if(item.area=="COSPLAY"){
+            val owner=AlohaSources.by(AlohaArea.COSPLAY).firstOrNull{
+                SiteControls.key(it.url)==SiteControls.key(item.source)
+            }
+            val album=owner?.let{site->
+                when{
+                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)->
+                        item.url
+                    SiteBackfillProfiles.recognizesGalleryPage(site.url,item.source)->
+                        item.source
+                    else->null
+                }
+            }
+            if(owner==null || album==null){
+                Toast.makeText(a,
+                    "Choose a publisher gallery, not an isolated preview image",
+                    Toast.LENGTH_LONG).show()
+            }else thread(name="asterion-cosplay-native-original"){
+                val ok=runCatching{
+                    ApprovedCosplayActions.enqueueExactOriginal(
+                        a,owner.url,album,item.title)
+                }.getOrDefault(false)
+                a.runOnUiThread{
+                    if(!a.isDestroyed && !a.isFinishing)
+                        Toast.makeText(a,
+                            if(ok)"Kyora album queued; originals tracked in Downloads"
+                            else "Selected album could not be queued",
+                            Toast.LENGTH_LONG).show()
+                }
+            }
             return
         }
         if(usesVideoEngine(item)){
