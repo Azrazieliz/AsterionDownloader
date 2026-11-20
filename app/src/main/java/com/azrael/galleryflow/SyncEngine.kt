@@ -433,6 +433,13 @@ class SyncEngine(private val context: Context) {
                             continue
                         }
                         val existing = db.media(media.source, media.stableId)
+                        // User cancellation persists across backfill and live
+                        // rescans. upsertMedia updates metadata, not state.
+                        // Never restart a deliberately discarded original.
+                        if (existing?.state == TransferState.CANCELLED) {
+                            allComplete=false
+                            continue
+                        }
                         if (existing != null && existing.state == TransferState.COMPLETE &&
                             files.exists(existing.contentUri)) continue
                         if (existing != null && !files.exists(existing.contentUri)) {

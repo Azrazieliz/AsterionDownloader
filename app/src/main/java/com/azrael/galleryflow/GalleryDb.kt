@@ -444,6 +444,32 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         }
     }
 
+    /** Durable owner cancel for one queued/failed ORIGINAL. A saved file is
+     * never touched; later site scans must not re-enqueue this exact media ID. */
+    fun cancelUnfinishedMedia(source:String,mediaId:String):Boolean {
+        if(source.isBlank() || mediaId.isBlank())return false
+        val changed=writableDatabase.update("media",ContentValues().apply{
+            put("state",TransferState.CANCELLED.dbValue)
+            put("updated_at",System.currentTimeMillis())
+        },"source=? AND media_id=? AND content_uri IS NULL AND "+
+            "state IN ('pending','retrying','permanent_error','inaccessible')",
+            arrayOf(source,mediaId))
+        if(changed>0)com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
+        return changed>0
+    }
+
+    /** Cancel every unsaved waiting Gallery original, including records
+     * beyond the UI's recent-row sample; never delete media or saved receipts. */
+    fun cancelAllWaitingMedia():Int {
+        val changed=writableDatabase.update("media",ContentValues().apply{
+            put("state",TransferState.CANCELLED.dbValue)
+            put("updated_at",System.currentTimeMillis())
+        },"content_uri IS NULL AND state IN "+
+            "('pending','retrying','permanent_error','inaccessible')",null)
+        if(changed>0)com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
+        return changed
+    }
+
     /**
      * Acknowledges only an unsaved, terminal Gallery failure. Never delete
      * media, pages, downloads or staged bytes, and never touch pending or

@@ -573,11 +573,10 @@ object UnifiedDownloadsUi {
                                 (a as? AsterionHomeActivity)
                                     ?.openDownloadsModule("Gallery")
                             },mime="image/*",hasPrimaryAction=false,
-                            onRemove=if(state==State.FAILED) ({
+                            onRemove=if(state==State.FAILED || state==State.QUEUED) ({
                                 com.azrael.galleryflow.GalleryDb(
                                     a.applicationContext).use{db->
-                                    db.acknowledgeTerminalMediaFailure(
-                                        publisher,mediaId)
+                                    db.cancelUnfinishedMedia(publisher,mediaId)
                                 }
                             }) else null,
                             key="gallery:"+publisher+":"+mediaId)
@@ -1620,6 +1619,44 @@ object UnifiedDownloadsUi {
                         (a as? AsterionHomeActivity)
                             ?.openDownloadsModule(source)
                     },ui.lp(a,9))
+                }
+                if(source=="Gallery"){
+                    val waiting=totals.queued+totals.failed
+                    if(waiting>0){
+                        card.addView(ui.action(a,"CANCEL ALL WAITING GALLERY JOBS",false){
+                            android.app.AlertDialog.Builder(a)
+                                .setTitle("Cancel waiting Gallery jobs?")
+                                .setMessage("Cancel all "+waiting+
+                                    " queued or failed Gallery originals, not only "+
+                                    "the most recent 80 displayed. Stop the current "+
+                                    "Gallery scan first. Existing saved files, "+
+                                    "previews and historical records are preserved.")
+                                .setNegativeButton("Keep jobs",null)
+                                .setPositiveButton("Cancel waiting"){_,_->
+                                    com.azrael.galleryflow.SyncControl.stop()
+                                    com.azrael.galleryflow.GalleryRequestLedger.clear(
+                                        a.applicationContext)
+                                    runCatching{
+                                        a.startForegroundService(
+                                            Intent(a,com.azrael.galleryflow
+                                                .SyncForegroundService::class.java)
+                                                .setAction(com.azrael.galleryflow
+                                                    .SyncForegroundService.ACTION_STOP))
+                                    }
+                                    val cancelled=runCatching{
+                                        com.azrael.galleryflow.GalleryDb(
+                                            a.applicationContext).use{
+                                            it.cancelAllWaitingMedia()
+                                        }
+                                    }.getOrDefault(0)
+                                    Toast.makeText(a,
+                                        cancelled.toString()+" waiting Gallery "+
+                                            "jobs cancelled; saved files kept",
+                                        Toast.LENGTH_LONG).show()
+                                    refresh()
+                                }.show()
+                        },ui.lp(a,8))
+                    }
                 }
                 if(source=="Gallery"){
                     val sync=com.azrael.galleryflow.SyncControl.snapshot()

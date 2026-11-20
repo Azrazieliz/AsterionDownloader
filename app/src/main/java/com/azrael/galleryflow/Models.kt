@@ -27,6 +27,7 @@ enum class TransferState(val dbValue: String) {
     PARTIAL("partial"),
     COMPLETE("complete"),
     SKIPPED("skipped"),
+    CANCELLED("cancelled"),
     INACCESSIBLE("inaccessible"),
     RETRYING("retrying"),
     PERMANENT_ERROR("permanent_error")
