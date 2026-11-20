@@ -51,6 +51,24 @@ class KyoraSelectedGalleryIdentityTest {
                 "https://cosplaytele.com/album-rose/","cosplaytele.com")?.source)
     }
 
+    @Test fun oldGenericRootCannotHijackNativeKyoraAlbum() {
+        fun root(source:SourceId,id:String,url:String)=EntityRecord(
+            source,id,"Kyora",url,"site",true,false,null,null,null)
+        val records=listOf(
+            root(SourceId.GENERIC,"site:all","https://buondua.com/"),
+            root(SourceId.BUONDUA,"site:all","https://buondua.net/albums"),
+            root(SourceId.COSPLAYTELE,"site:all","https://cosplaytele.com/")
+        )
+        val album="https://buondua.com/albums/rose-239"
+        val chosen=KyoraSelectedGalleryIdentity.parent(
+            records,"site:all",album,"buondua.net","buondua")
+        assertEquals(SourceId.BUONDUA,chosen?.source)
+        assertNull(KyoraSelectedGalleryIdentity.parent(
+            records,"site:all",album,"buondua.net","cosplaytele"))
+        assertNull(KyoraSelectedGalleryIdentity.parent(
+            records,"site:all",album,"other-host","buondua"))
+    }
+
     @Test fun unknownDomainAndNonAlbumsNeverUseBuonduaDownloader() {
         assertFalse(KyoraSelectedGalleryIdentity.sameApprovedSite(
             "https://buondua.net/albums",
