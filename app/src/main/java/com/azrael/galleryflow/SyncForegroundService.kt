@@ -20,6 +20,7 @@ class SyncForegroundService : Service() {
         const val EXTRA_MODE = "sync_mode"
         const val EXTRA_SITE_ID = "target_site_id"
         const val EXTRA_SITE_HOST = "target_site_host"
+        const val EXTRA_SITE_SOURCE = "target_site_source"
         const val EXTRA_ALBUM_URL = "target_album_url"
         const val EXTRA_ALBUM_TITLE = "target_album_title"
         private const val CHANNEL_ID = "galleryflow_sync"
@@ -78,7 +79,8 @@ class SyncForegroundService : Service() {
                 mode,intent?.getStringExtra(EXTRA_SITE_ID),
                 intent?.getStringExtra(EXTRA_SITE_HOST),
                 intent?.getStringExtra(EXTRA_ALBUM_URL),
-                intent?.getStringExtra(EXTRA_ALBUM_TITLE))
+                intent?.getStringExtra(EXTRA_ALBUM_TITLE),
+                intent?.getStringExtra(EXTRA_SITE_SOURCE))
         if(requested?.targeted==true)GalleryRequestLedger.remember(this,requested)
         // Recover unfinished album taps first. An untargeted automatic Live
         // run is not persisted and cannot turn an opted-out Sync back on.
@@ -110,6 +112,7 @@ class SyncForegroundService : Service() {
                             val result=SyncEngine(applicationContext).run(job.mode,
                                 targetEntityId=job.entityId,
                                 targetSiteHost=job.siteHost,
+                                targetSiteSource=job.siteSource,
                                 targetGalleryUrl=job.albumUrl,
                                 targetGalleryTitle=job.albumTitle){notifyNow()}
                             // A selected album is not a completed download
