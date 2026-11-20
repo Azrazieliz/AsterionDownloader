@@ -83,7 +83,7 @@ object AsterionSearchHub {
             // 35s per future in order could stall All for 70 seconds and
             // discard the fast category when another provider was blocked.
             val deadline=System.nanoTime()+
-                java.util.concurrent.TimeUnit.SECONDS.toNanos(35)
+                java.util.concurrent.TimeUnit.SECONDS.toNanos(32)
             var finished=0
             while(finished<areas.size){
                 val remaining=deadline-System.nanoTime()

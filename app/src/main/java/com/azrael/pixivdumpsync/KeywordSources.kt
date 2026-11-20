@@ -425,14 +425,15 @@ object KeywordSources {
             }
         }
         tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
-        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true)}
+        // Direct publisher searches and one independent web index are sufficient.
         val scheduled=prioritizedTasks(tasks)
         val pool=java.util.concurrent.Executors.newFixedThreadPool(
-            minOf(8,scheduled.size))
+            minOf(12,scheduled.size))
         val completion=java.util.concurrent.ExecutorCompletionService<
             Triple<String,List<RankedHit>,String?>>(pool)
         val collected=ArrayList<RankedHit>()
         val errors=ArrayList<String>()
+        var finished=0
         try {
             for((label,task) in scheduled)completion.submit(java.util.concurrent.Callable {
                 try {
@@ -445,8 +446,7 @@ object KeywordSources {
             // Search engines and direct publishers run in parallel. Results
             // are only source-page candidates until original resolution.
             val deadline=System.nanoTime()+
-                java.util.concurrent.TimeUnit.SECONDS.toNanos(38)
-            var finished=0
+                java.util.concurrent.TimeUnit.SECONDS.toNanos(26)
             while(finished<tasks.size){
                 val remaining=deadline-System.nanoTime()
                 if(remaining<=0L)break
@@ -466,7 +466,7 @@ object KeywordSources {
                     eligibleDiscoveryUrl(it.url)})
             else SearchRanking.deduplicate(keyword,collected.filter{
                 eligibleDiscoveryUrl(it.url)}),
-            tasks.size,errors)
+            finished,errors)
     }
     /** Search one explicitly supplied site, including HTML sites with unusual page URLs. */
     fun searchCustom(context:Context,keyword:String,address:String):SearchOutcome {
