@@ -96,7 +96,7 @@ internal object TaiAvOriginalSource {
             !contents.contains("#EXT-X-PLAYLIST-TYPE:VOD"))return false
         var duration=0.0
         var segments=0
-        for(match in Regex("""(?m)^#EXTINF:([0-9]+(?:\\.[0-9]+)?)""")
+        for(match in Regex("""(?m)^#EXTINF:([0-9]+(?:\.[0-9]+)?)""")
                 .findAll(contents)){
             val seconds=match.groupValues[1].toDoubleOrNull()?:return false
             if(!seconds.isFinite() || seconds<=0 || seconds>180)return false
