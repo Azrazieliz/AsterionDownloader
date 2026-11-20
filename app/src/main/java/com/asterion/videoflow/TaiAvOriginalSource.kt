@@ -84,6 +84,48 @@ internal object TaiAvOriginalSource {
         return link.toASCIIString()
     }
 
+    /**
+     * The publisher's own complete selected VOD is a media playlist with
+     * ENDLIST and a real sum of segment durations. A valid HLS *syntax*
+     * alone does not make a 30-second teaser a complete movie.
+     */
+    fun isFullVodManifest(contents:String):Boolean {
+        if(contents.length !in 150..400_000 ||
+            !contents.trimStart().startsWith("#EXTM3U") ||
+            !contents.contains("#EXT-X-ENDLIST") ||
+            !contents.contains("#EXT-X-PLAYLIST-TYPE:VOD"))return false
+        var duration=0.0
+        var segments=0
+        for(match in Regex("""(?m)^#EXTINF:([0-9]+(?:\\.[0-9]+)?)""")
+                .findAll(contents)){
+            val seconds=match.groupValues[1].toDoubleOrNull()?:return false
+            if(!seconds.isFinite() || seconds<=0 || seconds>180)return false
+            duration+=seconds
+            segments++
+            if(segments>10_000)return false
+        }
+        return segments>=20 && duration>=120.0
+    }
+
+    private fun selectedFullPlaylist(context:Context,article:String,
+                                     media:String):Boolean=runCatching {
+        val response=Jsoup.connect(media)
+            .userAgent(NativeMediaDownloader.USER_AGENT)
+            .header("Referer",article)
+            .ignoreHttpErrors(true).ignoreContentType(true)
+            .followRedirects(false)
+            .timeout(14_000).maxBodySize(400_000)
+            .apply {
+                NetworkRoute.javaProxyForSelected(context,article,media)
+                    ?.let{proxy(it)}
+                SiteSession.cookie(context,article)?.takeIf{
+                    it.isNotBlank()
+                }?.let{header("Cookie",it)}
+            }.execute()
+        response.statusCode()==200 &&
+            isFullVodManifest(response.body())
+    }.getOrDefault(false)
+
     fun resolve(context:Context,article:String,html:String):String? {
         val candidates=selectedRequest(article,html)
         for(request in candidates){
@@ -109,7 +151,10 @@ internal object TaiAvOriginalSource {
                 if(response.statusCode()!=200)null
                 else response.body()
             }.getOrNull()?:continue
-            verifiedHls(request,body)?.let{return it}
+            verifiedHls(request,body)?.let{playlist->
+                if(selectedFullPlaylist(context,article,playlist))
+                    return playlist
+            }
         }
         return null
     }
