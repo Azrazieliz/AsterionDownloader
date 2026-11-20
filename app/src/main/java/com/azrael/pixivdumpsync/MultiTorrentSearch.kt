@@ -180,10 +180,15 @@ object MultiTorrentSearch {
             knaben(request("https://api.knaben.org/v1",body)).filter{
                 val name=(it.details+" "+it.title).lowercase()
                 when(area){
-                    TorrentArea.ADULT->name.contains("xxx")||name.contains("porn")||
-                        name.contains("adult")||name.contains("erotic")
-                    TorrentArea.BOOKS->name.contains("book")||name.contains("epub")||
-                        name.contains("novel")
+                    // Adult includes full-scene video AND photo sets /
+                    // cosplay galleries. A title match alone is never enough
+                    // to misclassify a different release category.
+                    TorrentArea.ADULT->Regex(
+                        """(?i)\b(porn|xxx|adult|erotic|video|videos|images|gallery|galleries|photos|pictures)\b"""
+                    ).containsMatchIn(name)
+                    TorrentArea.BOOKS->Regex(
+                        """(?i)\b(books?|epubs?|novels?)\b"""
+                    ).containsMatchIn(name)
                     TorrentArea.GAMES->Regex("(?i)\\b(games?|software|visual.novel|ren.?py|eroge|rpg|vn)\\b")
                         .containsMatchIn(name) &&
                         !Regex("(?i)\\b(porn.?video|anime.?episode|movie|jav|video.?rip)\\b")
@@ -243,7 +248,16 @@ object MultiTorrentSearch {
             // requests a newer search. No zombie provider threads.
             pool.shutdownNow()
         }
-        return hits.filter{area!=TorrentArea.GAMES || !GameTorrentPolicy.clearlyNonGameTitle(it.title)}.distinctBy{
+        // APIs frequently return titles matching just ONE query character
+        // or a token buried in an unrelated release. Require the actual
+        // title to include EVERY significant search term before displaying it.
+        // Adult torrent images/galleries are allowed; quality and identity are
+        // still checked against the selected descriptor before downloading.
+        return hits.filter{
+            SearchExactness.matches(q,it.title) &&
+                (area!=TorrentArea.GAMES ||
+                    !GameTorrentPolicy.clearlyNonGameTitle(it.title))
+        }.distinctBy{
             if(it.url.startsWith("magnet:"))it.url.substringAfter("urn:btih:").substringBefore("&").lowercase()
             else it.url
         } to errors
