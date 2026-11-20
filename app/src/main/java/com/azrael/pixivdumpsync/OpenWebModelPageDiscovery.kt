@@ -52,7 +52,7 @@ internal object OpenWebModelPageDiscovery {
             // actual model detail pages are inspected for file links.
             if(fileExtension(address)!=null)continue
             found+=address
-            if(found.size>=5)break
+            if(found.size>=12)break
         }
         return found.toList()
     }
@@ -83,6 +83,12 @@ internal object OpenWebModelPageDiscovery {
         val title=document.selectFirst("h1")?.text()
             ?.takeIf{it.isNotBlank()}?:document.title()
         if(!SearchExactness.matches(term,title))return emptyList()
+        val poster=document.selectFirst(
+            "meta[property=og:image][content],meta[name=twitter:image][content]")
+            ?.attr("content")?.takeIf{it.isNotBlank()}?.let{raw->
+                runCatching{URI(page).resolve(raw).toString()}.getOrNull()
+                    ?.takeIf{approved(it)}
+            }
         val out=LinkedHashMap<String,OpenWebModelSearch.Candidate>()
         val anchors=document.select(
             "main a[href],article a[href],a[download][href],"+
@@ -97,7 +103,7 @@ internal object OpenWebModelPageDiscovery {
             out.putIfAbsent(SearchRanking.canonicalKey(direct),
                 OpenWebModelSearch.Candidate(title.take(180),
                     direct,ext.uppercase(Locale.ROOT),
-                    parsed.host.orEmpty()))
+                    parsed.host.orEmpty(),poster))
             if(out.size>=15)break
         }
         return out.values.toList()
