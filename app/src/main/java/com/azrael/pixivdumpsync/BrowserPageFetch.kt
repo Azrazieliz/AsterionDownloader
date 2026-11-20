@@ -32,7 +32,7 @@ object BrowserPageFetch {
         "streamtape.com","streamtape.to","streamtape.net",
         "streamtape.site","sbtape.com",
         "hqpornerxxx.com","helloporn.com","javideo.net","play.javideo.net",
-        "porneec.com","taiav.com",
+        "porneec.com","taiav.com","livecamrips.to",
         "hentaihaven.xxx","uncensoredhentai.xxx","mp4hentai.com","roshy.tv",
         "mirrored.to","upfiles.com","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
