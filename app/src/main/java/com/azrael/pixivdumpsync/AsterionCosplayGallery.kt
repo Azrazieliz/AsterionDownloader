@@ -50,7 +50,9 @@ object AsterionCosplayGallery {
             .distinctBy{SearchRanking.canonicalKey(it.url)}.toList()
         val bySite=indexed.groupBy{SiteControls.key(it.source)}
         val entities=GalleryDb(a).use{it.listEntities()}
-        val snapshots=approved.associate{it.host to KyoraCreatorPreviews.cached(a,it.url)}
+        val snapshots=approved.associate{
+            SiteControls.key(it.url) to KyoraCreatorPreviews.cached(a,it.url)
+        }
         val nativeBySite=entities.filter{
             it.canonicalUrl.isNotBlank() && CosplayGalleryVisibility.hasGalleryCards(it.kind)
         }.groupBy{SiteControls.key(it.canonicalUrl)}
@@ -105,7 +107,9 @@ object AsterionCosplayGallery {
 
         var shown=0
         for(site in approved){
-            val host=site.host
+            // Catalog *.com and original *.net are one BuonDua native
+            // provider. Raw host grouping hid legacy Kyora albums/cards.
+            val host=SiteControls.key(site.url)
             val source=registered.firstOrNull{SiteControls.key(it.url)==host}
             val galleryEntities=nativeBySite[host].orEmpty()
             val galleries=GalleryDb(a).use{db->
