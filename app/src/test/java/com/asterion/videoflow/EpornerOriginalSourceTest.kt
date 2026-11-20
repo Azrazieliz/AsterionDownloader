@@ -38,9 +38,10 @@ class EpornerOriginalSourceTest {
         assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
             trailer.verdict)
     }
-    @Test fun originalMustMatchOfficialDuration(){
+    @Test fun previewShorterThanOfficialRuntimeMustBeRejected(){
         val result=FullLengthVideoPolicy.assess("Published original",
             "Published original",video,40L,180L,publisherVerified=true)
-        assertEquals(FullLengthVideoPolicy.Verdict.ACCEPT,result.verdict)
+        assertEquals(FullLengthVideoPolicy.Verdict.REJECT_SHORT_VERSION,
+            result.verdict)
     }
 }
