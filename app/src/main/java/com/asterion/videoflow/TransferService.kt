@@ -1142,6 +1142,12 @@ object VideoEngine {
             VideoSiteProfiles.isVideoPage(item.url)
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
+        // TaiAV's verified full original comes from the selected movie's
+        // first-party /api/getmovie HLS. Falling back to generic Python on
+        // the HTML article always reports Unsupported URL and obscures the
+        // real player/API failure. Never substitute /previewvideo.
+        val strictTaiAv=NetworkRoute.siteKey(item.url)=="taiav.com" &&
+            VideoSiteProfiles.isVideoPage(item.url)
         val strictIframe=NetworkRoute.siteKey(item.url) in
             setOf("javideo.net","helloporn.com","uncensoredhentai.xxx",
                 "onscreens.me")
@@ -1169,6 +1175,11 @@ object VideoEngine {
                     "Selected publisher iframe exposed no attributable direct media; "+
                     "a player webpage is not a downloadable original"))
         val strictJavGuru=NetworkRoute.siteKey(item.url)=="jav.guru"
+        if(strictTaiAv && publishedOriginals.isEmpty())
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "TaiAV selected full VOD API returned no verified playlist; "+
+                    "check the exact first-party /api/getmovie media endpoint"))
         if(strictRule34 && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1409,6 +1420,10 @@ object VideoEngine {
                 throw (last?:IllegalStateException(
                     "3DHentaiX selected original failed; unrelated media "+
                     "and generic extractor fallback are prohibited"))
+            if(strictTaiAv && !downloaded)
+                throw (last?:IllegalStateException(
+                    "TaiAV first-party original HLS did not transfer; "+
+                    "the movie article or preview is not a video original"))
             if(strictJavGuru && !downloaded)
                 throw (last?:IllegalStateException(
                     "Jav Guru selected STREAM players failed. "+
