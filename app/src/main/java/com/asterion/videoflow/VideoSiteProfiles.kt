@@ -32,6 +32,11 @@ internal object VideoSiteProfiles {
         Route("fullporner.com",Regex("""(?i)^/watch/[a-f0-9]{24}/?$""")),
 
         Route("freepornvideos.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
+        // Porneec's real posts are root-level multiword scene slugs, not /video.
+        // Never admit ordinary category, performer, tracking or menu paths.
+        Route("porneec.com",Regex("""(?i)^/[a-z0-9]{2,40}(?:-[a-z0-9]{2,45}){3,12}/?$""")),
+        // TaiAV publishes identifiable Mandarin studio movies under /cn/movie/<hex>.
+        Route("taiav.com",Regex("""(?i)^/(?:cn|tw|en)/movie/[a-f0-9]{24}/?$""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
         // Keep native title slugs and /watch/ routes in one provider profile.
         Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
@@ -70,6 +75,10 @@ internal object VideoSiteProfiles {
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
         val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+        if(domain(url)=="porneec.com" && cleanPath in setOf(
+                "privacy-policy","contact-us","terms-and-conditions",
+                "all-videos","all-categories","video-collection",
+                "latest-videos","full-length-videos"))return false
         if(domain(url)=="mp4hentai.com" &&
             cleanPath.contains("upcoming-") &&
             cleanPath.contains("-hentai-release"))return false
