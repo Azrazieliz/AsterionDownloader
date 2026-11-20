@@ -234,6 +234,20 @@ object AssetsPanel {
                         errors.addAll(failures)
                         for(file in candidates.take(36)){
                             val tile=ui.card(a)
+                            // An indexed file may carry a genuine OG image
+                            // from its own model detail page. Older web
+                            // cards showed text-only even where a poster
+                            // existed, making model discovery look broken.
+                            file.thumbnail?.let{poster->
+                                val preview=ImageView(a).apply{
+                                    scaleType=ImageView.ScaleType.CENTER_CROP
+                                    contentDescription="Model preview · "+file.title
+                                    setImageResource(R.drawable.ic_source_video)
+                                }
+                                tile.addView(preview,LinearLayout.LayoutParams(
+                                    -1,ui.px(a,136)))
+                                RemoteImageLoader.load(a,preview,poster,file.url)
+                            }
                             tile.addView(ui.text(a,file.title,15f,ui.white,true),
                                 ui.lp(a,6))
                             tile.addView(ui.text(a,
