@@ -83,7 +83,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(20,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(22,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -128,6 +128,23 @@ class VideoSiteProfilesTest {
             "https://archivebate.com/platform/eW91dHViZQ=="))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://archivebate.com/gender/ZmVtYWxl"))
+    }
+    @Test fun approvedPorneecAndChineseTaiAVOnlyAcceptSelectedMovies(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://porneec.com/sexmex-andrea-castro-my-nympho-wife/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://porneec.com/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://porneec.com/category/lesbian/"))
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://taiav.com/cn/movie/654424d67b410d2615db16e5"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://taiav.com/cn/category/JAV_Uncensored"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://taiav.com.evil.example/cn/movie/654424d67b410d2615db16e5"))
+        assertTrue(PublisherOriginalExtractors.owns(
+            "https://porneec.com/sexmex-andrea-castro-my-nympho-wife/"))
+        assertTrue(PublisherOriginalExtractors.owns(
+            "https://taiav.com/cn/movie/654424d67b410d2615db16e5"))
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.eporner.com/"
