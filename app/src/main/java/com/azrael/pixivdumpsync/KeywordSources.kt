@@ -18,6 +18,19 @@ enum class VideoSearchArea { HENTAI, PORN, PIRACY_DARKWEB }
 
 object KeywordSources {
     private const val PREFS="asterion_keyword_sources"
+    // The owner explicitly rejected these publishers. Discovery across the
+    // open web must not add them back, even if a search index finds them.
+    // Historical download records and unrelated video adapters are unchanged.
+    private val rejectedDiscoveryHosts=setOf(
+        "spankbang.com","thisvid.com","manyvids.com")
+    internal fun eligibleDiscoveryUrl(value:String):Boolean {
+        val uri=runCatching{URI(value)}.getOrNull()?:return false
+        val host=uri.host.orEmpty().lowercase(java.util.Locale.ROOT)
+            .removePrefix("www.")
+        return SearchRanking.validUrl(value) &&
+            rejectedDiscoveryHosts.none{host==it || host.endsWith("."+it)} &&
+            !ProviderRetirement.isRetired(value)
+    }
     private fun preferences(context:Context)=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
     fun endpoint(context:Context):String=preferences(context).getString("searxng","").orEmpty()
     fun setEndpoint(context:Context,address:String){
@@ -34,7 +47,6 @@ object KeywordSources {
         "html|https://www.pornhub.com/video/search?search={query}|Pornhub",
         "html|https://xhamster.com/search/{query}|xHamster",
         "html|https://www.eporner.com/search/{query}/|Eporner",
-        "html|https://spankbang.com/s/{query}/|SpankBang",
         "html|https://www.redtube.com/?search={query}|RedTube"
     )
     /** Indexed listings are not playable video files and open as source pages. */
@@ -104,7 +116,9 @@ object KeywordSources {
             val host=runCatching{URI(provider.url.replace("{query}","sample")
                 .replace("{name}","sample")).host.orEmpty().lowercase()}
                 .getOrDefault("")
-            host.isNotBlank() && (!host.endsWith(".onion") || torEnabled)
+            host.isNotBlank() && (!host.endsWith(".onion") || torEnabled) &&
+                eligibleDiscoveryUrl(provider.url.replace("{query}","sample")
+                    .replace("{name}","sample"))
         }.distinctBy{it.kind.name+"|"+it.url.trimEnd('/')}
     }
     fun setSources(context:Context,lines:String){
@@ -145,7 +159,7 @@ object KeywordSources {
         for(i in 0 until minOf(found.length(),250)){
             val row=found.optJSONObject(i)?:continue
             val url=row.optString("url")
-            if(!SearchRanking.validUrl(url) || !SearchRanking.isVideoUrl(url))continue
+            if(!eligibleDiscoveryUrl(url) || !SearchRanking.isVideoUrl(url))continue
             val title=row.optString("title",url).take(220)
             val snippet=row.optString("content").take(500)
             results.add(RankedHit(title,url,provider.label,snippet))
@@ -287,7 +301,7 @@ object KeywordSources {
             val absolute=runCatching{
                 URI(doc.location()).resolve(node.attr("href")).toString()
             }.getOrNull()?:continue
-            if(!SearchRanking.validUrl(absolute) ||
+            if(!eligibleDiscoveryUrl(absolute) ||
                 !(SearchRanking.isVideoUrl(absolute) ||
                     (area==VideoSearchArea.PIRACY_DARKWEB &&
                         SearchRanking.isIndexPage(absolute))))continue
@@ -348,7 +362,7 @@ object KeywordSources {
                 }.orEmpty()
             }else raw
             if(!url.startsWith("https://",true) ||
-                !SearchRanking.validUrl(url) ||
+                !eligibleDiscoveryUrl(url) ||
                 !(SearchRanking.isVideoUrl(url) ||
                     SearchRanking.isIndexPage(url)))continue
             val title=a.text().trim().take(220)
@@ -427,8 +441,10 @@ object KeywordSources {
         }finally{pool.shutdownNow()}
         return SearchOutcome(
             if(area==VideoSearchArea.PIRACY_DARKWEB)
-                SearchRanking.deduplicateIndex(keyword,collected)
-            else SearchRanking.deduplicate(keyword,collected),
+                SearchRanking.deduplicateIndex(keyword,collected.filter{
+                    eligibleDiscoveryUrl(it.url)})
+            else SearchRanking.deduplicate(keyword,collected.filter{
+                eligibleDiscoveryUrl(it.url)}),
             tasks.size,errors)
     }
     /** Search one explicitly supplied site, including HTML sites with unusual page URLs. */
