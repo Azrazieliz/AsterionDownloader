@@ -306,6 +306,25 @@ internal object SiteSpecificOriginalSources {
         if(owner=="uncensoredhentai.xxx"){
             val exactServer=selectedNhPlayerServer(playerPage,player.outerHtml())
             if(exactServer!=null){
+                // /player.php is populated by the selected first-party AJAX.
+                // Reading its static HTTP shell first often produces no video
+                // even though the real authorized browser has videoReady.
+                // Give that exact player one isolated browser resolution
+                // before falling back to the existing static route.
+                val browserOriginal=runCatching {
+                    val html=BrowserPageFetch.html(context,exactServer,
+                        playerReferer=link)
+                    val rendered=Jsoup.parse(html,exactServer)
+                    val sources=mediaElements(rendered,exactServer,
+                        "main .video-player video[src],"+
+                        "main .video-player video source[src]")
+                        .filter{
+                            selectedNhPlayerAjaxOriginal(
+                                link,exactServer,it.url)
+                        }.distinctBy{it.url}
+                    sources.singleOrNull()
+                }.getOrNull()
+                if(browserOriginal!=null)return listOf(browserOriginal)
                 // The publisher-declared selected NHPlayer server is
                 // independent of the watch-page cookies. Normal user/site
                 // verification must complete; never forge challenge tokens.
@@ -343,8 +362,8 @@ internal object SiteSpecificOriginalSources {
                 "meta[itemprop=contentUrl][content]")+
             jsSources(player,playerPage)).distinctBy{it.url}.filter{
                 owner!="uncensoredhentai.xxx" ||
-                    URI(playerPage).path!="/player.php" ||
-                    selectedNhPlayerAjaxOriginal(link,playerPage,it.url)
+                    (URI(playerPage).path=="/player.php" &&
+                        selectedNhPlayerAjaxOriginal(link,playerPage,it.url))
             }
         if(selectedMedia.isNotEmpty())return selectedMedia
         // This exact site's own iframe may create the HTML5 player only
@@ -365,8 +384,8 @@ internal object SiteSpecificOriginalSources {
             val media=(mediaElements(rendered,playerPage,css)+
                 jsSources(rendered,playerPage)).distinctBy{it.url}.filter{
                     owner!="uncensoredhentai.xxx" ||
-                        URI(playerPage).path!="/player.php" ||
-                        selectedNhPlayerAjaxOriginal(link,playerPage,it.url)
+                        (URI(playerPage).path=="/player.php" &&
+                            selectedNhPlayerAjaxOriginal(link,playerPage,it.url))
                 }
             if(media.isNotEmpty())return media
         }
