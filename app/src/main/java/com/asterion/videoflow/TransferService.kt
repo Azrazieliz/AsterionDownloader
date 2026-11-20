@@ -30,6 +30,11 @@ object VideoEngine {
     // Separate pools retain the native transfer lane when Python is stuck.
     private val metadataExecutor=VideoExecutionPools.create("videoflow-metadata",2)
     private val publisherExecutor=VideoExecutionPools.create("videoflow-publisher",2)
+    // JAVIDEO's Play-triggered WebView can ignore task cancellation. Keep
+    // its slow player probes off the shared publisher lane so a dead iframe
+    // cannot starve working JAV Guru and Pornhub transfers.
+    private val javideoPlayerExecutor=VideoExecutionPools.create(
+        "videoflow-javideo-player",1)
     private val transferExecutor=VideoExecutionPools.create("videoflow-extractor",2)
     private val nativeExecutor=VideoExecutionPools.create("videoflow-native",2)
     /** Keep the Python-specific failures scoped to Python-required media.
@@ -644,7 +649,9 @@ object VideoEngine {
         }
         fun <T> inspectPublisher(inspect:()->T):T {
             val inspectedAt=android.os.SystemClock.elapsedRealtime()
-            val future=publisherExecutor.submit<T>{inspect()}
+            val executionPool=if(NetworkRoute.siteKey(item.url)=="javideo.net")
+                javideoPlayerExecutor else publisherExecutor
+            val future=executionPool.submit<T>{inspect()}
             extractionJobs[item.id]=future
             try {
                 while(true){
@@ -692,7 +699,7 @@ object VideoEngine {
             }finally{
                 future.cancel(true)
                 extractionJobs.remove(item.id,future)
-                VideoExecutionPools.discardCancelled(publisherExecutor)
+                VideoExecutionPools.discardCancelled(executionPool)
             }
         }
         fun <T> publisherResult(inspect:()->T):Result<T> =
