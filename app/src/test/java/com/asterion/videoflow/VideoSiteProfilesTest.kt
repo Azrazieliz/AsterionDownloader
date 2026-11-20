@@ -98,6 +98,19 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.omg.porn/fr/"))
     }
+    @Test fun onlyHentaiNativeKvsSelectedArticlesAreActualVideoPages(){
+        val selected="https://onlyhentaistuff.com/videos/123456/selected-hentai-scene/"
+        assertTrue(VideoSiteProfiles.isVideoPage(selected))
+        assertTrue(PublisherOriginalExtractors.owns(selected))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://onlyhentaistuff.com/videos/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://onlyhentaistuff.com/videos/123456/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://onlyhentaistuff.com/categories/animation/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://onlyhentaistuff.com.evil.example/videos/123456/selected-hentai-scene/"))
+    }
     @Test fun liveHentaiProviderPostRoutesAreNotReleaseCalendarsOrCategories(){
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://3dhentaix.com/loving-mother-1-8-by-japs8005/"))
