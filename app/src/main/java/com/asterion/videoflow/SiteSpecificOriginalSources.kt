@@ -14,9 +14,9 @@ import java.util.Locale
 /** Exact selected-publisher resolvers. Never treat cards, ads or thumbnails as originals. */
 internal object SiteSpecificOriginalSources {
     data class Source(val url:String,val referer:String)
-    private val owners=setOf("fullporner.com","hqpornerxxx.com","helloporn.com",
-        "jav.guru","javideo.net","roshy.tv","mp4hentai.com","hentaibros.net",
-        "3dhentaix.com","hentaihaven.xxx","uncensoredhentai.xxx")
+    private val owners=setOf("fullporner.com","hqpornerxxx.com",
+        "jav.guru","javideo.net","roshy.tv","hentaibros.net",
+        "3dhentaix.com","uncensoredhentai.xxx")
     internal fun host(url:String):String=runCatching {
         URI(url).host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
     }.getOrDefault("")
