@@ -104,6 +104,35 @@ class SiteBackfillProfilesTest {
            </main>""",home)
         assertTrue(SourceIndexParser.entries(page,home,"COSPLAY",100L).isEmpty())
     }
+    @Test fun sixKyoraProvidersRecognizeOnlyRealFirstPartyGalleryRoutes(){
+        val cases=listOf(
+            "https://www.4khd.com/" to
+                "https://www.4khd.com/content/20/set-name.html",
+            "https://buondua.com/" to
+                "https://buondua.net/albums/album-123/",
+            "https://cosplaytele.com/" to
+                "https://cosplaytele.com/selected-gallery/",
+            "https://kiutaku.com/" to
+                "https://kiutaku.com/7440/",
+            "https://www.pornpics.com/" to
+                "https://www.pornpics.com/galleries/example/",
+            "https://celeb.st/feed/hot" to
+                "https://celeb.st/creator/sample-123/images")
+        for((source,album) in cases)
+            assertTrue("$source should own $album",
+                SiteBackfillProfiles.recognizesGalleryPage(source,album))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://cosplaytele.com/",
+            "https://cosplaytele.com/category/"))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://buondua.com/",
+            "https://buondua.net/search"))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://kiutaku.com/","https://kiutaku.com/tag/123/"))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://celeb.st/feed/hot","https://celeb.st/feed/random"))
+    }
+
     @Test fun otherProvidersStillUseOriginalGenericPath(){
         assertNull(SiteBackfillProfiles.entries(
             Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),
