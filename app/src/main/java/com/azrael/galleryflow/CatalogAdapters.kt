@@ -287,13 +287,17 @@ class BuonDuaAdapter(private val http: HttpClient) : SourceAdapter {
 
     override fun matches(url: String): Boolean = runCatching {
         val host = URI(normalizeInputUrl(url)).host?.lowercase(Locale.ROOT).orEmpty()
-        host == "buondua.net" || host.endsWith(".buondua.net")
+        host in setOf("buondua.net","www.buondua.net",
+            "buondua.com","www.buondua.com") ||
+            host.endsWith(".buondua.net") || host.endsWith(".buondua.com")
     }.getOrDefault(false)
 
     override fun resolveEntity(inputUrl: String): SourceEntity {
         val uri = URI(normalizeInputUrl(inputUrl))
         val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
-        if (host != "buondua.net" && !host.endsWith(".buondua.net")) throw AdapterException("Not a BuonDua URL")
+        if (host !in setOf("buondua.net","buondua.com") &&
+            !host.endsWith(".buondua.net") &&
+            !host.endsWith(".buondua.com")) throw AdapterException("Not a BuonDua URL")
         val path = uri.path.trimEnd('/')
         if (path.startsWith("/albums/") && path != "/albums") {
             val id = path.substringAfterLast('/')
