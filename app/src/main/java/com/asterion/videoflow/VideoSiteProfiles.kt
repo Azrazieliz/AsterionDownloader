@@ -41,6 +41,12 @@ internal object VideoSiteProfiles {
         // Never admit ordinary category, performer, tracking or menu paths.
         Route("porneec.com",Regex("""(?i)^/[a-z0-9]{2,40}(?:-[a-z0-9]{2,45}){3,12}/?$""")),
         // PornBuz selected article IDs end in a unique numeric release key.
+        // These three public/connected video publishers have dedicated
+        // extractors in the exact bundled yt-dlp 2026.10.26 wheel. Do not
+        // infer full originals from their promotional HTML player tags.
+        Route("thisvid.com",Regex("""(?i)^/videos/[a-z0-9-]{6,160}/?$""")),
+        Route("spankbang.com",Regex("""(?i)^/[a-z0-9]{2,12}/(?:video|play|embed)(?:/[a-z0-9+%._-]{1,180})?/?$""")),
+        Route("manyvids.com",Regex("""(?i)^/video/[0-9]{3,12}(?:/[a-z0-9%-]{1,200})?/?$""")),
         Route("pornbuz.com",Regex("""(?i)^/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?$""")),
         // TaiAV publishes identifiable Mandarin studio movies under /cn/movie/<hex>.
         Route("taiav.com",Regex("""(?i)^/(?:cn|tw|en)/movie/[a-f0-9]{24}/?$""")),
@@ -156,5 +162,12 @@ internal object VideoSiteProfiles {
         }
         return null
     }
+    /** Source-specific yt-dlp extractors handle the selected video. Page HTML
+     * alone must never be promoted into a downloadable scene or teaser.
+     */
+    fun usesBundledExtractor(url:String):Boolean =
+        domain(url) in setOf("thisvid.com","spankbang.com","manyvids.com") &&
+            isVideoPage(url)
+
     val coveredHosts: Set<String> get()=routes.keys
 }
