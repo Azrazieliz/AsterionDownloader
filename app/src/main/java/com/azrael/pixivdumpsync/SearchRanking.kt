@@ -64,6 +64,9 @@ object SearchRanking {
     }catch(_:Exception){raw.trim()} }
     /** Search results are video pages, not browser searches, profiles or categories. */
     fun isVideoUrl(url:String):Boolean {
+        // Old indexed links, external search engines and generic /video/
+        // heuristics must never resurrect a provider deleted by the owner.
+        if(ProviderRetirement.isRetired(url))return false
         val uri=runCatching{URI(url)}.getOrNull()?:return false
         val path=uri.path.orEmpty().lowercase(Locale.ROOT)
         val host=uri.host.orEmpty().lowercase(Locale.ROOT)
@@ -88,8 +91,7 @@ object SearchRanking {
         if(host=="youtu.be")return path.length>2
         if(host.contains("vimeo.com")&&Regex("^/\\d+").containsMatchIn(path))return true
         // Approved publisher-selected articles need not contain /video:
-        // JAV Guru WordPress posts, JAVIDEO FC2 identifiers, HelloPorn
-        // video-<id>-<slug> and MP4Hentai dated posts are valid examples.
+        // JAV Guru WordPress posts and JAVIDEO FC2 identifiers are valid examples.
         // Reuse the SAME exact publisher route profiles as VideoFlow; do
         // not guess slug IDs or promote ads, category pages or site cards.
         if(VideoSiteProfiles.isVideoPage(url))return true
