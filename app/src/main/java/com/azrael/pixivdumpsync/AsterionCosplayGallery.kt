@@ -117,16 +117,13 @@ object AsterionCosplayGallery {
             val galleries=GalleryDb(a).use{db->
                 galleryEntities.flatMap{db.galleryCards(it.entityId,5)}
             }.distinctBy{it.galleryId}.take(12)
-            // Gallery thumbnails must link to an actual album for EVERY
-            // provider, not category/profile/navigation pages. The old
-            // screen only checked 4KHD, leaving PornPics, Celeb.st and
-            // other approved sources with non-downloadable fake albums.
-            val indexedItems=bySite[host].orEmpty().filter{item->
-                SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
-            }
-            val public=snapshots[host]?.entries.orEmpty().filter{item->
-                SiteBackfillProfiles.recognizesGalleryPage(site.url,item.url)
-            }
+            // Restore the complete Kyora gallery/creator previews.
+            // Filtering all covers by known POST routes hides legitimate
+            // albums on JavaScript-backed sites before their adapter can
+            // index them. Keep all covers visible; only verified exact
+            // album URLs get the original-file download action.
+            val indexedItems=bySite[host].orEmpty()
+            val public=snapshots[host]?.entries.orEmpty()
 
             val nativeTiles=galleries.mapNotNull{item->
                 val cover=item.firstUri?:item.firstUrl
@@ -221,20 +218,30 @@ object AsterionCosplayGallery {
                         }else SourceIndexPanel.details(a,item)
                     }
                     else->{
-                        // A gallery listing thumbnail does not prove that its
-                        // original is directly downloadable. Run its actual
-                        // native provider parser instead of saving HTML as art.
-                        thread(name="asterion-cosplay-open-gallery"){
-                            val message=runCatching{
-                                // A deliberately tapped public tile names a
-                                // precise gallery, not an authorization to
-                                // download the entire site or show a dead
-                                // "source not registered" message.
-                                ApprovedCosplayActions.selectedGallery(
-                                    a,site.url,tile)
-                            }.getOrElse{it.message?:"Gallery indexing failed"}
-                            toast(a,message)
-                        }
+                        // A tile may be a creator/profile or category, not
+                        // an album. Preserve the Kyora preview and let the
+                        // user browse it instead of queueing an impossible
+                        // original-file transfer or falsely reporting saved.
+                        if(SiteBackfillProfiles.recognizesGalleryPage(
+                                site.url,tile.url)){
+                            thread(name="asterion-cosplay-open-gallery"){
+                                val message=runCatching{
+                                    ApprovedCosplayActions.selectedGallery(
+                                        a,site.url,tile)
+                                }.getOrElse{
+                                    it.message?:"Selected gallery unavailable"
+                                }
+                                toast(a,message)
+                            }
+                        }else if(SourceIndexParser.safe(tile.url)){
+                            runCatching{
+                                a.startActivity(Intent(Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(tile.url)))
+                            }.onFailure{
+                                toast(a,"This preview is not a downloadable album")
+                            }
+                        }else toast(a,
+                            "Invalid preview: only source-owned gallery URLs are downloadable")
                     }
                 }
             }
