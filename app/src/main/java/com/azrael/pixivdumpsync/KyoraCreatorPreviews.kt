@@ -55,6 +55,10 @@ object KyoraCreatorPreviews {
      * Cosplay, books and other gallery providers keep their own contracts.
      */
     internal fun acceptedVideoCard(source:String,page:String):Boolean {
+        // Retired sources must not reappear through cached gallery previews
+        // or generic source indexes after their catalog entry was removed.
+        if(ProviderRetirement.isRetired(source) ||
+            ProviderRetirement.isRetired(page))return false
         val provider=SiteControls.key(source)
         // Scope to the observed OnScreens profile-card regression; other
         // publishers keep their existing approved media-path behavior.
@@ -63,6 +67,7 @@ object KyoraCreatorPreviews {
     }
 
     fun cached(context:Context,source:String):Snapshot?=runCatching {
+        if(ProviderRetirement.isRetired(source))return null
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
         val obj=JSONObject(raw)
         // Old Kiutaku snapshots contain homepage montages. Invalidate only
@@ -87,6 +92,7 @@ object KyoraCreatorPreviews {
         },obj.optLong("updated"),obj.optString("error").takeIf{it.isNotBlank()})
     }.getOrNull()
     internal fun parse(html:String,base:String):List<Preview>{
+        if(ProviderRetirement.isRetired(base))return emptyList()
         val doc=Jsoup.parse(html,base)
         // www/mobile/locale subdomains are the same approved provider.
         // Do not reject legitimate links when the site's landing URL redirects
@@ -171,7 +177,8 @@ object KyoraCreatorPreviews {
     fun load(a:Activity,url:String,force:Boolean=false,
              onReady:(Snapshot)->Unit){
         if(!force)cached(a,url)?.let{onReady(it)}
-        if(!SourceIndexParser.safe(url))return
+        if(!SourceIndexParser.safe(url) ||
+            ProviderRetirement.isRetired(url))return
         val stored=cached(a,url)
         val wait=if(stored?.error==null)12L*60*60*1000 else
             if(SiteControls.key(url)=="kiutaku.com")5L*60*1000
