@@ -15,18 +15,15 @@ class PublisherOriginalExtractorsTest {
         "watchporn.to" to "https://watchporn.to/video/1782/title",
         "archivebate.com" to "https://archivebate.com/watch/16458050",
         "xxxi.porn" to "https://xxxi.porn/video/example",
-        "helloporn.com" to "https://helloporn.com/video/example",
         "notfans.com" to "https://notfans.com/video/example",
         "fullporner.com" to "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
 
         "freepornvideos.xxx" to "https://www.freepornvideos.xxx/videos/example",
         "omg.porn" to "https://omg.porn/video/example",
         "hentaibros.net" to "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
-        "mp4hentai.com" to "https://mp4hentai.com/2026/11/example-episode/",
         "onlyhentaistuff.com" to "https://onlyhentaistuff.com/video/example",
         "uncensoredhentai.xxx" to "https://uncensoredhentai.xxx/watch/episode-3/",
         "3dhentaix.com" to "https://3dhentaix.com/ntr-compilation/",
-        "hentaihaven.xxx" to "https://hentaihaven.xxx/watch/example",
         "rule34video.com" to "https://rule34video.com/video/4727221/",
         "camstreams.tv" to "https://camstreams.tv/video/example"
     )
@@ -49,7 +46,7 @@ class PublisherOriginalExtractorsTest {
           <aside><video src="https://cdn.example/unrelated.mp4"></video></aside>
           </main></html>"""
         val result=PublisherOriginalExtractors.fromHtml(
-            cases.getValue("helloporn.com"),html)
+            cases.getValue("watchporn.to"),html)
         assertEquals(listOf("https://cdn.example/original.mp4"),
             result.map{it.url})
     }
@@ -93,7 +90,7 @@ class PublisherOriginalExtractorsTest {
         }
     }
     @Test fun exactSelectedPlayerHlsManifestIsDistinctFromPreview(){
-        val selected=cases.getValue("helloporn.com")
+        val selected=cases.getValue("watchporn.to")
         val html="""<main>
             <video src="https://cdn.example/preview.mp4"></video>
             <div id="player">
@@ -106,7 +103,9 @@ class PublisherOriginalExtractorsTest {
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
         val html="""<div id="player"><video src="https://cdn.example/original.mp4"></video></div>"""
         assertTrue(PublisherOriginalExtractors.fromHtml(
-            "https://helloporn.com/",html).isEmpty())
+            "https://helloporn.com/video-12345-selected/",html).isEmpty())
+        assertFalse(PublisherOriginalExtractors.owns(
+            "https://helloporn.com/video-12345-selected/"))
         assertTrue(PublisherOriginalExtractors.fromHtml(
             "https://unknown.example/video/123",html).isEmpty())
     }
