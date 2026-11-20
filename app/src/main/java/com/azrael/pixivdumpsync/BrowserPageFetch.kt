@@ -61,11 +61,19 @@ object BrowserPageFetch {
         // stored in the main process. Ask our non-exported provider to perform
         // the authorized DOM read in the actual owner process.
         if(android.os.Build.VERSION.SDK_INT>=28 &&
-            android.app.Application.getProcessName()!=context.packageName &&
-            com.azrael.galleryflow.SiteSession.bound(context,url)){
+            android.app.Application.getProcessName()!=context.packageName){
+            // Public selected players must use the same browser/cookie owner
+            // as connected pages. Rendering directly inside :videoflow_* can
+            // allocate an empty independent WebView jar and leave the exact
+            // JAVIDEO/NHPlayer stream invisible or rejected with HTTP 403.
             val response=context.contentResolver.call(
                 Uri.parse("content://"+context.packageName+".session-cookies"),
-                "read_site_html",url,null)
+                "read_site_html",url,android.os.Bundle().apply{
+                    playerReferer?.takeIf{
+                        publicEligible(it) ||
+                            com.azrael.galleryflow.SiteSession.bound(context,it)
+                    }?.let{putString("referer",it)}
+                })
             val html=response?.getString("html")
                 ?:response?.getString("html_gzip")?.let{
                     com.azrael.galleryflow.SessionHtmlEnvelope.expand(it)
