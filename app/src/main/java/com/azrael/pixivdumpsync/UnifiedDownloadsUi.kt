@@ -1568,6 +1568,25 @@ object UnifiedDownloadsUi {
                             ?.openDownloadsModule(source)
                     },ui.lp(a,9))
                 }
+                if(source=="Gallery"){
+                    val sync=com.azrael.galleryflow.SyncControl.snapshot()
+                    if(sync.running && !sync.stopping){
+                        card.addView(ui.action(a,"STOP GALLERY SYNC",false){
+                            android.app.AlertDialog.Builder(a)
+                                .setTitle("Stop Gallery downloads?")
+                                .setMessage("Stop the current Gallery sync. "+
+                                    "Already saved originals remain intact; "+
+                                    "unfinished gallery entries may be resumed "+
+                                    "through their creator or website.")
+                                .setNegativeButton("Keep running",null)
+                                .setPositiveButton("Stop sync"){_,_->
+                                    com.azrael.galleryflow.SyncControl.stop()
+                                    DownloadStateSignals.changed(a)
+                                    refresh()
+                                }.show()
+                        },ui.lp(a,8))
+                    }
+                }
                 if(source=="Pixiv"){
                     val sync=SyncControl.snapshot()
                     if(sync.running && !sync.stopping){
