@@ -1058,6 +1058,12 @@ class AsterionHomeActivity:Activity(){
         if(!WebDiscovery.isUrl(value)){
             toast("Enter a valid HTTP(S) link");return
         }
+        // A deliberately retired video publisher must NEVER fall through to
+        // the generic Gallery path when its VideoSiteProfile is removed.
+        if(ProviderRetirement.isRetired(value)){
+            toast("Provider removed from Asterion Downloader")
+            return
+        }
         when(SourceRouter.classify(value)){
             DownloadKind.PIXIV->{
                 val id=SourceRouter.pixivArtistId(value)
@@ -1108,7 +1114,9 @@ class AsterionHomeActivity:Activity(){
     }
     private fun renderQueue(){
         section("Downloads","Queued, downloading, completed and failed files in one place.")
-        val videos=VideoDb(this).use{it.listVideos(200)}
+        val videos=VideoDb(this).use{db->
+            db.listVideos(200).filterNot{ProviderRetirement.isRetired(it.url)}
+        }
         val comics=ChapterQueue(this).use{it.list()}
         val xphotos=XPhotoQueue(this).use{it.recent(100)}
         val artists=AppDb(this).use{it.listArtists()}
