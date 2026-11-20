@@ -27,7 +27,6 @@ internal object PublisherOriginalExtractors {
         Site("watchporn.to","meta[itemprop=contentUrl],#player source[src],#player video[src]"),
         Site("archivebate.com","#player iframe[src],.player iframe[src],iframe[src^='https://mixdrop.ag/e/']",allowPlayerIframe=true),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
-        Site("helloporn.com","#player video[src],#player source[src],.video-player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
 
