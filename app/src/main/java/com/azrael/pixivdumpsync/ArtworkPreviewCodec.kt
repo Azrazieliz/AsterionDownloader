@@ -4,6 +4,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object ArtworkPreviewCodec {
+    /** A single working thumbnail must not conceal four broken artwork cards. */
+    fun needsThumbnailRecovery(items:List<PixivApi.ArtworkPreview>):Boolean =
+        items.isEmpty() || items.take(5).any{it.thumbnailUrl.isNullOrBlank()}
     fun encode(items: List<PixivApi.ArtworkPreview>): String {
         val array = JSONArray()
         for (item in items) {
