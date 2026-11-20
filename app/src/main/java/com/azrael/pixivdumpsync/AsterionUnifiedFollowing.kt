@@ -388,7 +388,7 @@ object AsterionUnifiedFollowing {
                 it.listVerifiedProfile(creator.name,creator.source,perPage,
                     if(full)pageIndex*perPage else 0)
             }.filter{
-                SearchExactness.matches(creator.name,it.title) &&
+                SearchExactness.matchesPhrase(creator.name,it.title) &&
                     !IndexedMediaQuality.navigationTitle(it.title) &&
                     com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)
             } else emptyList()
