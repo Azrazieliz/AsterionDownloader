@@ -168,7 +168,8 @@ internal object TorrentMetadataBridge {
             val pointer=File(root(a),"cache-$hash.pointer")
             val existing=runCatching{pointer.readText().trim()}.getOrNull()
             if(existing!=null && idPattern.matches(existing) &&
-                File(root(a),"$existing.manifest.json").isFile){
+                File(root(a),"$existing.manifest.json").isFile &&
+                File(root(a),"$existing.torrent").isFile){
                 releaseRequest(request)
                 runCatching{showPreparedFiles(a,existing,folder)}
                     .onFailure{pointer.delete()}
@@ -249,7 +250,9 @@ internal object TorrentMetadataBridge {
             }
             val hash=id(bytes)
             val manifest=File(root(a),"$hash.manifest.json")
-            if(manifest.isFile){
+            // A cached file chooser without its original descriptor can
+            // never start an actual transfer; reconstruct both atomically.
+            if(manifest.isFile && File(root(a),"$hash.torrent").isFile){
                 showPreparedFiles(a,hash,folder)
                 return
             }
