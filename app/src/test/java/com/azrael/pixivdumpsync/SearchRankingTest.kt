@@ -51,14 +51,16 @@ class SearchRankingTest {
         for(url in listOf(
             "https://jav.guru/1234567/owner-selected-original/",
             "https://javideo.net/en/fc2ppv-4994603",
-            "https://helloporn.com/video-123456-selected-original",
-            "https://mp4hentai.com/2026/11/selected-file-post/"
+            "https://uncensoredhentai.xxx/watch/selected-video/"
         )) assertTrue(url,SearchRanking.isVideoUrl(url))
         for(url in listOf(
             "https://jav.guru/category/new-videos/",
             "https://jav.guru.evil.example/1234567/owner-selected-original/",
             "https://javideo.net/en/",
             "https://helloporn.com/",
+            "https://helloporn.com/video-123456-selected-original",
+            "https://mp4hentai.com/2026/11/selected-file-post/",
+            "https://hentaihaven.xxx/watch/example/episode-1/",
             "https://mp4hentai.com/2026/11/",
             "https://mp4hentai.com/2026/11/upcoming-hentai-release/"
         )) assertFalse(url,SearchRanking.isVideoUrl(url))
