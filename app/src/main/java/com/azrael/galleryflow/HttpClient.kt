@@ -283,8 +283,12 @@ open class HttpClient(private val context:android.content.Context?=null) {
         if (!SyncControl.checkpoint()) throw SyncCancelledException()
         val routedSite=referer?.takeIf { it.startsWith("http") } ?:url
         val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(context,routedSite)
-        val conn = (if(proxy==null)URL(url).openConnection()
-            else URL(url).openConnection(proxy)) as HttpURLConnection
+        // Kyora article URLs may contain Japanese/Chinese photo filenames.
+        // The original media identity stays unchanged; HTTP requires an
+        // ASCII-encoded request path. This also preserves signed query data.
+        val destination=GalleryOriginalUrl.requestTarget(url)
+        val conn = (if(proxy==null)URL(destination).openConnection()
+            else URL(destination).openConnection(proxy)) as HttpURLConnection
         NetworkRequestRegistry.register(conn)
         try {
             conn.instanceFollowRedirects = true
