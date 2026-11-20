@@ -749,8 +749,8 @@ object UnifiedDownloadsUi {
                 "WAITING_PEERS"->"Waiting for peers · "+
                     torrent.peers+" connected; partial pieces preserved"
                 "VERIFYING"->"Checking selected pieces in quarantine"
-                "QUARANTINED"->"BitTorrent hashes verified; private "+
-                    "quarantine awaits a separate security review"
+                "QUARANTINED"->"Pieces downloaded and hash-verified in private "+
+                    "storage · NOT malware-scanned · review and export if trusted"
                 else->torrent.text.substringAfter(" · ",torrent.text)
                     .take(250)
             }
@@ -797,7 +797,7 @@ object UnifiedDownloadsUi {
                     "TRANSFERRING"->"PAUSE"
                     "PAUSED","FAILED"->"RESUME"
                     "QUEUED","WAITING_PEERS"->"RESUME"
-                    "QUARANTINED"->"EXPORT VERIFIED FILES"
+                    "QUARANTINED"->"REVIEW & EXPORT FILES"
                     "EXPORTED"->"OPEN"
                     else->null
                 },
