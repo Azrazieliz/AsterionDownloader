@@ -168,8 +168,12 @@ object VideoSearchPreviews {
                 if(bitmap!=null)break
             }
             val ready=bitmap
-            if(ready==null && rule34Page!=null)
-                ThumbnailFailureJournal.record(app,rule34Page,
+            // A missing first-party poster is a diagnosable search
+            // failure, even when no thumbnail URL was present in the
+            // third-party index. Previously only Rule34Video recorded it,
+            // leaving diagnostics incorrectly claiming zero failures.
+            if(ready==null && selectedPage!=null)
+                ThumbnailFailureJournal.record(app,selectedPage,
                     failure?:"selected_page_did_not_publish_poster")
             if(ready!=null){
                 synchronized(lock){memory.put(key,ready)}
