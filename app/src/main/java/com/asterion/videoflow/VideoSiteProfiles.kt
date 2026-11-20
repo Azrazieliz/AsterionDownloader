@@ -28,7 +28,6 @@ internal object VideoSiteProfiles {
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         // Real HelloPorn selected videos are /video-<id>-<slug>, NOT
         // /video/<slug>. The former route dropped every live catalog card.
-        Route("helloporn.com",Regex("""(?i)^/(?:video-[0-9]{1,10}-[a-z0-9][a-z0-9-]{2,240}/?|(?:videos?|watch|v)/[^/?#]+)/?$""")),
         Route("notfans.com",Regex("""(?i)^/(?:videos?|watch|posts?|v)/[^/?#]+""")),
         Route("fullporner.com",Regex("""(?i)^/watch/[a-f0-9]{24}/?$""")),
 
@@ -38,12 +37,10 @@ internal object VideoSiteProfiles {
         Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
         // MP4Hentai actually publishes WordPress /YYYY/MM/post-slug/
         // pages; the old route only matched /video/... and missed everything.
-        Route("mp4hentai.com",Regex("""(?i)^/(?:[0-9]{4}/(?:0[1-9]|1[0-2])/[^/?#]{3,300}/?|(?:video|watch|hentai)/[^/?#]+)$""")),
         Route("onlyhentaistuff.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         // Actual 3DHentai video pages use a single top-level title slug.
         Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
-        Route("hentaihaven.xxx",Regex("""(?i)^/(?:video|videos|watch)/[^/?#]+""")),
         Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
         Route("camstreams.tv",Regex("""(?i)^/(?:video|videos|watch|clip)/[^/?#]+"""))
     ).associateBy{it.domain}
