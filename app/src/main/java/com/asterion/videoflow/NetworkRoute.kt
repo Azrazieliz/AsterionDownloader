@@ -221,18 +221,16 @@ internal object NetworkRoute {
         }
         return actualVpnExit(context)
     }
-    /** Fail closed on an unverified or still-French public exit. An actual
-     * network route is necessary; no fabricated IP address or site-wide
-     * browser proxy is installed by the app.
+    /** A third-party country lookup is not a prerequisite for requesting the
+     * selected Pornhub page. The previous mandatory ipwho.is preflight could
+     * fail or misclassify a valid configured route BEFORE the publisher was
+     * ever contacted. Enforce explicitly selected VPN mode here; let the
+     * publisher's own response report real geo/access denial without
+     * fabricating a foreign exit or bypassing website authentication.
      */
     fun requirePublisherExit(context:Context,url:String) {
         if(!needsVerifiedForeignExit(url))return
-        val exit=publisherExit(context,url)
-        check(exit.country!="FR"){
-            "Pornhub's selected route still exits in France (FR). "+
-            "Use a remote per-site proxy or Android VPN with a real "+
-            "non-French exit; the app will verify it before transfer."
-        }
+        requireVpn(context,url)
     }
 
     fun verifyVpnExit(context:Context,url:String):String {
