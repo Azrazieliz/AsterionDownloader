@@ -198,8 +198,18 @@ object AsterionSearchHub {
                     }
                 }
             }
-            val withPreviews=filtered.filter{SearchRanking.validUrl(it.thumbnail)}
-            val withoutPreviews=filtered.filterNot{SearchRanking.validUrl(it.thumbnail)}
+            // Previously all sources lacking pre-indexed thumbnail URLs
+            // were relegated to text rows: the exact selected-page publisher
+            // poster resolver was NEVER invoked. This made video search look
+            // like empty placeholders even for pages publishing real OG art.
+            // Attempt a bounded set of exact-page posters asynchronously;
+            // keep the remainder available as text, without inventing art
+            // or loading hundreds of player pages at once.
+            val indexed=filtered.filter{SearchRanking.validUrl(it.thumbnail)}
+            val missing=filtered.filterNot{SearchRanking.validUrl(it.thumbnail)}
+            val withPreviews=(indexed+missing.take(30))
+                .distinctBy{SearchRanking.canonicalKey(it.url)}
+            val withoutPreviews=missing.drop(30)
             // Result ownership is explicit. Never mix random thumbnails from
             // unrelated websites into a single apparently continuous gallery.
             val grouped=withPreviews.groupBy{
