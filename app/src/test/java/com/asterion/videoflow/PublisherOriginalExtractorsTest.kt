@@ -19,6 +19,8 @@ class PublisherOriginalExtractorsTest {
         "fullporner.com" to "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
 
         "freepornvideos.xxx" to "https://www.freepornvideos.xxx/videos/example",
+        "porneec.com" to "https://porneec.com/sexmex-andrea-castro-my-nympho-wife/",
+        "taiav.com" to "https://taiav.com/cn/movie/654424d67b410d2615db16e5",
         "omg.porn" to "https://omg.porn/video/example",
         "hentaibros.net" to "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
         "onlyhentaistuff.com" to "https://onlyhentaistuff.com/video/example",
