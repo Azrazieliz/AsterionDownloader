@@ -157,7 +157,10 @@ internal object ApprovedCosplayActions {
         if(!AppPower.enabled(a))return "Resume downloads first"
         val site=approved(sourceAddress)?:error("Unknown approved Cosplay source")
         require(SourceIndexParser.safe(tile.url) &&
-            SourceIndexParser.sameSite(site.url,tile.url)){
+            SiteControls.key(site.url)==SiteControls.key(tile.url)){
+            // BuonDua .com catalog cards and .net original albums belong to
+            // the SAME native provider; raw-host matching rejected valid
+            // Kyora selected albums before they ever reached GalleryFlow.
             "Gallery selection is not a first-party gallery URL"
         }
         val uri=URI(tile.url)
