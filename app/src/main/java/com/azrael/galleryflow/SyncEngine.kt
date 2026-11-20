@@ -18,6 +18,7 @@ class SyncEngine(private val context: Context) {
 
     fun run(mode: SyncMode, targetEntityId: String? = null,
             targetSiteHost: String? = null,
+            targetSiteSource: String? = null,
             targetGalleryUrl: String? = null,
             targetGalleryTitle: String? = null,
             progress: (String) -> Unit = {}): Stats {
@@ -41,7 +42,7 @@ class SyncEngine(private val context: Context) {
             if(targetGalleryUrl!=null){
                 require(targetEntityId!=null){"Selected gallery must belong to a registered site"}
                 runExactAlbum(db,files,flow,stats,progress,targetEntityId,
-                    targetGalleryUrl,targetGalleryTitle,targetSiteHost)
+                    targetGalleryUrl,targetGalleryTitle,targetSiteHost,targetSiteSource)
             }else {
                 // Legacy manual site:all requests without their owning host
                 // must never fan out across every native gallery provider.
@@ -49,8 +50,10 @@ class SyncEngine(private val context: Context) {
                     "Manual site check needs its provider identity; select CHECK NEW on that site"
                 }
                 when (mode) {
-                SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
-                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
+                SyncMode.LIVE -> runLive(db, files, flow, stats, progress,
+                    targetEntityId,targetSiteHost,targetSiteSource)
+                SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress,
+                    targetEntityId,targetSiteHost,targetSiteSource)
                 }
             }
             while (!SyncControl.isStopping() && SyncControl.takePendingLive()) {
@@ -87,9 +90,10 @@ class SyncEngine(private val context: Context) {
     private fun runExactAlbum(db:GalleryDb, files:MediaStoreFiles,
                               flow:FlowLinkEmitter,stats:Stats,
                               progress:(String)->Unit,entityId:String,
-                              rawUrl:String,title:String?,siteHost:String?){
+                              rawUrl:String,title:String?,siteHost:String?,
+                              siteSource:String?){
         val entity=KyoraSelectedGalleryIdentity.parent(db.listEntities(),
-            entityId,rawUrl,siteHost) ?:throw AdapterException(
+            entityId,rawUrl,siteHost,siteSource) ?:throw AdapterException(
                 "Selected album's exact parent provider is not registered")
         // Preserve Kyora's original native stable IDs. The unified
         // selection path formerly synthesized a generic hash for every
@@ -121,16 +125,18 @@ class SyncEngine(private val context: Context) {
         stats: Stats,
         progress: (String) -> Unit,
         targetEntityId: String? = null,
-        targetSiteHost: String? = null
+        targetSiteHost: String? = null,
+        targetSiteSource: String? = null
     ) {
-        val targeted=targetEntityId!=null || targetSiteHost!=null
+        val targeted=targetEntityId!=null || targetSiteHost!=null || targetSiteSource!=null
         val entities = db.listEntities().filter {
             it.selected &&
                 (targeted || (it.liveEnabled &&
                     com.azrael.pixivdumpsync.SiteControls.sync(context,
                         it.canonicalUrl,it.liveEnabled))) &&
                 (targetEntityId == null || it.entityId == targetEntityId) &&
-                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost) &&
+                (targetSiteSource==null || it.source.wireName==targetSiteSource)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
@@ -206,18 +212,21 @@ class SyncEngine(private val context: Context) {
         stats: Stats,
         progress: (String) -> Unit,
         targetEntityId: String? = null,
-        targetSiteHost: String? = null
+        targetSiteHost: String? = null,
+        targetSiteSource: String? = null
     ) {
         // A user-initiated exact gallery or site BACKFILL is an explicit
         // command, independent of the provider's automatic-history switch.
         // The switch still controls untargeted scheduled background passes.
-        val targeted = targetEntityId != null || targetSiteHost != null
+        val targeted = targetEntityId != null || targetSiteHost != null ||
+            targetSiteSource != null
         val entities = db.listEntities().filter {
             it.selected &&
                 (targeted || com.azrael.pixivdumpsync.SiteControls.backfill(
                     context,it.canonicalUrl,it.selected)) &&
                 (targetEntityId == null || it.entityId == targetEntityId) &&
-                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost)
+                (targetSiteHost==null || com.azrael.pixivdumpsync.SiteControls.key(it.canonicalUrl)==targetSiteHost) &&
+                (targetSiteSource==null || it.source.wireName==targetSiteSource)
         }
         stats.entities = maxOf(stats.entities, entities.size)
         for ((entityIndex, entity) in entities.withIndex()) {
