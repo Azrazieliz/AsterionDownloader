@@ -49,13 +49,7 @@ internal object VideoSiteProfiles {
         Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
         // MP4Hentai actually publishes WordPress /YYYY/MM/post-slug/
         // pages; the old route only matched /video/... and missed everything.
-        // Real OnlyHentai KVS articles use /videos/<numeric-id>/<title>/.
-        // Previously only one segment after /videos/ was admitted, so
-        // selected publisher originals were rejected before yt-dlp could
-        // inspect the genuine kt_player flashvars and encoded /get_file URL.
-        // Preserve historic single-segment selected-page routes, never
-        // admit /videos/ as an original or a playlist/category page.
-        Route("onlyhentaistuff.com",Regex("""(?i)^/(?:videos/[0-9]{1,12}/[a-z0-9][a-z0-9_-]{2,240}/?|(?:video|watch)/[a-z0-9][a-z0-9_-]{2,240}/?|videos/[a-z][a-z0-9_-]{2,240}/?)$""")),
+        Route("onlyhentaistuff.com",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         // Actual 3DHentai video pages use a single top-level title slug.
         Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
