@@ -548,7 +548,8 @@ internal object SourceIndexParser {
         // WordPress headlines often use a separate sibling image anchor.
         // Restrict fallback to the same media article/post; never a sidebar.
         val image=link.selectFirst("img")
-            ?:link.closest("article,.post,.gallery-item,.media-item,.video-card")
+            ?:link.closest("article,.post,.gallery-item,.media-item,.video-card,"+
+                    ".movie-card,.hots-card,.uk-card-media-top")
                 ?.selectFirst("img")
             ?:return null
         return SitePreviewImage.best(image)
