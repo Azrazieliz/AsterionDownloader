@@ -12,6 +12,21 @@ internal object PerformerFollowPolicy {
         "model","models","girl","girls","woman","women","porn","video",
         "videos","unknown","test","sample","artist","performer"
     )
+    /** Unverified name watches require a distinctive multi-word identity.
+     * A random, single long token is not evidence of a real human performer.
+     * Single-word stage names can still be VERIFIED from a real first-party
+     * profile; they cannot create false name-only video associations. */
+    fun canTrackUnverified(raw:String):Boolean {
+        if(!permittedName(raw))return false
+        val terms=Normalizer.normalize(raw.trim(),Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter{it.isNotBlank()}
+        return terms.size in 2..6 && terms.distinct().size==terms.size &&
+            terms.all{word->word.length>=2 &&
+                word.any{it.isLetter()} && word !in generic}
+    }
+
     fun permittedName(raw:String):Boolean {
         val name=Normalizer.normalize(raw.trim(),Normalizer.Form.NFKC)
             .replace(Regex("\\s+")," ")
