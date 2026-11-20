@@ -192,20 +192,29 @@ internal object ApprovedCosplayActions {
             // full-image routing and the original download ledger.
             val nativeSource=com.azrael.galleryflow.AdapterRegistry.forUrl(
                 site.url,a.applicationContext).source
-            val existing=db.listEntities().filter{
-                it.kind=="site" &&
-                    SiteControls.key(it.canonicalUrl)==site.host
-            }.sortedByDescending{it.source==nativeSource}.firstOrNull()
-            // Reuse any existing root before allocating a new one. A user
-            // with historical generic receipts must not get a duplicate
-            // 4KHD subscription or lose its existing gallery identifiers.
-            val sourceId=existing?.source?:nativeSource
+            // A generic legacy site record is NOT interchangeable with
+            // Kyora's original native site adapter. Selecting it sent
+            // 4KHD/CosplayTele/BuonDua into the wrong parser, which yielded
+            // previews, HTTP 403 or no actual download. Keep legacy rows
+            // intact, but target the matching native source/root only.
+            val host=SiteControls.key(site.url)
+            val existing=db.listEntities().firstOrNull{
+                it.kind=="site" && it.source==nativeSource &&
+                    SiteControls.key(it.canonicalUrl)==host
+            }
             val root=existing?.let{record->
-                SourceEntity(record.source,record.entityId,record.displayName,
-                    record.canonicalUrl,"site")
-            }?:SourceEntity(sourceId,"site:"+site.host,site.name,
-                site.url,"site")
-            if(existing==null) {
+                SourceEntity(record.source,record.entityId,
+                    record.displayName,record.canonicalUrl,"site")
+            } ?: run {
+                val adapter=com.azrael.galleryflow.AdapterRegistry.forSource(
+                    nativeSource,a.applicationContext)
+                adapter.defaultEntities().firstOrNull{entity->
+                    entity.kind=="site" &&
+                        SiteControls.key(entity.canonicalUrl)==host
+                } ?: SourceEntity(nativeSource,
+                    "site:"+host,site.name,site.url,"site")
+            }
+            if(existing==null){
                 db.addEntity(root)
                 db.setLiveEnabled(root.source,root.stableId,
                     SiteControls.sync(a,site.url,false))
