@@ -50,6 +50,8 @@ object AsterionCosplayGallery {
             .distinctBy{SearchRanking.canonicalKey(it.url)}.toList()
         val bySite=indexed.groupBy{SiteControls.key(it.source)}
         val entities=GalleryDb(a).use{it.listEntities()}
+        val queuedGalleryJobs=com.azrael.galleryflow.GalleryRequestLedger
+            .pending(a)
         val snapshots=approved.associate{
             SiteControls.key(it.url) to KyoraCreatorPreviews.cached(a,it.url)
         }
@@ -247,11 +249,21 @@ object AsterionCosplayGallery {
                 visual.isNotEmpty()->"Public media covers · originals not verified"
                 else->"Not checked"
             }
+            val verifiedGalleries=galleries.count{it.state=="complete"}
+            val queuedCount=queuedGalleryJobs.count{it.siteHost==host}
             card.addView(ui.text(a,
-                visual.size.toString()+" gallery cover links · "+checked,
+                visual.size.toString()+" gallery covers · "+
+                    verifiedGalleries+" recently saved galleries"+
+                    (if(queuedCount>0)
+                        " · "+queuedCount+" pending Kyora requests (not downloaded)"
+                    else "")+" · "+checked,
                 12f,ui.secondary),ui.lp(a,5))
-            val issue=(source?.error?:previewStatus?.error)?.takeUnless{reason->
-                visual.isNotEmpty() &&
+            val nativeFailure=galleryEntities.firstOrNull{
+                !it.lastError.isNullOrBlank()
+            }?.lastError
+            val issue=(nativeFailure?:source?.error?:previewStatus?.error)
+                ?.takeUnless{reason->
+                nativeFailure==null && visual.isNotEmpty() &&
                     (reason.contains("No supported public media",true) ||
                      reason.contains("No gallery thumbnails",true))
             }
