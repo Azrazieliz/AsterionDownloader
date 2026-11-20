@@ -111,6 +111,15 @@ object NameCrawler {
             return false
         }
         if(!PerformerIdentity.isProfileUrl(watch.name,watch.source)){
+            // Do not silently upgrade gibberish or generic one-word searches
+            // into a performer watch. Real stage names remain supported once
+            // their first-party profile identity is actually verified.
+            if(!PerformerFollowPolicy.canTrackUnverified(watch.name)){
+                NameWatchDb(context).use{it.setResult(id,
+                    "No verified performer profile. Name-only tracking requires a distinctive multi-word name.")}
+                onStatus("Unverified name: "+watch.name)
+                return false
+            }
             // Explicitly user-selected names are valid watch queries, not proof
             // that any particular provider page belongs to that performer.
             // Search only real indexed first-party video pages. No automated
@@ -154,14 +163,25 @@ object NameCrawler {
         BackfillAgents.submit(context,"performer:"+id){
             NameWatchDb(context).use{watches->
                 try{
+                    // A URL shaped like /model/name is not proof that the
+                    // page still belongs to this person. Revalidate the live
+                    // heading/canonical identity before scanning its videos.
+                    val personDocument=com.asterion.videoflow.WebDiscovery
+                        .selectedDocument(watch.source,context)
+                    check(PerformerIdentity.matchesEvidence(
+                        watch.name,watch.source,personDocument)){
+                        "Performer identity could not be confirmed on the first-party profile"
+                    }
+                    val ownedLinks=PerformerMediaAttribution.attributableUrls(
+                        watch.name,watch.source,personDocument)
                     val profile=com.asterion.videoflow.WebDiscovery.page(
                         watch.source,watch.source,context)
                     val hits=profile.hits.asSequence()
                         .filter{com.asterion.videoflow.VideoSiteProfiles
                             .isVideoPage(it.url)}
-                        // A profile can display recommendations. We only admit
-                        // titles that also explicitly name the followed actor.
-                        .filter{SearchExactness.matches(watch.name,it.title)}
+                        // A title match is not creator attribution. Only the
+                        // verified profile's own media grid can auto-queue.
+                        .filter{SearchRanking.canonicalKey(it.url) in ownedLinks}
                         .distinctBy{SearchRanking.canonicalKey(it.url)}
                         .map{RankedHit(it.title,it.url,
                             "Verified profile: "+watch.source,score=350,
