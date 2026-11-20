@@ -29,7 +29,6 @@ internal object PublisherOriginalExtractors {
         // LiveCamRips' exact /video/<id> publisher page embeds the recording
         // in one iframe#iframe-video. Other iframes/ads are not originals.
         Site("livecamrips.to","iframe#iframe-video[src]",allowPlayerIframe=true),
-        Site("onscreens.me","#player video[src],main video[src]",allowPlayerIframe=true),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
@@ -42,6 +41,28 @@ internal object PublisherOriginalExtractors {
             "article .video-player video[src],article .video-player source[src],"+
             "video[src][data-duration],video source[src][data-duration]",
             requireDuration=true),
+        // Owner-requested first-party selected-player providers. Reuse
+        // existing original-duration / same-article checks and native
+        // media byte validation. No alternate guessed hosters or preview
+        // endpoints, and NO changes to Jav Guru or Pornhub extractors.
+        Site("pimpbunny.com",
+            "main .video-player video[src],main .video-player source[src],"+
+            "main #player video[src],main #player source[src],"+
+            "article video[src],meta[itemprop=contentUrl]"),
+        Site("xchina.co",
+            "main .video-player video[src],main .video-player source[src],"+
+            "article video[src],meta[itemprop=contentUrl]"),
+        Site("bubblecum.lol",
+            "main .video-player video[src],main .video-player source[src],"+
+            "main #player video[src],main #player source[src],"+
+            "article video[src],meta[itemprop=contentUrl]"),
+        Site("pornavhd.com",
+            "article .video-player video[src],article .video-player source[src],"+
+            "article #player video[src],article #player source[src],"+
+            "meta[itemprop=contentUrl]"),
+        Site("avple.tv",
+            "main #player video[src],main #player source[src],"+
+            "article video[src],meta[itemprop=contentUrl]"),
         Site("taiav.com","main .video-player video[src],main .video-player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
             "video[src][data-duration],video source[src][data-duration]",
@@ -52,7 +73,10 @@ internal object PublisherOriginalExtractors {
         Site("uncensoredhentai.xxx","iframe[src*='nhplayer.com/v/']",allowPlayerIframe=true),
         Site("3dhentaix.com","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
         Site("rule34video.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
-        Site("camstreams.tv","#player video[src],.video-player source[src],meta[itemprop=contentUrl]")
+        Site("camstreams.tv",
+            "main #player video[src],main #player source[src],"+
+            "main .video-player video[src],main .video-player source[src],"+
+            "article video[src],meta[itemprop=contentUrl]")
     ).associateBy { it.host }
 
     val coveredHosts:Set<String> get()=sites.keys
@@ -222,15 +246,6 @@ internal object PublisherOriginalExtractors {
         // static selected HTML is empty, inspect ONLY publisher-selected
         // rendered iframe candidates. Generic watch-page Python extraction
         // then cannot mask a missing selected player with "Unsupported URL".
-        if(host=="onscreens.me"){
-            // Open the video player on the exact selected recording. Nitroflare
-            // and the site's recommendations are NOT equivalent to a free
-            // selected playable source and must not be blindly scraped.
-            val selectedPlayer=OnScreensOriginalSource.published(
-                selected,page.outerHtml())
-            return selectedPlayer?.let{listOf(Candidate(it,selected,host))}
-                .orEmpty()
-        }
         if(host=="archivebate.com" &&
             ArchivebateSelectedMedia.isSelectedArticle(selected)){
             val static=fromHtml(selected,page.outerHtml())
