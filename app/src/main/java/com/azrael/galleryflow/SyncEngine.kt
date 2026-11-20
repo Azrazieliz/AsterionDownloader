@@ -23,7 +23,15 @@ class SyncEngine(private val context: Context) {
             progress: (String) -> Unit = {}): Stats {
         com.azrael.pixivdumpsync.BackfillPerformance.backgroundWorker()
         val stats = Stats()
-        if (!SyncControl.tryStart(mode, queueLiveIfBusy = true)) return stats
+        if (!SyncControl.tryStart(mode, queueLiveIfBusy = false)) {
+            // A targeted Kyora request must not be marked "completed" when
+            // another sync owns the global lock. Its durable request ledger
+            // will retry it after the active run. Never turn a busy worker
+            // into an invisible zero-gallery success.
+            stats.errors++
+            progress("Gallery engine busy; targeted request retained for retry")
+            return stats
+        }
         val db = GalleryDb(context)
         val files = MediaStoreFiles(context, http)
         val flow = FlowLinkEmitter(context, db)
