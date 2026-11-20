@@ -146,6 +146,22 @@ class VideoSiteProfilesTest {
         assertTrue(PublisherOriginalExtractors.owns(
             "https://taiav.com/cn/movie/654424d67b410d2615db16e5"))
     }
+    @Test fun newFullVideoProvidersRejectUnverifiedPreviewAndAds(){
+        val porneec="https://porneec.com/sexmex-andrea-castro-my-nympho-wife/"
+        val taiav="https://taiav.com/cn/movie/654424d67b410d2615db16e5"
+        val previewOnly="""<main><div class="video-player">
+            <video src="https://video.example.com/trailer.mp4" data-duration="28"></video>
+            </div></main>"""
+        assertTrue(PublisherOriginalExtractors.fromHtml(porneec,previewOnly).isEmpty())
+        assertTrue(PublisherOriginalExtractors.fromHtml(taiav,previewOnly).isEmpty())
+        val confirmedOriginal="""<main><div class="video-player">
+            <video src="https://video.example.com/selected-original.mp4"
+                data-duration="3600"></video></div></main>"""
+        assertEquals(1,PublisherOriginalExtractors
+            .fromHtml(porneec,confirmedOriginal).size)
+        assertEquals(1,PublisherOriginalExtractors
+            .fromHtml(taiav,confirmedOriginal).size)
+    }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.eporner.com/"
         val doc=Jsoup.parse("""<nav class="pagination">
