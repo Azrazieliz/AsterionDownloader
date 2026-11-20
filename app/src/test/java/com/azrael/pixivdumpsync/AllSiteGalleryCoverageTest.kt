@@ -13,7 +13,7 @@ class AllSiteGalleryCoverageTest {
         assertFalse(sites.any{it.host in setOf("pornhits.com","omg.porn","omg.xxx",
             "porntrex.com","xnxx.com","pornone.com","sunporno.com",
             "xvideos.com","peekvids.com","tnaflix.com","helloporn.com")})
-        assertEquals(12,sites.map{SiteControls.key(it.url)}.distinct().size)
+        assertEquals(14,sites.map{SiteControls.key(it.url)}.distinct().size)
     }
 
     @Test fun publicListingRecognizesRealNestedMediaCovers() {
