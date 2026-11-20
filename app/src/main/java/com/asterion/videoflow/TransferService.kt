@@ -1546,6 +1546,32 @@ object VideoEngine {
                 "staged bytes preserved without publishing as an original")
         }
         val name=file.name.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"),"_").take(210)
+        // Files can be playable, checksum-valid and nonetheless be a
+        // 20-second trailer from a selected feed. This LAST gate runs after
+        // real container duration extraction and BEFORE publishing a Saved
+        // receipt. Keep owner-selected short works working; auto sync must
+        // not mark an unverified excerpt as a full original.
+        if(!audioOnly){
+            val reference=FullSceneRuntimeDb(context).use{
+                it.expected(item.title)
+            }
+            val known=listOfNotNull(reference,expectedDuration)
+                .filter{it>0L}.maxOrNull()
+            val fullness=FullLengthVideoPolicy.completedOriginalVerdict(
+                actual,known,userRequested)
+            if(fullness.verdict!=FullLengthVideoPolicy.Verdict.ACCEPT){
+                VideoTransferJournal.record(context,item.id,
+                    "short_original_held",fullness.reason)
+                // Reject just this assembled auto-selected short clip.
+                // It has not been published as an original; retain any
+                // independently staged resumable fragments/metadata.
+                if(!userRequested && actual>0L &&
+                    actual<FullLengthVideoPolicy
+                        .MIN_UNCORROBORATED_AUTO_SECONDS*1000L)
+                    runCatching{file.delete()}
+                throw FullVersionUnavailable(fullness.reason)
+            }
+        }
         val values=ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME,name)
             put(MediaStore.Downloads.MIME_TYPE,when(file.extension.lowercase()){
