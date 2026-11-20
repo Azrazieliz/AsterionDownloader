@@ -93,7 +93,7 @@ object NameCrawler {
     private fun liveCandidates(context:Context,name:String):List<RankedHit> {
         val result=KeywordSources.searchDetailed(context,name,VideoSearchArea.PORN)
         return result.hits.asSequence()
-            .filter{SearchExactness.matches(name,it.title) &&
+            .filter{SearchExactness.matchesPhrase(name,it.title) &&
                 com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
                 !ProviderRetirement.isRetired(it.url)}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
@@ -115,7 +115,8 @@ object NameCrawler {
             // Do not silently upgrade gibberish or generic one-word searches
             // into a performer watch. Real stage names remain supported once
             // their first-party profile identity is actually verified.
-            if(!PerformerFollowPolicy.canTrackUnverified(watch.name)){
+            if(!PerformerFollowPolicy.canTrackUnverified(watch.name) &&
+                !PublicCreatorEvidence.isPublisherPage(watch.source)){
                 NameWatchDb(context).use{it.setResult(id,
                     "No verified performer profile. Name-only tracking requires a distinctive multi-word name.")}
                 onStatus("Unverified name: "+watch.name)
@@ -135,7 +136,8 @@ object NameCrawler {
                                 com.asterion.videoflow.VideoSiteProfiles
                                     .isVideoPage(it.url) &&
                                 !ProviderRetirement.isRetired(it.url) &&
-                                SourceIndexParser.sameSite(it.source,it.url) }
+                                SourceIndexParser.sameSite(it.source,it.url) &&
+                                !FullLengthVideoPolicy.isExplicitPreview(it.title,it.url) }
                             .map{RankedHit(it.title,it.url,
                                 "Name match · "+it.source,score=110,
                                 thumbnail=it.preview)}.toList()
