@@ -131,7 +131,7 @@ object NameCrawler {
                         val indexed=SourceIndex.items(context,"ADULT",5000)
                             .asSequence()
                             .filter { it.kind=="video" &&
-                                SearchExactness.matches(watch.name,it.title) &&
+                                SearchExactness.matchesPhrase(watch.name,it.title) &&
                                 com.asterion.videoflow.VideoSiteProfiles
                                     .isVideoPage(it.url) &&
                                 !ProviderRetirement.isRetired(it.url) &&
