@@ -171,19 +171,15 @@ class ReportedSiteSpecificOriginalsTest {
         assertEquals(selected,SiteSpecificOriginalSources.playerLink(
             Jsoup.parse(html,page),"fullporner.com"))
     }
-    @Test fun javideoFirstPartyHtmlIsNotAnOriginalForGenericPython(){
+    @Test fun javideoPreviouslyWorkingSelectedIframeFallbackIsRestored(){
         val page="https://javideo.net/en/fc2ppv-4994603"
         val firstParty="https://play.javideo.net/embed/selectedplayer123"
         val supported="https://streamtape.com/e/AaBbCcDdEe12345"
-        // In-place browser evidence: first-party HTML/API HTTP 200, but no
-        // media src or duration after the selected real Play gesture.
-        // Never send that HTML page to generic yt-dlp as an original.
+        // Preserve the earlier selected first-party fallback while continuing
+        // to reject ads. This is a routing test, not completed file proof.
         assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(page,firstParty))
-        assertFalse(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
-            page,firstParty))
-        assertTrue(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
-            page,supported))
-        assertFalse(SiteSpecificOriginalSources.javideoSupportedExtractorFrame(
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(page,supported))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
             page,"https://ads.example/embed/selectedplayer123"))
     }
 
