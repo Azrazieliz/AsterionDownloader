@@ -342,33 +342,18 @@ object AsterionUnifiedFollowing {
                 a.runOnUiThread{
                     if(a.isFinishing || a.isDestroyed)return@runOnUiThread
                     if(proof==null){
-                        // A failed profile lookup is NOT evidence that this
-                        // name belongs to a real performer. The previous
-                        // "VERIFY & FOLLOW" button silently accepted random
-                        // strings and triggered unrelated name-match crawls.
+                        // Do not offer an "unverified performer" follow as
+                        // a substitute for the failed identity check. That
+                        // previously let gibberish and misleading video title
+                        // matches appear exactly like real performers.
                         android.app.AlertDialog.Builder(a)
-                            .setTitle("Performer not verified")
-                            .setMessage("No first-party performer profile "+
-                                "with the exact name \""+name.take(80)+
-                                "\" was confirmed. This name has NOT been "+
-                                "followed. You can separately track literal "+
-                                "name matches for manual review; those are "+
-                                "not verified performer videos.")
-                            .setNegativeButton("Do not follow",null)
-                            .setPositiveButton("Track unverified name"){_,_->
-                                val id=NameWatchDb(a).use{db->
-                                    db.add(name)
-                                    db.list().firstOrNull{
-                                        it.name.equals(name,true)
-                                    }?.id
-                                }
-                                if(id!=null){
-                                    CreatorNames.remember(a,name,"PERFORMERS",true)
-                                    NameCrawler.scanCreator(a.applicationContext,id)
-                                    notice(a,"Name-only watch · not a verified performer")
-                                    refresh()
-                                }else notice(a,"Could not save name watch")
-                            }.show()
+                            .setTitle("No verified performer profile")
+                            .setMessage("A real first-party profile for \""+
+                                name.take(80)+"\" was not confirmed by "+
+                                "the connected publishers or web indexes. "+
+                                "Nothing was followed. Video title matches "+
+                                "alone cannot establish performer identity.")
+                            .setPositiveButton("CLOSE",null).show()
                     }else{
                         val id=NameWatchDb(a).use{
                             it.addVerified(proof.displayName,proof.profileUrl)
@@ -388,23 +373,23 @@ object AsterionUnifiedFollowing {
             val full=prefs.getBoolean("expanded:"+creator.id,false)
             val pageIndex=prefs.getInt("matches_page:"+creator.id,0).coerceAtLeast(0)
             val perPage=24
-            val totalMatches=SearchResultsDb(a).use{
-                it.countForQuery(creator.name)
-            }
             val verified=PerformerFollowPolicy.permittedName(creator.name) &&
                 PerformerIdentity.isProfileUrl(creator.name,creator.source)
-            // Old name-only follows are retained for recovery, but unrelated
-            // historic keyword results never pass as verified performer media.
-            val hits=if(PerformerFollowPolicy.permittedName(creator.name))
-                SearchResultsDb(a).use{
-                    it.listForQuery(creator.name,perPage,if(full)pageIndex*perPage else 0)
-                }.filter{
-                    SearchExactness.matches(creator.name,it.title) &&
-                        !IndexedMediaQuality.navigationTitle(it.title) &&
-                        com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
-                        (verified || it.source.startsWith("Name match · "))
-                }
-                else emptyList()
+            // A title containing a person's name never proves that the
+            // thumbnail actually depicts that person. The old UI treated
+            // all title-only hits as a performer gallery, even when they
+            // came from unrelated sources. Retain those indexed records
+            // but do not present or auto-download them as actor content.
+            val hits=if(verified)SearchResultsDb(a).use{
+                it.listForQuery(creator.name,perPage,
+                    if(full)pageIndex*perPage else 0)
+            }.filter{
+                SearchExactness.matches(creator.name,it.title) &&
+                    !IndexedMediaQuality.navigationTitle(it.title) &&
+                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
+                    it.source=="Verified profile: "+creator.source
+            } else emptyList()
+            val totalMatches=if(verified)hits.size else 0
             val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
                 SearchRanking.validUrl(it.thumbnail)}
             val head=ui.row(a)
@@ -482,7 +467,7 @@ object AsterionUnifiedFollowing {
             if(hits.isEmpty()){
                 put(a,c,ui.text(a,if(verified)
                     "Verified profile · no attributable original videos indexed yet"
-                    else "Name watch · no candidate videos indexed yet; no automatic downloads",
+                    else "No verified profile · old title matches are not attributed to this performer",
                     12f,ui.secondary),6)
             }
             if(!creator.lastError.isNullOrBlank())
@@ -506,9 +491,8 @@ object AsterionUnifiedFollowing {
                         a.runOnUiThread{
                             if(!a.isFinishing && !a.isDestroyed){
                                 if(proof==null){
-                                    NameWatchDb(a).use{it.setEnabled(creator.id,true)}
-                                    NameCrawler.scanCreator(a.applicationContext,creator.id)
-                                    notice(a,"Checking indexed name matches; downloads require review")
+                                    notice(a,"No verified performer profile found; "+
+                                        "unattributed title matches are withheld")
                                 }else{
                                     val id=NameWatchDb(a).use{
                                         it.addVerified(creator.name,proof.profileUrl)
