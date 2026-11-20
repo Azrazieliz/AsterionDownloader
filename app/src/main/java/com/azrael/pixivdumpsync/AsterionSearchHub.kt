@@ -257,6 +257,21 @@ object AsterionSearchHub {
                     setPadding(ui.px(a,10),ui.px(a,10),
                         ui.px(a,10),ui.px(a,10))
                 }
+                // A search index lacking a poster is not proof the
+                // SELECTED publisher page lacks one. Recover only that
+                // page's genuine og:image/video[poster] asynchronously,
+                // without mixing images from another search hit.
+                if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(hit.url)){
+                    val poster=ImageView(a).apply{
+                        scaleType=ImageView.ScaleType.CENTER_CROP
+                        contentDescription="Publisher poster for "+hit.title
+                    }
+                    row.addView(poster,LinearLayout.LayoutParams(
+                        ui.px(a,82),ui.px(a,82)).apply{
+                            rightMargin=ui.px(a,8)
+                        })
+                    VideoSearchPreviews.display(a,poster,null,hit.url)
+                }
                 val content=LinearLayout(a).apply{
                     orientation=LinearLayout.VERTICAL
                 }
@@ -266,7 +281,8 @@ object AsterionSearchHub {
                         ellipsize=android.text.TextUtils.TruncateAt.END
                     })
                 content.addView(ui.text(a,
-                    hit.source.removePrefix("Aloha · ").take(45)+" · Preview unavailable",
+                    hit.source.removePrefix("Aloha · ").take(45)+
+                        " · Publisher poster checked only on selected page",
                     11f,ui.secondary),ui.lp(a,3))
                 row.addView(content,LinearLayout.LayoutParams(0,-2,1f))
                 row.addView(ui.action(a,"DOWNLOAD",false){saveHit(hit)},
