@@ -6,21 +6,22 @@ import org.junit.Test
 class AlohaSourcesTest {
     @Test fun userApprovedBookmarksOnly() {
         val sites=AlohaSources.all
-        assertEquals(37,sites.size)
-        assertEquals(37,sites.map{it.url}.toSet().size)
+        assertEquals(34,sites.size)
+        assertEquals(34,sites.map{it.url}.toSet().size)
         assertTrue(sites.all{it.url.startsWith("https://")})
         assertTrue(sites.none{it.url.contains("slot-id=")})
         assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
             it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK})
         assertEquals(6,AlohaSources.by(AlohaArea.COSPLAY).size)
-        assertEquals(13,AlohaSources.by(AlohaArea.ADULT).size)
+        assertEquals(12,AlohaSources.by(AlohaArea.ADULT).size)
         assertTrue(AlohaSources.by(AlohaArea.VIDEOS).isEmpty())
         assertEquals(3,AlohaSources.by(AlohaArea.TORRENTS).size)
         assertEquals(setOf("onejav.com","sukebei.nyaa.si","xxxclub.to"),
             AlohaSources.by(AlohaArea.TORRENTS).map{it.host}.toSet())
         assertTrue(sites.none{it.host in setOf("cums.net","camstreams.tv")})
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{it.host=="archivebate.com"})
-        assertEquals(7,AlohaSources.by(AlohaArea.HENTAI).size)
+        assertTrue(sites.none{it.host in setOf("mp4hentai.com","hentaihaven.xxx","helloporn.com")})
+        assertEquals(5,AlohaSources.by(AlohaArea.HENTAI).size)
         assertFalse(sites.any{it.host in setOf("xvideos.com","peekvids.com","tnaflix.com")})
         assertEquals(3,AlohaSources.by(AlohaArea.COMICS).size)
         assertEquals(4,AlohaSources.by(AlohaArea.BOOKS).size)
@@ -29,8 +30,8 @@ class AlohaSourcesTest {
     }
     @Test fun onlyMissingSourcesAreShownInAlohaAdditions() {
         val newSites=AlohaSources.additions
-        assertEquals(27,newSites.size)
-        assertEquals(27,newSites.map{it.host}.toSet().size)
+        assertEquals(25,newSites.size)
+        assertEquals(25,newSites.map{it.host}.toSet().size)
         assertTrue(newSites.any{it.host=="fullporner.com"})
         assertTrue(newSites.any{it.host=="notfans.com"})
         assertTrue(newSites.any{it.host=="archivebate.com"})
