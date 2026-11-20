@@ -439,6 +439,24 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         }
     }
 
+    /**
+     * Acknowledges only an unsaved, terminal Gallery failure. Never delete
+     * media, pages, downloads or staged bytes, and never touch pending or
+     * active work. The exact source/media identity is mandatory.
+     */
+    fun acknowledgeTerminalMediaFailure(source:String,mediaId:String):Boolean {
+        if(source.isBlank() || mediaId.isBlank())return false
+        val affected=writableDatabase.update("media",ContentValues().apply{
+            put("state",TransferState.SKIPPED.dbValue)
+            put("updated_at",System.currentTimeMillis())
+        },"source=? AND media_id=? AND "+
+            "state IN ('permanent_error','inaccessible') AND content_uri IS NULL",
+            arrayOf(source,mediaId))
+        if(affected>0)
+            com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
+        return affected>0
+    }
+
     fun media(source: SourceId, mediaId: String): MediaRecord? = queryMedia(
         "source=? AND media_id=?", arrayOf(source.wireName, mediaId), "1"
     ).firstOrNull()
