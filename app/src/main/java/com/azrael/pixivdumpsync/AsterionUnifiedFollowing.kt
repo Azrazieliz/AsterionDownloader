@@ -214,7 +214,10 @@ object AsterionUnifiedFollowing {
             val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5,entity.source)}
             val c=ui.card(a)
             val first=gallery.firstOrNull()
-            val thumbnail=first?.firstUri?:first?.firstUrl
+            // Unsaved original CDN URLs often reject thumbnail HTTP requests.
+            // Use verified local receipts for native thumbnails; otherwise
+            // show the site's real listing covers, not failed full-file URLs.
+            val thumbnail=first?.firstUri
             val cached=KyoraCreatorPreviews.cached(a,entity.canonicalUrl)
             val cover=thumbnail?:cached?.entries?.firstOrNull()?.cover
             val isProvider=entity.kind=="site"
@@ -230,7 +233,7 @@ object AsterionUnifiedFollowing {
                 cover!=null && !cover.startsWith("content:"),entity.canonicalUrl)
             val holder=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
             val nativePreviews=gallery.mapNotNull{item->
-                (item.firstUri?:item.firstUrl)?.let{url->
+                item.firstUri?.let{url->
                     url to {
                         a.startActivity(Intent(a,GalleryDetailActivity::class.java).apply{
                             putExtra(GalleryDetailActivity.EXTRA_GALLERY_ID,item.galleryId)
@@ -249,12 +252,29 @@ object AsterionUnifiedFollowing {
                         // Ask the existing native parser to resolve this gallery,
                         // instead of downloading an HTML page as an image.
                         if(!AppPower.enabled(a))notice(a,"Resume first")
-                        else runCatching{
+                        else if(isProvider){
+                            // Tapping a cover means THIS album, never a
+                            // full-site backlog. That previously left 350
+                            // unrelated items "queued" with zero selected files.
+                            val outcome=runCatching{
+                                ApprovedCosplayActions.selectedGallery(
+                                    a,entity.canonicalUrl,
+                                    KurohaMediaPreview.Tile(
+                                        item.url,item.title,item.cover,
+                                        shortName,entity.canonicalUrl))
+                            }.getOrElse{it.message?:"Selected gallery unavailable"}
+                            notice(a,outcome)
+                        }else runCatching{
                             a.startForegroundService(Intent(a,GalleryService::class.java)
                                 .setAction(GalleryService.ACTION_START)
                                 .putExtra(GalleryService.EXTRA_MODE,SyncMode.BACKFILL.name)
-                                .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId))
-                            notice(a,"Indexing original gallery · "+item.title.take(50))
+                                .putExtra(GalleryService.EXTRA_SITE_ID,entity.entityId)
+                                .putExtra(GalleryService.EXTRA_SITE_SOURCE,
+                                    entity.source.wireName)
+                                .putExtra(GalleryService.EXTRA_ALBUM_URL,item.url)
+                                .putExtra(GalleryService.EXTRA_ALBUM_TITLE,item.title))
+                            notice(a,"Selected original gallery queued · "+
+                                item.title.take(50))
                         }.onFailure{notice(a,it.message?:"Gallery parser unavailable")}
                         Unit
                     }
