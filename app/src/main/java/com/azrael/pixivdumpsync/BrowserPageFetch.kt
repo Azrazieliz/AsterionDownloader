@@ -34,7 +34,13 @@ object BrowserPageFetch {
         "hqpornerxxx.com","helloporn.com","javideo.net","play.javideo.net",
         "porneec.com","taiav.com","livecamrips.to",
         "hentaihaven.xxx","uncensoredhentai.xxx","mp4hentai.com","roshy.tv",
-        "mirrored.to","upfiles.com","upfilesgo.com")
+        "mirrored.to","upfiles.com","upfilesgo.com",
+        // Owner-approved selected first-party video publishers. Their
+        // live watch pages often expose only a JS player shell to HTTP.
+        // Reading the existing authorized WebView DOM never authorizes an
+        // ad iframe, bypasses a site gate or invents a media URL.
+        "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
+        "bubblecum.lol","pornavhd.com","camstreams.tv")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -123,7 +129,9 @@ object BrowserPageFetch {
             "roshy.tv","rule34video.com","porneec.com","taiav.com","pornhub.com",
             "m.pornhub.com","fr.pornhub.com","en.pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
-            "streamtape.site","sbtape.com")
+            "streamtape.site","sbtape.com",
+            "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
+            "bubblecum.lol","pornavhd.com","camstreams.tv")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {
