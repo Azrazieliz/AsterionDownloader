@@ -94,12 +94,13 @@ internal object ApprovedCosplayActions {
      * generic-only PornPics/Celeb.st. A preview/index refresh is NOT a
      * backfill, and a generic legacy row must never replace a native root.
      */
-    private fun galleryRoot(a:Activity,enrolled:IndexedSource):SourceEntity {
+    private fun galleryRoot(context:android.content.Context,
+                            enrolled:IndexedSource):SourceEntity {
         val host=SiteControls.key(enrolled.url)
         albumRoot(host,enrolled.name)?.let{return it}
         val adapter=com.azrael.galleryflow.AdapterRegistry.forUrl(
-            enrolled.url,a.applicationContext)
-        GalleryDb(a).use{db->
+            enrolled.url,context.applicationContext)
+        GalleryDb(context).use{db->
             db.listEntities().firstOrNull{record->
                 record.kind=="site" && record.source==adapter.source &&
                     SiteControls.key(record.canonicalUrl)==host
@@ -112,6 +113,46 @@ internal object ApprovedCosplayActions {
             entity.kind=="site" &&
                 SiteControls.key(entity.canonicalUrl)==host
         }?:adapter.resolveEntity(enrolled.url)
+    }
+
+    /** Native, context-safe Kyora entry point shared by automatic scans
+     * and authenticated browser media. Android DownloadManager must never
+     * handle isolated Cosplay JPEGs: that loses album referers, cookies,
+     * pagination, original validation and resumable receipts.
+     */
+    internal fun enqueueExactOriginal(context:android.content.Context,
+                                      sourceAddress:String,albumAddress:String,
+                                      title:String):Boolean {
+        if(!AppPower.enabled(context))return false
+        val site=approved(sourceAddress)?:return false
+        if(!SiteBackfillProfiles.recognizesGalleryPage(site.url,albumAddress))
+            return false
+        val enrolled=source(context.applicationContext,site.url)
+        val root=galleryRoot(context,enrolled)
+        GalleryDb(context).use{db->
+            db.addEntity(root)
+            db.setSelected(root.source,root.stableId,true)
+            db.setLiveEnabled(root.source,root.stableId,
+                SiteControls.sync(context,site.url,false))
+        }
+        val exact=albumAddress.substringBefore('#')
+        val host=SiteControls.key(site.url)
+        val job=GalleryRequestLedger.Request(SyncMode.BACKFILL,
+            root.stableId,siteHost=host,albumUrl=exact,
+            albumTitle=title.take(160),
+            siteSource=root.source.wireName)
+        GalleryRequestLedger.remember(context,job)
+        context.startForegroundService(Intent(context,
+            SyncForegroundService::class.java)
+            .setAction(SyncForegroundService.ACTION_START)
+            .putExtra(SyncForegroundService.EXTRA_MODE,SyncMode.BACKFILL.name)
+            .putExtra(SyncForegroundService.EXTRA_SITE_ID,root.stableId)
+            .putExtra(SyncForegroundService.EXTRA_SITE_HOST,host)
+            .putExtra(SyncForegroundService.EXTRA_SITE_SOURCE,
+                root.source.wireName)
+            .putExtra(SyncForegroundService.EXTRA_ALBUM_URL,exact)
+            .putExtra(SyncForegroundService.EXTRA_ALBUM_TITLE,job.albumTitle))
+        return true
     }
 
     fun checkNew(a:Activity,address:String):String{
