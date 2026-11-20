@@ -1216,6 +1216,26 @@ object UnifiedDownloadsUi {
     private val liveSamples=java.util.concurrent.ConcurrentHashMap<
         String,DownloadLiveRate.Sample>()
 
+    private fun providerLabel(item:Row):String {
+        if(item.source!="Video")return item.source
+        val host=item.posterPage?.let{url->
+            runCatching{java.net.URI(url).host.orEmpty().lowercase(
+                java.util.Locale.ROOT).removePrefix("www.")}.getOrDefault("")
+        }.orEmpty()
+        return when(host){
+            "jav.guru"->"JAV Guru"
+            "javideo.net"->"JAVideo"
+            "pornhub.com"->"Pornhub"
+            "onscreens.me"->"OnScreens"
+            "livecamrips.to"->"LiveCamRips"
+            "taiav.com"->"TaiAV"
+            "porneec.com"->"Porneec"
+            "archivebate.com"->"Archivebate"
+            "uncensoredhentai.xxx"->"UncensoredHentai"
+            "pornbuz.com"->"PornBuz"
+            else->host.ifBlank{"Video"}
+        }
+    }
     private fun sizeLabel(bytes:Long):String {
         if(bytes<1_024L)return bytes.toString()+" B"
         val unit=when{
@@ -1402,7 +1422,7 @@ object UnifiedDownloadsUi {
                 val name=LinearLayout(a).apply{
                     orientation=LinearLayout.VERTICAL
                 }
-                name.addView(ui.text(a,item.source,11f,ui.secondary,true))
+                name.addView(ui.text(a,providerLabel(item),11f,ui.secondary,true))
                 name.addView(ui.text(a,item.filename,14f,ui.white,true).apply{
                     maxLines=2
                     ellipsize=android.text.TextUtils.TruncateAt.END
@@ -1679,10 +1699,20 @@ object UnifiedDownloadsUi {
                                 ui.px(a,58),ui.px(a,58)).apply{
                                 rightMargin=ui.px(a,8)
                             })
-                            heading.addView(name,LinearLayout.LayoutParams(0,-2,1f))
+                            val identity=LinearLayout(a).apply{
+                                orientation=LinearLayout.VERTICAL
+                                addView(ui.text(a,providerLabel(job),
+                                    11f,ui.secondary,true))
+                                addView(name,ui.lp(a,2))
+                            }
+                            heading.addView(identity,LinearLayout.LayoutParams(0,-2,1f))
                             panel.addView(heading)
                             VideoSearchPreviews.display(a,thumbnail,null,poster)
-                        }else panel.addView(name)
+                        }else{
+                            panel.addView(ui.text(a,providerLabel(job),
+                                11f,ui.secondary,true))
+                            panel.addView(name)
+                        }
                         val stateDescription=when(job.state){
                             State.ACTIVE->"Working"
                             State.QUEUED->"Queued"
