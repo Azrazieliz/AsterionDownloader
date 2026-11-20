@@ -129,7 +129,8 @@ object AssetsPanel {
             val q=input.text.toString().trim().lowercase()
             CreatorNames.remember(a,q,"ASSETS",true)
             if(q.length<2){status.text="Enter a model name";return@action}
-            results.removeAllViews();status.text="Searching Poly Haven and ambientCG…"
+            results.removeAllViews()
+            status.text="Searching model libraries and the public web…"
             // Each search owns its view token. A later query or navigation
             // cannot be overwritten by a stale asynchronous response.
             val requestToken=Any()
@@ -138,7 +139,7 @@ object AssetsPanel {
                 // The earlier serial fetches could keep the first source's
                 // successful result hidden behind a 19-second second-source
                 // timeout. Fetch both approved public catalogs concurrently.
-                val pool=java.util.concurrent.Executors.newFixedThreadPool(2)
+                val pool=java.util.concurrent.Executors.newFixedThreadPool(3)
                 val searches=try{
                     val poly=pool.submit<JSONObject>{
                         JSONObject(fetch("https://api.polyhaven.com/assets?type=models"))
@@ -148,9 +149,14 @@ object AssetsPanel {
                             java.net.URLEncoder.encode(q,"UTF-8")+
                             "&limit=12&include=title,tags,downloads"))
                     }
-                    Pair(runCatching{poly.get()},runCatching{ambientResult.get()})
+                    val web=pool.submit<Pair<
+                        List<OpenWebModelSearch.Candidate>,List<String>>>{
+                        OpenWebModelSearch.find(q)
+                    }
+                    Triple(runCatching{poly.get()},runCatching{ambientResult.get()},
+                        runCatching{web.get()})
                 }finally{pool.shutdownNow()}
-                val (outcome,ambient)=searches
+                val (outcome,ambient,web)=searches
                 a.runOnUiThread{
                     if(a.isDestroyed || a.isFinishing ||
                         results.parent==null || results.tag!==requestToken)
@@ -221,10 +227,37 @@ object AssetsPanel {
                         }
                     }.onFailure{errors+="ambientCG unavailable: "+
                         (it.cause?.message?:it.message).orEmpty().take(120)}
+                    var webCount=0
+                    web.onSuccess{(candidates,failures)->
+                        errors.addAll(failures)
+                        for(file in candidates.take(36)){
+                            val tile=ui.card(a)
+                            tile.addView(ui.text(a,file.title,15f,ui.white,true),
+                                ui.lp(a,6))
+                            tile.addView(ui.text(a,
+                                file.host+" · "+file.format+
+                                " · indexed file, not a completed download",
+                                11f,ui.secondary),ui.lp(a,4))
+                            tile.addView(ui.action(a,"DOWNLOAD ORIGINAL FILE",true){
+                                // This is the returned HTTPS file itself, not a
+                                // paid storefront or an unverified download link
+                                // guessed from an unrelated landing page.
+                                val filename=runCatching{
+                                    URI(file.url).path.substringAfterLast('/')
+                                }.getOrDefault("model."+file.format.lowercase())
+                                ResourceDownloads.downloadFile(
+                                    a,file.url,"Assets",filename)
+                            },ui.lp(a,8))
+                            results.addView(tile,ui.lp(a,9))
+                            webCount++
+                        }
+                    }.onFailure{errors+="Open web unavailable: "+
+                        (it.cause?.message?:it.message).orEmpty().take(120)}
                     status.text=buildString{
-                        append(polyCount).append(" Poly Haven models · ")
-                        append(ambientCount).append(" ambientCG assets")
-                        if(polyCount+ambientCount==0 && errors.isEmpty())
+                        append(polyCount).append(" Poly Haven · ")
+                        append(ambientCount).append(" ambientCG · ")
+                        append(webCount).append(" web-indexed original files")
+                        if(polyCount+ambientCount+webCount==0 && errors.isEmpty())
                             append(" · No matching originals")
                         if(errors.isNotEmpty())
                             append(" · ").append(errors.joinToString(" · "))
