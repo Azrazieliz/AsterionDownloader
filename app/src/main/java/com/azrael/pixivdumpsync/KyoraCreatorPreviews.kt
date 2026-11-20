@@ -244,7 +244,16 @@ object KyoraCreatorPreviews {
                     else "No gallery thumbnails exposed by listing")
                 Snapshot(items,System.currentTimeMillis(),null)
             }.getOrElse{
-                Snapshot(stored?.entries.orEmpty(),System.currentTimeMillis(),
+                // A failed NEW listing refresh cannot negate valid indexed
+                // Archivebate recordings already shown/downloadable. The old
+                // fallback retained 40 real cards yet labeled them "no visible
+                // video cards" on the same screen.
+                val retained=stored?.entries.orEmpty()
+                if(SiteControls.key(url)=="archivebate.com" &&
+                    retained.isNotEmpty() &&
+                    it.message.orEmpty().contains("no visible video cards",true))
+                    Snapshot(retained,stored?.updated?:System.currentTimeMillis(),null)
+                else Snapshot(retained,System.currentTimeMillis(),
                     (it.message?:"Source not available").take(160))
             }
             val obj=JSONObject().apply{
