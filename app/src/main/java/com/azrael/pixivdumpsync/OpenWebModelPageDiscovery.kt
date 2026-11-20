@@ -103,7 +103,7 @@ internal object OpenWebModelPageDiscovery {
             out.putIfAbsent(SearchRanking.canonicalKey(direct),
                 OpenWebModelSearch.Candidate(title.take(180),
                     direct,ext.uppercase(Locale.ROOT),
-                    parsed.host.orEmpty(),poster))
+                    parsed.host.orEmpty(),poster,page))
             if(out.size>=15)break
         }
         return out.values.toList()
