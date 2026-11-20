@@ -156,8 +156,12 @@ internal object ApprovedCosplayActions {
         // Do not invoke resolveEntity(album), which can turn one post into a
         // creator/tag subscription or spawn an extra "generic" provider card.
         val entity=GalleryDb(a).use{db->
-            val sourceId=if(site.host=="kiutaku.com")
-                SourceId.KIUTAKU else SourceId.GENERIC
+            // Never force a selected 4KHD / Buondua / CosplayTele album
+            // through GenericSiteAdapter when its original native parser is
+            // already installed. That discarded provider-specific archives,
+            // full-image routing and the original download ledger.
+            val sourceId=com.azrael.galleryflow.AdapterRegistry.forUrl(
+                site.url,a.applicationContext).source
             val existing=db.listEntities().firstOrNull{
                 it.kind=="site" && it.source==sourceId &&
                 SiteControls.key(it.canonicalUrl)==site.host
