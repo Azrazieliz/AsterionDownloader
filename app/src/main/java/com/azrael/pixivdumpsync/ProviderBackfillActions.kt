@@ -99,8 +99,12 @@ object ProviderBackfillActions {
                 .setAction(GallerySync.ACTION_START)
                 .putExtra(GallerySync.EXTRA_MODE,mode.name)
                 .putExtra(GallerySync.EXTRA_SITE_HOST,host))
-            return "Scheduled "+host+" · "+mode.name.lowercase()+" · "+
-                selected+" included profiles"
+            // The count is the native root-site record (normally one
+            // 'site:all'), NOT the number of albums or performer profiles.
+            // Original Kyora will enumerate every selected source album.
+            return "Site-wide "+host+" backfill requested · "+
+                "original Kyora gallery scanner · "+
+                "check Downloads for verified files or specific errors"
         }
         if(site.area=="BOOKS" && NovelEpubParser.supportedSeries(site.url)){
             NovelEpubService.enqueue(a,site.url,site.name)
