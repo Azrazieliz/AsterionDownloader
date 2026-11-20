@@ -155,8 +155,18 @@ object AssetsPanel {
                         List<OpenWebModelSearch.Candidate>,List<String>>>{
                         OpenWebModelSearch.find(q)
                     }
-                    Triple(runCatching{poly.get()},runCatching{ambientResult.get()},
-                        runCatching{web.get()})
+                    // Catalog fetches already run concurrently. Waiting on
+                    // each unbounded Future.get() in declaration order
+                    // nevertheless held a fast Poly Haven/model result behind
+                    // the slowest provider. One bounded overall deadline
+                    // returns all completed original-file results together.
+                    val deadline=System.nanoTime()+
+                        java.util.concurrent.TimeUnit.SECONDS.toNanos(26)
+                    fun <T> bounded(job:java.util.concurrent.Future<T>):Result<T> =
+                        runCatching{job.get(
+                            (deadline-System.nanoTime()).coerceAtLeast(0L),
+                            java.util.concurrent.TimeUnit.NANOSECONDS)}
+                    Triple(bounded(poly),bounded(ambientResult),bounded(web))
                 }finally{pool.shutdownNow()}
                 val (outcome,ambient,web)=searches
                 a.runOnUiThread{
