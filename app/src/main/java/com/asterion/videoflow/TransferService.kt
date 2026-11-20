@@ -658,12 +658,25 @@ object VideoEngine {
                             VideoPayloadBytes.count(parent)>0L))
                         throw java.util.concurrent.TimeoutException(
                             "Total selected-media resolution budget exceeded")
-                    val remaining=VideoTransferLimits.NO_BYTES_RESOLVE_MS-
-                        (now-inspectedAt)
-                    if(remaining<=0L)
+                    // JAVIDEO inserts the player after a Play click. A
+                    // stalled WebView/browser response must not occupy a
+                    // downloader slot indefinitely or silently cycle
+                    // additional extraction backends.
+                    val selectedHost=NetworkRoute.siteKey(item.url)
+                    val resolutionLimit=if(selectedHost=="javideo.net")
+                        35_000L else VideoTransferLimits.NO_BYTES_RESOLVE_MS
+                    val remaining=resolutionLimit-(now-inspectedAt)
+                    if(remaining<=0L){
+                        VideoTransferJournal.record(context,item.id,"source_timeout",
+                            "Selected publisher "+selectedHost+
+                                " did not expose a verified player in "+
+                                (resolutionLimit/1000L)+" seconds")
                         throw java.util.concurrent.TimeoutException(
-                            "Selected publisher did not expose a transferable original "+
-                                "within the resolver time budget")
+                            "Selected publisher "+selectedHost+
+                                " resolution timed out after "+
+                                (resolutionLimit/1000L)+"s; retain queued original "+
+                                "and retry the selected player when accessible")
+                    }
                     try {
                         return future.get(minOf(remaining,VideoTransferLimits.POLL_MS),
                             java.util.concurrent.TimeUnit.MILLISECONDS)
