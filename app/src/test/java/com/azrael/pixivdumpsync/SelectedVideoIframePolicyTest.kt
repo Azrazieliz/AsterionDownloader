@@ -14,8 +14,6 @@ class SelectedVideoIframePolicyTest {
                 "https://streamtape.com/e/Ab1cd2ef3G",
             "https://javideo.net/en/fc2ppv-4994603" to
                 "https://play.javideo.net/player/AbC123456",
-            "https://helloporn.com/video-115854-something" to
-                "https://voe.sx/e/wx8walm5hqkj",
             "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/" to
                 "https://nhplayer.com/v/Z2flAXXPucyCbVJ/",
             "https://roshy.tv/video/exact-scene/" to
@@ -45,6 +43,8 @@ class SelectedVideoIframePolicyTest {
         assertTrue(SelectedVideoIframePolicy.allow(source,
             "https://helloporn.com/video-115854-something",true))
         assertTrue(SelectedVideoIframePolicy.allow(source,"about:blank",false))
+        assertFalse(SelectedVideoIframePolicy.allow(source,
+            "https://voe.sx/e/wx8walm5hqkj",false))
     }
     @Test fun selectedPlayersCannotBeReusedForUnrelatedPublishers() {
         val random="https://hentaihaven.xxx/watch/renseijutsushi-collet-episode-1/"
