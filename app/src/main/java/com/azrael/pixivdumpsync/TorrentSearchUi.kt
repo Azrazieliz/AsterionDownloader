@@ -172,12 +172,12 @@ object TorrentSearchUi {
                             TorrentGalleryClassifier.likelyGallery(it.title,it.details)
                         }
                         status.text=records.size.toString()+" indexed releases"+
-                            if(area==TorrentArea.ADULT)
+                            (if(area==TorrentArea.ADULT)
                                 " · "+galleries+" identified photo galleries"
-                            else ""+
-                            if(errors.isEmpty())"" else
+                            else "")+
+                            (if(errors.isEmpty())"" else
                                 "\nUnavailable: "+
-                                    errors.take(2).joinToString(" | ").take(160)
+                                    errors.take(2).joinToString(" | ").take(160))
                         draw()
                     }.onFailure{
                         status.text="Torrent search unavailable: "+
