@@ -83,7 +83,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(24,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(25,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -176,6 +176,23 @@ class VideoSiteProfilesTest {
                 src="https://mdzsmutpcvykb.net/e/z1j1rlr6ie71z0"
                 ></iframe><iframe src="https://ads.example/e/bad111"></iframe></main>"""
             ).map{it.url})
+    }
+    @Test fun pornBuzSceneRequiresExactWatchAndSelectedServer(){
+        val page="https://pornbuz.com/video/milfty-deliah-grace-you-think-youll-be-able-to-resist-me-cute-the-hunt-is-on-91071/"
+        assertTrue(VideoSiteProfiles.isVideoPage(page))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://pornbuz.com/channels/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://pornbuz.com/tag/anything"))
+        assertTrue(PublisherOriginalExtractors.owns(page))
+        val html="""<main>
+          <a href="https://watchstreamus.com/embed/uPXbeFkW">Server 1</a>
+          <a href="https://streamtape.com/v/wPr0zqgxz0iJOmz/milfty.26.09.21.deliah.grace.mp4">SERVER 2</a>
+          <aside><a href="https://streamtape.com/v/abcdefg123/related.mp4">SERVER 2</a></aside>
+        </main>"""
+        assertEquals(listOf("https://streamtape.com/v/wPr0zqgxz0iJOmz/milfty.26.09.21.deliah.grace.mp4"),
+            PublisherOriginalExtractors.fromHtml(page,html).map{it.url})
+        assertTrue(PublisherOriginalExtractors.fromHtml(
+            page,"""<main><a href="https://streamtape.com/v/abcdefg123/unlabelled.mp4">play</a></main>"""
+        ).isEmpty())
     }
     @Test fun paginationDoesNotCrossToOtherDomain(){
         val home="https://www.eporner.com/"
