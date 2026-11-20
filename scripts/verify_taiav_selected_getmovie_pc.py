@@ -69,12 +69,14 @@ def main():
     "json_keys":sorted(data)[:15],"declares_hls":isinstance(media,str) and bool(media),
     "message_present":bool(data.get("message"))}
    if isinstance(media,str) and media:
-    u=urllib.parse.urlsplit(media)
+    absolute=urllib.parse.urljoin(page,media)
+    u=urllib.parse.urlsplit(absolute)
+    result["source_relative"]=not bool(urllib.parse.urlsplit(media).scheme)
     result["media_scheme"]=u.scheme;result["media_host"]=u.hostname
     result["media_ext"]=u.path.rsplit(".",1)[-1] if "." in u.path else "none"
     if u.scheme=="https" and re.search(r"\.m3u8$",u.path,re.I):
      try:
-      playlist_status,_,body=fetch(media,page,12000)
+      playlist_status,_,body=fetch(absolute,page,12000)
       playlist=body.decode("utf8","replace")
       result["playlist_status"]=playlist_status
       result["valid_m3u8"]=playlist.lstrip().startswith("#EXTM3U")
