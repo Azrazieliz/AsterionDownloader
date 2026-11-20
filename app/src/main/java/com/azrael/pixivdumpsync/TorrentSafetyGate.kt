@@ -75,6 +75,29 @@ internal object TorrentSafetyGate {
         return Admission(true)
     }
 
+    /** Only a deliberate on-screen retry may acknowledge the previous
+     * suspected device restart. Background workers never clear this hold.
+     * Recheck battery, thermal state and available memory before rearming;
+     * a further interrupted native request will trip the hold again.
+     */
+    fun incidentHold(c:Context):Boolean {
+        assess(c) // persist an interrupted-boot observation if present
+        return prefs(c).getBoolean("suspected_device_restart",false)
+    }
+    @Synchronized fun ownerReviewedRetry(c:Context):Admission {
+        if(!incidentHold(c))return assess(c)
+        val p=prefs(c)
+        check(p.edit()
+            .putBoolean("suspected_device_restart",false)
+            .putBoolean("native_request_running",false)
+            .putLong("last_boot_epoch_ms",bootEpoch())
+            .commit()){"Cannot persist torrent incident recovery"}
+        val admission=assess(c)
+        if(!admission.allowed)
+            p.edit().putBoolean("suspected_device_restart",true).commit()
+        return admission
+    }
+
     @Synchronized fun begin(c:Context):Admission{
         val admission=assess(c)
         if(admission.allowed)prefs(c).edit()
