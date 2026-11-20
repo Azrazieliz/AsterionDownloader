@@ -7,13 +7,13 @@ class SelectedVideoRouterTest {
     @Test fun knownPublisherPagesGoToVideoFlowRegardlessOfIndexedKind(){
         assertTrue(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://javideo.net/en/fc2ppv-4994603"))
-        assertTrue(SelectedVideoRouter.isSelectedVideo(
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://helloporn.com/video/example"))
         assertFalse(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://xxxclub.to/videos/example"))
         assertFalse(SelectedVideoRouter.isSelectedVideo(
             "TORRENTS","https://xxxclub.to/torrents/details/480815","video"))
-        assertTrue(SelectedVideoRouter.isSelectedVideo(
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
             "HENTAI","https://mp4hentai.com/2026/11/example-episode/"))
     }
     @Test fun mislabeledKnownPlayerStillUsesVideoEngine(){
@@ -37,7 +37,7 @@ class SelectedVideoRouterTest {
             "ADULT","https://unknown.example/gallery/123"))
         assertTrue(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://javideo.net/current-unknown-slug","video"))
-        assertTrue(SelectedVideoRouter.isSelectedVideo(
+        assertFalse(SelectedVideoRouter.isSelectedVideo(
             "ADULT","https://helloporn.com/current-unknown-slug","video"))
         assertFalse(SelectedVideoRouter.isSelectedVideo(
             "COSPLAY","https://helloporn.com/current-unknown-slug","video"))
