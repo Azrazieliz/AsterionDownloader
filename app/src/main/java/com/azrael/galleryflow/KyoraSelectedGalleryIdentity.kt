@@ -18,6 +18,22 @@ internal object KyoraSelectedGalleryIdentity {
         return a==b || setOf(a,b)==setOf("buondua.com","buondua.net")
     }
 
+    fun parent(entities:List<EntityRecord>,entityId:String,
+               rawUrl:String,selectedSiteHost:String?):EntityRecord? {
+        val selectedHost=host(rawUrl)
+        // SiteControls stores BuonDua's .com/.net aliases under .net.
+        fun provider(url:String):String =
+            host(url).let{if(it=="buondua.com")"buondua.net" else it}
+        val matched=entities.filter{
+            it.entityId==entityId && it.kind=="site" &&
+                sameApprovedSite(it.canonicalUrl,rawUrl) &&
+                (selectedSiteHost==null ||
+                    provider(it.canonicalUrl)==selectedSiteHost)
+        }
+        // An ambiguous root is an error, never a random other site.
+        return matched.singleOrNull()
+    }
+
     fun canonicalUrl(source:SourceId,raw:String):String {
         val uri=URI(raw)
         require(uri.scheme=="https" && uri.userInfo==null &&
