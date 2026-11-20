@@ -391,10 +391,15 @@ class TorrentTransferService : Service() {
             return START_NOT_STICKY
         }
         if(intent?.action!=PAUSE){
-            val admitted=if(intent?.getBooleanExtra(
-                    OWNER_REVIEWED_RETRY,false)==true)
-                TorrentSafetyGate.ownerReviewedRetry(applicationContext)
+            val admitted=runCatching {
+                if(intent?.getBooleanExtra(OWNER_REVIEWED_RETRY,false)==true)
+                    TorrentSafetyGate.ownerReviewedRetry(applicationContext)
                 else TorrentSafetyGate.assess(applicationContext)
+            }.getOrElse {
+                TorrentSafetyGate.Admission(false,
+                    "Torrent recovery unavailable: "+
+                    (it.message?:it.javaClass.simpleName))
+            }
             if(!admitted.allowed){
                 @Suppress("DEPRECATION")
                 val receiver=if(Build.VERSION.SDK_INT>=33)
