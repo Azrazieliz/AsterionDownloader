@@ -142,7 +142,14 @@ internal object SiteSpecificOriginalSources {
                 .ignoreHttpErrors(true).followRedirects(false)
                 .timeout(14_000).maxBodySize(1_800_000)
                 .apply {
-                    NetworkRoute.javaProxy(context,referer)?.let{proxy(it)}
+                    // NHPlayer is a distinct user-selected first-party
+                    // media host. Respect the owner's configured route for
+                    // that exact host instead of forcing the outer article's
+                    // network exit (which can return 403 for the player).
+                    val selectedRoute=if(owner=="uncensoredhentai.xxx")
+                        NetworkRoute.javaProxyForSelected(context,referer,link)
+                    else NetworkRoute.javaProxy(context,referer)
+                    selectedRoute?.let{proxy(it)}
                     SiteSession.cookie(context,link)?.takeIf{it.isNotBlank()}
                         ?.let{header("Cookie",it)}
                 }.execute()
