@@ -79,14 +79,8 @@ class SyncEngine(private val context: Context) {
                               flow:FlowLinkEmitter,stats:Stats,
                               progress:(String)->Unit,entityId:String,
                               rawUrl:String,title:String?,siteHost:String?){
-        val entity=db.listEntities().firstOrNull{record->
-            record.entityId==entityId && record.kind=="site" &&
-                KyoraSelectedGalleryIdentity.sameApprovedSite(
-                    record.canonicalUrl,rawUrl) &&
-                (siteHost==null ||
-                    com.azrael.pixivdumpsync.SiteControls.key(
-                        record.canonicalUrl)==siteHost)
-        } ?:throw AdapterException(
+        val entity=KyoraSelectedGalleryIdentity.parent(db.listEntities(),
+            entityId,rawUrl,siteHost) ?:throw AdapterException(
                 "Selected album's exact parent provider is not registered")
         // Preserve Kyora's original native stable IDs. The unified
         // selection path formerly synthesized a generic hash for every
