@@ -342,20 +342,33 @@ object AsterionUnifiedFollowing {
                 a.runOnUiThread{
                     if(a.isFinishing || a.isDestroyed)return@runOnUiThread
                     if(proof==null){
-                        // Do not discard a deliberately selected genuine creator
-                        // merely because three sites lack an accessible profile.
-                        // Save a name watch, never a fake verified identity.
-                        val id=NameWatchDb(a).use{db->
-                            db.add(name)
-                            db.list().firstOrNull{
-                                it.name.equals(name,true)
-                            }?.id
-                        }
-                        if(id!=null){
-                            CreatorNames.remember(a,name,"PERFORMERS",true)
-                            NameCrawler.scanCreator(a.applicationContext,id)
-                            notice(a,"Tracking "+name+" by name · manual review; profile not verified")
-                        }else notice(a,"Could not save the selected creator name")
+                        // A failed profile lookup is NOT evidence that this
+                        // name belongs to a real performer. The previous
+                        // "VERIFY & FOLLOW" button silently accepted random
+                        // strings and triggered unrelated name-match crawls.
+                        android.app.AlertDialog.Builder(a)
+                            .setTitle("Performer not verified")
+                            .setMessage("No first-party performer profile "+
+                                "with the exact name \""+name.take(80)+
+                                "\" was confirmed. This name has NOT been "+
+                                "followed. You can separately track literal "+
+                                "name matches for manual review; those are "+
+                                "not verified performer videos.")
+                            .setNegativeButton("Do not follow",null)
+                            .setPositiveButton("Track unverified name"){_,_->
+                                val id=NameWatchDb(a).use{db->
+                                    db.add(name)
+                                    db.list().firstOrNull{
+                                        it.name.equals(name,true)
+                                    }?.id
+                                }
+                                if(id!=null){
+                                    CreatorNames.remember(a,name,"PERFORMERS",true)
+                                    NameCrawler.scanCreator(a.applicationContext,id)
+                                    notice(a,"Name-only watch · not a verified performer")
+                                    refresh()
+                                }else notice(a,"Could not save name watch")
+                            }.show()
                     }else{
                         val id=NameWatchDb(a).use{
                             it.addVerified(proof.displayName,proof.profileUrl)
