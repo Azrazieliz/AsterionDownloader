@@ -308,11 +308,18 @@ internal object PublisherOriginalExtractors {
             return (formats+fromHtml(selected,page.outerHtml()))
                 .distinctBy{it.url}
         }
-        if(host in setOf("porneec.com","taiav.com")){
-            // Their public article HTML is a JavaScript shell; static pages
-            // contain ad iframes / preview MP4s but NOT a full media original.
-            // Only the exact selected HTML5 player in the owner's rendered
-            // browser may supply a video with an observed >=90-second duration.
+        if(host=="taiav.com"){
+            // 2026-11-20 PC verification: actual first-party selected player
+            // GET /api/getmovie?type=<published quality>&id=<selected movie>
+            // supplies JSON.m3u8. The separate /previewvideo endpoint is only
+            // a short thumbnail clip and MUST NEVER become a saved original.
+            // Do not fall through to unrelated rendered article teaser MP4s.
+            return TaiAvOriginalSource.resolve(context,selected,page.outerHtml())
+                ?.let{listOf(Candidate(it,selected,host))}.orEmpty()
+        }
+        if(host=="porneec.com"){
+            // Preserve working Porneec selected HTML5 player unchanged.
+            // Static ad/preview media cannot stand in for the original.
             val static=fromHtml(selected,page.outerHtml())
             if(static.isNotEmpty())return static
             val snapshot=com.azrael.pixivdumpsync.BrowserPageFetch
