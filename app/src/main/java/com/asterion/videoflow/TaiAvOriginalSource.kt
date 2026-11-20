@@ -74,7 +74,9 @@ internal object TaiAvOriginalSource {
         // Observed /api/getmovie on the exact selected TaiAV movie returns
         // a first-party relative HLS playlist; no off-site/preview mirror
         // is authenticated by this JSON field.
-        if(host!="taiav.com")return null
+        // A publisher-owned www redirect is the same approved first-party
+        // origin. Do not reject an otherwise valid signed HLS playlist.
+        if(host !in setOf("taiav.com","www.taiav.com"))return null
         if(link.scheme!="https" || host.isBlank() ||
             host=="localhost" || host=="127.0.0.1" ||
             link.userInfo!=null || link.port!=-1 ||
@@ -135,7 +137,7 @@ internal object TaiAvOriginalSource {
                     .header("Referer",request.selected)
                     .header("Accept","application/json")
                     .header("X-Requested-With","XMLHttpRequest")
-                    .ignoreHttpErrors(true)
+                    .ignoreHttpErrors(true).ignoreContentType(true)
                     .followRedirects(false)
                     .timeout(13_000).maxBodySize(150_000)
                     .apply {
