@@ -560,20 +560,24 @@ object UnifiedDownloadsUi {
                         val raw=cursor.getString(4).orEmpty()
                         val state=when(raw){
                             "downloading"->State.ACTIVE
-                            "pending","retrying"->State.QUEUED
+                            // Inventory/retry rows are NOT submitted
+                            // download jobs. The old screen reported 350
+                            // "queued" with zero active transfer services.
+                            "pending","retrying"->State.HELD
                             else->State.FAILED
                         }
                         val updated=cursor.getLong(5)
                         rows+=Row("Gallery",file,
                             "Gallery · "+publisher+" · "+when(state){
                                 State.ACTIVE->"Acquiring original"
-                                State.QUEUED->"Waiting for Gallery sync"
+                                State.HELD->"Unscheduled Gallery inventory; "+
+                                    "choose this album or CHECK NEW to retry"
                                 else->"Original unavailable; saved files kept"
                             },state,null,updated,{
                                 (a as? AsterionHomeActivity)
                                     ?.openDownloadsModule("Gallery")
                             },mime="image/*",hasPrimaryAction=false,
-                            onRemove=if(state==State.FAILED || state==State.QUEUED) ({
+                            onRemove=if(state==State.FAILED || state==State.HELD) ({
                                 com.azrael.galleryflow.GalleryDb(
                                     a.applicationContext).use{db->
                                     db.cancelUnfinishedMedia(publisher,mediaId)
@@ -1001,8 +1005,11 @@ object UnifiedDownloadsUi {
                     "AND bytes>0"),
                 failed=count("SELECT COUNT(*) FROM media WHERE "+
                     "state IN ('permanent_error','inaccessible')"),
-                queued=count("SELECT COUNT(*) FROM media WHERE "+
-                    "state IN ('pending','retrying')"),
+                // A Gallery media row is catalogue inventory, NOT an actual
+                // OS transfer. Only durable selected/site requests count
+                // as queued Gallery work (no more phantom 350 pending).
+                queued=com.azrael.galleryflow.GalleryRequestLedger
+                    .pending(a.applicationContext).size,
                 active=count("SELECT COUNT(*) FROM media WHERE "+
                     "state='downloading'"))
         }
@@ -1621,7 +1628,19 @@ object UnifiedDownloadsUi {
                     },ui.lp(a,9))
                 }
                 if(source=="Gallery"){
-                    val waiting=totals.queued+totals.failed
+                    val waiting=runCatching{
+                        com.azrael.galleryflow.GalleryDb(a).use{db->
+                            val sql=db.readableDatabase
+                            val retry=android.database.DatabaseUtils.longForQuery(
+                                sql,"SELECT COUNT(*) FROM backfill_retries",null)
+                            val media=android.database.DatabaseUtils.longForQuery(
+                                sql,"SELECT COUNT(*) FROM media WHERE "+
+                                    "content_uri IS NULL AND state IN "+
+                                    "('pending','retrying','permanent_error','inaccessible')",
+                                null)
+                            (retry+media).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                        }
+                    }.getOrDefault(totals.queued+totals.failed)
                     if(waiting>0){
                         card.addView(ui.action(a,"CANCEL ALL WAITING GALLERY JOBS",false){
                             android.app.AlertDialog.Builder(a)
@@ -1651,7 +1670,7 @@ object UnifiedDownloadsUi {
                                     }.getOrDefault(0)
                                     Toast.makeText(a,
                                         cancelled.toString()+" waiting Gallery "+
-                                            "jobs cancelled; saved files kept",
+                                            "retry/inventory records cancelled; saved files kept",
                                         Toast.LENGTH_LONG).show()
                                     refresh()
                                 }.show()
