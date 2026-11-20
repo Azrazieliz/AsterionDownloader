@@ -34,6 +34,23 @@ class KyoraSelectedGalleryIdentityTest {
                 "https://cosplaytele.com/cosplay-title/"))
     }
 
+    @Test fun sameSiteAllIdentifierCannotSelectAnUnrelatedProvider() {
+        fun root(source:SourceId,id:String,url:String)=EntityRecord(
+            source,id,"Native Kyora",url,"site",true,false,null,null,null)
+        val entities=listOf(
+            root(SourceId.FOUR_K_HD,"site:all","https://www.4khd.com/"),
+            root(SourceId.COSPLAYTELE,"site:all","https://cosplaytele.com/"),
+            root(SourceId.BUONDUA,"site:all","https://buondua.net/albums"))
+        val chosen=KyoraSelectedGalleryIdentity.parent(entities,"site:all",
+            "https://buondua.com/albums/rose-239","buondua.net")
+        assertEquals(SourceId.BUONDUA,chosen?.source)
+        assertNull(KyoraSelectedGalleryIdentity.parent(entities,"site:all",
+            "https://buondua.net/albums/rose-239","4khd.com"))
+        assertEquals(SourceId.COSPLAYTELE,
+            KyoraSelectedGalleryIdentity.parent(entities,"site:all",
+                "https://cosplaytele.com/album-rose/","cosplaytele.com")?.source)
+    }
+
     @Test fun unknownDomainAndNonAlbumsNeverUseBuonduaDownloader() {
         assertFalse(KyoraSelectedGalleryIdentity.sameApprovedSite(
             "https://buondua.net/albums",
