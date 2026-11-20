@@ -312,6 +312,11 @@ object DirectDownloadRetry {
                             count++
                             continue
                         }
+                        // If Android denies foreground promotion, the
+                        // native request is still retained in its ledger.
+                        // NEVER fall through to another isolated OS JPEG.
+                        OriginalReceiptState.set(ctx,record.id,"NEEDS_GALLERY")
+                        continue
                     }else{
                         // No provable album URL in the legacy request. Keep
                         // its record visible, but do not blindly re-enqueue.
