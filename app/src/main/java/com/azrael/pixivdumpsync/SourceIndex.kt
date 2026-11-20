@@ -1593,9 +1593,17 @@ object SourceIndex {
         }
     }.getOrDefault(false)
     fun status(context:Context,area:String):List<IndexedSource> =
-        SourceIndexDb(context).use{it.sources().filter{src->src.area==area}}
+        SourceIndexDb(context).use{db->
+            db.sources().filter{src->src.area==area &&
+                !ProviderRetirement.isRetired(src.url)}
+        }
     fun items(context:Context,area:String?=null,limit:Int=40):List<IndexedItem> =
-        SourceIndexDb(context).use{it.items(area,limit)}
+        SourceIndexDb(context).use{db->
+            db.items(area,limit).filter{entry->
+                !ProviderRetirement.isRetired(entry.url) &&
+                !ProviderRetirement.isRetired(entry.source)
+            }
+        }
 }
 
 class SourceIndexJob:JobService() {
