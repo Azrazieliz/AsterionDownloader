@@ -31,8 +31,13 @@ Kiutaku|https://kiutaku.com/|COSPLAY
 Porn Pics|https://www.pornpics.com/|COSPLAY
 NotFans|https://notfans.com/|ADULT
 Archivebate|https://archivebate.com/|ADULT
-OnScreens|https://www.onscreens.me/|ADULT
 LiveCamRips|https://livecamrips.to/|ADULT
+Avple|https://avple.tv/|ADULT
+PimpBunny|https://pimpbunny.com/|ADULT
+xChina|https://en.xchina.co/|ADULT
+Bubblecum|https://www.bubblecum.lol/|ADULT
+PornAVHD|https://pornavhd.com/|ADULT
+CamStreams|https://camstreams.tv/latest-updates/|ADULT
 Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 Porneec|https://porneec.com/|ADULT
@@ -69,7 +74,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==39 && sites.distinctBy{it.url}.size==39){"Incorrect approved Aloha source set"}
+            require(sites.size==44 && sites.distinctBy{it.url}.size==44){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
