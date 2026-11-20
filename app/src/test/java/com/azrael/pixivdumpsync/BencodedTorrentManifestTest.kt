@@ -18,6 +18,23 @@ class BencodedTorrentManifestTest {
         encode(mapOf("announce" to "https://example.org/announce","info" to info))
             .toByteArray(Charsets.UTF_8)
 
+    @Test fun cachedMagnetManifestCannotCrossBindAnotherTorrent(){
+        val info=mapOf<String,Any>(
+            "name" to "selected-original.zip","length" to 4096L,
+            "piece length" to 16384L,"pieces" to "12345678901234567890")
+        val bytes=descriptor(info)
+        val job=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(bytes).take(12).joinToString(""){"%02x".format(it)}
+        val hash=BencodedTorrentManifest.parse(bytes).infoHashHex
+        assertTrue(TorrentMetadataBridge.cachedDescriptorMatchesJob(bytes,job,hash))
+        assertTrue(!TorrentMetadataBridge.cachedDescriptorMatchesJob(
+            bytes,"0".repeat(24),hash))
+        assertTrue(!TorrentMetadataBridge.cachedDescriptorMatchesJob(
+            bytes,job,"f".repeat(40)))
+        assertTrue(!TorrentMetadataBridge.cachedDescriptorMatchesJob(
+            bytes.copyOf(bytes.size-3),job,hash))
+    }
+
     @Test fun singleFileIsInspectableWithoutNativeEngine(){
         val info=mapOf<String,Any>("name" to "demo.zip","length" to 4096L,
             "piece length" to 16384L,"pieces" to "12345678901234567890")

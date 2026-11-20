@@ -48,6 +48,18 @@ internal object TorrentMetadataBridge {
     private fun root(context:Context)=File(context.filesDir,"torrent-jobs").apply{mkdirs()}
     private fun id(bytes:ByteArray)=MessageDigest.getInstance("SHA-256")
         .digest(bytes).take(12).joinToString(""){"%02x".format(it)}
+    /** Authenticate a locally cached .torrent against BOTH its SHA-256
+     * storage ID and the magnet's v1 info hash before displaying a chooser.
+     * A stale pointer must never silently cross-bind a different release.
+     */
+    internal fun cachedDescriptorMatchesJob(
+        bytes:ByteArray,jobId:String,infoHash:String):Boolean = runCatching {
+        bytes.size in 33..8_388_608 && idPattern.matches(jobId) &&
+            id(bytes)==jobId &&
+            BencodedTorrentManifest.parse(bytes).infoHashHex.equals(
+                infoHash,ignoreCase=true)
+    }.getOrDefault(false)
+
     private fun checkId(value:String):String {
         require(idPattern.matches(value)){"Invalid torrent job identifier"}
         return value
@@ -167,13 +179,25 @@ internal object TorrentMetadataBridge {
         if(hash!=null){
             val pointer=File(root(a),"cache-$hash.pointer")
             val existing=runCatching{pointer.readText().trim()}.getOrNull()
-            if(existing!=null && idPattern.matches(existing) &&
-                File(root(a),"$existing.manifest.json").isFile &&
-                File(root(a),"$existing.torrent").isFile){
-                releaseRequest(request)
-                runCatching{showPreparedFiles(a,existing,folder)}
-                    .onFailure{pointer.delete()}
-                return
+            if(existing!=null && idPattern.matches(existing)){
+                val descriptor=File(root(a),"$existing.torrent")
+                val manifest=File(root(a),"$existing.manifest.json")
+                val validated=runCatching {
+                    descriptor.isFile && manifest.isFile &&
+                        cachedDescriptorMatchesJob(descriptor.readBytes(),existing,hash) &&
+                        JSONObject(manifest.readText()).optString("id")==existing
+                }.getOrDefault(false)
+                if(validated){
+                    val opened=runCatching{showPreparedFiles(a,existing,folder)}
+                    if(opened.isSuccess){
+                        releaseRequest(request)
+                        return
+                    }
+                }
+                // Previously a corrupt/stale cached manifest returned here,
+                // leaving FILES taps inert. Preserve the original files but
+                // discard only the advisory pointer and retry genuine metadata.
+                runCatching{pointer.delete()}
             }
         }
         Toast.makeText(a,"Checking authenticated torrent metadata cache first",
