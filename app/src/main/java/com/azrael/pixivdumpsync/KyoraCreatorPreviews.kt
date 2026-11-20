@@ -26,21 +26,30 @@ object KyoraCreatorPreviews {
     // redraw callbacks; every provider's actual cache entry remains separate.
     private class PendingRedraw(var snapshot:Snapshot,
         var callback:(Snapshot)->Unit)
-    private val pendingRedraws=java.util.WeakHashMap<Activity,PendingRedraw>()
+    // Coalesce redraws BY PROVIDER, not only by Activity. The previous
+    // WeakHashMap<Activity,PendingRedraw> overwrote 4KHD's callback when
+    // BuonDua or any other Kyora source finished within the same 350ms.
+    // Those covers were cached but never painted until screen recreation.
+    private val pendingRedraws=java.util.WeakHashMap<Activity,
+        MutableMap<String,PendingRedraw>>()
     private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
-    private fun deliver(a:Activity,snapshot:Snapshot,onReady:(Snapshot)->Unit){
+    private fun deliver(a:Activity,source:String,snapshot:Snapshot,
+                        onReady:(Snapshot)->Unit){
         main.post {
             if(a.isFinishing || a.isDestroyed)return@post
-            val pending=pendingRedraws[a]
+            val bySource=pendingRedraws.getOrPut(a){LinkedHashMap()}
+            val pending=bySource[source]
             if(pending!=null){
                 pending.snapshot=snapshot
                 pending.callback=onReady
             }else{
                 val next=PendingRedraw(snapshot,onReady)
-                pendingRedraws[a]=next
+                bySource[source]=next
                 main.postDelayed({
-                    if(pendingRedraws[a]===next){
-                        pendingRedraws.remove(a)
+                    if(pendingRedraws[a]?.get(source)===next){
+                        pendingRedraws[a]?.remove(source)
+                        if(pendingRedraws[a]?.isEmpty()==true)
+                            pendingRedraws.remove(a)
                         if(!a.isFinishing && !a.isDestroyed)
                             next.callback(next.snapshot)
                     }
@@ -325,7 +334,7 @@ object KyoraCreatorPreviews {
             a.getSharedPreferences(PREF,0).edit().putString(url,obj.toString()).apply()
             DownloadStateSignals.changed(a)
             inflight.remove(url)
-            deliver(a,snapshot,onReady)
+            deliver(a,url,snapshot,onReady)
         }
     }
 }

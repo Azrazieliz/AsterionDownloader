@@ -211,7 +211,7 @@ object AsterionUnifiedFollowing {
         put(a,p,ui.text(a,followed.size.toString()+" creators and collections",12f,ui.secondary),2)
         // Latest gallery thumbnails are embedded within each followed creator card.
         for(entity in followed.take(currentLimit(a,"kyora"))){
-            val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5)}
+            val gallery=GalleryDb(a).use{it.galleryCards(entity.entityId,5,entity.source)}
             val c=ui.card(a)
             val first=gallery.firstOrNull()
             val thumbnail=first?.firstUri?:first?.firstUrl
