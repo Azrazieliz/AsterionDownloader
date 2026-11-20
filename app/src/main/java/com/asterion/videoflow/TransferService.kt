@@ -1030,13 +1030,7 @@ object VideoEngine {
         }
         val lightweight= nativeOnly &&
             SecondaryLightNativeOriginal.eligible(item.url)
-        // These pages have dedicated site extractors in the EXACT pinned
-        // bundled wheel. Do not first scrape teaser/related media via HTML
-        // or let an unrelated embedded player override the selected URL.
-        val pinnedPublisher=VideoSiteProfiles.usesBundledExtractor(item.url)
-        val publisherOriginals=if(pinnedPublisher)
-            Result.success(emptyList())
-        else if(lightweight)
+        val publisherOriginals=if(lightweight)
             publisherResult{
                 val candidate=SecondaryLightNativeOriginal.resolve(
                     context,item.url)
@@ -1110,8 +1104,8 @@ object VideoEngine {
             throw IllegalStateException(
                 "3DHentaiX original identity unverified: selected player "+
                 "must expose exactly one attributable media source")
-        val publishedPlayerInspection=if(pinnedPublisher ||
-            !canInspectPublisherHtml || publishedOriginals.isNotEmpty())
+        val publishedPlayerInspection=if(!canInspectPublisherHtml ||
+            publishedOriginals.isNotEmpty())
             Result.success(emptyList<String>()) else publisherResult {
                 WebDiscovery.embeddedCandidates(item.url,context,
                     explicitlySelected=userRequested)
@@ -1375,8 +1369,7 @@ object VideoEngine {
                 // entries BEFORE running generic yt-dlp metadata/download.
                 // This works for any publisher with a real media element,
                 // without adding site-specific fake player links.
-                val directlyPublished=if(canInspectPublisherHtml &&
-                    !pinnedPublisher)
+                val directlyPublished=if(canInspectPublisherHtml)
                     publisherResult{WebDiscovery.directMedia(candidate,context)}
                         .onFailure{cause->
                             // A real browser may show ONLY preview clips or a
@@ -1432,7 +1425,7 @@ object VideoEngine {
                         // attempt through the original engine, with final byte,
                         // container and MediaStore verification unchanged.
                         // Automatic discovery still requires its existing policy.
-                        if(userRequested && !pinnedPublisher &&
+                        if(userRequested &&
                             !VideoTransferLimits.preparationBudgetExceeded(
                                 android.os.SystemClock.elapsedRealtime()-preparationStart,
                                 VideoPayloadBytes.count(parent)>0L) &&
@@ -1467,7 +1460,7 @@ object VideoEngine {
                             }else heldReason=verified.reason
                         }else{
                             last=checked.exceptionOrNull()
-                            if(userRequested && !pinnedPublisher &&
+                            if(userRequested &&
                                 !VideoTransferLimits.preparationBudgetExceeded(
                                     android.os.SystemClock.elapsedRealtime()-preparationStart,
                                     VideoPayloadBytes.count(parent)>0L) &&

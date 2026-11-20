@@ -83,7 +83,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(28,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(25,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -161,20 +161,6 @@ class VideoSiteProfilesTest {
             .fromHtml(porneec,confirmedOriginal).size)
         assertEquals(1,PublisherOriginalExtractors
             .fromHtml(taiav,confirmedOriginal).size)
-    }
-    @Test fun creatorAndCommunityVideosUsePinnedExtractorsOnlyOnSelectedPosts(){
-        for(selected in listOf(
-            "https://thisvid.com/videos/sitting-on-ball-tight-jeans/",
-            "https://spankbang.com/56b3d/video/the+slut+maker+hmv",
-            "https://www.manyvids.com/Video/935718/MY-FACE-REVEAL/")){
-            assertTrue(selected,VideoSiteProfiles.usesBundledExtractor(selected))
-        }
-        for(listing in listOf(
-            "https://thisvid.com/members/2140501/",
-            "https://spankbang.com/56b3d/playlist/sample",
-            "https://www.manyvids.com/Store/")){
-            assertFalse(listing,VideoSiteProfiles.usesBundledExtractor(listing))
-        }
     }
     @Test fun liveCamRipsRecognizesOnlyActualRecording(){
         assertTrue(VideoSiteProfiles.isVideoPage(

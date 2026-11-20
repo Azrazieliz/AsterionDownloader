@@ -23,9 +23,6 @@ class PublisherOriginalExtractorsTest {
         "freepornvideos.xxx" to "https://www.freepornvideos.xxx/videos/example",
         "porneec.com" to "https://porneec.com/sexmex-andrea-castro-my-nympho-wife/",
         "pornbuz.com" to "https://pornbuz.com/video/milfty-deliah-grace-you-think-youll-be-able-to-resist-me-cute-the-hunt-is-on-91071/",
-        "thisvid.com" to "https://thisvid.com/videos/sitting-on-ball-tight-jeans/",
-        "spankbang.com" to "https://spankbang.com/56b3d/video/the+slut+maker+hmv",
-        "manyvids.com" to "https://www.manyvids.com/Video/935718/MY-FACE-REVEAL/",
         "taiav.com" to "https://taiav.com/cn/movie/654424d67b410d2615db16e5",
         "omg.porn" to "https://omg.porn/video/example",
         "hentaibros.net" to "https://hentaibros.net/deco-x-deco-the-animation-episode-1/",
@@ -107,18 +104,6 @@ class PublisherOriginalExtractorsTest {
             </div></main>"""
         assertEquals(listOf("https://cdn.example/selected/master.m3u8"),
             PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
-    }
-    @Test fun pinnedSiteExtractorsNeverPromoteHtmlPreviewsOrRelatedVideos(){
-        val html="""<main>
-          <video src="https://cdn.example/trailer.mp4" data-duration="900"></video>
-          <aside><video src="https://cdn.example/other-full.mp4"></video></aside>
-          </main>"""
-        for(host in listOf("thisvid.com","spankbang.com","manyvids.com")){
-            assertTrue(host,PublisherOriginalExtractors.fromHtml(
-                cases.getValue(host),html).isEmpty())
-            assertTrue(VideoSiteProfiles.usesBundledExtractor(
-                cases.getValue(host)))
-        }
     }
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
         val html="""<div id="player"><video src="https://cdn.example/original.mp4"></video></div>"""

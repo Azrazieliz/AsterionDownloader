@@ -38,11 +38,6 @@ internal object PublisherOriginalExtractors {
         // Only the selected article's own main player is eligible. No sidebar,
         // thumbnail MP4s, related posts, or guessed off-site player domains.
         Site("pornbuz.com","a[href^='https://streamtape.com/v/'],a[href^='https://streamtape.to/v/']"),
-        // Exact selected pages are resolved by the bundled native yt-dlp site
-        // extractors, not by HTML teaser/related-video selection.
-        Site("thisvid.com","main video[src]"),
-        Site("spankbang.com","#main_video video[src]"),
-        Site("manyvids.com","main video[src]"),
         Site("porneec.com","main .video-player video[src],main .video-player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
             "video[src][data-duration],video source[src][data-duration]",
@@ -133,10 +128,6 @@ internal object PublisherOriginalExtractors {
         val host=domain(selected)?:return emptyList()
         val site=sites[host]?:return emptyList()
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
-        // Some ManyVids pages expose only a paid-scene teaser; the pinned
-        // site extractor distinguishes -preview from the full original.
-        // No generic <video>, og:video or recommendation is valid here.
-        if(VideoSiteProfiles.usesBundledExtractor(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
         if(host=="pornbuz.com"){
@@ -194,7 +185,6 @@ internal object PublisherOriginalExtractors {
      */
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
-        if(VideoSiteProfiles.usesBundledExtractor(selected))return emptyList()
         val host=domain(selected)
         val page=WebDiscovery.selectedDocument(selected,context)
         // Real Pornhub selected watch pages publish their signed original
