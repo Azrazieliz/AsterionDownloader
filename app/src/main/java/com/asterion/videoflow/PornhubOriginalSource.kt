@@ -48,9 +48,12 @@ internal object PornhubOriginalSource {
         // Real selected 2026-11-17 watch publishes hm-h.phncdn.com,
         // not only the historically observed em-h host. Permit ONLY these
         // exact publisher CDN hosts, never arbitrary *.phncdn.com.
-        if(h !in setOf("em-h.phncdn.com","hm-h.phncdn.com"))return false
+        // Windows first-party live probe (2026-11-20) verified an
+        // im-h.phncdn.com master with signed comma/equals path tokens.
+        if(h !in setOf("em-h.phncdn.com","hm-h.phncdn.com",
+                "im-h.phncdn.com"))return false
         return uri.path.orEmpty().matches(
-            Regex("""(?i)^/[A-Za-z0-9_./\-]{12,700}\.m3u8$""")) &&
+            Regex("""(?i)^/[A-Za-z0-9_./,=\-]{12,700}\.m3u8$""")) &&
             !FullLengthVideoPolicy.isExplicitPreview("",url)
     }
     /** The same exact selected watch/CDN conditions that authorize real
