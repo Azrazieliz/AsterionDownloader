@@ -78,7 +78,7 @@ object ResourceDownloads {
         torrent.addView(ui.text(a,"BITTORRENT",15f,ui.white,true),ui.lp(a,3))
         torrent.addView(ui.text(a,
             "Game torrents: search by TITLE above, select a torrent result, choose the complete game files, then monitor verified peer "+
-            "transfers below. Torrent files remain in private quarantine after download. A verified malware scan is required before any export or installation.",
+            "transfers below. Torrent files remain private after verified transfer. Use Review & Export on a completed torrent to inspect preliminary findings and explicitly approve publication; this is not a malware scan.",
             12f,ui.secondary),ui.lp(a,7))
         torrent.addView(action(a,"ACTIVE / COMPLETED TORRENTS · PAUSE / RESUME"){
             TorrentTransfers.showQueue(a)
