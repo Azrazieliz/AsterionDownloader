@@ -249,8 +249,25 @@ object KyoraCreatorPreviews {
                 // fallback retained 40 real cards yet labeled them "no visible
                 // video cards" on the same screen.
                 val retained=stored?.entries.orEmpty()
+                // A failed listing/Continue step is not evidence that the
+                // owner's existing independently indexed /watch/<id> videos
+                // have disappeared. Preserve those cards and avoid a false
+                // catalog-wide "no recordings" warning. AUTH/HTTP and real
+                // selected-player failures remain visible.
+                val nativeIndexExists=if(
+                    SiteControls.key(url)=="archivebate.com" &&
+                    it.message.orEmpty().contains("no visible video cards",true))
+                    runCatching{
+                        SourceIndexDb(a.applicationContext).use{db->
+                            db.forSource(url,5).any{entry->
+                                com.asterion.videoflow.ArchivebateSelectedMedia
+                                    .isSelectedArticle(entry.url)
+                            }
+                        }
+                    }.getOrDefault(false)
+                else false
                 if(SiteControls.key(url)=="archivebate.com" &&
-                    retained.isNotEmpty() &&
+                    (retained.isNotEmpty() || nativeIndexExists) &&
                     it.message.orEmpty().contains("no visible video cards",true))
                     Snapshot(retained,stored?.updated?:System.currentTimeMillis(),null)
                 else Snapshot(retained,System.currentTimeMillis(),
