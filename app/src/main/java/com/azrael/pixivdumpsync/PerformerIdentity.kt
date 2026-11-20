@@ -18,7 +18,8 @@ import java.util.concurrent.TimeUnit
  * matching prominent name can establish a follow.
  */
 internal object PerformerIdentity {
-    data class Proof(val displayName:String,val profileUrl:String,val provider:String)
+    data class Proof(val displayName:String,val profileUrl:String,
+                     val provider:String,val videoProfile:Boolean=true)
     // FullPorner publishes first-party /pornstar/<slug> profiles too.
     // Search discovery spans all approved providers separately; identity
     // verification requires an actual first-party person page.
@@ -121,14 +122,16 @@ internal object PerformerIdentity {
                 }.getOrNull().orEmpty()
                 else->href
             }
-            if(isProfileUrl(name,candidate))results+=candidate
+            if(isProfileUrl(name,candidate) ||
+                PublicCreatorEvidence.trustedProfileCandidate(name,candidate))
+                results+=candidate
             if(results.size>=30)break
         }
         return results.toList()
     }
 
     private fun searchProfileCandidates(name:String):List<String>{
-        val query=URLEncoder.encode("\""+name.trim()+"\" performer model profile","UTF-8")
+        val query=URLEncoder.encode("\""+name.trim()+"\" model creator performer gravure","UTF-8")
         val engines=listOf(
             "https://www.bing.com/search?q="+query,
             "https://html.duckduckgo.com/html/?q="+query)
@@ -157,6 +160,11 @@ internal object PerformerIdentity {
         val needle=name.trim()
         val handle=slug(needle)
         if(handle.length<2 || needle.length<2)return null
+        // This independently published reference was verified from the
+        // publisher itself, not inferred from a title-match video index.
+        // Treat it as public CREATOR identity only (never video attribution).
+        PublicCreatorEvidence.verifiedReference(needle)?.let{return Proof(
+            needle,it,"Shueisha · public creator",videoProfile=false)}
         val urls=listOf(
             "https://www.pornhub.com/model/$handle",
             "https://www.pornhub.com/pornstar/$handle",
@@ -180,7 +188,10 @@ internal object PerformerIdentity {
                             Jsoup.parse(BrowserPageFetch.html(context,candidate),candidate)
                         else null
                         if(doc!=null && matchesEvidence(needle,candidate,doc))
-                            Proof(needle,candidate,host(candidate))
+                            Proof(needle,candidate,host(candidate),videoProfile=true)
+                        else if(doc!=null && PublicCreatorEvidence.publishedPerson(
+                                needle,candidate,doc))
+                            Proof(needle,candidate,host(candidate),videoProfile=false)
                         else null
                     }.getOrNull()
                 }
