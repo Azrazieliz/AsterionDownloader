@@ -33,13 +33,14 @@ internal object PublisherOriginalExtractors {
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
         // Only the selected article's own main player is eligible. No sidebar,
         // thumbnail MP4s, related posts, or guessed off-site player domains.
-        Site("porneec.com","article video[src],article video source[src],"+
-            "main .video-player video[src],main .video-player source[src],"+
-            "main #player video[src],main #player source[src],meta[itemprop=contentUrl]"),
-        Site("taiav.com","main video[src],main video source[src],"+
-            "main #player video[src],main #player source[src],"+
+        Site("porneec.com","main .video-player video[src],main .video-player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
-            "meta[itemprop=contentUrl]"),
+            "video[src][data-duration],video source[src][data-duration]",
+            requireDuration=true),
+        Site("taiav.com","main .video-player video[src],main .video-player source[src],"+
+            "article .video-player video[src],article .video-player source[src],"+
+            "video[src][data-duration],video source[src][data-duration]",
+            requireDuration=true),
         Site("omg.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("hentaibros.net","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
         Site("onlyhentaistuff.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
@@ -281,6 +282,17 @@ internal object PublisherOriginalExtractors {
                 selected,page,context).map {Candidate(it,selected,host)}
             return (formats+fromHtml(selected,page.outerHtml()))
                 .distinctBy{it.url}
+        }
+        if(host in setOf("porneec.com","taiav.com")){
+            // Their public article HTML is a JavaScript shell; static pages
+            // contain ad iframes / preview MP4s but NOT a full media original.
+            // Only the exact selected HTML5 player in the owner's rendered
+            // browser may supply a video with an observed >=90-second duration.
+            val static=fromHtml(selected,page.outerHtml())
+            if(static.isNotEmpty())return static
+            val snapshot=com.azrael.pixivdumpsync.BrowserPageFetch
+                .html(context,selected)
+            return fromHtml(selected,snapshot).distinctBy{it.url}
         }
         return fromHtml(selected,page.outerHtml())
     }
