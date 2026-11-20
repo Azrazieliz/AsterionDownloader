@@ -38,19 +38,16 @@ FullPorner|https://fullporner.com/|ADULT
 Pornhub|https://www.pornhub.com/|ADULT
 EPORNER|https://www.eporner.com/|ADULT
 XXXi|https://xxxi.porn/|ADULT
-HelloPorn|https://helloporn.com/|ADULT
 HQPornerxxx|https://hqpornerxxx.com/|ADULT
 Jav Guru|https://jav.guru/|ADULT
 Roshy JAV|https://roshy.tv/category/decensored-6/|ADULT
 JAVIDEO|https://javideo.net/en/|ADULT
 XXXClub|https://xxxclub.to/|TORRENTS
 OneJAV|https://onejav.com/|TORRENTS
-MP4Hentai|https://mp4hentai.com/|HENTAI
 Hentai Bros|https://hentaibros.net/|HENTAI
 OnlyHentai|https://www.onlyhentaistuff.com/|HENTAI
 Uncensored Hentai|https://uncensoredhentai.xxx/|HENTAI
 3DHentai|https://3dhentaix.com/|HENTAI
-Hentai Haven|https://hentaihaven.xxx/|HENTAI
 Rule34 videos|https://rule34video.com/|HENTAI
 MangaDex (English)|https://mangadex.org/|COMICS
 Freeweb Novel|https://freewebnovel.com/home|BOOKS
@@ -67,7 +64,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==37 && sites.distinctBy{it.url}.size==37){"Incorrect approved Aloha source set"}
+            require(sites.size==34 && sites.distinctBy{it.url}.size==34){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
@@ -75,7 +72,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
     // supplemental bookmark rows. Their original engines and saved data stay intact.
     internal val alreadyIntegratedHosts=setOf("4khd.com","buondua.com","cosplaytele.com",
         "kiutaku.com","watchporn.to","pornhub.com","eporner.com",
-        "hentaihaven.xxx","sukebei.nyaa.si","db.bepis.moe")
+        "sukebei.nyaa.si","db.bepis.moe")
     val additions:List<AlohaSite> get()=all.filterNot{
         val siteHost=it.host.removePrefix("m.").removePrefix("fr.")
         siteHost in alreadyIntegratedHosts
