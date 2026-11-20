@@ -25,17 +25,30 @@ internal object KurohaMediaPreview {
         val duration: String? = null
     )
 
-    internal fun usable(tiles: List<Tile>): List<Tile> =
-        tiles.asSequence().filter {
-            (it.thumbnail.startsWith("content://") ||
-                SearchRanking.validUrl(it.thumbnail) ||
-                // An indexed publisher video can be shown with the native
-                // video icon when its thumbnail is not yet accessible.
-                // Never mislabel a missing thumbnail as a missing video.
-                (it.video && SourceIndexParser.safe(it.url))) &&
-                it.title.isNotBlank() && it.url.isNotBlank()
-        }.distinctBy { SearchRanking.canonicalKey(it.url) }
-            .take(120).toList()
+    internal fun usable(tiles: List<Tile>): List<Tile> {
+        // An indexed item may have only its selected-page URL while the
+        // independent public listing has the genuine poster for that same
+        // video. Earlier distinctBy() always kept the FIRST entry (often
+        // a blank poster), discarding later image evidence.
+        val selected=LinkedHashMap<String,Tile>()
+        for(tile in tiles){
+            if(!((tile.thumbnail.startsWith("content://") ||
+                SearchRanking.validUrl(tile.thumbnail) ||
+                (tile.video && SourceIndexParser.safe(tile.url))) &&
+                tile.title.isNotBlank() && tile.url.isNotBlank()))continue
+            val key=SearchRanking.canonicalKey(tile.url)
+            val existing=selected[key]
+            val hasPoster=tile.thumbnail.startsWith("content://") ||
+                SearchRanking.validUrl(tile.thumbnail)
+            val oldHasPoster=existing?.let{
+                it.thumbnail.startsWith("content://") ||
+                    SearchRanking.validUrl(it.thumbnail)
+            }?:false
+            if(existing==null || (hasPoster && !oldHasPoster))
+                selected[key]=tile
+        }
+        return selected.values.take(120)
+    }
 
     fun render(
         a: Activity,
