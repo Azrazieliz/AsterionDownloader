@@ -32,6 +32,7 @@ object BrowserPageFetch {
         "streamtape.com","streamtape.to","streamtape.net",
         "streamtape.site","sbtape.com",
         "hqpornerxxx.com","helloporn.com","javideo.net","play.javideo.net",
+        "porneec.com","taiav.com",
         "hentaihaven.xxx","uncensoredhentai.xxx","mp4hentai.com","roshy.tv",
         "mirrored.to","upfiles.com","upfilesgo.com")
     fun publicEligible(url:String):Boolean {
@@ -119,7 +120,7 @@ object BrowserPageFetch {
             "fullporner.com","mydaddy.cc","nhplayer.com","voe.sx","kamehaus.net",
             "hentaibros.net","3dhentaix.com","hentaihaven.xxx",
             "hqpornerxxx.com","javideo.net","play.javideo.net","helloporn.com","mp4hentai.com",
-            "roshy.tv","rule34video.com","pornhub.com",
+            "roshy.tv","rule34video.com","porneec.com","taiav.com","pornhub.com",
             "m.pornhub.com","fr.pornhub.com","en.pornhub.com",
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com")
