@@ -32,10 +32,17 @@ class SyncEngine(private val context: Context) {
             if(targetGalleryUrl!=null){
                 require(targetEntityId!=null){"Selected gallery must belong to a registered site"}
                 runExactAlbum(db,files,flow,stats,progress,targetEntityId,
-                    targetGalleryUrl,targetGalleryTitle)
-            }else when (mode) {
+                    targetGalleryUrl,targetGalleryTitle,targetSiteHost)
+            }else {
+                // Legacy manual site:all requests without their owning host
+                // must never fan out across every native gallery provider.
+                require(targetEntityId!="site:all" || targetSiteHost!=null){
+                    "Manual site check needs its provider identity; select CHECK NEW on that site"
+                }
+                when (mode) {
                 SyncMode.LIVE -> runLive(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
                 SyncMode.BACKFILL -> runBackfill(db, files, flow, stats, progress, targetEntityId,targetSiteHost)
+                }
             }
             while (!SyncControl.isStopping() && SyncControl.takePendingLive()) {
                 SyncControl.setMode(SyncMode.LIVE)
@@ -71,10 +78,16 @@ class SyncEngine(private val context: Context) {
     private fun runExactAlbum(db:GalleryDb, files:MediaStoreFiles,
                               flow:FlowLinkEmitter,stats:Stats,
                               progress:(String)->Unit,entityId:String,
-                              rawUrl:String,title:String?){
-        val entity=db.listEntities().firstOrNull{it.entityId==entityId &&
-            it.kind=="site"} ?:throw AdapterException(
-                "Selected album's parent site is not registered")
+                              rawUrl:String,title:String?,siteHost:String?){
+        val entity=db.listEntities().firstOrNull{record->
+            record.entityId==entityId && record.kind=="site" &&
+                KyoraSelectedGalleryIdentity.sameApprovedSite(
+                    record.canonicalUrl,rawUrl) &&
+                (siteHost==null ||
+                    com.azrael.pixivdumpsync.SiteControls.key(
+                        record.canonicalUrl)==siteHost)
+        } ?:throw AdapterException(
+                "Selected album's exact parent provider is not registered")
         // Preserve Kyora's original native stable IDs. The unified
         // selection path formerly synthesized a generic hash for every
         // non-Kiutaku album; BuonDua then looked for /photos/<hash>/
