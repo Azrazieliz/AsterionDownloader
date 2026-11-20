@@ -31,8 +31,9 @@ class NameWatchDb(context:Context):SQLiteOpenHelper(context,"asterion_name_watch
      * without evidence. Verified follow never creates a fake person record.
      */
     fun addVerified(name:String,profileUrl:String):Long{
-        require(PerformerIdentity.isProfileUrl(name,profileUrl)){
-            "A verified first-party performer profile is required"
+        require(PerformerIdentity.isProfileUrl(name,profileUrl) ||
+            PublicCreatorEvidence.isPublisherPage(profileUrl)){
+            "A verified public creator or first-party performer source is required"
         }
         val db=writableDatabase
         db.beginTransaction()
