@@ -26,6 +26,9 @@ internal object PublisherOriginalExtractors {
         Site("cums.net","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("watchporn.to","meta[itemprop=contentUrl],#player source[src],#player video[src]"),
         Site("archivebate.com","#player iframe[src],.player iframe[src],iframe[src^='https://mixdrop.ag/e/']",allowPlayerIframe=true),
+        // LiveCamRips' exact /video/<id> publisher page embeds the recording
+        // in one iframe#iframe-video. Other iframes/ads are not originals.
+        Site("livecamrips.to","iframe#iframe-video[src]",allowPlayerIframe=true),
         Site("onscreens.me","#player video[src],main video[src]",allowPlayerIframe=true),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
@@ -87,6 +90,9 @@ internal object PublisherOriginalExtractors {
         val path=u.path.orEmpty()
         return when(host) {
             "archivebate.com" -> h=="mixdrop.ag" &&
+                Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)
+            "livecamrips.to" -> h in setOf(
+                "mdzsmutpcvykb.net","mixdrop.ag","mixdrop.co","mixdrop.to") &&
                 Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)
             "uncensoredhentai.xxx" -> h=="nhplayer.com" &&
                 Regex("""^/v/[A-Za-z0-9]{8,40}/?$""").matches(path)
