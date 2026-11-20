@@ -79,12 +79,15 @@ internal object ApprovedCosplayActions {
         }
         val host=SiteControls.key(sourceAddress)
         GalleryRequestLedger.remember(a,GalleryRequestLedger.Request(
-            mode,entity.stableId,siteHost=host))
+            mode,entity.stableId,siteHost=host,
+            siteSource=entity.source.wireName))
         a.startForegroundService(Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
             .putExtra(SyncForegroundService.EXTRA_MODE,mode.name)
             .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId)
-            .putExtra(SyncForegroundService.EXTRA_SITE_HOST,host))
+            .putExtra(SyncForegroundService.EXTRA_SITE_HOST,host)
+            .putExtra(SyncForegroundService.EXTRA_SITE_SOURCE,
+                entity.source.wireName))
     }
 
     fun checkNew(a:Activity,address:String):String{
@@ -225,7 +228,8 @@ internal object ApprovedCosplayActions {
         val request=GalleryRequestLedger.Request(SyncMode.BACKFILL,
             entity.stableId,siteHost=SiteControls.key(site.url),
             albumUrl=exactUrl,
-            albumTitle=tile.title.take(160))
+            albumTitle=tile.title.take(160),
+            siteSource=entity.source.wireName)
         GalleryRequestLedger.remember(a,request)
         a.startForegroundService(Intent(a,SyncForegroundService::class.java)
             .setAction(SyncForegroundService.ACTION_START)
@@ -233,6 +237,8 @@ internal object ApprovedCosplayActions {
             .putExtra(SyncForegroundService.EXTRA_SITE_ID,entity.stableId)
             .putExtra(SyncForegroundService.EXTRA_SITE_HOST,
                 SiteControls.key(site.url))
+            .putExtra(SyncForegroundService.EXTRA_SITE_SOURCE,
+                entity.source.wireName)
             .putExtra(SyncForegroundService.EXTRA_ALBUM_URL,exactUrl)
             .putExtra(SyncForegroundService.EXTRA_ALBUM_TITLE,request.albumTitle))
         return "Selected gallery queued · "+site.name+
