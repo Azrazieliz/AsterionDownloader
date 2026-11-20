@@ -19,7 +19,7 @@ def mask(s):
  s=re.sub(r"https?(?:\\/\\/|://)[^\\s\"'<>{}]{1,350}",
           lambda x:"{URL_HOST:"+str(urllib.parse.urlsplit(x.group().replace("\\/","/")).hostname)+"}",s)
  s=re.sub(r"[A-Za-z0-9+/=_-]{42,}","{opaque}",s)
- return " ".join(s.split())[:280]
+ return " ".join(s.split())[:1250]
 def main():
  url,html=get("https://taiav.com/cn/")
  tags=Links();tags.feed(html)
@@ -30,7 +30,15 @@ def main():
   if u.scheme=="https" and u.hostname in ("taiav.com","www.taiav.com") and re.fullmatch(r"/(?:cn|tw|en)/movie/[a-f0-9]{24}/?",u.path,re.I) and a not in selected:selected.append(a)
  if not selected:print(json.dumps({"error":"NO_SELECTED"}));return
  page,html=get(selected[0]);print(json.dumps({"selected_path":urllib.parse.urlsplit(page).path,"html_bytes":len(html)}),flush=True)
- for label,rx in (("hls",r"\.m3u8"),("mp4",r"\.mp4"),("video_type",r"(?:video_url|videoUrl|hls|file|playUrl|video-src|m3u8)"),("ajax",r"(?:axios|fetch\(|ajax|VideoPlayer|jwplayer|videojs|m3u8Url)")):
+ for label,rx in (("HLS_ASSIGN",r"data\\.m3u8"),
+                  ("AJAX",r"\\$\\.ajax\\s*\\("),
+                  ("FETCH",r"fetch\\s*\\("),
+                  ("VIDEO_INIT",r"var\\s+(?:player|isQuark|m3u8)\\b")):
   all=list(re.finditer(rx,html,re.I))
-  print(json.dumps({"kind":label,"count":len(all),"contexts":[mask(html[max(0,m.start()-155):m.end()+155]) for m in all[:min(5,len(all))]]},ensure_ascii=False),flush=True)
+  contexts=[]
+  for match in all[:3]:
+   before=1100 if label=="HLS_ASSIGN" else 180
+   after=280 if label=="HLS_ASSIGN" else 580
+   contexts.append(mask(html[max(0,match.start()-before):match.end()+after]))
+  print(json.dumps({"kind":label,"count":len(all),"contexts":contexts},ensure_ascii=True),flush=True)
 if __name__=="__main__":main()
