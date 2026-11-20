@@ -147,7 +147,8 @@ internal object TorrentMetadataBridge {
         }
         return null
     }
-    fun prepareMagnet(a:Activity,magnet:String,folder:String) {
+    fun prepareMagnet(a:Activity,magnet:String,folder:String,
+                      ownerReviewed:Boolean=false) {
         if(!(magnet.startsWith("magnet:?xt=urn:btih:",true) ||
                 magnet.startsWith("magnet:?xt=urn:btmh:",true))){
             Toast.makeText(a,"Invalid magnet info hash",Toast.LENGTH_LONG).show()
@@ -196,10 +197,25 @@ internal object TorrentMetadataBridge {
                 val safety=TorrentSafetyGate.assess(a)
                 if(!safety.allowed){
                     releaseRequest(request)
-                    AlertDialog.Builder(a).setTitle("Torrent device-safety hold")
+                    val dialog=AlertDialog.Builder(a)
+                        .setTitle("Torrent device-safety hold")
                         .setMessage(safety.reason+
                             "\nNo validated cached file list was available.")
-                        .setPositiveButton("Close",null).show()
+                        .setNegativeButton("Keep paused",null)
+                    if(TorrentSafetyGate.incidentHold(a))
+                        dialog.setPositiveButton("Retry isolated torrent"){_,_->
+                            val reviewed=runCatching{
+                                TorrentSafetyGate.ownerReviewedRetry(a)
+                            }.getOrElse{TorrentSafetyGate.Admission(
+                                false,it.message?:"Cannot acknowledge incident")}
+                            if(reviewed.allowed)
+                                prepareMagnet(a,magnet,folder,ownerReviewed=true)
+                            else AlertDialog.Builder(a)
+                                .setTitle("Torrent remains paused")
+                                .setMessage(reviewed.reason)
+                                .setPositiveButton("Close",null).show()
+                        }
+                    dialog.show()
                     return@runOnUiThread
                 }
                 val intent=Intent(a,TorrentTransferService::class.java).apply{
@@ -344,6 +360,7 @@ internal object TorrentMetadataBridge {
         val selected=BooleanArray(paths.size){i->
             TorrentContentRisk.selectByDefault(folder,paths[i])
         }
+        var ownerReviewed=false
         fun startSelected(){
             if(!selected.any{it}){
                 Toast.makeText(a,"Select at least one file",Toast.LENGTH_LONG).show()
@@ -357,9 +374,25 @@ internal object TorrentMetadataBridge {
             }
             val admission=TorrentSafetyGate.assess(a)
             if(!admission.allowed){
-                AlertDialog.Builder(a).setTitle("Torrent safety hold")
+                val dialog=AlertDialog.Builder(a)
+                    .setTitle("Torrent safety hold")
                     .setMessage(admission.reason)
-                    .setPositiveButton("Close",null).show()
+                    .setNegativeButton("Keep paused",null)
+                if(TorrentSafetyGate.incidentHold(a))
+                    dialog.setPositiveButton("Retry isolated torrent"){_,_->
+                        val reviewed=runCatching{
+                            TorrentSafetyGate.ownerReviewedRetry(a)
+                        }.getOrElse{TorrentSafetyGate.Admission(
+                            false,it.message?:"Cannot acknowledge incident")}
+                        if(reviewed.allowed){
+                            ownerReviewed=true
+                            startSelected()
+                        }else AlertDialog.Builder(a)
+                            .setTitle("Torrent remains paused")
+                            .setMessage(reviewed.reason)
+                            .setPositiveButton("Close",null).show()
+                    }
+                dialog.show()
                 return
             }
             val indices=selected.indices.filter{selected[it]}.joinToString(",")
@@ -369,6 +402,8 @@ internal object TorrentMetadataBridge {
                     putExtra("job",hash)
                     putExtra("folder",folder)
                     putExtra("indices",indices)
+                    putExtra(TorrentTransferService.OWNER_REVIEWED_RETRY,
+                        ownerReviewed)
                 })
             }.onSuccess{
                 Toast.makeText(a,"Starting selected torrent files",
