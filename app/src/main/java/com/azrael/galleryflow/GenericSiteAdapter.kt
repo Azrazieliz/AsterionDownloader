@@ -51,7 +51,14 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
         }
         val visited = linkedSetOf<String>()
         val found = linkedSetOf<String>()
-        var next: String? = url
+        val siteHost=URI(url).host.lowercase(Locale.ROOT).removePrefix("www.")
+        // The PornPics homepage is a navigation shell: its actual public
+        // album cards are listed at /popular/, confirmed by live HTML.
+        // The previous site:all backfill inspected the homepage as one
+        // invented gallery and never reached its published original sets.
+        var next: String? = if(siteHost=="pornpics.com" &&
+            URI(url).path.trim('/').isBlank())
+                "https://www.pornpics.com/popular/" else url
         while (next != null && visited.size < MAX_LISTING_PAGES) {
             if (!SyncControl.checkpoint()) return@sequence
             val current = next
@@ -59,7 +66,14 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             val doc = documentWithRetry(current)
             val host = URI(current).host.lowercase(Locale.ROOT)
             val links = discoverGalleryLinks(doc, host)
-            if (links.isEmpty() && visited.size == 1) {
+            if (links.isEmpty() && visited.size == 1 &&
+                siteHost in setOf("pornpics.com","celeb.st")) {
+                // These home/feed pages are not media albums. A layout
+                // change is an indexing error, not a completed download.
+                throw AdapterException(
+                    "No original-gallery links in "+siteHost+
+                        " listing; reconnect or update its site adapter")
+            } else if (links.isEmpty() && visited.size == 1) {
                 yield(toGallery(entity, current, doc.title().ifBlank { entity.displayName }))
             } else for ((link, title) in links) {
                 if (found.add(link)) yield(toGallery(entity, link, title))
@@ -295,7 +309,10 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             val link = absolute(doc.baseUri(), a.attr("href")) ?: continue
             val uri = runCatching { URI(link) }.getOrNull() ?: continue
             if (uri.host?.lowercase(Locale.ROOT) != host) continue
-            if (!looksGalleryPage(uri.path) ||
+            val celebImageSet=host.removePrefix("www.")=="celeb.st" &&
+                Regex("""(?i)^/creator/[^/]+/(?:images|posts)/?$""")
+                    .matches(uri.path.orEmpty())
+            if ((!looksGalleryPage(uri.path) && !celebImageSet) ||
                 Regex("/(?:photo|pic|picture|image)/[^/]+$", RegexOption.IGNORE_CASE)
                     .containsMatchIn(uri.path)) continue
             found.putIfAbsent(canonical(uri), a.text().ifBlank { uri.path })
