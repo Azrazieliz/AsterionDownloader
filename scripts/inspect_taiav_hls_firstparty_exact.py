@@ -30,12 +30,12 @@ def main():
   if u.scheme=="https" and u.hostname in ("taiav.com","www.taiav.com") and re.fullmatch(r"/(?:cn|tw|en)/movie/[a-f0-9]{24}/?",u.path,re.I) and a not in selected:selected.append(a)
  if not selected:print(json.dumps({"error":"NO_SELECTED"}));return
  page,html=get(selected[0]);print(json.dumps({"selected_path":urllib.parse.urlsplit(page).path,"html_bytes":len(html)}),flush=True)
- for label,rx in (("AJAX_HLS",r"if\\s*\\(\\s*data\\.m3u8\\s*\\)"),
-                  ("AJAX_CALL",r"\\$\\.ajax\\s*\\(")):
-  all=list(re.finditer(rx,html,re.I))
-  match=all[-1] if all else None
-  before=950 if label=="AJAX_HLS" else 120
-  after=100 if label=="AJAX_HLS" else 350
-  excerpt=mask(html[max(0,match.start()-before):match.end()+after]) if match else ""
-  print(json.dumps({"kind":label,"count":len(all),"context":excerpt},ensure_ascii=True),flush=True)
+ for label,needle in (("HLS","data.m3u8"),("AJAX","$.ajax("),
+                      ("FETCH","fetch("),("PLAY","player.load(")):
+  pos=html.lower().find(needle.lower())
+  preceding=1200 if label=="HLS" else 240
+  following=180 if label=="HLS" else 380
+  excerpt=mask(html[max(0,pos-preceding):pos+len(needle)+following]) if pos>=0 else ""
+  print(json.dumps({"kind":label,"found":pos>=0,
+      "context":excerpt},ensure_ascii=True),flush=True)
 if __name__=="__main__":main()
