@@ -158,6 +158,19 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
             arrayOf(ref.source.wireName, ref.stableId))
     }
 
+    fun backfillOffset(source:SourceId,entityId:String):Int =
+        readableDatabase.rawQuery(
+            "SELECT backfill_page FROM entities WHERE source=? AND entity_id=? LIMIT 1",
+            arrayOf(source.wireName,entityId)).use{cursor->
+            if(cursor.moveToFirst())cursor.getInt(0).coerceIn(0,500_000) else 0
+        }
+
+    fun setBackfillOffset(source:SourceId,entityId:String,next:Int){
+        writableDatabase.update("entities",ContentValues().apply {
+            put("backfill_page",next.coerceIn(0,500_000))
+        },"source=? AND entity_id=?",arrayOf(source.wireName,entityId))
+    }
+
     fun pendingRetries(entity: EntityRecord, limit: Int = 12): List<GalleryRef> {
         val result = mutableListOf<GalleryRef>()
         readableDatabase.query(
@@ -476,13 +489,27 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
     /** Cancel every unsaved waiting Gallery original, including records
      * beyond the UI's recent-row sample; never delete media or saved receipts. */
     fun cancelAllWaitingMedia():Int {
-        val changed=writableDatabase.update("media",ContentValues().apply{
-            put("state",TransferState.CANCELLED.dbValue)
-            put("updated_at",System.currentTimeMillis())
-        },"content_uri IS NULL AND state IN "+
-            "('pending','retrying','permanent_error','inaccessible')",null)
-        if(changed>0)com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
-        return changed
+        val db=writableDatabase
+        db.beginTransaction()
+        val cancelled=try {
+            val media=db.update("media",ContentValues().apply{
+                put("state",TransferState.CANCELLED.dbValue)
+                put("updated_at",System.currentTimeMillis())
+            },"content_uri IS NULL AND state IN "+
+                "('pending','retrying','permanent_error','inaccessible')",null)
+            // A Cancel All action must also stop the 31k+ durable Gallery
+            // retry records, not just hide 350 associated media rows.
+            // Preserve the galleries and all completed MediaStore originals.
+            val retries=db.delete("backfill_retries",null,null)
+            val galleries=db.update("galleries",ContentValues().apply{
+                put("state",TransferState.CANCELLED.dbValue)
+            },"state IN ('pending','retrying','partial')",null)
+            db.setTransactionSuccessful()
+            media+retries+galleries
+        }finally{db.endTransaction()}
+        if(cancelled>0)
+            com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
+        return cancelled
     }
 
     /**

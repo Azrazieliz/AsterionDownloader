@@ -2,6 +2,16 @@ package com.azrael.galleryflow
 
 import android.content.Context
 
+/** Hard, per-provider processing budget. A dead 4KHD backfill previously
+ * generated 31,195 retained retries and prevented every other cosplay site
+ * from receiving transfer time. Budgets never delete existing originals.
+ */
+internal object GalleryBackfillBudget {
+    const val PRIOR_RETRIES=2
+    const val NEW_GALLERIES_PER_PASS=4
+    fun hasMore(visited:Int):Boolean=visited>=NEW_GALLERIES_PER_PASS
+}
+
 class SyncEngine(private val context: Context) {
     data class Stats(
         var entities: Int = 0,
@@ -252,11 +262,18 @@ class SyncEngine(private val context: Context) {
             SyncControl.updateMessage(prefix)
             progress(prefix)
             try {
-                val pages = adapter.enumerateGalleries(entity.toSourceEntity())
+                // A per-source continuation offset bounds the NATIVE
+                // enumeration to four NEW albums per invocation. Without
+                // this, one broken provider could create tens of thousands
+                // of retries before any other provider received a turn.
+                val savedOffset=db.backfillOffset(entity.source,entity.entityId)
+                val pages=adapter.enumerateGalleries(entity.toSourceEntity())
+                    .drop(savedOffset)
+                var inspected=0
                 var failedCount = 0
                 val attemptedGalleries=hashSetOf<String>()
                 // Retry a bounded batch of historical failures, then continue onward.
-                for (retry in db.pendingRetries(entity)) {
+                for (retry in db.pendingRetries(entity,GalleryBackfillBudget.PRIOR_RETRIES)) {
                     if(!attemptedGalleries.add(retry.stableId))continue
                     if (!SyncControl.checkpoint()) return
                     if(!targeted &&
@@ -272,6 +289,13 @@ class SyncEngine(private val context: Context) {
                     }
                 }
                 for (gallery in pages) {
+                    if(GalleryBackfillBudget.hasMore(inspected)){
+                        stats.incompleteGalleries++
+                        progress("Backfill slice completed for "+entity.displayName+
+                            "; continuing on the next pass. Other providers can proceed.")
+                        break
+                    }
+                    inspected++
                     if(!attemptedGalleries.add(gallery.stableId))continue
                     if (!SyncControl.checkpoint()) return
                     if(!targeted &&
@@ -302,6 +326,11 @@ class SyncEngine(private val context: Context) {
                         progress("Resuming " + prefix)
                     }
                 }
+                // Keep the offset only after the bounded slice has
+                // returned. Historical retry records are independent and
+                // remain available for explicit retry/cancel.
+                if(inspected>0)db.setBackfillOffset(entity.source,
+                    entity.entityId,savedOffset+inspected)
                 val retryCount = db.retryCount(entity.source, entity.entityId)
                 db.setEntityError(entity.source, entity.entityId,
                     if (retryCount > 0) retryCount.toString() +
