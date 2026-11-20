@@ -159,6 +159,29 @@ object TorrentTransfers {
         }.getOrNull()
         return stored ?: prefs.getString("job_$id","").orEmpty()
     }
+    /** Only relevant controls for the job's durable state. Never present
+     * Pause and Resume together, and always allow safe queue dismissal.
+     * Discard is a tombstone, NOT deletion of saved originals or private
+     * unverified pieces. Only TorrentTransferService may stop active JNI work.
+     */
+    internal fun queueActionLabels(value:String):List<String> {
+        val normalized=value.lowercase(java.util.Locale.ROOT)
+        val exported="exported" in normalized
+        val quarantined="quarantined" in normalized
+        val cancelled="cancelled" in normalized
+        val paused="paused" in normalized || "failed:" in normalized ||
+            "stalled:" in normalized
+        return buildList {
+            if(!exported && !quarantined && !cancelled)
+                add(if(paused)"Resume transfer" else "Pause transfer")
+            add("Show current status")
+            add("Quarantine security report")
+            if(quarantined)add("Review & export selected files")
+            if(exported)add("Open exported originals")
+            if(!cancelled)add("Discard from queue")
+        }
+    }
+
     fun showQueue(a: Activity) {
         val prefs = a.getSharedPreferences("torrent_transfers", Context.MODE_PRIVATE)
         val existing=prefs.all.keys.filter{
@@ -178,72 +201,96 @@ object TorrentTransfers {
         AlertDialog.Builder(a).setTitle("BitTorrent transfers")
             .setItems(labels){_,index->
                 val id=keys[index]
-                val finished=labels[index].contains("EXPORTED",true)
-                val quarantined=labels[index].contains("QUARANTINED",true)
-                val controls=buildList {
-                    add("Pause transfer");add("Resume transfer")
-                    add("Show current status")
-                    add("Quarantine security report")
-                    if(quarantined)add("Review & export selected files")
-                    if(finished)add("Open exported originals")
-                }.toTypedArray()
+                val controls=queueActionLabels(labels[index]).toTypedArray()
                 AlertDialog.Builder(a).setTitle(labels[index])
                     .setItems(controls){_,which->
-                        if(controls[which]=="Review & export selected files"){
-                            TorrentVerifiedExport.request(a,id)
-                        }else if(controls[which]=="Open exported originals"){
-                            TorrentVerifiedExport.open(a,id)
-                        }else if(which>=2){
-                            val details=if(which==3)runCatching{
-                                val report=File(statusDir(a),"$id.security-review.txt")
-                                if(report.isFile)report.readText().take(3500)
-                                else "No completed security review. All unverified "+
-                                    "torrent pieces remain in private storage."
-                            }.getOrDefault("Security review unavailable. Keep quarantined.")
+                        when(val control=controls[which]){
+                            "Review & export selected files"->
+                                TorrentVerifiedExport.request(a,id)
+                            "Open exported originals"->
+                                TorrentVerifiedExport.open(a,id)
+                            "Show current status","Quarantine security report"->{
+                                val details=if(control=="Quarantine security report")
+                                    runCatching{
+                                        val report=File(statusDir(a),
+                                            "$id.security-review.txt")
+                                        if(report.isFile)report.readText().take(3500)
+                                        else "No completed security review. All unverified "+
+                                            "torrent pieces remain in private storage."
+                                    }.getOrDefault("Security review unavailable. Keep quarantined.")
                                 else status(a,id,prefs)
-                            AlertDialog.Builder(a).setTitle(
-                                if(which==3)"Quarantine: "+id.take(8)
-                                else "Torrent "+id.take(8))
-                                .setMessage(details)
-                                .setPositiveButton("Close",null).show()
-                        }else{
-                            fun dispatch(reviewed:Boolean){
-                                runCatching {
-                                    a.startForegroundService(
-                                        Intent(a,TorrentTransferService::class.java).apply{
-                                            action=if(which==0)
-                                                TorrentTransferService.PAUSE
-                                                else TorrentTransferService.RESUME
-                                            putExtra("job",id)
-                                            putExtra(
-                                                TorrentTransferService.OWNER_REVIEWED_RETRY,
-                                                reviewed)
-                                        })
-                                }.onFailure {
-                                    Toast.makeText(a,
-                                        "Torrent service unavailable: "+
-                                        it.message.orEmpty().take(90),
-                                        Toast.LENGTH_LONG).show()
-                                }
+                                AlertDialog.Builder(a).setTitle(
+                                    if(control=="Quarantine security report")
+                                        "Quarantine: "+id.take(8)
+                                    else "Torrent "+id.take(8))
+                                    .setMessage(details)
+                                    .setPositiveButton("Close",null).show()
                             }
-                            if(which==1 && TorrentSafetyGate.incidentHold(a)){
+                            "Discard from queue"->{
                                 AlertDialog.Builder(a)
-                                    .setTitle("Resume isolated torrent?")
-                                    .setMessage("A previous native request "+
-                                        "may have interrupted the phone. "+
-                                        "Only this torrent's isolated worker "+
-                                        "will retry; existing pieces are kept.")
-                                    .setNegativeButton("Keep paused",null)
-                                    .setPositiveButton("Retry"){_,_->
-                                        val admitted=runCatching {
-                                            TorrentSafetyGate.ownerReviewedRetry(a)
-                                        }.getOrElse {TorrentSafetyGate.Admission(
-                                            false,it.message?:"Recovery failed")}
-                                        if(admitted.allowed)dispatch(true)
-                                        else Toast.makeText(a,
-                                            admitted.reason,Toast.LENGTH_LONG).show()
+                                    .setTitle("Discard this torrent from the queue?")
+                                    .setMessage("Stop this job and hide its queue entry. "+
+                                        "Already exported original files are preserved. "+
+                                        "Unverified private pieces are retained for security review.")
+                                    .setNegativeButton("Keep job",null)
+                                    .setPositiveButton("Discard"){_,_->
+                                        runCatching{
+                                            a.startForegroundService(
+                                                Intent(a,TorrentTransferService::class.java).apply{
+                                                    action=TorrentTransferService.CANCEL
+                                                    putExtra("job",id)
+                                                })
+                                        }.onSuccess{
+                                            Toast.makeText(a,
+                                                "Discard requested; saved originals preserved",
+                                                Toast.LENGTH_LONG).show()
+                                        }.onFailure{
+                                            Toast.makeText(a,"Could not discard torrent: "+
+                                                it.message.orEmpty().take(100),
+                                                Toast.LENGTH_LONG).show()
+                                        }
                                     }.show()
-                            }else dispatch(false)
+                            }
+                            "Pause transfer","Resume transfer"->{
+                                val resuming=control=="Resume transfer"
+                                fun dispatch(reviewed:Boolean){
+                                    runCatching{
+                                        a.startForegroundService(
+                                            Intent(a,TorrentTransferService::class.java).apply{
+                                                action=if(resuming)
+                                                    TorrentTransferService.RESUME
+                                                    else TorrentTransferService.PAUSE
+                                                putExtra("job",id)
+                                                putExtra(
+                                                    TorrentTransferService.OWNER_REVIEWED_RETRY,
+                                                    reviewed)
+                                            })
+                                    }.onFailure{
+                                        Toast.makeText(a,
+                                            "Torrent service unavailable: "+
+                                                it.message.orEmpty().take(90),
+                                            Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                                if(resuming && TorrentSafetyGate.incidentHold(a)){
+                                    AlertDialog.Builder(a)
+                                        .setTitle("Resume isolated torrent?")
+                                        .setMessage("A previous native request "+
+                                            "may have interrupted the phone. "+
+                                            "Only this torrent's isolated worker "+
+                                            "will retry; existing pieces are kept.")
+                                        .setNegativeButton("Keep paused",null)
+                                        .setPositiveButton("Retry"){_,_->
+                                            val admitted=runCatching{
+                                                TorrentSafetyGate.ownerReviewedRetry(a)
+                                            }.getOrElse{TorrentSafetyGate.Admission(
+                                                false,it.message?:"Recovery failed")}
+                                            if(admitted.allowed)dispatch(true)
+                                            else Toast.makeText(a,
+                                                admitted.reason,Toast.LENGTH_LONG).show()
+                                        }.show()
+                                }else dispatch(false)
+                            }
                         }
                     }.setNegativeButton("Close",null).show()
             }.setPositiveButton("Refresh"){_,_->showQueue(a)}
