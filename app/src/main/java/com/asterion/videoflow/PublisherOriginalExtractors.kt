@@ -332,6 +332,27 @@ internal object PublisherOriginalExtractors {
             return TaiAvOriginalSource.resolve(context,selected,page.outerHtml())
                 ?.let{listOf(Candidate(it,selected,host))}.orEmpty()
         }
+        if(host in setOf("avple.tv","pimpbunny.com","xchina.co",
+                "bubblecum.lol","pornavhd.com","camstreams.tv")){
+            // Public listings are not media evidence. Their exact selected
+            // pages often initialize the genuine player only after JS:
+            // inspect the SAME approved watch through the existing browser
+            // owner, then accept precisely one directly attributable
+            // video/HLS source. Multiple competing videos (including ads)
+            // must never be silently selected by order or poster title.
+            val static=fromHtml(selected,page.outerHtml())
+            if(static.size==1)return static
+            val rendered=runCatching {
+                if(com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(
+                        selected) ||
+                    com.azrael.galleryflow.SiteSession.bound(context,selected))
+                    com.azrael.pixivdumpsync.BrowserPageFetch
+                        .html(context,selected)
+                else null
+            }.getOrNull()?:return emptyList()
+            val published=fromHtml(selected,rendered)
+            return published.singleOrNull()?.let{listOf(it)}.orEmpty()
+        }
         if(host=="porneec.com"){
             // Preserve working Porneec selected HTML5 player unchanged.
             // Static ad/preview media cannot stand in for the original.
