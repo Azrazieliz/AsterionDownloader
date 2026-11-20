@@ -1611,7 +1611,8 @@ object UnifiedDownloadsUi {
                         val actions=ui.row(a)
                         if(job.hasPrimaryAction && job.actionText!=null &&
                             job.actionText !in setOf("COOLDOWN")){
-                            actions.addView(ui.action(a,job.actionText,false){
+                            actions.addView(ui.action(a,job.actionText,
+                                job.actionText=="RESUME"){
                                 job.action();refresh()
                             },LinearLayout.LayoutParams(0,-2,1f))
                         }
