@@ -84,12 +84,20 @@ class SyncForegroundService : Service() {
         if(requested?.targeted==true)GalleryRequestLedger.remember(this,requested)
         // Recover unfinished album taps first. An untargeted automatic Live
         // run is not persisted and cannot turn an opted-out Sync back on.
-        val jobs=(GalleryRequestLedger.pending(this)+listOfNotNull(requested))
+        // A user-tapped gallery takes priority over old failed site-wide
+        // backfills. Do not discard those durable jobs; process them AFTER
+        // the current explicit selection instead of appearing hung on source.
+        val jobs=(listOfNotNull(requested)+GalleryRequestLedger.pending(this))
             .distinctBy{it.signature()}
         synchronized(pending){
             if(currentRun?.isDone==false){
                 for(job in jobs){
-                    if(job!=activeRequest && job !in pending)pending.addLast(job)
+                    if(job==activeRequest)continue
+                    if(requested!=null && job.signature()==requested.signature() &&
+                        job.albumUrl!=null){
+                        pending.remove(job)
+                        pending.addFirst(job)
+                    }else if(job !in pending)pending.addLast(job)
                 }
                 notifyNow()
                 return START_NOT_STICKY
