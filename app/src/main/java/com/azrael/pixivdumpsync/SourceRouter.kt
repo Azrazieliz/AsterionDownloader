@@ -21,6 +21,13 @@ object SourceRouter {
             return DownloadKind.COMIC
         if(Regex("(?i)(/manga/|/manhwa/|/series/|/serie/|/chapter[-/]|/chapitre[-/])")
             .containsMatchIn(path))return DownloadKind.COMIC
+        // Many supported original-video pages use native publisher routes
+        // such as JAV Guru /123456/title/, JAVIDEO /en/fc2ppv-12345 and
+        // MP4Hentai /YYYY/MM/title/. A generic /video or .mp4 heuristic
+        // wrongly sends them to gallery sync when shared from Android,
+        // silently bypassing the real VideoFlow engine.
+        if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(raw))
+            return DownloadKind.VIDEO
         if(Regex("(?i)\\.(mp4|webm|m3u8|mpd|mov)([?#]|$)").containsMatchIn(raw)||
            Regex("(?i)(/watch|/video|/shorts/|/reel/|/clip/|/post/)")
             .containsMatchIn(path)||
