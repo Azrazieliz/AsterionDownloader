@@ -34,7 +34,15 @@ object VideoSearchPreviews {
             it.startsWith("https://") && SearchRanking.validUrl(it) &&
                 SearchRanking.isVideoUrl(it)
         }
-        val key=validUrl?:selectedPage?:return
+        // OnScreens listing cards have repeatedly attributed a shared
+        // thumbnail to different recordings. The genuine selected article
+        // owns its preview: key by exact recording URL, not shared listing
+        // cover URL, and verify its first-party OG/poster independently.
+        val exactOnScreens=selectedPage?.takeIf{
+            SiteControls.key(it)=="onscreens.me"
+        }
+        val key=if(exactOnScreens!=null)
+            "onscreens:selected:"+exactOnScreens else validUrl?:selectedPage?:return
         synchronized(lock){memory.get(key)}?.let{
             image.scaleType=ImageView.ScaleType.CENTER_CROP
             image.setImageBitmap(it)
@@ -53,7 +61,14 @@ object VideoSearchPreviews {
             // Only a failed/missing Rule34Video poster triggers an additional
             // selected-page request. All work remains off the UI thread.
             val candidates=sequence<String>{
-                validUrl?.let{verifiedPoster->
+                if(exactOnScreens!=null){
+                    // Never reuse a possibly duplicated listing cover. The
+                    // selected OnScreens recording must actually publish its
+                    // own OG-image/poster. Otherwise show the honest icon.
+                    runCatching{
+                        PublisherSearchPoster.fetch(app,exactOnScreens)
+                    }.getOrNull()?.let{yield(it)}
+                }else validUrl?.let{verifiedPoster->
                     yieldAll(PublisherPreviewFallback.candidates(verifiedPoster,referer))
                 }
                 rule34Page?.let{source->
@@ -65,7 +80,9 @@ object VideoSearchPreviews {
                     }.getOrNull()
                     if(poster!=null && poster!=validUrl)yield(poster)
                 }
-                selectedPage?.takeIf{it!=rule34Page}?.let{source->
+                selectedPage?.takeIf{
+                    it!=rule34Page && it!=exactOnScreens
+                }?.let{source->
                     val poster=runCatching{
                         PublisherSearchPoster.fetch(app,source)
                     }.onFailure{problem->
