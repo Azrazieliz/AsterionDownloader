@@ -273,30 +273,10 @@ object AssetsPanel {
         body.addView(ui.text(a,"Files & source libraries",19f,ui.white,true),
             ui.lp(a,10))
         body.addView(ui.text(a,
-            "Open a local model or manage your approved 3D and Studio libraries.",
+            "Manage approved model sources and synchronize original downloadable assets.",
             12f,ui.secondary),ui.lp(a,6))
-        body.addView(ui.action(a,"GUMROAD · ORIGINAL ASSETS",true){
-            val address="https://gumroad.com/discover?query="+Uri.encode("3d model")
-            a.startActivity(Intent(a,AssetMarketplaceActivity::class.java)
-                .putExtra(AssetMarketplaceActivity.EXTRA_URL,address))
-        },ui.lp(a,7))
-        body.addView(ui.action(a,"OPEN LOCAL BLENDER / MODEL / ARCHIVE",false){
-            a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
-                // Android SAF requires a wildcard plus MIME alternatives.
-                // The provider may mislabel a .blend as octet-stream, so
-                // validate the actual selected filename before opening too.
-                type="*/*"
-                addCategory(Intent.CATEGORY_OPENABLE)
-                putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(
-                    "application/octet-stream","application/zip",
-                    "application/x-zip-compressed","application/x-rar-compressed",
-                    "application/vnd.rar","application/x-7z-compressed",
-                    "application/x-tar","application/gzip",
-                    "model/gltf+json","model/gltf-binary","model/obj",
-                    "model/stl","model/3mf","model/vnd.usdz+zip",
-                    "application/x-blender"))
-            },5204)
-        },ui.lp(a,7))
+        // Downloader-only workspace: paid Gumroad redirect and local Blender
+        // file opener were not requested and did not download anything.
         val pref=a.getSharedPreferences("asterion_asset_workspace_v2",0)
         val open=pref.getBoolean("provider_tools",false)
         body.addView(ui.action(a,
