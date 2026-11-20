@@ -221,8 +221,10 @@ object AsterionCosplayGallery {
                         // generic download file. The old branch bypassed the
                         // functioning Kyora GalleryFlow selected-album parser.
                         if(ApprovedCosplayActions.isGalleryPage(item.url) &&
-                            SiteBackfillProfiles.recognizesGalleryPage(
-                                site.url,item.url)){
+                            (SiteBackfillProfiles.recognizesGalleryPage(
+                                site.url,item.url) ||
+                                (host=="buondua.com" &&
+                                    item.url!=site.url))){
                             thread(name="asterion-cosplay-selected-indexed-album"){
                                 val result=runCatching{
                                     ApprovedCosplayActions.selectedGallery(
