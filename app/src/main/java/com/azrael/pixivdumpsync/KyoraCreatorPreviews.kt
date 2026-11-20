@@ -115,7 +115,8 @@ object KyoraCreatorPreviews {
             if(target.scheme!="https" ||
                 !SourceIndexParser.sameSite(base,page))continue
             val card=anchor.closest(
-                ".video-item,.video-card,.item,.thumb,.video-block,.card,.item-inner")
+                ".video-item,.video-card,.item,.thumb,.video-block,.card,.item-inner,"+
+                ".movie-card,.hots-card,.uk-card-media-top")
             val img=anchor.selectFirst("img")?:card?.selectFirst("img")
             val video=anchor.selectFirst("video[poster],video[data-poster]")
                 ?:card?.selectFirst("video[poster],video[data-poster]")
