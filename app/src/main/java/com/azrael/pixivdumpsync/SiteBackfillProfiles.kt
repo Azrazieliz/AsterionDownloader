@@ -94,7 +94,7 @@ internal object SiteBackfillProfiles {
             val url=runCatching{URI(doc.location()).resolve(link.attr("href"))}
                 .getOrNull()?:continue
             if(url.scheme!="https" || url.userInfo!=null ||
-                url.host?.lowercase(Locale.ROOT)?.removePrefix("www.")!=host ||
+                SiteControls.key(url.toString())!=SiteControls.key(base) ||
                 !profile.path.matches(url.path.orEmpty()) ||
 false)continue
             val destination=url.toString().substringBefore('#').trimEnd('/')+
@@ -148,8 +148,8 @@ false)continue
             if(raw.isBlank())continue
             val uri=runCatching{URI(doc.location()).resolve(raw)}
                 .getOrNull()?:continue
-            if(uri.scheme!="https" || uri.host?.lowercase(Locale.ROOT)
-                    ?.removePrefix("www.")!=host ||
+            if(uri.scheme!="https" ||
+                SiteControls.key(uri.toString())!=SiteControls.key(source) ||
                 uri.toString()==current || uri.userInfo!=null)continue
             // Navigation within the same listing/page family only.
             val currentPath=URI(current).path.orEmpty()
