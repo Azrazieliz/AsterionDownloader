@@ -37,19 +37,6 @@ internal object SiteBackfillProfiles {
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
         Profile("nhentai.xxx","COMICS",comics,
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
-        // MP4Hentai's current public homepage exposes its recent videos
-        // through dated WordPress post URLs. The wp-json endpoint can return
-        // HTTP 403 while ordinary HTML listing access succeeds. The generic
-        // heuristic previously discarded many legitimate article anchors.
-        Profile("mp4hentai.com","HENTAI",
-            ".gridwp-grid-post-title a[href],"+
-            ".gridwp-grid-post-thumbnail a[href],"+
-            ".gridwp-grid-post a[href],"+
-            "article h2 a[href],article h3 a[href],"+
-            ".entry-title a[href],.post-title a[href],"+
-            "article .post-thumbnail a[href],"+
-            ".post article a[href],main article a[href]",
-            Regex("^/20[0-9]{2}/(?:0[1-9]|1[0-2])/.{3,240}/?$"),"video"),
         Profile("4khd.com","COSPLAY",
             cosplay+",main article a[href],.post-list a[href]",
             Regex("^/content/[0-9]{1,8}/[a-z0-9][a-z0-9_-]{2,180}\\.html/?$"),
@@ -97,9 +84,7 @@ internal object SiteBackfillProfiles {
             if(url.scheme!="https" || url.userInfo!=null ||
                 url.host?.lowercase(Locale.ROOT)?.removePrefix("www.")!=host ||
                 !profile.path.matches(url.path.orEmpty()) ||
-                (host=="mp4hentai.com" &&
-                    url.path.orEmpty().contains("upcoming-",true) &&
-                    url.path.orEmpty().contains("-hentai-release",true)))continue
+false)continue
             val destination=url.toString().substringBefore('#').trimEnd('/')+
                 if(profile.kind=="books")"" else "/"
             val title=link.attr("title").ifBlank{
