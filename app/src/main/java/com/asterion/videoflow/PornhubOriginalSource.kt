@@ -29,7 +29,8 @@ internal object PornhubOriginalSource {
         if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
             uri.fragment!=null || uri.path!="/view_video.php")return false
         val host=uri.host.orEmpty().lowercase(Locale.ROOT)
-        if(host !in setOf("pornhub.com","www.pornhub.com","m.pornhub.com"))
+        if(host !in setOf("pornhub.com","www.pornhub.com","m.pornhub.com",
+                "fr.pornhub.com","en.pornhub.com"))
             return false
         val query=uri.rawQuery.orEmpty()
         // Exactly one selected viewkey; never accept a catalog/recommendation
