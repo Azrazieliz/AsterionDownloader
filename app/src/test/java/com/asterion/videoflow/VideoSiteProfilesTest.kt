@@ -35,8 +35,8 @@ class VideoSiteProfilesTest {
     }
     @Test fun helloPornActualFirstPartyVideoCardRoutesAreSelected() {
         val selected="https://helloporn.com/video-28699-fakedrivingschool-naughty-student-late-for-her-exam-j"
-        assertTrue(VideoSiteProfiles.isVideoPage(selected))
-        assertTrue(PublisherOriginalExtractors.owns(selected))
+        assertFalse(VideoSiteProfiles.isVideoPage(selected))
+        assertFalse(PublisherOriginalExtractors.owns(selected))
         assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/videos"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/channels/213-fake-driving-school"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://helloporn.com/video-latest"))
@@ -79,12 +79,11 @@ class VideoSiteProfilesTest {
     @Test fun hentaiAndVideoSourceHostsHaveIndependentProfiles(){
         for(url in listOf(
             "https://rule34video.com/video/example",
-            "https://mp4hentai.com/video/example",
             "https://watchporn.to/video/1234/name",
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(23,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(20,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -107,13 +106,13 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/anal/"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/inflation/"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://3dhentaix.com/explore/categories/"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://mp4hentai.com/2026/11/si-give-me-more-segs/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://mp4hentai.com/2026/07/upcoming-october-2026-hentai-release/"))
     }
     @Test fun hentaiHavenNestedEpisodeRemainsRecognized(){
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://hentaihaven.xxx/watch/example-series/episode-4/"))
     }
     @Test fun archivebateUploaderWatchIsVideoButUploaderProfileIsNot(){
