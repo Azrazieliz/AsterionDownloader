@@ -11,7 +11,9 @@ def main():
     import yt_dlp
     assert yt_dlp.version.__version__=="2026.10.26"
     episode,manifest,count=selected_original()
-    expression="bv[height<=480]+ba/bv+ba"
+    expression=("bv[height<=480]+ba[language=ja]/"
+                "bv[height<=480]+ba[language=jpn]/"
+                "bv[height<=480]+ba/bv+ba")
     with yt_dlp.YoutubeDL({"quiet":True,"no_warnings":True,
             "format":expression,"noplaylist":True,
             "http_headers":{"User-Agent":UA,"Referer":episode}}) as dl:
