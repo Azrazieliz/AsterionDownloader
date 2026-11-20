@@ -156,7 +156,8 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         if(origin!="user" || watchId!=0L)return false
         val statement=db.compileStatement(
             """UPDATE videos SET request_origin='user',watch_id=0,
-               state='queued',retry_after=0,error=NULL,updated=?
+               state='queued',progress=0,attempts=0,retry_after=0,error=NULL,
+               lease=lease+1,updated=?
                WHERE url=? AND state NOT IN ('running','done')
                  AND (request_origin!='user' OR
                       state IN ('full_only_hold','retry_wait','error','paused','dismissed'))""")
