@@ -34,9 +34,9 @@ class TaiAvOriginalSourceTest {
 
     @Test fun fullVodPlaylistMustContainActualVODAndSufficientRuntime(){
         val whole=buildString {
-            append("#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:VOD\\n")
-            repeat(100){append("#EXTINF:4.000,\\nseg").append(it).append(".ts\\n")}
-            append("#EXT-X-ENDLIST\\n")
+            append("#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n")
+            repeat(100){append("#EXTINF:4.000,\nseg").append(it).append(".ts\n")}
+            append("#EXT-X-ENDLIST\n")
         }
         assertTrue(TaiAvOriginalSource.isFullVodManifest(whole))
         assertFalse(TaiAvOriginalSource.isFullVodManifest(
@@ -44,9 +44,9 @@ class TaiAvOriginalSourceTest {
         assertFalse(TaiAvOriginalSource.isFullVodManifest(
             whole.replace("#EXT-X-PLAYLIST-TYPE:VOD","")))
         val short=buildString {
-            append("#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:VOD\\n")
-            repeat(20){append("#EXTINF:2.000,\\nseg").append(it).append(".ts\\n")}
-            append("#EXT-X-ENDLIST\\n")
+            append("#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n")
+            repeat(20){append("#EXTINF:2.000,\nseg").append(it).append(".ts\n")}
+            append("#EXT-X-ENDLIST\n")
         }
         assertFalse(TaiAvOriginalSource.isFullVodManifest(short))
     }
