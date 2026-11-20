@@ -17,6 +17,13 @@ object ProviderBackfillActions {
     fun request(a:Activity,site:IndexedSource):String{
         if(!AppPower.enabled(a))return "App is paused in Settings"
         val host=SiteControls.key(site.url)
+        // Every approved Cosplay entry point (including Manage Websites)
+        // must use the SAME actual Kyora original-file backfill. Old
+        // generic SourceIndex/SiteRunControl calls only populated previews.
+        if(site.area=="COSPLAY" &&
+            AlohaSources.by(AlohaArea.COSPLAY).any{
+                SiteControls.key(it.url)==host
+            })return ApprovedCosplayActions.backfill(a,site.url)
         if(host in setOf("onejav.com","sukebei.nyaa.si","xxxclub.to")){
             // scanAsync runs only feeds with automatic Sync enabled. A manual
             // BACKFILL must check the requested feed even when Sync is off.
