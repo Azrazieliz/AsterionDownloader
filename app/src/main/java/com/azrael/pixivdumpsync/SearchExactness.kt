@@ -13,6 +13,22 @@ object SearchExactness {
             .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter{it.isNotBlank()}
 
+    /**
+     * Model/person queries are identities, not an unordered bag of words.
+     * "Bella Alice" must not match "Barbara Bella and Alice Marshall".
+     * Keep the general unordered matcher for descriptive and torrent queries.
+     */
+    fun matchesPhrase(query:String,title:String):Boolean {
+        val requested=terms(query)
+        val candidate=terms(title)
+        if(requested.isEmpty() || candidate.size<requested.size)return false
+        return candidate.windowed(requested.size).any{slice->
+            requested.zip(slice).all{(q,t)->
+                t==q || (q.length>3 && t.startsWith(q))
+            }
+        }
+    }
+
     fun matches(query:String,title:String):Boolean {
         val required=terms(query)
         val actual=terms(title)
