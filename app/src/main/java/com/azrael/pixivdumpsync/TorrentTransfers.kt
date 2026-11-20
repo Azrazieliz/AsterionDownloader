@@ -33,11 +33,16 @@ import kotlin.concurrent.thread
 object TorrentTransfers {
     // Never instantiate the native engine in the main Android process.
     // Metadata and download calls are routed to :torrent via a service.
-    private val engine by lazy(LazyThreadSafetyMode.SYNCHRONIZED){SessionManager()}
-    @Volatile private var running = false
-    @Synchronized internal fun session(): SessionManager {
-        if (!running) { engine.start(); running = true }
-        return engine
+    // A stopped JNI session is disposable. Retaining the same native-backed
+    // manager through every torrent operation can re-enter a partially closed
+    // alerts loop after a previous transfer or metadata timeout.
+    @Volatile private var engine:SessionManager?=null
+    @Synchronized internal fun session():SessionManager {
+        engine?.let{return it}
+        val fresh=SessionManager()
+        fresh.start()
+        engine=fresh
+        return fresh
     }
     /** libtorrent owns native threads, sockets and piece buffers. Android
      * does not reclaim them just because the foreground service stops.
@@ -45,8 +50,9 @@ object TorrentTransfers {
      * returned from JNI, and never from the Activity main thread.
      */
     @Synchronized internal fun stopSessionWhenIdle() {
-        if(!running)return
-        try{engine.stop()}finally{running=false}
+        val closing=engine?:return
+        engine=null
+        closing.stop()
     }
     private fun statusDir(context:Context)=
         File(context.filesDir,"torrent-jobs").apply{mkdirs()}
@@ -277,6 +283,7 @@ class TorrentTransferService : Service() {
                 getSharedPreferences("torrent_transfers",MODE_PRIVATE).edit()
                     .remove("job_paused_$id").apply()
             }catch(e:Throwable){
+                if(e is VirtualMachineError || e is ThreadDeath)throw e
                 if(e is InterruptedException || stopRequests.contains(id))
                     update(id,"Paused · original pieces preserved; resume to continue")
                 else if(e is java.io.IOException &&
@@ -396,6 +403,7 @@ class TorrentTransferService : Service() {
                         applicationContext,action,intent,chosen)
                     receiver?.send(1,android.os.Bundle().apply{putString("job",hash)})
                 }catch(t:Throwable){
+                    if(t is VirtualMachineError || t is ThreadDeath)throw t
                     receiver?.send(0,android.os.Bundle().apply{
                         putString("error",t.message?:t.javaClass.simpleName)})
                 }finally{
