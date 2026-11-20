@@ -138,7 +138,7 @@ object KyoraCreatorPreviews {
                 ?.let{it.attr("data-duration").ifBlank{it.text()}}
                 ?.trim().orEmpty()
             val duration=rawDuration.takeIf{
-                it.matches(Regex("""\\d{1,3}:\\d{2}(?::\\d{2})?"""))
+                it.matches(Regex("""\d{1,3}:\d{2}(?::\d{2})?"""))
             }
             result.putIfAbsent(page,Preview(page,cover,title,duration))
             if(result.size>=24)break
