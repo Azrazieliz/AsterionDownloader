@@ -68,9 +68,10 @@ object TorrentSearchUi {
         val records=ArrayList<CatalogHit>()
         val searchGeneration=java.util.concurrent.atomic.AtomicLong()
         var searchWorker:Thread?=null
+        var visibleCount=40
         fun draw(){
             results.removeAllViews()
-            for(hit in records.take(80)){
+            for(hit in records.take(visibleCount)){
                 val item=ui.row(a).apply{
                     gravity=android.view.Gravity.CENTER_VERTICAL
                     setPadding(ui.px(a,12),ui.px(a,9),ui.px(a,10),ui.px(a,9))
@@ -87,6 +88,23 @@ object TorrentSearchUi {
                     11f,ui.secondary).apply{maxLines=1
                         ellipsize=android.text.TextUtils.TruncateAt.END
                     },ui.lp(a,4))
+                hit.coverUrl.takeIf{it.isNotBlank() &&
+                    SearchRanking.validUrl(it)}?.let{cover->
+                    val preview=android.widget.ImageView(a).apply{
+                        scaleType=android.widget.ImageView.ScaleType.CENTER_INSIDE
+                        setImageResource(R.drawable.ic_source_video)
+                    }
+                    item.addView(preview,LinearLayout.LayoutParams(
+                        ui.px(a,58),ui.px(a,58)).apply{
+                        rightMargin=ui.px(a,8)
+                    })
+                    val referer=runCatching{
+                        java.net.URI(cover).let{
+                            it.scheme+"://"+it.host+"/"
+                        }
+                    }.getOrDefault("https://www.asterion.local/")
+                    RemoteImageLoader.load(a,preview,cover,referer)
+                }
                 item.addView(details,LinearLayout.LayoutParams(0,-2,1f))
                 item.addView(ui.action(a,"CHECK FILES",false){
                     status.text="Checking this release's real torrent file tree"
@@ -100,6 +118,13 @@ object TorrentSearchUi {
                 })
                 results.addView(item,ui.lp(a,5))
             }
+            if(records.size>visibleCount){
+                results.addView(ui.action(a,
+                    "SHOW MORE MATCHES · "+(records.size-visibleCount),false){
+                    visibleCount=(visibleCount+40).coerceAtMost(records.size)
+                    draw()
+                },ui.lp(a,7))
+            }
         }
         card.addView(ui.action(a,"SEARCH "+name+" TORRENTS",true){
             val term=field.text.toString().trim()
@@ -108,7 +133,7 @@ object TorrentSearchUi {
             status.text="Searching available torrent libraries…"
             val ticket=searchGeneration.incrementAndGet()
             searchWorker?.interrupt()
-            records.clear();draw()
+            records.clear();visibleCount=40;draw()
             searchWorker=thread(name="asterion-torrent-query"){
                 val response=runCatching{MultiTorrentSearch.search(term,area)}
                 a.runOnUiThread{
@@ -117,8 +142,8 @@ object TorrentSearchUi {
                         !results.isAttachedToWindow)return@runOnUiThread
                     response.onSuccess{(hits,errors)->
                         records+=hits.filter{
-                            CatalogDiscovery.relevance(term,it.title)>0
-                        }.take(80)
+                            SearchExactness.matches(term,it.title)
+                        }
                         status.text=records.size.toString()+" results"+
                             if(errors.isEmpty())"" else
                                 "\nUnavailable: "+
