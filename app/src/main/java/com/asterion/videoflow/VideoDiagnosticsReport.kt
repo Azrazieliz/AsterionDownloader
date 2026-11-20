@@ -40,6 +40,11 @@ internal object VideoDiagnosticsReport {
         builder.append("Expected embedded extractor: ")
             .append(VideoExtractorVersion.VERSION)
             .append(" (actual loaded version requires runtime check)\n")
+        builder.append('\n')
+        builder.append(runCatching{
+            AppPrivateStorageAudit.report(context)
+        }.getOrElse{"App storage scan unavailable: "+
+            sanitize(it.javaClass.simpleName)+"\n"})
         val tabs=listOf("Active","Queued","Held","Failed","Paused")
         val rows=runCatching{
             VideoDb(context).use {db->
