@@ -7,6 +7,10 @@ import java.util.Locale
 enum class DownloadKind { PIXIV, X, VIDEO, COMIC, GALLERY }
 object SourceRouter {
     fun classify(raw:String):DownloadKind {
+        // This enum has no REJECTED state. The entry-point already rejects
+        // retired hosts; classify them as non-video to prevent VideoFlow
+        // admission from generic /video paths or old external SHARE links.
+        if(ProviderRetirement.isRetired(raw))return DownloadKind.GALLERY
         val uri=runCatching { URI(raw.trim()) }.getOrNull()
             ?:return DownloadKind.GALLERY
         val host=uri.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
@@ -22,8 +26,8 @@ object SourceRouter {
         if(Regex("(?i)(/manga/|/manhwa/|/series/|/serie/|/chapter[-/]|/chapitre[-/])")
             .containsMatchIn(path))return DownloadKind.COMIC
         // Many supported original-video pages use native publisher routes
-        // such as JAV Guru /123456/title/, JAVIDEO /en/fc2ppv-12345 and
-        // MP4Hentai /YYYY/MM/title/. A generic /video or .mp4 heuristic
+        // such as JAV Guru /123456/title/ and JAVIDEO /en/fc2ppv-12345.
+        // A generic /video or .mp4 heuristic
         // wrongly sends them to gallery sync when shared from Android,
         // silently bypassing the real VideoFlow engine.
         if(com.asterion.videoflow.VideoSiteProfiles.isVideoPage(raw))
