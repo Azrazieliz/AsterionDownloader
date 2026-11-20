@@ -193,7 +193,7 @@ class ReportedSiteSpecificOriginalsTest {
         val stream="https://streamtape.com/e/AaBbCcDdEe12345"
         val player="https://voe.sx/e/wx8walm5hqkj"
         assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(jav,stream))
-        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(voe,player))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(voe,player))
         assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
             jav,"https://streamtape.com/e/../ads"))
         assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
@@ -249,7 +249,7 @@ class ReportedSiteSpecificOriginalsTest {
         val voe="https://helloporn.com/video-28699-selected-clip"
         assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
             nh,"https://nhplayer.com/v/Z2flAXXPucyCbVJ/"))
-        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
             voe,"https://voe.sx/e/wx8walm5hqkj"))
         for(bad in listOf(
             "https://nhplayer.com/v/Z2flAXXPucyCbVJ/?advert=1",
