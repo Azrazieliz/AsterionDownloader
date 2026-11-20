@@ -160,6 +160,7 @@ object DirectDownloadRetry {
     fun retryNow(ctx:Context,id:Long):Boolean{
         if(!AppPower.enabled(ctx))return false
         val record=DirectRetryVault.all(ctx).firstOrNull{it.id==id}?:return false
+        if(OriginalReceiptState.get(ctx,id)=="NEEDS_GALLERY")return false
         val state=DirectDownloadTracker.states(ctx,250)
             .firstOrNull{it.job.id==id}?:return false
         val receipt=OriginalReceiptState.get(ctx,id)
@@ -275,6 +276,49 @@ object DirectDownloadRetry {
                 DirectRetryVault.remove(ctx,record.id)
                 CrossSourceDedup(ctx).use{it.completeById(record.id)}
                 continue
+            }
+            // Old builds queued isolated Cosplay photos through the OS,
+            // where their album's referer/session/pagination was lost and
+            // all providers emitted "Download unsuccessful". Never replay
+            // those same 403-prone jobs in a 15-minute retry loop.
+            if(state.bytes<=0L &&
+                state.status in setOf(DownloadManager.STATUS_FAILED,
+                    DownloadManager.STATUS_PAUSED)){
+                val owner=record.referer?.let{referer->
+                    AlohaSources.by(AlohaArea.COSPLAY).firstOrNull{
+                        SiteControls.key(it.url)==SiteControls.key(referer)
+                    }
+                }
+                if(owner!=null &&
+                    Regex("""(?i)\.(?:jpe?g|png|webp|gif|avif)$""")
+                        .containsMatchIn(record.name)){
+                    val exact=record.referer?.takeIf{
+                        SiteBackfillProfiles.recognizesGalleryPage(
+                            owner.url,it)
+                    }
+                    if(exact!=null){
+                        val migrated=runCatching{
+                            ApprovedCosplayActions.enqueueExactOriginal(ctx,
+                                owner.url,exact,record.name)
+                        }.getOrDefault(false)
+                        if(migrated){
+                            // Only obsolete zero-byte OS receipts are hidden;
+                            // native Kyora gallery files and receipts remain.
+                            DirectRetryVault.remove(ctx,record.id)
+                            CrossSourceDedup(ctx).use{
+                                it.releaseById(record.id)
+                            }
+                            OriginalReceiptState.set(ctx,record.id,"DISMISSED")
+                            count++
+                            continue
+                        }
+                    }else{
+                        // No provable album URL in the legacy request. Keep
+                        // its record visible, but do not blindly re-enqueue.
+                        OriginalReceiptState.set(ctx,record.id,"NEEDS_GALLERY")
+                        continue
+                    }
+                }
             }
             val badReceipt=systemSuccess && receipt?.valid==false
             if(badReceipt)OriginalReceiptState.set(ctx,record.id,"INVALID")
