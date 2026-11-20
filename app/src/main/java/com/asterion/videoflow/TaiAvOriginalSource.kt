@@ -99,8 +99,10 @@ internal object TaiAvOriginalSource {
                             it.isNotBlank()
                         }?.let{header("Cookie",it)}
                     }.execute()
-                if(response.statusCode()!=200 ||
-                    !response.contentType().contains("json",true))null
+                // The actual player contract is its small JSON body,
+                // not a required Content-Type header: some mirrors return
+                // application/octet-stream for an otherwise valid API reply.
+                if(response.statusCode()!=200)null
                 else response.body()
             }.getOrNull()?:continue
             verifiedHls(request,body)?.let{return it}
