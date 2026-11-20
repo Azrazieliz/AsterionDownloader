@@ -15,6 +15,21 @@ enum class TorrentArea { GAMES, BOOKS, ADULT }
 object MultiTorrentSearch {
     private fun enc(s:String)=URLEncoder.encode(s.trim(),"UTF-8")
     private val hashPattern=Regex("(?i)^[a-f0-9]{40}$")
+    /** Show an index-owned poster only if its API published an actual image
+     * address. Do not scrape random search images for a torrent identity. */
+    private fun poster(row:JSONObject):String{
+        for(key in listOf("coverUrl","poster","thumbnail","image","cover",
+                "posterUrl","imageUrl")){
+            val candidate=row.optString(key).trim()
+            if(candidate.startsWith("https://") &&
+                SearchRanking.validUrl(candidate) &&
+                runCatching{java.net.URI(candidate).path.orEmpty()
+                    .matches(Regex(""".*\.(?:jpe?g|png|webp|avif)$""",
+                        RegexOption.IGNORE_CASE))}.getOrDefault(false))
+                return candidate
+        }
+        return ""
+    }
     // Index APIs often return only an infohash, not the original .torrent
     // descriptor or any announce trackers. A trackerless synthesized magnet
     // can wait indefinitely for DHT bootstrap on Android mobile networks.
@@ -57,7 +72,8 @@ object MultiTorrentSearch {
             val category=row.optString("category")
             val seeders=row.optInt("seeders")
             result+=CatalogHit(title,"Bitsearch",magnet(hash,title),CatalogKind.TORRENT,"",
-                "Peers: $seeders · $category · file selection required")
+                "Peers: $seeders · $category · file selection required",
+                poster(row))
         }
         return result
     }
@@ -78,7 +94,8 @@ object MultiTorrentSearch {
             }
             result+=CatalogHit(title,"Knaben ("+row.optString("tracker").take(24)+")",
                 url,CatalogKind.TORRENT,"",
-                "Peers: "+row.optInt("seeders")+" · "+row.optString("category").take(50))
+                "Peers: "+row.optInt("seeders")+" · "+row.optString("category").take(50),
+                poster(row))
         }
         return result
     }
@@ -92,7 +109,8 @@ object MultiTorrentSearch {
             if(!hashPattern.matches(hash) || title.isBlank() || category !in range)
                 return@mapNotNull null
             CatalogHit(title,"The Pirate Bay index",magnet(hash,title),CatalogKind.TORRENT,"",
-                "Seeders: "+row.optInt("seeders")+" · metadata only")
+                "Seeders: "+row.optInt("seeders")+" · metadata only",
+                poster(row))
         }
     }
 
