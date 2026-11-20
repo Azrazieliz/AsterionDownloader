@@ -161,7 +161,29 @@ object AsterionCosplayGallery {
             labels.addView(ui.text(a,site.name,17f,ui.white,true))
             labels.addView(ui.text(a,host,12f,ui.secondary),ui.lp(a,3))
             head.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+            // Keep every provider reachable but avoid stacking six full
+            // preview strips + Sync/Backfill toolbars on a phone screen.
+            // Only one site expands; the other rows retain real cover and
+            // index counts, not a new competing management interface.
+            val open=prefs.getString("expanded_site","4khd.com")==host
+            head.isClickable=true
+            head.isFocusable=true
+            head.contentDescription=site.name+
+                if(open)" · Collapse gallery" else " · Expand gallery"
+            head.setOnClickListener{
+                prefs.edit().putString("expanded_site",
+                    if(open)"" else host).apply()
+                refresh()
+            }
             card.addView(head)
+            if(!open){
+                card.addView(ui.text(a,
+                    visual.size.toString()+" real gallery covers · "+
+                        "Tap to view albums, Sync and download controls",
+                    12f,ui.secondary),ui.lp(a,5))
+                parent.addView(card,ui.lp(a,7))
+                continue
+            }
 
             KurohaMediaPreview.render(a,card,"pixiv:cosplay:"+host,visual){tile->
                 val gallery=galleries.firstOrNull{"gallery:"+it.galleryId==tile.url}
@@ -318,8 +340,17 @@ object AsterionCosplayGallery {
                 "inspect provider and sign-in status in Manage websites. "+
                 "Unverified website logos are not media thumbnails.",
             12f,ui.secondary),ui.lp(a,9))
-        // Retain every original Kyora operation without opening its
-        // competing MainActivity. The GalleryDb and worker stay unchanged.
-        UnifiedKyoraFeatures.render(a,parent,refresh)
+        // Preserve the entire original Kyora backend and all its controls,
+        // while keeping advanced site/tag management collapsed by default.
+        // The gallery-first screen no longer floods the viewport with a
+        // second fully expanded legacy administration interface.
+        val advanced=prefs.getBoolean("advanced_controls",false)
+        parent.addView(ui.action(a,
+            if(advanced)"HIDE ADVANCED GALLERY CONTROLS"
+            else "ADVANCED GALLERY CONTROLS",false){
+                prefs.edit().putBoolean("advanced_controls",!advanced).apply()
+                refresh()
+            },ui.lp(a,11))
+        if(advanced)UnifiedKyoraFeatures.render(a,parent,refresh)
     }
 }
