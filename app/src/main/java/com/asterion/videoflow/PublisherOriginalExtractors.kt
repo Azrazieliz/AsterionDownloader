@@ -33,7 +33,6 @@ internal object PublisherOriginalExtractors {
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("omg.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("hentaibros.net","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
-        Site("mp4hentai.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("onlyhentaistuff.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("uncensoredhentai.xxx","iframe[src*='nhplayer.com/v/']",allowPlayerIframe=true),
         Site("3dhentaix.com","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
