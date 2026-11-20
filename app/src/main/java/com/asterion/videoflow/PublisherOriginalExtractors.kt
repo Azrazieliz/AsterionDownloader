@@ -26,6 +26,7 @@ internal object PublisherOriginalExtractors {
         Site("cums.net","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("watchporn.to","meta[itemprop=contentUrl],#player source[src],#player video[src]"),
         Site("archivebate.com","#player iframe[src],.player iframe[src],iframe[src^='https://mixdrop.ag/e/']",allowPlayerIframe=true),
+        Site("onscreens.me","#player video[src],main video[src]",allowPlayerIframe=true),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
@@ -206,6 +207,15 @@ internal object PublisherOriginalExtractors {
         // static selected HTML is empty, inspect ONLY publisher-selected
         // rendered iframe candidates. Generic watch-page Python extraction
         // then cannot mask a missing selected player with "Unsupported URL".
+        if(host=="onscreens.me"){
+            // Open the video player on the exact selected recording. Nitroflare
+            // and the site's recommendations are NOT equivalent to a free
+            // selected playable source and must not be blindly scraped.
+            val selectedPlayer=OnScreensOriginalSource.published(
+                selected,page.outerHtml())
+            return selectedPlayer?.let{listOf(Candidate(it,selected,host))}
+                .orEmpty()
+        }
         if(host=="archivebate.com" &&
             ArchivebateSelectedMedia.isSelectedArticle(selected)){
             val static=fromHtml(selected,page.outerHtml())
