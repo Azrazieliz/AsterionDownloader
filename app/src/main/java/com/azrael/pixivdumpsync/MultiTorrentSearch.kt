@@ -164,6 +164,64 @@ object MultiTorrentSearch {
         return ggbasesListing(response.body(),q)
     }
 
+    /**
+     * Discover exact .torrent descriptors from the open web rather than only
+     * the built-in torrent APIs. These ARE NOT new torrent providers. Search
+     * engines return candidates; the existing descriptor fetch checks HTTPS,
+     * size, bencode and selected file list before starting any peer transfers.
+     * Never present arbitrary HTML listings or a search redirect as a verified
+     * torrent descriptor.
+     */
+    internal fun webTorrentResults(html:String,base:String,label:String):List<CatalogHit>{
+        val doc=Jsoup.parse(html,base)
+        val anchors=when(label){
+            "DuckDuckGo"->doc.select("a.result__a[href]")
+            else->doc.select("li.b_algo h2 a[href]")
+        }
+        val hits=LinkedHashMap<String,CatalogHit>()
+        for(anchor in anchors.take(120)){
+            val raw=anchor.absUrl("href").ifBlank{anchor.attr("href")}
+            val initial=runCatching{java.net.URI(raw)}.getOrNull()?:continue
+            val direct=if(initial.host.orEmpty().endsWith("duckduckgo.com") &&
+                initial.path=="/l/"){
+                initial.rawQuery.orEmpty().split('&').firstOrNull{
+                    it.startsWith("uddg=")
+                }?.substringAfter('=')?.let{
+                    runCatching{java.net.URLDecoder.decode(it,"UTF-8")}
+                        .getOrNull()
+                }.orEmpty()
+            }else raw
+            val uri=runCatching{java.net.URI(direct)}.getOrNull()?:continue
+            if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
+                uri.fragment!=null || !uri.path.orEmpty().endsWith(".torrent",true) ||
+                !SearchRanking.validUrl(direct) ||
+                ProviderRetirement.isRetired(direct))continue
+            val title=anchor.text().trim().take(180)
+            if(title.length<3 || IndexedMediaQuality.navigationTitle(title))continue
+            val key=SearchRanking.canonicalKey(direct)
+            hits.putIfAbsent(key,CatalogHit(title,"Web · "+label,
+                direct,CatalogKind.TORRENT,"",
+                "Public .torrent descriptor · file list verified before transfer"))
+            if(hits.size>=100)break
+        }
+        return hits.values.toList()
+    }
+
+    private fun searchWebIndex(q:String,duck:Boolean):List<CatalogHit>{
+        val query=enc(q+" filetype:torrent")
+        val address=if(duck)"https://html.duckduckgo.com/html/?q="+query
+            else "https://www.bing.com/search?q="+query+"&count=50"
+        val result=Jsoup.connect(address)
+            .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
+            .timeout(14_000).maxBodySize(2_000_000)
+            .ignoreHttpErrors(true).followRedirects(false).execute()
+        require(result.statusCode() in 200..299){
+            "Web torrent index HTTP "+result.statusCode()
+        }
+        return webTorrentResults(result.body(),result.url().toString(),
+            if(duck)"DuckDuckGo" else "Bing")
+    }
+
     fun search(q:String):Pair<List<CatalogHit>,List<String>> = search(q,TorrentArea.GAMES)
 
     fun search(q:String,area:TorrentArea):Pair<List<CatalogHit>,List<String>>{
@@ -235,6 +293,8 @@ object MultiTorrentSearch {
                 CatalogDiscovery.torrentRss(data,url,"Nyaa")
             }
         }
+        provider("Open web · DuckDuckGo"){searchWebIndex(q,true)}
+        provider("Open web · Bing"){searchWebIndex(q,false)}
         val pool=java.util.concurrent.Executors.newFixedThreadPool(
             minOf(4,providers.size.coerceAtLeast(1)))
         val completion=java.util.concurrent.ExecutorCompletionService<
