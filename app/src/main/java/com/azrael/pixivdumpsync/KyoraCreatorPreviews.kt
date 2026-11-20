@@ -48,6 +48,18 @@ object KyoraCreatorPreviews {
             }
         }
     }
+    /**
+     * A native video-provider preview MUST be its exact recording page.
+     * OnScreens profile, model, category and account tiles had been accepted
+     * merely because they contained an <img>, then cached for 12 hours.
+     * Cosplay, books and other gallery providers keep their own contracts.
+     */
+    internal fun acceptedVideoCard(source:String,page:String):Boolean {
+        val provider=SiteControls.key(source)
+        return provider !in com.asterion.videoflow.VideoSiteProfiles.coveredHosts ||
+            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
+    }
+
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
         val obj=JSONObject(raw)
@@ -64,9 +76,11 @@ object KyoraCreatorPreviews {
         }
         val arr=obj.optJSONArray("entries")?:JSONArray()
         Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
-            arr.optJSONObject(i)?.let{
-                Preview(it.optString("url"),it.optString("cover"),it.optString("title"),
-                    it.optString("duration").takeIf{v->v.isNotBlank()})
+            arr.optJSONObject(i)?.let{entry->
+                val page=entry.optString("url")
+                if(!acceptedVideoCard(source,page))null
+                else Preview(page,entry.optString("cover"),entry.optString("title"),
+                    entry.optString("duration").takeIf{v->v.isNotBlank()})
             }
         },obj.optLong("updated"),obj.optString("error").takeIf{it.isNotBlank()})
     }.getOrNull()
@@ -93,7 +107,8 @@ object KyoraCreatorPreviews {
         val anchors=if(sections.isEmpty())doc.select("a:has(img)") else sections
         for(anchor in (anchors+rich+directVideo).distinct().take(1500)){
             val page=anchor.absUrl("href")
-            if(!SearchRanking.validUrl(page))continue
+            if(!SearchRanking.validUrl(page) ||
+                !acceptedVideoCard(base,page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
             if(target.scheme!="https" ||
                 !SourceIndexParser.sameSite(base,page))continue
