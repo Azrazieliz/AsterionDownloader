@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit
  */
 internal object OpenWebModelSearch {
     data class Candidate(val title:String,val url:String,val format:String,
-                         val host:String,val thumbnail:String?=null)
+                         val host:String,val thumbnail:String?=null,
+                         val referer:String?=null)
 
     private val modelExtensions=setOf(
         "blend","fbx","obj","stl","gltf","glb","dae",
