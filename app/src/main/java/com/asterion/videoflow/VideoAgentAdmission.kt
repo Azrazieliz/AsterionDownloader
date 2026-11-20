@@ -11,14 +11,34 @@ import android.content.Context
  * HTTP only rather than duplicating the Chaquopy runtime and crashing.
  */
 internal object VideoAgentAdmission {
-    // Two Chaquopy runtimes + two independently allocating WebViews caused
-    // unacceptable pressure on the actual 12GB Samsung with ~3.3GB free.
-    // Keep the second process able to download direct media in parallel,
-    // but enable a second heavy website/Python extractor only with 4GB free.
+    // The original 4 GB free-memory requirement unnecessarily disabled
+    // the second extractor on the owner's 12 GB Samsung: Android reported
+    // ~3.4 GB available AND lowMemory=false. RAM used by reclaimable caches
+    // is not evidence that another transfer cannot start. Respect the OS's
+    // actual pressure threshold plus a reserve instead of one hardcoded
+    // free-RAM requirement for every RAM configuration.
     internal const val MIN_FREE_FOR_TWO_EXTRACTORS=4_000_000_000L
+    internal const val MIN_TOTAL_FOR_TWO_EXTRACTORS=10_000_000_000L
+    internal const val LARGE_DEVICE_RESERVE_BYTES=2_600_000_000L
+    internal const val OS_PRESSURE_RESERVE_BYTES=1_300_000_000L
 
+    /** Compatibility for older admission fixtures where total RAM and
+     * Android's pressure threshold are unavailable: remain conservative.
+     */
     internal fun secondaryNativeOnly(freeBytes:Long,lowMemory:Boolean):Boolean =
-        lowMemory || freeBytes<MIN_FREE_FOR_TWO_EXTRACTORS
+        secondaryNativeOnly(freeBytes,lowMemory,0L,0L)
+
+    internal fun secondaryNativeOnly(
+        freeBytes:Long,lowMemory:Boolean,totalBytes:Long,
+        androidPressureThreshold:Long):Boolean {
+        if(lowMemory || freeBytes<=0L)return true
+        val needs=if(totalBytes>=MIN_TOTAL_FOR_TWO_EXTRACTORS &&
+                androidPressureThreshold in 1L..totalBytes)
+            maxOf(LARGE_DEVICE_RESERVE_BYTES,
+                androidPressureThreshold+OS_PRESSURE_RESERVE_BYTES)
+        else MIN_FREE_FOR_TWO_EXTRACTORS
+        return freeBytes<needs
+    }
 
     fun nativeOnly(context:Context):Boolean {
         val secondary=android.app.Application.getProcessName().orEmpty()
@@ -29,7 +49,8 @@ internal object VideoAgentAdmission {
         val info=ActivityManager.MemoryInfo()
         return try {
             am.getMemoryInfo(info)
-            secondaryNativeOnly(info.availMem,info.lowMemory)
+            secondaryNativeOnly(info.availMem,info.lowMemory,
+                info.totalMem,info.threshold)
         }catch(_:RuntimeException){
             // No unknown memory state may cause a second large Python engine
             // to start without evidence of sufficient available RAM.
