@@ -11,7 +11,7 @@ import java.util.Locale
 object ProviderRetirement {
     // Both OMG aliases expose the same public 34/34 video identifiers as
     // FreePornVideos in the 2026-11-11 verified listing comparison.
-    private val retired=setOf("chaturbate.com","camstreams.tv","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
+    private val retired=setOf("chaturbate.com","onscreens.me","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
         "porntrex.com","xnxx.com","xvideos.com","peekvids.com","tnaflix.com",
         "mp4hentai.com","hentaihaven.xxx","helloporn.com")
 
@@ -52,6 +52,31 @@ object ProviderRetirement {
             }.isSuccess
             if(indexed && watched)
                 pref.edit().putBoolean("archivebate.com-reactivated-v1",true).apply()
+        }
+        // CamStreams is explicitly reinstated by the owner in Nov 2026.
+        // An earlier retirement disabled its saved watch/index records.
+        // Restore only subscriptions the user has enabled; never globally
+        // re-enable a user-paused source, replay cancelled downloads, or
+        // clear any prior downloaded original.
+        if(pref.getBoolean("camstreams.tv-disabled",false) &&
+            !pref.getBoolean("camstreams.tv-reactivated-v1",false)){
+            val host="camstreams.tv"
+            val optedIn=SiteControls.explicitlyEnabled(
+                app,"https://camstreams.tv/latest-updates/")
+            val indexed=runCatching{
+                SourceIndexDb(app).use{ db->
+                    db.sources().filter{SiteControls.key(it.url)==host}
+                        .forEach{db.enable(it.url,optedIn)}
+                }
+            }.isSuccess
+            val watched=runCatching{
+                com.asterion.videoflow.VideoDb(app).use{db->
+                    db.listWatches().filter{SiteControls.key(it.address)==host}
+                        .forEach{db.enableWatch(it.id,optedIn)}
+                }
+            }.isSuccess
+            if(indexed && watched)
+                pref.edit().putBoolean("camstreams.tv-reactivated-v1",true).apply()
         }
         // Migrate retirement one provider at a time. The old builds may
         // have already saved pornhits-disabled=true; that must never cause
