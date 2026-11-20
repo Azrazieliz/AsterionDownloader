@@ -30,7 +30,12 @@ internal object VideoHlsDispatch {
         // while starting the embedded Python runtime on Android.
         return (host=="jav.guru" && VideoSiteProfiles.isVideoPage(url)) ||
             (host=="hentaihaven.xxx" &&
-                HentaiHavenEpisodeSource.isEpisode(url))
+                HentaiHavenEpisodeSource.isEpisode(url)) ||
+            // TaiAV's exact selected movie publishes a short-lived
+            // first-party /api/getmovie HLS. Prepare Python BEFORE asking
+            // the publisher to sign that stream, not after it has started
+            // expiring. Do not prewarm on its listings or previewvideo.
+            (host=="taiav.com" && VideoSiteProfiles.isVideoPage(url))
     }
 
     fun isSelectedManifest(url:String):Boolean {
