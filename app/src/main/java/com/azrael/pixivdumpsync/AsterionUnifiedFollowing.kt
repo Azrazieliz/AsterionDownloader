@@ -384,17 +384,29 @@ object AsterionUnifiedFollowing {
             // all title-only hits as a performer gallery, even when they
             // came from unrelated sources. Retain those indexed records
             // but do not present or auto-download them as actor content.
-            val hits=if(verified)SearchResultsDb(a).use{
-                it.listVerifiedProfile(creator.name,creator.source,perPage,
+            // Name-only / independently published creator identities are
+            // NOT equivalent to a profile-attested video gallery. Previous
+            // code stored name matches in SearchResultsDb but rendered zero
+            // cards unless the person had one of four exact video profiles.
+            // Restore a clearly labelled review-only candidate browser;
+            // never attribute or auto-queue name-only hits as her videos.
+            val hits=SearchResultsDb(a).use{db->
+                if(verified)db.listVerifiedProfile(
+                    creator.name,creator.source,perPage,
+                    if(full)pageIndex*perPage else 0)
+                else db.listForQuery(creator.name,perPage,
                     if(full)pageIndex*perPage else 0)
             }.filter{
                 SearchExactness.matchesPhrase(creator.name,it.title) &&
                     !IndexedMediaQuality.navigationTitle(it.title) &&
-                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)
-            } else emptyList()
-            val totalMatches=if(verified)SearchResultsDb(a).use{
-                it.countVerifiedProfile(creator.name,creator.source)
-            } else 0
+                    !ProviderRetirement.isRetired(it.url) &&
+                    com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
+                    (verified || !it.source.startsWith("Verified profile: "))
+            }
+            val totalMatches=SearchResultsDb(a).use{db->
+                if(verified)db.countVerifiedProfile(creator.name,creator.source)
+                else db.countForQuery(creator.name)
+            }
             val gallery=hits.filter{!it.thumbnail.isNullOrBlank() &&
                 SearchRanking.validUrl(it.thumbnail)}
             val head=ui.row(a)
@@ -421,38 +433,66 @@ object AsterionUnifiedFollowing {
                 }
             }
             labels.addView(name)
+            val matchType=when{
+                verified->"verified profile videos"
+                publicIdentity->"published creator · unrelated titles require review"
+                else->"name matches · not verified as this creator's videos"
+            }
             labels.addView(ui.text(a,
-                hits.size.toString()+if(verified)" indexed profile matches · "
-                    else if(publicIdentity)" public identity verified · review only · "
-                    else " title matches to review · "+
-                    if(full)"page "+(pageIndex+1)+" · "+totalMatches+
-                        " total saved matches" else "tap name to expand",
+                hits.size.toString()+" shown · "+matchType+" · "+
+                    (if(full)"page "+(pageIndex+1)+" · "+totalMatches+
+                        " candidate records" else "tap to page results"),
                 12f,ui.secondary),ui.lp(a,4))
             head.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
             put(a,c,head,3)
+            fun queueReviewedVideo(hit:SavedSearchHit){
+                val accepted=VideoDb(a).use{
+                    it.addVideo(hit.url,hit.title,origin="user")
+                }
+                if(accepted)VideoEngine.launch(a,false)
+                notice(a,if(accepted)
+                    "Selected original queued · "+hit.title.take(50)
+                    else "Previously queued · "+hit.title.take(50))
+            }
+            fun selectCandidate(hit:SavedSearchHit){
+                if(verified){
+                    queueReviewedVideo(hit)
+                }else{
+                    android.app.AlertDialog.Builder(a)
+                        .setTitle("Review this video")
+                        .setMessage("This title matches "+creator.name+
+                            ", but it has NOT been proven to feature this "+
+                            "creator. Source: "+hit.source.take(120)+
+                            ". Download this exact selected video anyway?")
+                        .setNegativeButton("CANCEL",null)
+                        .setPositiveButton("DOWNLOAD"){_,_->
+                            queueReviewedVideo(hit)
+                        }.show()
+                }
+            }
             if(gallery.isNotEmpty()){
+                if(!verified)put(a,c,ui.text(a,
+                    "SEARCH CANDIDATES ONLY · cover and title do not prove "+
+                        "creator identity. Tap to review each source.",
+                    12f,ui.secondary),6)
                 KurohaMediaPreview.render(a,c,
                     "model:"+creator.id,
                     gallery.map{hit->KurohaMediaPreview.Tile(
                         url=hit.url,title=hit.title,
                         thumbnail=hit.thumbnail.orEmpty(),
-                        attribution=hit.source,
+                        attribution=if(verified)hit.source
+                            else "UNVERIFIED NAME MATCH · "+hit.source,
                         referer=hit.url,video=true
                     )}){tile->
-                    val matching=gallery.firstOrNull{it.url==tile.url}
-                    if(matching!=null){
-                        if(VideoDb(a).use{it.addVideo(matching.url,matching.title)})
-                            VideoEngine.launch(a,false)
-                        notice(a,"Queued in Downloads · "+matching.title.take(50))
-                    }
+                    gallery.firstOrNull{it.url==tile.url}
+                        ?.let{selectCandidate(it)}
                 }
             }
             if(full){
                 for(hit in hits.filter{it.thumbnail.isNullOrBlank()}.take(8)){
-                    action(a,c,"DOWNLOAD · "+hit.title.take(45),false){
-                        if(VideoDb(a).use{it.addVideo(hit.url,hit.title)})
-                            VideoEngine.launch(a,false)
-                        notice(a,"Queued · "+hit.title.take(65))
+                    action(a,c,(if(verified)"DOWNLOAD · " else
+                        "REVIEW MATCH · ")+hit.title.take(45),false){
+                        selectCandidate(hit)
                     }
                 }
             }
@@ -476,7 +516,8 @@ object AsterionUnifiedFollowing {
                     else if(publicIdentity)
                         "Real creator confirmed by an independent publisher. "+
                             "No third-party videos have been verified as hers."
-                    else "No verified video profile · title matches do not prove ownership",
+                    else "No attributable video profile or name-matching "+
+                        "recordings indexed yet. CHECK NAME MATCHES searches live sources.",
                     12f,ui.secondary),6)
             }
             if(!creator.lastError.isNullOrBlank())
