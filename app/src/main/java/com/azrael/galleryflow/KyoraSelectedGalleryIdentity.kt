@@ -19,13 +19,16 @@ internal object KyoraSelectedGalleryIdentity {
     }
 
     fun parent(entities:List<EntityRecord>,entityId:String,
-               rawUrl:String,selectedSiteHost:String?):EntityRecord? {
+               rawUrl:String,selectedSiteHost:String?,
+               selectedSiteSource:String?=null):EntityRecord? {
         val selectedHost=host(rawUrl)
         // SiteControls stores BuonDua's .com/.net aliases under .net.
         fun provider(url:String):String =
             host(url).let{if(it=="buondua.com")"buondua.net" else it}
         val matched=entities.filter{
             it.entityId==entityId && it.kind=="site" &&
+                (selectedSiteSource==null ||
+                    it.source.wireName==selectedSiteSource) &&
                 sameApprovedSite(it.canonicalUrl,rawUrl) &&
                 (selectedSiteHost==null ||
                     provider(it.canonicalUrl)==selectedSiteHost)
