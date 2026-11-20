@@ -243,7 +243,8 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
             arrayOf(source.wireName,galleryId)
         ).use{c->if(c.moveToFirst())c.getString(0)else null}
 
-    fun galleryCards(entityId: String, limit: Int = 80): List<GalleryCard> {
+    fun galleryCards(entityId: String, limit: Int = 80,
+                     source: SourceId? = null): List<GalleryCard> {
         val result = ArrayList<GalleryCard>()
         val sql = """
             SELECT g.source, g.gallery_id, g.title, g.media_count, g.state,
@@ -253,10 +254,14 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
           (SELECT m.url FROM media m WHERE m.source=g.source
            AND m.gallery_id=g.gallery_id ORDER BY m.media_index LIMIT 1)
             FROM galleries g WHERE g.entity_id=?
+            ${if(source!=null)"AND g.source=?" else ""}
             ORDER BY COALESCE(g.retrieved_at, 0) DESC, g.gallery_id DESC
             LIMIT ?
         """.trimIndent()
-        readableDatabase.rawQuery(sql, arrayOf(entityId, limit.coerceIn(1, 100).toString())).use { cursor ->
+        val args=if(source==null)
+            arrayOf(entityId,limit.coerceIn(1,100).toString())
+        else arrayOf(entityId,source.wireName,limit.coerceIn(1,100).toString())
+        readableDatabase.rawQuery(sql,args).use { cursor ->
             while (cursor.moveToNext()) result.add(GalleryCard(
                 SourceId.fromWire(cursor.getString(0)), cursor.getString(1),
                 cursor.getString(2), cursor.getInt(3), cursor.getString(4),
