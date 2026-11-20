@@ -194,7 +194,24 @@ object AsterionCosplayGallery {
                                 putExtra(GalleryDetailActivity.EXTRA_TITLE,gallery.title)
                             })
                     }
-                    item!=null->SourceIndexPanel.details(a,item)
+                    item!=null->{
+                        // An indexed COSPLAY post is still an album, not a
+                        // generic download file. The old branch bypassed the
+                        // functioning Kyora GalleryFlow selected-album parser.
+                        if(ApprovedCosplayActions.isGalleryPage(item.url) &&
+                            SiteBackfillProfiles.recognizesGalleryPage(
+                                site.url,item.url)){
+                            thread(name="asterion-cosplay-selected-indexed-album"){
+                                val result=runCatching{
+                                    ApprovedCosplayActions.selectedGallery(
+                                        a,site.url,tile)
+                                }.getOrElse{
+                                    it.message?:"Selected gallery could not start"
+                                }
+                                toast(a,result)
+                            }
+                        }else SourceIndexPanel.details(a,item)
+                    }
                     else->{
                         // A gallery listing thumbnail does not prove that its
                         // original is directly downloadable. Run its actual
@@ -259,16 +276,13 @@ object AsterionCosplayGallery {
                 if(!AppPower.enabled(a)){
                     toast(a,"Resume the application first")
                 }else{
-                    // Catalog preview refresh alone downloaded no albums.
-                    // These two publishers now run a manual, targeted
-                    // original-album check in addition to cover discovery.
-                    if(site.host in setOf("kiutaku.com","pornpics.com")){
-                        thread(name="asterion-cosplay-new-originals"){
-                            val message=runCatching{
-                                ApprovedCosplayActions.checkNew(a,site.url)
-                            }.getOrElse{it.message?:"Original album check failed"}
-                            toast(a,message)
-                        }
+                    // Always request the original GalleryFlow CHECK NEW.
+                    // A refreshed cover list is not a downloaded album.
+                    thread(name="asterion-cosplay-new-originals"){
+                        val message=runCatching{
+                            ApprovedCosplayActions.checkNew(a,site.url)
+                        }.getOrElse{it.message?:"Original album check failed"}
+                        toast(a,message)
                     }
                     SourceIndex.refreshSitePreview(a.applicationContext,area,site.url){
                         a.runOnUiThread{if(!a.isFinishing&&!a.isDestroyed)refresh()}
