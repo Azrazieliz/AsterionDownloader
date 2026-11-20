@@ -25,9 +25,6 @@ internal object VideoSiteProfiles {
         // Admit media only on verified descriptive media routes; a public
         // homepage without content is not proof of available originals.
         Route("archivebate.com",Regex("""(?i)^/(?:(?:u/)?watch|videos?|recordings?|v)/[^/?#]+""")),
-        // OnScreens identifies a single saved recording with a UUID and a
-        // descriptive slug; /videos, /models, /t/* are LISTING routes only.
-        Route("onscreens.me",Regex("""(?i)^/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/[a-z0-9][a-z0-9-]{8,250}/?$""")),
         // Model directories and categories are not recordings.
         Route("livecamrips.to",Regex("""(?i)^/video/[0-9]{5,12}/?$""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
@@ -43,7 +40,19 @@ internal object VideoSiteProfiles {
         // PornBuz selected article IDs end in a unique numeric release key.
         Route("pornbuz.com",Regex("""(?i)^/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?$""")),
         // TaiAV publishes identifiable Mandarin studio movies under /cn/movie/<hex>.
-        Route("taiav.com",Regex("""(?i)^/(?:cn|tw|en)/movie/[a-f0-9]{24}/?$""")),
+        // Public site listing routes checked 2026-11-20. Only selected
+        // articles are videos; creator profiles, categories and searches
+        // remain excluded. These paths are NOT proof of full downloadable
+        // originals: the selected player must independently validate.
+        Route("pimpbunny.com",Regex("""(?i)^/videos/[a-z0-9][a-z0-9-]{2,200}/?$""")),
+        Route("xchina.co",Regex("""(?i)^/video/(?:id-)?[a-f0-9]{10,32}(?:\.html)?/?$""")),
+        Route("bubblecum.lol",Regex("""(?i)^/video/[a-z0-9][a-z0-9-]{5,220}/?$""")),
+        Route("pornavhd.com",Regex("""(?i)^/20[0-9]{2}/(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])/[a-z0-9][a-z0-9_-]{2,220}/?$""")),
+        // Avple is presently HTTP 403 to an unconnected public client.
+        // Admit only a plausible user-selected watch page; do not infer
+        // search, channel, premium or model pages as public originals.
+        Route("avple.tv",Regex("""(?i)^/(?:video|videos|watch)/[a-z0-9][a-z0-9_-]{2,200}/?$""")),
+                Route("taiav.com",Regex("""(?i)^/(?:cn|tw|en)/movie/[a-f0-9]{24}/?$""")),
         Route("omg.porn",Regex("""(?i)^/(?:[a-z]{2}/)?(?:(?:video|videos|watch)/[^/?#]+|[0-9]{2,10}/?$)""")),
         // Keep native title slugs and /watch/ routes in one provider profile.
         Route("hentaibros.net",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{5,180}/?|(?:videos|video|watch)/[a-z0-9][a-z0-9_-]{2,180}/?)$""")),
@@ -54,7 +63,8 @@ internal object VideoSiteProfiles {
         // Actual 3DHentai video pages use a single top-level title slug.
         Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
         Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
-        Route("camstreams.tv",Regex("""(?i)^/(?:video|videos|watch|clip)/[^/?#]+"""))
+        // Verified /videos/<numeric-id>/<selected-title>/ CamStreams VOD.
+        Route("camstreams.tv",Regex("""(?i)^/videos/[0-9]{4,12}/[a-z0-9][a-z0-9-]{3,225}/?$"""))
     ).associateBy{it.domain}
     private fun domain(raw:String):String=runCatching{
         var host=URI(raw).host.orEmpty().lowercase(Locale.ROOT)
@@ -82,14 +92,6 @@ internal object VideoSiteProfiles {
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
         val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
-        // OnScreens uses UUID + slug for both recordings and profile landing
-        // cards. A strict UUID route alone incorrectly admitted "sagnic profile"
-        // as a selected video; those cards cannot expose a recording player.
-        if(domain(url)=="onscreens.me" &&
-            cleanPath.substringAfterLast('/').let{slug->
-                slug=="profile" || slug.endsWith("-profile") ||
-                    slug.endsWith("-profile-page")
-            })return false
         if(domain(url)=="porneec.com" && cleanPath in setOf(
                 "privacy-policy","contact-us","terms-and-conditions",
                 "all-videos","all-categories","video-collection",
