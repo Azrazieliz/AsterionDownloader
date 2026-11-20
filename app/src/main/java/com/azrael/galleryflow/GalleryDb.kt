@@ -444,6 +444,21 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         }
     }
 
+    /** Only an explicit owner-selected album tap may undo its previous
+     * cancellation; automatic backfill and new-media scans never do so. */
+    fun rearmCancelledSelectedAlbum(source:SourceId,albumUrl:String):Int {
+        if(albumUrl.isBlank())return 0
+        val changed=writableDatabase.update("media",ContentValues().apply{
+            put("state",TransferState.PENDING.dbValue)
+            put("updated_at",System.currentTimeMillis())
+        },"source=? AND state='cancelled' AND content_uri IS NULL AND "+
+            "gallery_id IN (SELECT gallery_id FROM galleries "+
+            "WHERE source=? AND canonical_url=?)",
+            arrayOf(source.wireName,source.wireName,albumUrl))
+        if(changed>0)com.azrael.pixivdumpsync.DownloadStateSignals.changed(signalContext)
+        return changed
+    }
+
     /** Durable owner cancel for one queued/failed ORIGINAL. A saved file is
      * never touched; later site scans must not re-enqueue this exact media ID. */
     fun cancelUnfinishedMedia(source:String,mediaId:String):Boolean {

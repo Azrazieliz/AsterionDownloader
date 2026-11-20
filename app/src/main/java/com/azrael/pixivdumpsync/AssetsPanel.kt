@@ -54,7 +54,22 @@ object AssetsPanel {
                     setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
                         "AsterionDownloader/Assets/"+id+"/"+directory+"/"+filename)
                 }
-                seen.edit().putLong(url,dm.enqueue(req)).apply();queued++
+                val jobId=dm.enqueue(req)
+                try {
+                    // Assets previously bypassed the ONLY unified queue
+                    // and therefore had no usable Cancel, Retry or provider
+                    // row even when hundreds of MB were transferring.
+                    DirectDownloadTracker.record(a,jobId,filename,"Assets",url)
+                    DirectDownloadRetry.remember(a,jobId,url,"Assets",filename,null)
+                    seen.edit().putLong(url,jobId).apply()
+                    queued++
+                }catch(failure:Exception){
+                    dm.remove(jobId)
+                    runCatching{DirectDownloadTracker.forget(a,jobId)}
+                    runCatching{DirectRetryVault.remove(a,jobId)}
+                    runCatching{seen.edit().remove(url).apply()}
+                    throw failure
+                }
             }
         }
         Toast.makeText(a,queued.toString()+" original asset files queued",Toast.LENGTH_LONG).show()

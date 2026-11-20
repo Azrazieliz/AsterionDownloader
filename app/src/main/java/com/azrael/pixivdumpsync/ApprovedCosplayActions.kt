@@ -264,6 +264,12 @@ internal object ApprovedCosplayActions {
             root
         }
         val exactUrl=tile.url.substringBefore('#')
+        // A previous owner cancellation is final for automatic scans.
+        // Explicitly tapping this SAME gallery is the only deliberate
+        // operation that may re-arm its unsaved media identities.
+        GalleryDb(a).use{db->
+            db.rearmCancelledSelectedAlbum(entity.source,exactUrl)
+        }
         val request=GalleryRequestLedger.Request(SyncMode.BACKFILL,
             entity.stableId,siteHost=SiteControls.key(site.url),
             albumUrl=exactUrl,
