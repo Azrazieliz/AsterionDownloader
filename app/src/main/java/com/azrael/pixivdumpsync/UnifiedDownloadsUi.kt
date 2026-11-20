@@ -701,6 +701,7 @@ object UnifiedDownloadsUi {
         // Downloads manager. The main process reads only its atomic receipts;
         // it never creates another libtorrent engine or fake file success.
         for(torrent in TorrentTransfers.snapshots(a,200)){
+            if(torrent.stage=="CANCELLED")continue
             val state=when(torrent.stage){
                 "TRANSFERRING","EXPORTING"->State.ACTIVE
                 "EXPORTED"->State.DONE
@@ -776,6 +777,23 @@ object UnifiedDownloadsUi {
                     "TRANSFERRING","PAUSED","FAILED","QUEUED","WAITING_PEERS",
                     "QUARANTINED","EXPORTED"),
                 key="torrent:"+torrent.id,
+                onRemove=if(torrent.stage in setOf(
+                    "QUEUED","WAITING_PEERS","TRANSFERRING",
+                    "PAUSED","FAILED","VERIFYING")) ({
+                    // This calls the existing isolated torrent worker.
+                    // No native peer engine is initialized by the UI. Keep
+                    // quarantine payloads until explicit owner security review.
+                    runCatching{
+                        a.startForegroundService(
+                            Intent(a,TorrentTransferService::class.java)
+                                .setAction(TorrentTransferService.CANCEL)
+                                .putExtra("job",torrent.id))
+                    }.onFailure{
+                        Toast.makeText(a,"Torrent cancellation unavailable: "+
+                            (it.message?:"Service failed").take(120),
+                            Toast.LENGTH_LONG).show()
+                    }
+                }) else null,
                 transferStage=torrent.stage,
                 transferUpdated=torrent.updated)
         }
