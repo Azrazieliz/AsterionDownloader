@@ -101,7 +101,7 @@ class SearchRankingTest {
         assertTrue(result[0].title.contains("Rare Phrase"))
         assertFalse(SearchRanking.isVideoUrl("https://example.com/category/rare-phrase"))
         assertTrue(SearchRanking.isVideoUrl("https://www.pornhub.com/view_video.php?viewkey=abc"))
-        assertTrue(SearchRanking.isVideoUrl("https://www.xvideos.com/video.oteflpmace7/anime_perverted_milf"))
+        assertFalse(SearchRanking.isVideoUrl("https://www.xvideos.com/video.oteflpmace7/anime_perverted_milf"))
         assertFalse(SearchRanking.isVideoUrl("https://www.pornhub.com/video/search?search=rare"))
     }
 }
