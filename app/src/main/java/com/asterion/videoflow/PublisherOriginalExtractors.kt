@@ -36,7 +36,6 @@ internal object PublisherOriginalExtractors {
         Site("onlyhentaistuff.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("uncensoredhentai.xxx","iframe[src*='nhplayer.com/v/']",allowPlayerIframe=true),
         Site("3dhentaix.com","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
-        Site("hentaihaven.xxx","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("rule34video.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("camstreams.tv","#player video[src],.video-player source[src],meta[itemprop=contentUrl]")
     ).associateBy { it.host }
