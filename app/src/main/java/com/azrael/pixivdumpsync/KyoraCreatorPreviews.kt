@@ -107,6 +107,32 @@ object KyoraCreatorPreviews {
             SiteControls.key(page)=="buondua.net"
     }
 
+    /** Use the existing native Kiutaku original-image parser rather than
+     * discarding valid full-size gallery photos during a generic cover scan.
+     * Listing collages, site banners and sidebars remain ineligible.
+     */
+    internal fun selectedKiutakuImage(
+        doc:org.jsoup.nodes.Document,album:IndexedItem):String? {
+        if(!SiteBackfillProfiles.recognizesGalleryPage(
+                "https://kiutaku.com/",album.url))return null
+        val native=com.azrael.galleryflow.KiutakuAdapter(HttpClient())
+            .imageCandidates(doc).firstOrNull{address->
+                val url=runCatching{URI(address)}.getOrNull()
+                    ?:return@firstOrNull false
+                val host=url.host.orEmpty().lowercase()
+                val path=url.path.orEmpty().lowercase()
+                url.scheme=="https" &&
+                    (host=="mitaku.net" || host.endsWith(".mitaku.net") ||
+                     host=="kiutaku.com" || host.endsWith(".kiutaku.com")) &&
+                    path.contains("/wp-content/uploads/") &&
+                    Regex("""(?i)\\.(?:jpe?g|png|webp|avif)$""").containsMatchIn(path) &&
+                    listOf("thumb","thumbnail","preview","cover",
+                        "collage","montage","avatar","logo").none{it in path}
+            }
+        return native ?: SiteBackfillProfiles.galleryOriginals(
+            doc,album,System.currentTimeMillis()).firstOrNull()?.url
+    }
+
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         if(ProviderRetirement.isRetired(source))return null
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
@@ -316,10 +342,9 @@ object KyoraCreatorPreviews {
                             }
                             val gallery=IndexedItem(item.url,item.title,item.cover,
                                 url,"COSPLAY","cosplay",System.currentTimeMillis(),false)
-                            SiteBackfillProfiles.galleryOriginals(response.parse(),gallery,
-                                System.currentTimeMillis()).firstOrNull()
+                            selectedKiutakuImage(response.parse(),gallery)
                         }.getOrNull()
-                        if(found!=null)originals+=item.copy(cover=found.url)
+                        if(found!=null)originals+=item.copy(cover=found)
                     }
                     // An empty real-photo listing is better than a convincing
                     // collage falsely presented as original image coverage.
