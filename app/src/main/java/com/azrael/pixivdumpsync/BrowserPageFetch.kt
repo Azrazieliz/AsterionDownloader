@@ -42,7 +42,7 @@ object BrowserPageFetch {
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
         "bubblecum.lol","pornavhd.com","cosplaytele.com",
         // Public gallery rendering fallback only. No challenge solving.
-        "4kgirl.com","4khd.com")
+        "4kgirl.com","4khd.com","m.4khd.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -105,6 +105,7 @@ object BrowserPageFetch {
         var archivebateContinued=false
         var archivebateWaits=0
         var mirroredHostWaits=0
+        var fourKhdBridgeWaits=0
         var mirrorSelectedClickAttempts=0
         // Mirrored.to exposes official file-host choices only AFTER its
         // selected /files/<id>/ 'View download links' control is clicked.
@@ -537,6 +538,19 @@ object BrowserPageFetch {
                             // documented player iframe. Never serialize ad,
                             // social/comment or recommendation iframe URLs.
                             const publisher=location.hostname.replace(/^www\./,'');
+                            // The exact 4KHD official archive bridge injects
+                            // #custom_button only after its public JS loads.
+                            // Serialize its real link or report a pending
+                            // state for bounded browser inspection. Never
+                            // click adverts or fabricate a TeraBox URL.
+                            if(publisher==='m.4khd.com' &&
+                                /^\/(?:link\/)?[A-Za-z0-9_-]{4,90}\/?$/.test(location.pathname)){
+                                const button=document.querySelector(
+                                    'a#custom_button[href]');
+                                if(!button)return '<html><head>'+
+                                    '<meta name="asterion-4khd-link-pending" content="true">'+
+                                    '</head></html>';
+                            }
                             // Real HentaiBros public HTML may contain no
                             // wpfp_* config until JavaScript initializes the
                             // selected Flowplayer. Preserve that publisher
@@ -757,6 +771,12 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
+                            }else if(host=="m.4khd.com" &&
+                                page.contains("asterion-4khd-link-pending") &&
+                                fourKhdBridgeWaits++<7){
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_000L)
                             }else if(host=="mirrored.to" &&
                                 page.contains("asterion-host-list-pending") &&
                                 mirroredHostWaits++<8){
