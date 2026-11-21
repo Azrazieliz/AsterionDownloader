@@ -35,7 +35,11 @@ def main():
                 ("SUBSCRIPTIONS", "SELECT source,kind,selected,live_enabled,archived,count(*) FROM entities GROUP BY source,kind,selected,live_enabled,archived ORDER BY source,kind"),
                 ("SOURCE_ERRORS", "SELECT source,substr(last_error,1,120),count(*) FROM entities WHERE last_error IS NOT NULL AND length(last_error)>0 GROUP BY source,substr(last_error,1,120) ORDER BY source LIMIT 25"),
                 ("RETRY_JOBS", "SELECT source,count(*) FROM backfill_retries GROUP BY source ORDER BY source"),
-                ("UNSAVED_BYTES", "SELECT source,state,count(*) FROM media WHERE content_uri IS NULL GROUP BY source,state ORDER BY source,state")
+                ("UNSAVED_BYTES", "SELECT source,state,count(*) FROM media WHERE content_uri IS NULL GROUP BY source,state ORDER BY source,state"),
+                ("GALLERY_FAILURE_CAUSES", "SELECT source,substr(last_error,1,100),count(*) AS n FROM galleries WHERE last_error IS NOT NULL AND length(last_error)>0 GROUP BY source,substr(last_error,1,100) ORDER BY n DESC LIMIT 24"),
+                ("RETRY_FAILURE_CAUSES", "SELECT source,substr(last_error,1,100),count(*) AS n FROM backfill_retries WHERE last_error IS NOT NULL AND length(last_error)>0 GROUP BY source,substr(last_error,1,100) ORDER BY n DESC LIMIT 24"),
+                ("RETRY_ATTEMPT_DISTRIBUTION", "SELECT source,min(attempts),max(attempts),count(*) FROM backfill_retries GROUP BY source ORDER BY source"),
+                ("FOREIGN_CARD_COLLISIONS", "SELECT e.source,g.source,count(*) AS n FROM entities e JOIN galleries g ON e.entity_id=g.entity_id AND e.source<>g.source WHERE e.archived=0 AND e.selected=1 GROUP BY e.source,g.source ORDER BY n DESC LIMIT 18")
             )
             for title, query in reports:
                 print(title, flush=True)
