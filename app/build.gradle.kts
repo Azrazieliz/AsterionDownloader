@@ -36,8 +36,8 @@ android {
         applicationId = "com.azrael.pixivdumpsync"
         minSdk = 29
         targetSdk = 35
-        versionCode = 107
-        versionName = "1.3.78"
+        versionCode = 108
+        versionName = "1.3.79"
 
         testInstrumentationRunner = "com.azrael.pixivdumpsync.DeviceTransferSimulation"
     }
@@ -123,7 +123,9 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".acceptance"
             versionNameSuffix = "-acceptance"
-            isDebuggable = true
+            // Owner-signed distribution is a release update, never a
+            // debug APK. Keep installed package ID and retained signer.
+            isDebuggable = false
             // Stable Windows-owned signer allows REAL in-place updates.
             // CI's per-run debug key must never be published for this package.
             signingConfig = if (hasStablePreviewKey)
