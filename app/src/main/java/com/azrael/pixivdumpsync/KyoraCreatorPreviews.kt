@@ -75,6 +75,13 @@ object KyoraCreatorPreviews {
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
     }
 
+    /** Only a selected gallery belonging to THIS publisher may be displayed
+     * inside its site card. CDN cover hosts can differ; page hosts cannot.
+     * This is intentionally limited to cached/gallery-page attribution.
+     */
+    internal fun previewBelongsToSource(source:String,page:String):Boolean =
+        SourceIndexParser.safe(page) && SourceIndexParser.sameSite(source,page)
+
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         if(ProviderRetirement.isRetired(source))return null
         val raw=context.getSharedPreferences(PREF,0).getString(source,null)?:return null
@@ -91,10 +98,20 @@ object KyoraCreatorPreviews {
                 obj.optString("error").ifBlank{"Old montage cache invalidated"})
         }
         val arr=obj.optJSONArray("entries")?:JSONArray()
+        // An old preview cache can contain 4KHD pages under Buondua and
+        // CosplayTele. Do not render even a single cross-provider entry.
+        // Return no cache instead of storing a partially filtered snapshot,
+        // so load() immediately refetches this site's own listings rather
+        // than waiting twelve hours behind the old cache timestamp.
+        if((0 until arr.length()).any{i->
+                val item=arr.optJSONObject(i)
+                item==null || !previewBelongsToSource(source,item.optString("url"))
+            })return null
         Snapshot((0 until minOf(24,arr.length())).mapNotNull{i->
             arr.optJSONObject(i)?.let{entry->
                 val page=entry.optString("url")
-                if(!acceptedVideoCard(source,page))null
+                if(!acceptedVideoCard(source,page) ||
+                    !previewBelongsToSource(source,page))null
                 else Preview(page,entry.optString("cover"),entry.optString("title"),
                     entry.optString("duration").takeIf{v->v.isNotBlank()})
             }
