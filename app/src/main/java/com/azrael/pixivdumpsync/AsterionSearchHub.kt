@@ -65,7 +65,10 @@ object AsterionSearchHub {
         val areas=when(mode){
             1->listOf(VideoSearchArea.PORN)
             2->listOf(VideoSearchArea.HENTAI)
-            else->listOf(VideoSearchArea.PORN,VideoSearchArea.HENTAI)
+            // All videos includes independent general internet results.
+            // Adult/Hentai enrich but never gate the web-index search.
+            else->listOf(VideoSearchArea.GENERAL,
+                VideoSearchArea.PORN,VideoSearchArea.HENTAI)
         }
         val errors=ArrayList<String>();val items=ArrayList<RankedHit>()
         var checked=0
