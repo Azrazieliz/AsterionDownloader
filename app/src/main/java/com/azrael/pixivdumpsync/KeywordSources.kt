@@ -14,7 +14,7 @@ import java.net.URLEncoder
  * mirrors, and Tor-reachable sources. No preconfigured site-category blacklist.
  * Discovery is metadata-based; it does not bypass protected streams or DRM.
  */
-enum class VideoSearchArea { HENTAI, PORN, PIRACY_DARKWEB }
+enum class VideoSearchArea { HENTAI, PORN, PIRACY_DARKWEB, GENERAL }
 
 object KeywordSources {
     private const val PREFS="asterion_keyword_sources"
@@ -60,6 +60,8 @@ object KeywordSources {
         VideoSearchArea.HENTAI -> hentaiSites
         VideoSearchArea.PORN -> pornSites
         VideoSearchArea.PIRACY_DARKWEB -> clearnetIndexes
+        // Internet-wide video discovery does not depend on configured sites.
+        VideoSearchArea.GENERAL -> emptyList()
     }
     private fun isOldBrowser(line:String)=
         line.contains("www.bing.com/videos/search",true) ||
@@ -405,6 +407,7 @@ object KeywordSources {
             VideoSearchArea.HENTAI->" hentai animation video"
             VideoSearchArea.PORN->" adult video"
             VideoSearchArea.PIRACY_DARKWEB->" torrent download"
+            VideoSearchArea.GENERAL->" video"
         }
         val query=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
         val offset=page.toLong()*50L
