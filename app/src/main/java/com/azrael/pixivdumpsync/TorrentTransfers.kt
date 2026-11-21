@@ -476,7 +476,11 @@ class TorrentTransferService : Service() {
         catch(t:Exception){
             android.util.Log.w("AsterionTorrent",
                 "Foreground promotion denied; preserving active native workers",t)
-            stopIfIdle(startId)
+            // A denied fresh foreground start must not launch deferred JNI.
+            // Conversely, a denied second command must not kill the first.
+            if(TorrentServiceLifetimePolicy.mayStop(
+                    inFlight.size,metadataWorkers.size,exportWorkers.size))
+                stopSelfResult(startId)
             return START_NOT_STICKY
         }
         // A process restart must not drop owner-selected jobs which were
