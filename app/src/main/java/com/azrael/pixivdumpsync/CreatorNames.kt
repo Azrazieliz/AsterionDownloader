@@ -82,14 +82,20 @@ object CreatorNames {
             background=ui.shape(a,ui.raised,12)
             setPadding(ui.px(a,12),ui.px(a,10),ui.px(a,12),ui.px(a,10))
         }
+        // ArrayAdapter.clear() mutates its backing list. Kotlin emptyList() is
+        // immutable and crashes the keyboard text callback on Android 17.
         val adapter=ArrayAdapter(a,android.R.layout.simple_dropdown_item_1line,
-            emptyList<String>())
+            ArrayList<String>())
         view.setAdapter(adapter)
         view.addTextChangedListener(object:TextWatcher {
             override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
             override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}
             override fun afterTextChanged(s:Editable?){
-                if(s.isNullOrBlank())return
+                if(s.isNullOrBlank()){
+                    adapter.clear()
+                    adapter.notifyDataSetChanged()
+                    return
+                }
                 val results=CreatorNameDb(a).use{it.suggest(s.toString(),category)}
                 adapter.clear()
                 adapter.addAll(results)

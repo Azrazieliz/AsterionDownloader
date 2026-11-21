@@ -19,6 +19,9 @@ class WorkingVideoProviderFreezeTest {
         // Explicit owner freeze: previously working JAV Guru and Pornhub
         // engines must remain byte-identical until separately approved and
         // demonstrated on the actual Android phone.
+        // Owner-confirmed working on phone 2026-11-21: preserve exact
+        // Bubblecum original resolver until explicit owner authorization.
+        "BubblecumSelectedOriginalSource.kt" to "65af6f3b99abeace2b25c62836c882898a405e26",
         "JavGuruOriginalSource.kt" to "be1940889517f07356299b04d77d4d545336984a",
         "JavGuruJkNativeHls.kt" to "dea17996493751e259a196f7019d0656717ac2f4",
         "PornhubOriginalSource.kt" to "c8387035b387c8b9b1b97b00458b27c7a33a0f9d",
@@ -46,7 +49,7 @@ class WorkingVideoProviderFreezeTest {
         return digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
     }
     @Test fun dedicatedWorkingProviderEnginesRemainFrozen(){
-        assertEquals("Freeze coverage must not silently disappear",13,frozen.size)
+        assertEquals("Freeze coverage must not silently disappear",14,frozen.size)
         frozen.forEach{(name,sha)->
             val source=sourceFile(name)
             assertTrue("Missing frozen provider source: "+name,source.isFile)
