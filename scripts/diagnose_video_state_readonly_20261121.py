@@ -4,6 +4,7 @@ Only aggregate hosts, short sanitized error types, and counts leave the phone.
 No media, URLs, credentials, titles, or app databases are exported.
 """
 import argparse,collections,pathlib,re,sqlite3,subprocess,tempfile,urllib.parse
+from contextlib import closing
 p=argparse.ArgumentParser();p.add_argument("--device",required=True)
 p.add_argument("--package",default="com.azrael.pixivdumpsync.acceptance")
 opts=p.parse_args()
@@ -15,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix="asterion_video_agg_") as tmp:
   if r.returncode==0 and r.stdout: (root/name).write_bytes(r.stdout)
  if not (root/"videoflow.sqlite").is_file():
   print("VIDEO_DATABASE_UNREADABLE");raise SystemExit(1)
- with sqlite3.connect("file:"+str(root/"videoflow.sqlite")+"?mode=ro",uri=True) as db:
+ with closing(sqlite3.connect("file:"+str(root/"videoflow.sqlite")+"?mode=ro",uri=True)) as db:
   rows=db.execute("""SELECT url,state,progress,error,attempts,updated,heartbeat_at,request_origin
                  FROM videos ORDER BY updated DESC LIMIT 1800""").fetchall()
   by=collections.Counter();errors=collections.Counter();recent=collections.defaultdict(list)
