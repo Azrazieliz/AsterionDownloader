@@ -29,7 +29,9 @@ class WorkingVideoProviderFreezeTest {
         "ThreeDHentaiSignedOriginal.kt" to "9bff43bbdf5d29479e4ac41636b21a2c3b159fa7",
         "Rule34VideoOriginalSource.kt" to "02d00276a554a92c685eef249656f9bcaf3e846f",
         "EpornerOriginalSource.kt" to "c9c4b21720bfbd702d48dea5be6a11dab38bc485",
-        "FreePornVideosOriginalSource.kt" to "184e349e1b97800746578f79aa2bc1c9250fdeaa"
+        "FreePornVideosOriginalSource.kt" to "184e349e1b97800746578f79aa2bc1c9250fdeaa",
+        "TaiAvOriginalSource.kt" to "aef7612803d49acef9027d99faa95421450b2488",
+        "WatchPornOriginalSource.kt" to "f0376ab8528479b93b7173b33a46b345c7c20913"
     )
     private fun sourceFile(name:String):File {
         val cwd=File(System.getProperty("user.dir") ?: ".")
@@ -44,7 +46,7 @@ class WorkingVideoProviderFreezeTest {
         return digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}
     }
     @Test fun dedicatedWorkingProviderEnginesRemainFrozen(){
-        assertEquals("Freeze coverage must not silently disappear",11,frozen.size)
+        assertEquals("Freeze coverage must not silently disappear",13,frozen.size)
         frozen.forEach{(name,sha)->
             val source=sourceFile(name)
             assertTrue("Missing frozen provider source: "+name,source.isFile)
