@@ -342,12 +342,18 @@ internal object TorrentMetadataBridge {
             else->error("Unknown torrent metadata request")
         }
         require(bytes.size in 33..8_388_608){"Invalid torrent descriptor size"}
+        // Pure JVM bounded validation precedes the libtorrent JNI parser,
+        // including when metadata came from magnet peers rather than an
+        // already-validated user-selected .torrent. Keep unsafe paths,
+        // symbolic links and v2-only descriptors out of native file lists.
+        val checked=BencodedTorrentManifest.parse(bytes)
+        require(checked.files.size in 1..20_000){"Invalid torrent file count"}
         val hash=id(bytes)
         val file=File(root(context),"$hash.torrent")
         if(!file.exists())file.writeBytes(bytes)
         val info=TorrentInfo(bytes)
-        require(info.isValid() && info.numFiles() in 1..20000){
-            "Invalid torrent file list"
+        require(info.isValid() && info.numFiles()==checked.files.size){
+            "Native torrent file list disagreed with the bounded descriptor"
         }
         val list=info.files()
         val entries=(0 until info.numFiles()).map{i->list.filePath(i)}
