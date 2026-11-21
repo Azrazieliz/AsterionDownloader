@@ -168,6 +168,16 @@ internal object SelectedAlbumScope {
         URI(url).host.orEmpty().removePrefix("www.").equals(
             uri.host.orEmpty().removePrefix("www."),ignoreCase=true)
 
+    /** A publisher's '37 photos' is a count of photos, not videos or
+     * video-only archives. Preserve all selected media but compare image
+     * members only; full original archives have their own receipt counts.
+     */
+    internal fun verifySelectedPhotos(expected:Int?,media:List<MediaRef>):Boolean {
+        if(expected==null || media.any{it.expectedArchivePhotos!=null})return false
+        verifyAdvertisedCount(expected,media.count{it.kind==MediaKind.IMAGE})
+        return true
+    }
+
     fun verifyAdvertisedCount(expected:Int?,actual:Int){
         if(expected!=null && actual!=expected)
             throw AdapterException(
