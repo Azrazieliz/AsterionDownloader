@@ -1168,6 +1168,10 @@ object VideoEngine {
         // to mix with an in-progress HLS .part file.
         val strictRoshy=NetworkRoute.siteKey(item.url)=="roshy.tv" &&
             VideoSiteProfiles.isVideoPage(item.url)
+        // PornBuz's publisher-labelled Server 2 is the only selected-player
+        // candidate. A generic watch-page retry may download a 20s teaser,
+        // so it must not be used as a fallback for this provider.
+        val strictPornBuz=PornBuzOriginalSource.owns(item.url)
         val strictThreeD=NetworkRoute.siteKey(item.url)=="3dhentaix.com"
         val strictRule34=Rule34VideoOriginalSource.videoId(item.url)!=null
         // TaiAV's verified full original comes from the selected movie's
@@ -1185,6 +1189,11 @@ object VideoEngine {
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)
+        if(strictPornBuz && publishedOriginals.size!=1)
+            throw (publisherOriginals.exceptionOrNull()?:
+                IllegalStateException(
+                    "PornBuz selected article has no unique Server 2 full player; "+
+                    "a teaser or unrelated iframe cannot replace the original"))
         if(strictRoshy && publishedOriginals.isEmpty())
             throw (publisherOriginals.exceptionOrNull()?:
                 IllegalStateException(
@@ -1398,6 +1407,16 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(strictPornBuz && userRequested &&
+                    source.referer==item.url){
+                    // Only the publisher-labelled selected Streamtape player
+                    // reaches the original engine. Skip generic watch-page
+                    // fallback that previously accepted playable short previews.
+                    try {
+                        execute(source.url,source.referer)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else if(strictJavGuru && userRequested){
                     // The shortcode and both first-party relay steps
                     // already prove the selected hoster identity. Start its
@@ -1431,6 +1450,10 @@ object VideoEngine {
                     Mp4HentaiPublishedHost.isPublishedHost(item.url,it.url)})
                 throw (last?:IllegalStateException(
                     "MP4Hentai selected file hosts exposed no verified media URL"))
+            if(strictPornBuz && !downloaded)
+                throw (last?:IllegalStateException(
+                    "PornBuz selected Server 2 original could not transfer; "+
+                    "no 20-second preview or generic page fallback permitted"))
             if(strictRoshy && !downloaded)
                 throw (last?:IllegalStateException(
                     "Roshy exact selected player did not complete; "+
