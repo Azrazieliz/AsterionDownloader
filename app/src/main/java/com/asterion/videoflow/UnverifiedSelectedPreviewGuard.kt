@@ -16,7 +16,7 @@ internal object UnverifiedSelectedPreviewGuard {
         "taiav.com","javideo.net","livecamrips.to",
         "uncensoredhentai.xxx",
         "avple.tv","pimpbunny.com","xchina.co","bubblecum.lol",
-        "pornavhd.com","camstreams.tv","pornbuz.com"
+        "pornavhd.com","camstreams.tv","pornbuz.com","notfans.com"
     )
     private const val UNVERIFIED_PREVIEW_SECONDS=60L
     fun shouldHold(selectedUrl:String,actualDurationMs:Long,
