@@ -234,6 +234,31 @@ internal object PublisherOriginalExtractors {
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
+        if(host=="eporner.com"){
+            // Existing official /embed/<same-id>/ is an independently
+            // publisher-owned, publicly served selected player. The owner
+            // verified this route before the watch-page age/region shell
+            // regression. Do not first fetch the 3.5 KiB watch gateway and
+            // fail the entire original-resolution task; inspect the exact
+            // first-party embed without cookies from another publisher.
+            val embed=EpornerOriginalSource.officialEmbed(selected)
+            val found=embed?.let{address->
+                runCatching{WebDiscovery.selectedDocument(address,context)}
+                    .getOrNull()?.takeUnless(WebDiscovery::epornerAccessGate)
+                    ?.let{player->
+                        val official=EpornerOriginalSource.publishedSources(
+                            selected,player,context).map {
+                                Candidate(it,address,"eporner.com")
+                            }
+                        val html=fromHtml(selected,player.outerHtml())
+                            .map{it.copy(referer=address)}
+                        (official+html).distinctBy{it.url}
+                    }
+            }.orEmpty()
+            if(found.isNotEmpty())return found
+            // Do not weaken the old connected-account and watch-page
+            // behavior when the publisher embed is genuinely unavailable.
+        }
         val page=WebDiscovery.selectedDocument(selected,context)
         // Real Pornhub selected watch pages publish their signed original
         // HLS quality variants in one first-party flashvars_<id> JSON object.

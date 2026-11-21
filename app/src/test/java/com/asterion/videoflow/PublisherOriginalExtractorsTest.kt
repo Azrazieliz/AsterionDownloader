@@ -70,6 +70,22 @@ class PublisherOriginalExtractorsTest {
             PublisherOriginalExtractors.fromHtml(
                 cases.getValue("rule34video.com"),html).map{it.url})
     }
+    @Test fun knownPublisherEmbedHtmlCanYieldOriginalWithoutWatchPageGateway(){
+        val selected=cases.getValue("eporner.com")
+        val publicEmbed="""<main><section id="player"><video>
+            <source src="https://cdn.example/eporner-full-scene.mp4"
+                    type="video/mp4"/>
+          </video></section>
+          <aside class="related"><video>
+            <source src="https://cdn.example/unrelated-preview.mp4"/>
+          </video></aside></main>"""
+        val result=PublisherOriginalExtractors.fromHtml(selected,publicEmbed)
+        assertEquals(listOf("https://cdn.example/eporner-full-scene.mp4"),
+            result.map{it.url})
+        assertEquals("https://www.eporner.com/embed/MSADu4C0K92/",
+            EpornerOriginalSource.officialEmbed(selected))
+    }
+
     @Test fun archivebateIsExactWatchEmbedNotPreviewOrAdvert(){
         val html="""<div class="player">
           <iframe src="https://ads.example/e/ABC12345"></iframe>
