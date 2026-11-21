@@ -1,49 +1,39 @@
 package com.azrael.galleryflow
 
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.junit.Assert.*
 import org.junit.Test
 
+/**
+ * User-retired publishers must never wake up through a legacy generic
+ * album root. Their previously saved original files and records remain
+ * untouched; no read-only provider access is attempted by these tests.
+ */
 class KyoraOriginalCatalogRegressionTest {
-    @Test fun pornPicsSiteRootUsesActualPublishedAlbumListing() {
-        val root="https://www.pornpics.com/"
-        val listing="https://www.pornpics.com/popular/"
+    private fun rejectsRetiredRootWithoutFetching(site:String,root:String) {
+        var requests=0
         val http=object:HttpClient(){
             override fun document(url:String,referer:String?):Document {
-                assertEquals("Must not scan a menu as an album",listing,url)
-                return Jsoup.parse("""
-                    <main><a href="/galleries/album-one/">
-                    Album one original</a></main>
-                """,url)
+                requests++
+                throw AssertionError("Retired $site fetched remote site: $url")
             }
         }
         val entity=SourceEntity(SourceId.GENERIC,
-            "site:pornpics.com","PornPics",root,"site")
-        val records=GenericSiteAdapter(http)
-            .enumerateGalleries(entity).toList()
-        assertEquals(1,records.size)
-        assertTrue(records.single().canonicalUrl
-            .contains("/galleries/album-one/"))
+            "site:"+site,site,root,"site")
+        val exception=assertThrows(AdapterException::class.java) {
+            GenericSiteAdapter(http).enumerateGalleries(entity).toList()
+        }
+        assertTrue(exception.message.orEmpty().contains("Retired provider"))
+        assertEquals("Retirement must not reconnect retired sources",0,requests)
     }
-    @Test fun celebCreatorImageCollectionsDoNotBecomeHomepagePreviews() {
-        val source="https://celeb.st/feed/hot"
-        val http=object:HttpClient(){
-            override fun document(url:String,referer:String?):Document {
-                assertEquals(source,url)
-                return Jsoup.parse("""
-                    <main><a href="/creator/artist-123/images">
-                    Artist images</a>
-                    <a href="/login">Sign in</a></main>
-                """,url)
-            }
-        }
-        val entity=SourceEntity(SourceId.GENERIC,
-            "url:celeb-hot","Celeb.st",source,"site")
-        val records=GenericSiteAdapter(http)
-            .enumerateGalleries(entity).toList()
-        assertEquals(1,records.size)
-        assertTrue(records.single().canonicalUrl
-            .contains("/creator/artist-123/images"))
+
+    @Test fun retiredPornPicsRootNeverReseedsOldGalleryRows() {
+        rejectsRetiredRootWithoutFetching("pornpics.com",
+            "https://www.pornpics.com/")
+    }
+
+    @Test fun retiredCelebStRootNeverReopensCreatorCollections() {
+        rejectsRetiredRootWithoutFetching("celeb.st",
+            "https://celeb.st/feed/hot")
     }
 }
