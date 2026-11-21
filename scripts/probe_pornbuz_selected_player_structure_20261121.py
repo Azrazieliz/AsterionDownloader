@@ -61,3 +61,18 @@ with tempfile.TemporaryDirectory(prefix="adl_pornbuz_main_") as d:
     ("video-js","jwplayer","fluidplayer","player.src","hls.js","sources","file:","html5","video_url","duration")},
   "gate":bool(re.search(r"captcha|cf-turnstile|verify you are human|just a moment",body[:12000],re.I))
  }),flush=True)
+ inline=re.findall(r"""(?is)<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>""",body)
+ for variable in ("VK_PLAYBACK","VK_PLAYER_OPTS","VK_ADS"):
+  result=[]
+  for code in inline:
+   m=re.search(r"(?:window\\.)?"+variable+r"\\s*=\\s*\\{",code)
+   if m:
+    snippet=code[m.end()-1:m.end()+900]
+    keys=re.findall(r"""(?i)(?:["']?)([a-z_][a-z0-9_]{1,40})(?:["']?)\\s*:""",snippet)
+    hosts=sorted(set(urllib.parse.urlsplit(u).hostname for u in
+      re.findall(r"""https?://[^"'\\s<>]{12,900}""",snippet)))
+    result.append({"keys":keys[:24],"hosts":hosts,"chars":len(code),
+      "hls_mentions":len(re.findall(r"\\.m3u8",code,re.I)),
+      "mp4_mentions":len(re.findall(r"\\.mp4",code,re.I)),
+      "has_file_key":bool(re.search(r"\\bfile\\s*:",code))})
+  print(json.dumps({"variable":variable,"configs":result[:2]}),flush=True)
