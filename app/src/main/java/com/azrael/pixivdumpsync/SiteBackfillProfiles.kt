@@ -119,7 +119,12 @@ false)continue
                 ?:link.closest(".gridwp-grid-post,.post,.gridwp-grid-post-item")
                     ?.selectFirst("img")
             val image=cover?.let{img->
-                listOf("data-original","data-src","src").firstNotNullOfOrNull{
+                if(host=="4kgirl.com") {
+                    // 4KGirl list markup may contain a 1-pixel loading.gif
+                    // src while the real cover is in data-lazy-src/srcset.
+                    // Never cache the placeholder as the gallery thumbnail.
+                    SitePreviewImage.best(img)
+                }else listOf("data-original","data-src","src").firstNotNullOfOrNull{
                     k->img.absUrl(k).takeIf{u->SourceIndexParser.safe(u)}
                 }
             }
