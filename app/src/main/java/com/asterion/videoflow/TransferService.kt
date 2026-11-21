@@ -179,8 +179,16 @@ object VideoEngine {
                     context,scan,targetHost)
             false
         }
+        // Do not create an extra native/Python process merely because the
+        // user entered Downloads or an automatic website scan started.
+        // Independent parallel transfers remain enabled for 2+ runnable
+        // originals; process duplication with no work caused low-memory
+        // kills of both :videoflow_secondary and :torrent.
+        val secondaryNeeded=runCatching {
+            VideoDb(context).use { it.hasParallelRunnableWork() }
+        }.getOrDefault(false)
         var secondaryScheduled=false
-        val secondaryStarted=try{
+        val secondaryStarted=if(secondaryNeeded)try{
             val second=Intent(context,TransferAgentTwoService::class.java)
             if(Build.VERSION.SDK_INT>=26)context.startForegroundService(second)
             else context.startService(second)
@@ -189,7 +197,7 @@ object VideoEngine {
             if(allowJobFallback)
                 secondaryScheduled=Scheduling.requestSecondaryImmediate(context)
             false
-        }
+        } else false
         // Android may defer foreground starts while successfully accepting
         // the durable JobScheduler fallback. The old return value discarded
         // successful job scheduling and falsely told users nothing started.

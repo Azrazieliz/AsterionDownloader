@@ -421,6 +421,36 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
         }
         return out
     }
+    /**
+     * A second isolated Android worker is justified only when at least two
+     * real transfers are currently runnable. Empty scheduled scans and a
+     * single stalled provider must not keep a second Python/JNI process
+     * resident. Historical/retired watches and not-yet-due retries do not
+     * count. This only gates process creation; no queued item is discarded.
+     */
+    fun hasParallelRunnableWork():Boolean {
+        val sql="""SELECT v.url,v.watch_id,w.address
+            FROM videos v LEFT JOIN watches w ON w.id=v.watch_id
+            WHERE v.state='running' OR
+                ((v.state='queued' OR
+                  (v.state='retry_wait' AND v.retry_after<=?))
+                 AND (v.watch_id=0 OR w.enabled=1))
+            ORDER BY CASE WHEN v.state='running' THEN 0 ELSE 1 END
+            LIMIT 1000"""
+        readableDatabase.rawQuery(sql,
+            arrayOf(System.currentTimeMillis().toString())).use { c ->
+            var count=0
+            while(c.moveToNext()) {
+                if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(
+                        c.getString(0)))continue
+                if(c.getLong(1)!=0L && !com.azrael.pixivdumpsync.SiteControls
+                        .any(appContext,c.getString(2).orEmpty()))continue
+                if(++count>=2)return true
+            }
+        }
+        return false
+    }
+
     fun count(status: String): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM videos WHERE state=?", arrayOf(status)).use { c -> c.moveToFirst(); return c.getInt(0) }
     }

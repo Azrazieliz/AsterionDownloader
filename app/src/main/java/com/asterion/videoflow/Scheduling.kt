@@ -32,11 +32,16 @@ object Scheduling {
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setMinimumLatency(delay).setOverrideDeadline(delay+30_000L)
             .build())>0
-        val secondary=jobs.schedule(JobInfo.Builder(SECONDARY_RETRY,
+        // Primary always owns the durable retry. The secondary is scheduled
+        // only for already runnable parallel work, not one blocked source.
+        val parallel=runCatching{
+            VideoDb(context).use{it.hasParallelRunnableWork()}
+        }.getOrDefault(false)
+        val secondary=if(parallel)jobs.schedule(JobInfo.Builder(SECONDARY_RETRY,
             ComponentName(context,SecondaryPollJobService::class.java))
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setMinimumLatency(delay).setOverrideDeadline(delay+30_000L)
-            .build())>0
+            .build())>0 else true
         return primary && secondary
     }
     fun requestPrimaryImmediate(context:Context,scan:Boolean=false,
@@ -65,7 +70,10 @@ object Scheduling {
     fun requestImmediate(context:Context,scan:Boolean=false,
                          targetHost:String?=null):Boolean{
         val primary=requestPrimaryImmediate(context,scan,targetHost)
-        val secondary=requestSecondaryImmediate(context)
+        val parallel=runCatching{
+            VideoDb(context).use{it.hasParallelRunnableWork()}
+        }.getOrDefault(false)
+        val secondary=if(parallel)requestSecondaryImmediate(context) else true
         return primary && secondary
     }
     fun configure(context:Context,enabled:Boolean){
@@ -81,12 +89,10 @@ object Scheduling {
                 .setPersisted(true).setPeriodic(15*60*1000L)
                 .setBackoffCriteria(60*1000L,
                     JobInfo.BACKOFF_POLICY_EXPONENTIAL).build())
-            jobs.schedule(JobInfo.Builder(SECONDARY_PERIODIC,
-                ComponentName(context,SecondaryPollJobService::class.java))
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setPersisted(true).setPeriodic(15*60*1000L)
-                .setBackoffCriteria(60*1000L,
-                    JobInfo.BACKOFF_POLICY_EXPONENTIAL).build())
+            // The primary periodic scan discovers items. A second idle
+            // periodic process serves no purpose and competes with torrents
+            // and GalleryFlow for Android's native memory budget.
+            jobs.cancel(SECONDARY_PERIODIC)
         }
     }
     fun cancel(context:Context){
@@ -102,7 +108,7 @@ object Scheduling {
                 .getBoolean("auto",true)){
             val ids=context.getSystemService(JobScheduler::class.java)
                 .allPendingJobs.map{it.id}.toSet()
-            if(ID !in ids || SECONDARY_PERIODIC !in ids)configure(context,true)
+            if(ID !in ids)configure(context,true)
         }
     }
 }
@@ -160,6 +166,8 @@ class SecondaryPollJobService:JobService(){
     override fun onStartJob(params:JobParameters?):Boolean{
         val job=params?:return false
         if(!com.azrael.pixivdumpsync.AppPower.enabled(this))return false
+        if(!runCatching{ VideoDb(this).use{it.hasParallelRunnableWork()} }
+                .getOrDefault(false))return false
         val manual=job.jobId==42685 || job.jobId==42686
         if(!manual && !getSharedPreferences("video_options",MODE_PRIVATE)
                 .getBoolean("auto",true))return false
