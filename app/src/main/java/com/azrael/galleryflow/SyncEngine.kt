@@ -178,6 +178,9 @@ class SyncEngine(private val context: Context) {
                 !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                 continue
             val adapter = AdapterRegistry.forSource(entity.source,context)
+            val val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
+                CosplayTeleVideoCompleteness.exactEntitySelection(
+                    targetEntityId,entity.entityId,entity.kind)
             if (!adapter.enabled) {
                 db.setEntityError(entity.source, entity.entityId, adapter.statusLabel)
                 continue
@@ -203,7 +206,8 @@ class SyncEngine(private val context: Context) {
                 if (entity.liveCursor.isNullOrBlank()) {
                     if(targeted && galleries.isNotEmpty()){
                         val latest=galleries.first()
-                        if(processGallery(entity,latest,adapter,db,files,flow,stats,progress)){
+                        if(processGallery(entity,latest,adapter,db,files,flow,stats,progress,
+                                exactSelection=exactAlbumRequest)){
                             db.setLiveCursor(entity.source,entity.entityId,newest)
                         }else{
                             db.queueRetry(latest,"Initial new-album check incomplete")
@@ -221,7 +225,8 @@ class SyncEngine(private val context: Context) {
                     if(!targeted &&
                         !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                         break
-                    if (processGallery(entity, gallery, adapter, db, files, flow, stats, progress)) {
+                    if (processGallery(entity, gallery, adapter, db, files, flow,
+                            stats, progress,exactSelection=exactAlbumRequest)) {
                         db.setLiveCursor(entity.source, entity.entityId, gallery.stableId)
                     } else {
                         break
@@ -272,6 +277,9 @@ class SyncEngine(private val context: Context) {
             }
             val selectedAlbum=entity.kind=="selected_album" ||
                 (targetEntityId!=null && entity.kind=="gallery_only")
+            val val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
+                CosplayTeleVideoCompleteness.exactEntitySelection(
+                    targetEntityId,entity.entityId,entity.kind)
             val prefix=if(selectedAlbum)
                 "Selected album • "+entity.displayName
                 else "Backfill • " + (entityIndex + 1) + "/" + entities.size + " • " + entity.displayName
@@ -296,7 +304,9 @@ class SyncEngine(private val context: Context) {
                         !com.azrael.pixivdumpsync.SiteControls.backfill(context,entity.canonicalUrl))
                         break
                     progress("Retrying failed gallery: " + retry.title)
-                    if (processGallery(entity, retry, adapter, db, files, flow, stats, progress)) {
+                    if (processGallery(entity, retry, adapter, db, files,
+                            flow, stats, progress,
+                            exactSelection=exactAlbumRequest)) {
                         db.clearRetry(retry)
                     } else {
                         failedCount++
@@ -325,7 +335,7 @@ class SyncEngine(private val context: Context) {
                     SyncControl.updateMessage(message)
                     progress(message)
                     val completed = processGallery(entity, gallery, adapter, db, files,
-                        flow, stats, progress)
+                        flow, stats, progress,exactSelection=exactAlbumRequest)
                     if (completed) {
                         db.clearRetry(gallery)
                     } else {
