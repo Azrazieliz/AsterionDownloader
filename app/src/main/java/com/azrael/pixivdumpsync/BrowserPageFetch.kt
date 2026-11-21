@@ -609,6 +609,17 @@ object BrowserPageFetch {
                                     return /^\/(?:u\/)?watch\/\d{1,16}\/?$/.test(currentPath) &&
                                         host==='mixdrop.ag' &&
                                         /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
+                                if(publisher==='livecamrips.to')
+                                    return /^\/video\/\d{5,12}\/?$/.test(currentPath) &&
+                                        el.id==='iframe-video' &&
+                                        !el.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,.sidebar') &&
+                                        ((host==='vidara.to' &&
+                                            /^\/[A-Za-z0-9_-]{8,50}\/?$/.test(u.pathname) &&
+                                            !u.search && !u.hash) ||
+                                        (['mdzsmutpcvykb.net','mixdrop.ag',
+                                            'mixdrop.co','mixdrop.to'].includes(host) &&
+                                            /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname)));
                                 if(publisher==='javideo.net'){
                                     const wrapper=el.closest('.embed-responsive.player');
                                     if(!wrapper || wrapper.classList.contains('d-none'))
@@ -645,7 +656,11 @@ object BrowserPageFetch {
                                         /^\/(?:embed|player|watch|video)\//.test(u.pathname);
                                 return false;
                             }).slice(0,5).map(el=>
-                                '<iframe src="'+esc(new URL(
+                                '<iframe '+
+                                (publisher==='livecamrips.to' &&
+                                    el.id==='iframe-video'
+                                    ?'id="iframe-video" ':'')+
+                                'src="'+esc(new URL(
                                     el.getAttribute('src'),location.href).href)+
                                 '" allowfullscreen></iframe>').join('');
                             const chapter=document.querySelector(
