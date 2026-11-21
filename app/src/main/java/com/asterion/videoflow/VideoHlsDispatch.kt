@@ -35,7 +35,10 @@ internal object VideoHlsDispatch {
             // first-party /api/getmovie HLS. Prepare Python BEFORE asking
             // the publisher to sign that stream, not after it has started
             // expiring. Do not prewarm on its listings or previewvideo.
-            (host=="taiav.com" && VideoSiteProfiles.isVideoPage(url))
+            (host=="taiav.com" && VideoSiteProfiles.isVideoPage(url)) ||
+            // The owner-selected PornBuz primary player issues a signed
+            // JWPlayer HLS. Warm Python before resolving its signature.
+            (host=="pornbuz.com" && VideoSiteProfiles.isVideoPage(url))
     }
 
     fun isSelectedManifest(url:String):Boolean {

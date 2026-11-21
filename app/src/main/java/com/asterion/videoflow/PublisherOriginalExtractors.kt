@@ -301,6 +301,37 @@ internal object PublisherOriginalExtractors {
             // behavior when the publisher embed is genuinely unavailable.
         }
         val page=WebDiscovery.selectedDocument(selected,context)
+        if(host=="pornbuz.com"){
+            // The owner-selected article publishes its REAL primary
+            // watchstreamus JWPlayer (a signed full-duration HLS). A
+            // separate Server 2/Streamtape link remains the old fallback.
+            // Never return a sidebar 20-second trailer as the original.
+            val frame=PornBuzOriginalSource.selectedMainPlayer(
+                selected,page.outerHtml())
+            val primary=frame?.let{exact->
+                runCatching{
+                    val response=org.jsoup.Jsoup.connect(exact)
+                        .userAgent(NativeMediaDownloader.USER_AGENT)
+                        .header("Referer",selected)
+                        .ignoreHttpErrors(true).followRedirects(false)
+                        .timeout(13_000).maxBodySize(150_000)
+                        .apply{
+                            NetworkRoute.javaProxyForSelected(
+                                context,selected,exact)?.let{proxy(it)}
+                            com.azrael.galleryflow.SiteSession.cookie(context,exact)
+                                ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
+                        }.execute()
+                    if(response.statusCode()!=200)null else
+                        PornBuzOriginalSource.selectedHls(
+                            exact,response.body())?.takeIf{playlist->
+                                PornBuzOriginalSource.verifiedFullHls(
+                                    context,selected,exact,playlist)
+                            }?.let{Candidate(it,exact,host)}
+                }.getOrNull()
+            }
+            if(primary!=null)return listOf(primary)
+            return fromHtml(selected,page.outerHtml())
+        }
         // Real Pornhub selected watch pages publish their signed original
         // HLS quality variants in one first-party flashvars_<id> JSON object.
         // Initial HTML5 video/src is absent; generic CSS only finds previews.
