@@ -31,6 +31,7 @@ class TeraBoxResolver(private val http: HttpClient) {
             sharePage = landing.finalUrl,
             jsToken = jsToken,
             shortUrl = shortUrl,
+            logId = publishedLogId(html),
             directory = null,
             depth = 0
         )
@@ -60,6 +61,7 @@ class TeraBoxResolver(private val http: HttpClient) {
         sharePage: String,
         jsToken: String,
         shortUrl: String,
+        logId: String?,
         directory: String?,
         depth: Int
     ): List<RemoteFile> {
@@ -69,7 +71,7 @@ class TeraBoxResolver(private val http: HttpClient) {
         // clienttype=0; some shares reply errno=-4 with this shape even
         // when their own /share/list contract accepts the minimal fields.
         // We never invent a token, guess a password or bypass verification.
-        val queries = shareListQueries(jsToken,shortUrl,directory)
+        val queries = shareListQueries(jsToken,shortUrl,directory,logId)
         val hosts = linkedSetOf(
             apiBase(sharePage),
             "https://www.1024tera.com",
@@ -113,7 +115,8 @@ class TeraBoxResolver(private val http: HttpClient) {
                     // Keep the ORIGINAL public share URL as Referer through
                     // nested directory traversal. An API /share/list URL is
                     // not the authorized share page and can cause errno=-4.
-                    files += listFiles(sharePage, jsToken, shortUrl, path, depth + 1)
+                    files += listFiles(sharePage, jsToken, shortUrl,
+                        logId, path, depth + 1)
                     continue
                 }
                 val name = item.optString("server_filename").ifBlank { "file-$i" }
@@ -141,7 +144,9 @@ class TeraBoxResolver(private val http: HttpClient) {
     /** Equivalent first-party public-share forms, in conservative order.
      * Do not derive a guessed access token or send a private account cookie to
      * third-party domains. Only the public share's actual jsToken is reused. */
-    internal fun shareListQueries(token:String,shortUrl:String,dir:String?):List<String> {
+    internal fun shareListQueries(
+        token:String,shortUrl:String,dir:String?,publishedLogId:String?=null
+    ):List<String> {
         require(token.length in 4..512 && shortUrl.length in 3..250)
         val standard=linkedMapOf(
             "app_id" to "250528",
@@ -152,6 +157,9 @@ class TeraBoxResolver(private val http: HttpClient) {
         )
         standard[if(dir.isNullOrBlank())"root" else "dir"]=
             dir?.takeIf{it.isNotBlank()}?:"1"
+        publishedLogId?.takeIf{
+            it.matches(Regex("[A-Za-z0-9_-]{6,160}"))
+        }?.let{standard["dp-logid"]=it}
         fun build(extra:Map<String,String>):String =
             (standard+extra).entries.joinToString("&"){
                 enc(it.key)+"="+enc(it.value)
@@ -163,6 +171,16 @@ class TeraBoxResolver(private val http: HttpClient) {
             build(mapOf("web" to "1","channel" to "dubox",
                 "clienttype" to "0","by" to "name","order" to "asc"))
         ).distinct()
+    }
+
+    /** Optional, publisher-rendered public-share request identifier.
+     * Never synthesize a log id or mix it with a different share.
+     * When absent, the exact old three request forms are preserved.
+     */
+    internal fun publishedLogId(html:String):String? {
+        val pattern=Regex(
+            """(?i)["']?dp[-_]?logid["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{6,160})""")
+        return pattern.find(html)?.groupValues?.getOrNull(1)
     }
 
     private fun extractJsToken(html: String): String? {
