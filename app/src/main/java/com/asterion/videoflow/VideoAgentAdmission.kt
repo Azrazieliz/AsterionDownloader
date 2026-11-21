@@ -20,7 +20,12 @@ internal object VideoAgentAdmission {
     internal const val MIN_FREE_FOR_TWO_EXTRACTORS=4_000_000_000L
     internal const val MIN_TOTAL_FOR_TWO_EXTRACTORS=10_000_000_000L
     internal const val LARGE_DEVICE_RESERVE_BYTES=2_600_000_000L
-    internal const val OS_PRESSURE_RESERVE_BYTES=1_300_000_000L
+    // Native-only fallback remains mandatory when Android reports pressure.
+    // On >=10 GB devices with healthy available RAM, reserving an extra
+    // 1.3 GB *above* Android's own pressure threshold permanently disabled
+    // the second publisher extractor on the owner's non-low-memory phone.
+    // Keep 900 MB above the OS threshold and the 2.6 GB absolute floor.
+    internal const val OS_PRESSURE_RESERVE_BYTES=900_000_000L
 
     /** Compatibility for older admission fixtures where total RAM and
      * Android's pressure threshold are unavailable: remain conservative.
