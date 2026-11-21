@@ -175,6 +175,12 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        if(host=="bubblecum.lol"){
+            // The publisher's real KVS flashvars.video_url belongs to one
+            // selected #kt_player. Page-wide VideoObject and trailers do not.
+            return BubblecumSelectedOriginalSource.published(selected,html)
+                .map{Candidate(it,selected,host)}
+        }
         if(host=="xchina.co"){
             // Current selected xChina articles identify their real HLS
             // original in #video-player[data-src], NOT a <video> element.
