@@ -126,9 +126,27 @@ internal object SelectedAlbumScope {
         }
         if(postId!=null && wordpressGalleries.isNotEmpty() && selectedGalleries.isNullOrEmpty())
             throw AdapterException("The selected post did not expose its own photo gallery")
-        val content=selectedGalleries?.takeIf { it.isNotEmpty() }?.joinToString("") {
-            it.outerHtml()
-        } ?: body.outerHtml()
+        val content=selectedGalleries?.takeIf { it.isNotEmpty() }?.let{galleries->
+            val photos=galleries.joinToString(""){it.outerHtml()}
+            // WordPress galleryid-N contains photos ONLY. CosplayTele's
+            // selected article can place its full video player or MP4 links
+            // as siblings of that gallery. Dropping the siblings made an
+            // otherwise complete photo set silently omit EVERY video.
+            // Retain only direct media evidence inside the same post body.
+            val videoExtras=if(URI(selectedUrl).host.orEmpty()
+                    .lowercase(Locale.ROOT).removePrefix("www.")=="cosplaytele.com"){
+                val nodes=body.select(
+                    ".video-player,.wp-video,video,iframe[data-video],"+
+                    "a[href$=.mp4],a[href*=.mp4?],"+
+                    "a[href$=.webm],a[href*=.webm?]")
+                nodes.filter{element->
+                    element.closest(excluded)==null &&
+                    element.closest(".gallery[class*=galleryid-]")==null &&
+                    nodes.none{parent->parent!==element && parent.contains(element)}
+                }.joinToString(""){it.outerHtml()}
+            }else ""
+            photos+videoExtras
+        }?:body.outerHtml()
         val isolated=Jsoup.parse(content,doc.baseUri().ifBlank { selectedUrl })
         isolated.select(excluded).remove()
         // Strip links to other album pages, but keep only image/media links
