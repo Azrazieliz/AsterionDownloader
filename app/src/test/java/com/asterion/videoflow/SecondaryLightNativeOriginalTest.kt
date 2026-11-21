@@ -6,7 +6,9 @@ import org.junit.Test
 
 class SecondaryLightNativeOriginalTest {
     @Test fun lightweightNativeAdmissionOnlyForExactSelectedPages(){
-        assertTrue(SecondaryLightNativeOriginal.eligible(
+        // Preserve byte-positive primary JAV Guru transfer, not the
+        // extra native_deferred -> failing Python handoff from this version.
+        assertFalse(SecondaryLightNativeOriginal.eligible(
             "https://jav.guru/1234567/owner-selected-original/"))
         assertTrue(SecondaryLightNativeOriginal.eligible(
             "https://rule34video.com/video/123456/selected-scene"))

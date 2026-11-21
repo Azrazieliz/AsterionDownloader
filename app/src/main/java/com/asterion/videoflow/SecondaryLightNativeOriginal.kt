@@ -23,7 +23,14 @@ internal object SecondaryLightNativeOriginal {
                 .removePrefix("www.")
         }.getOrDefault("")
         return when(host){
-            "jav.guru"->JavGuruJkNativeHls.selectedArticleForNative(selected)
+            // Installed release: JAV Guru's failing jobs were claimed by
+            // this speculative secondary first, then native_deferred, then
+            // retried as Python AUTH 403 with zero media bytes. The prior
+            // successful receiving-bytes run had NO secondary handoff.
+            // Restore the established primary owner for this provider.
+            // The primary still uses native JK when the selected manifest
+            // proves eligible; other providers retain parallel eligibility.
+            "jav.guru"->false
             "rule34video.com"->Rule34VideoOriginalSource.videoId(selected)!=null
             "hentaibros.net"->VideoSiteProfiles.isVideoPage(selected)
             // This publisher directly advertises quality-labelled MP4 files
