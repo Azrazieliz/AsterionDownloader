@@ -114,8 +114,10 @@ class SiteBackfillProfilesTest {
                 "https://cosplaytele.com/selected-gallery/",
             "https://kiutaku.com/" to
                 "https://kiutaku.com/7440/",
-            "https://pimpbunny.com/models/" to
-                "https://pimpbunny.com/models/creator-1/photos/set-12/")
+            "https://www.4kgirl.com/" to
+                "https://www.4kgirl.com/real-cosplay-set/",
+            "https://everia.club/cosplay-gallery/" to
+                "https://everia.club/2026/11/20/real-cosplay-set/")
         for((source,album) in cases)
             assertTrue("$source should own $album",
                 SiteBackfillProfiles.recognizesGalleryPage(source,album))
@@ -138,31 +140,28 @@ class SiteBackfillProfilesTest {
             "https://buondua.com/","https://buondua.net/search"))
     }
 
-    @Test fun pimpbunnyModelPortraitsAreNotPromotedToPhotoAlbums(){
-        val source="https://pimpbunny.com/models/"
-        val html="""<main><article class="model">
-          <a href="/models/lolabunny-yu/">
-            <img src="https://pimpbunny.com/posters/lolabunny.webp"
-                 alt="Lolabunny profile portrait"/></a>
-          <div class="photo-grid"><a href="/photos/model-set-123/">
-            <img src="https://pimpbunny.com/previews/set-123.webp"
-                 alt="Model photos set"/></a></div>
-          <div class="video-card"><a href="/videos/actual-scene-123/">
-            <img src="https://pimpbunny.com/posters/video.webp"
-                 alt="Video scene"/></a></div></article></main>"""
-        val records=SourceIndexParser.entries(
-            Jsoup.parse(html,source),source,"COSPLAY",100L)
-        assertEquals(1,records.size)
-        assertEquals("https://pimpbunny.com/photos/model-set-123/",
-            records.single().url)
-        assertEquals("cosplay",records.single().kind)
-        val portraitsOnly=SourceIndexParser.entries(
-            Jsoup.parse("""<main><article>
-                <a href="/models/lolabunny-yu/">
-                  <img src="/portrait.webp" alt="Creator portrait"/></a>
-                </article></main>""",source),source,"COSPLAY",100L)
-        assertTrue("A model portrait is not a published photo album",
-            portraitsOnly.isEmpty())
+    @Test fun pimpbunnyPhotosAreNotAnActiveCosplayProvider(){
+        assertFalse(SiteBackfillProfiles.supports("pimpbunny.com"))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://pimpbunny.com/models/",
+            "https://pimpbunny.com/photos/model-set-123/"))
+        assertFalse(AlohaSources.by(AlohaArea.COSPLAY).any{
+            it.host=="pimpbunny.com"
+        })
+        assertTrue(AlohaSources.by(AlohaArea.ADULT).any{
+            it.host=="pimpbunny.com"
+        })
+    }
+
+    @Test fun kyoraNativeGalleryPathsExcludeNavigation(){
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://www.4kgirl.com/","https://www.4kgirl.com/category/"))
+        assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://everia.club/cosplay-gallery/",
+            "https://everia.club/cosplay-gallery/"))
+        assertTrue(SiteBackfillProfiles.recognizesGalleryPage(
+            "https://everia.club/cosplay-gallery/",
+            "https://everia.club/2026/11/20/real-cosplay-set/"))
     }
 
     @Test fun otherProvidersStillUseOriginalGenericPath(){
