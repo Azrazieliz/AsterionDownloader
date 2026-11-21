@@ -1342,6 +1342,8 @@ object VideoEngine {
                         item.url,source.url) ||
                     BubblecumSelectedOriginalSource.verifiedMedia(
                         item.url,source.url) ||
+                    PimpBunnySelectedOriginalSource.verifiedMedia(
+                        item.url,source.url) ||
                     FullPornerOriginalSource.verifiedMedia(
                         item.url,source.referer,source.url)){
                     try {

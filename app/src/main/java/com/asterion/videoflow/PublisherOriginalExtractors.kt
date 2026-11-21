@@ -175,6 +175,15 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        if(host=="pimpbunny.com"){
+            // The live selected #kt_player publishes signed first-party
+            // KVS video_url and video_alt_url. Page preview_*.mp4 files
+            // cannot stand in for the requested original.
+            if(doc.select("#kt_player").isNotEmpty()){
+                return PimpBunnySelectedOriginalSource.published(selected,html)
+                    .map{Candidate(it,selected,host)}
+            }
+        }
         if(host=="bubblecum.lol"){
             // Prefer the actual selected KVS flashvars.video_url when the
             // publisher renders #kt_player. On a genuine older HTML5 article
