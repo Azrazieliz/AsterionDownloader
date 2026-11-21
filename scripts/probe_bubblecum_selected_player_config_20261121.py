@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
   page=e.read(70000).decode("utf-8","replace");http=e.code
  scripts=re.findall(r"""(?is)<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>""",page)
  out=[]
+ original=None
  for s in scripts:
   if not re.search(r"(?i)\bvideo_url\b|flashvars|kt_player",s):continue
   keyed=[k for k in ("video_url","video_alt_url","video_url_text","video_id","video_duration",
@@ -35,6 +36,10 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
    if not m:continue
    url=m.group(1).replace("\\/","/")
    u=urllib.parse.urlsplit(urllib.parse.urljoin(selected,url))
+   if (key=="video_url" and original is None and
+       u.scheme=="https" and u.hostname in ("bubblecum.lol","www.bubblecum.lol") and
+       u.path.startswith("/get_file/") and ".mp4" in u.path.lower()):
+     original=u.geturl()
    sources.append({"key":key,"host":u.hostname,
       "route":u.path.split("/")[1] if len(u.path.split("/"))>1 else "",
       "path_depth":len(u.path.split("/")),"ext":u.path.rsplit(".",1)[-1][:9] if "." in u.path else "",
@@ -46,3 +51,24 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
    "candidate_scripts":out[:6],"html_get_file_count":page.count("/get_file/"),
    "preview_mp4_count":len(re.findall(r"(?i)preview(?:_[a-z0-9]+)?\.mp4",page)),
    "actual_video_player_id":bool(re.search(r"""(?i)id=["'](?:kt_player|video-player)["']""",page))}),flush=True)
+ if original:
+  try:
+   req=urllib.request.Request(original,headers={
+    "User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
+    "Referer":selected,"Accept":"video/mp4,*/*;q=0.8",
+    "Accept-Encoding":"identity","Range":"bytes=0-4095"})
+   with urllib.request.urlopen(req,timeout=20) as resp:
+    first=resp.read(4096)
+    print(json.dumps({"stage":"SELECTED_KVS_FIRST_ORIGINAL_BYTES",
+      "http":resp.status,
+      "final_host":urllib.parse.urlsplit(resp.url).hostname,
+      "mime":resp.headers.get("Content-Type","").split(";")[0],
+      "sample_bytes":len(first),
+      "mp4_ftyp":b"ftyp" in first[:36],
+      "content_range":bool(resp.headers.get("Content-Range")),
+      "full_file_verified":False}),flush=True)
+  except urllib.error.HTTPError as error:
+   print(json.dumps({"stage":"SELECTED_KVS_ORIGINAL_TRANSFER_GATE","http":error.code}),flush=True)
+  except Exception as error:
+   print(json.dumps({"stage":"SELECTED_KVS_ORIGINAL_TRANSFER_ERROR",
+     "error":type(error).__name__}),flush=True)
