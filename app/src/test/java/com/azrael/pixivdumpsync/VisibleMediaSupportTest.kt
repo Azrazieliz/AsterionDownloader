@@ -32,6 +32,18 @@ class VisibleMediaSupportTest {
         assertFalse(VisibleMediaSupport.isEpubOriginal(
             VisibleMedia("https://cdn.example.net/cover.jpg","image")))
     }
+    @Test fun exactCosplayTeleArticleVideoIsSeparateFromItsPhotoAlbum() {
+        val selected="https://cosplaytele.com/selected-album-with-video/"
+        assertTrue(VisibleMediaSupport.selectedCosplayVideoPage(selected,"video"))
+        assertFalse(VisibleMediaSupport.selectedCosplayVideoPage(selected,"image"))
+        assertFalse(VisibleMediaSupport.selectedCosplayVideoPage(
+            "https://cosplaytele.com/category/gallery/","video"))
+        assertFalse(VisibleMediaSupport.selectedCosplayVideoPage(
+            "https://cosplaytele.com/gallery/","video"))
+        assertFalse(VisibleMediaSupport.selectedCosplayVideoPage(
+            "https://example.net/selected-album-with-video/","video"))
+    }
+
     @Test fun safeFileNamesForSignedMedia() {
         val filename=VisibleMediaSupport.fileName(
             VisibleMedia("https://cdn.example.net/files/opaque?sig=secret","image"))
