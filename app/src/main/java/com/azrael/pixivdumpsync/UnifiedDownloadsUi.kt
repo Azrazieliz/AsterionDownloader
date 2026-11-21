@@ -536,17 +536,16 @@ object UnifiedDownloadsUi {
                     },key="x:"+item.id)
             }
         }
-        // The Gallery counts come from its durable media table. Previously
-        // this Downloads screen loaded only SAVED Gallery thumbnails from
-        // MediaStore, so a genuine 3-active/1-queued module always said
-        // "No unfinished jobs in the recent queue sample". Show actual
-        // nonterminal records without changing their state or canceling sync.
+        // Display only real active Gallery transfers and terminal failures.
+        // Pending/retrying records are unscheduled inventory (often thousands
+        // after site backfill), not user-visible active download jobs. Keep
+        // every record in GalleryDb and its retry subsystem.
         runCatching {
             com.azrael.galleryflow.GalleryDb(a.applicationContext).use { store ->
                 store.readableDatabase.query("media",
                     arrayOf("source","media_id","filename","url","state",
                         "updated_at"),
-                    "state IN ('downloading','pending','retrying',"+
+                    "state IN ('downloading',"+
                         "'permanent_error','inaccessible')",
                     null,null,null,"updated_at DESC","80").use { cursor ->
                     while(cursor.moveToNext()){
@@ -1984,7 +1983,7 @@ object UnifiedDownloadsUi {
                 }
                 if(failures.isNotEmpty()){
                     card.addView(ui.action(a,
-                        "ISSUES · "+totals.failed,true){
+                        "ATTENTION · "+failures.size+" SHOWN",true){
                         val options=failures.map{item->
                             item.filename.take(70)+" · "+
                                 item.info.substringAfter(" · ",item.info).take(75)
