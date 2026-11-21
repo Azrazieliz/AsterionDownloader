@@ -160,12 +160,17 @@ open class HttpClient(private val context:android.content.Context?=null) {
         if (host == "m.4khd.com" || host.endsWith(".4khd.com")) {
             val page = textResponse(url, referer)
             val doc = Jsoup.parse(page.body, page.finalUrl)
+            // A placeholder #custom_button can have href="#",
+            // javascript:void(0), or the current bridge page. Those are
+            // NOT a selected TeraBox archive and must never prevent the
+            // real delayed first-party link from being rendered.
             val staticBridge =
-                doc.selectFirst("#custom_button[href],a[href*=terabox],a[href*=1024tera],a[href*=teraboxapp]")
-                    ?.absUrl("href")
-                    ?.takeIf { it.isNotBlank() }
-                    ?: extractTeraBoxUrl(page.body)
-                    ?: extractRedirect(doc)
+                doc.select("#custom_button[href],a[href*=terabox],"+
+                    "a[href*=1024tera],a[href*=teraboxapp]")
+                    .mapNotNull{it.absUrl("href").takeIf(::isReal4khdBridge)}
+                    .firstOrNull()
+                    ?: extractTeraBoxUrl(page.body)?.takeIf(::isReal4khdBridge)
+                    ?: extractRedirect(doc)?.takeIf(::isReal4khdBridge)
             // m.4khd.com often adds the official TeraBox link AFTER its
             // first-party JavaScript initializes. Static HTML returning
             // only a page shell does not prove the selected archive absent.
@@ -253,6 +258,18 @@ open class HttpClient(private val context:android.content.Context?=null) {
         return url
     }
 
+    /** Only a real selected file/share route, never a placeholder
+     * anchor or a random same-page redirect posing as an archive. */
+    internal fun isReal4khdBridge(value:String):Boolean {
+        val parsed=runCatching{URI(value)}.getOrNull()?:return false
+        if(parsed.scheme!="https" || parsed.userInfo!=null ||
+            parsed.host.isNullOrBlank() || parsed.port!=-1 ||
+            parsed.rawFragment!=null)return false
+        val host=parsed.host!!.lowercase(Locale.ROOT)
+        val path=parsed.path.orEmpty().lowercase(Locale.ROOT)
+        return isTeraBoxHost(host) || isDirectFilePath(path)
+    }
+
     private fun extractRedirect(doc: Document): String? {
         doc.selectFirst("meta[http-equiv=refresh],meta[http-equiv=Refresh]")?.attr("content")?.let { content ->
             Regex("(?i)url\\s*=\\s*['\"]?([^'\";]+)").find(content)?.groupValues?.get(1)?.trim()?.let { raw ->
@@ -325,13 +342,14 @@ open class HttpClient(private val context:android.content.Context?=null) {
             ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"
         ).any { path.endsWith(it) }
 
-    private fun isTeraBoxHost(host: String): Boolean =
-        host.contains("terabox") ||
-            host.endsWith("1024tera.com") ||
-            host.endsWith("4funbox.com") ||
-            host.endsWith("nephobox.com") ||
-            host.endsWith("mirrobox.com") ||
-            host.endsWith("momerybox.com")
+    private fun isTeraBoxHost(host: String): Boolean {
+        val normalized=host.lowercase(Locale.ROOT)
+        return setOf("terabox.com","terabox.app","teraboxapp.com",
+            "1024tera.com","1024terabox.com","4funbox.com",
+            "nephobox.com","mirrobox.com","momerybox.com").any{
+                normalized==it || normalized.endsWith("."+it)
+            }
+    }
 
     private fun hostOf(value: String): String =
         runCatching { URI(value).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
