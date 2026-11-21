@@ -36,6 +36,27 @@ class InternetWideDiscoveryRegressionTest {
         assertEquals(listOf("https://unknown.example/story/rare-show"),urls)
     }
 
+    @Test fun fourKGirlPlaceholderCannotReplaceLazyFullCover(){
+        val base="https://www.4kgirl.com/"
+        val html="""
+          <article class="gridwp-grid-post">
+            <h3 class="entry-title"><a href="/actual-gallery/">
+              Actual gallery
+            </a></h3>
+            <img src="/loading.gif"
+                 data-lazy-src="https://www.4kgirl.com/wp-content/uploads/actual-600.webp"
+                 alt="Actual gallery"/>
+          </article>
+        """.trimIndent()
+        val entries=SiteBackfillProfiles.entries(
+            org.jsoup.Jsoup.parse(html,base),base,"COSPLAY",1L).orEmpty()
+        assertEquals(1,entries.size)
+        assertTrue(entries.single().preview.orEmpty().endsWith("actual-600.webp"))
+        val cards=KyoraCreatorPreviews.parse(html,base)
+        assertEquals(1,cards.size)
+        assertTrue(cards.single().cover.endsWith("actual-600.webp"))
+    }
+
     @Test fun fourKGirlSiblingThumbnailIsFoundOnPublisherListing(){
         val base="https://www.4kgirl.com/"
         val html="""
