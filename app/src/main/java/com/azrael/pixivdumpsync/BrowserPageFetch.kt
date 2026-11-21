@@ -620,6 +620,15 @@ object BrowserPageFetch {
                                         (['mdzsmutpcvykb.net','mixdrop.ag',
                                             'mixdrop.co','mixdrop.to'].includes(host) &&
                                             /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname)));
+                                if(publisher==='pornavhd.com')
+                                    return /^\/20\d{2}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/[a-z0-9][a-z0-9_-]{2,220}\/?$/i
+                                        .test(currentPath) &&
+                                        !!el.closest('main,article') &&
+                                        !el.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,.sidebar,[data-ad]') &&
+                                        host==='video.playerrecord.cfd' &&
+                                        /^\/e\/[A-Za-z0-9_-]{8,100}\/?$/.test(u.pathname) &&
+                                        !u.search && !u.hash;
                                 if(publisher==='javideo.net'){
                                     const wrapper=el.closest('.embed-responsive.player');
                                     if(!wrapper || wrapper.classList.contains('d-none'))
@@ -733,6 +742,61 @@ object BrowserPageFetch {
                                         evidence+'</script></head><body></body></html>';
                                 }
                             }
+                            // xChina's actual selected HLS belongs to the
+                            // first-party #video-player[data-src], not an
+                            // HTML5 source. The compact DOM used to drop that
+                            // element and make every browser fallback fail.
+                            if(['xchina.co','en.xchina.co'].includes(publisher)){
+                                const match=currentPath.match(
+                                    /^\/video\/(?:id-)?([a-f0-9]{10,32})(?:\.html)?\/?$/i);
+                                const nodes=[...document.querySelectorAll(
+                                    '#video-player[data-src]')].filter(el=>
+                                    !el.closest('aside,.related,.recommended,'+
+                                        '.recommendations,.ads,.advertisement,.sidebar,[data-ad]'));
+                                if(match && nodes.length===1){
+                                    const source=nodes[0].getAttribute('data-src')||'';
+                                    try{
+                                        const link=new URL(source,location.href);
+                                        const valid=link.protocol==='https:' &&
+                                            ['xchina.co','www.xchina.co','en.xchina.co']
+                                                .includes(link.hostname.toLowerCase()) &&
+                                            !link.username && !link.password &&
+                                            !link.port && !link.search && !link.hash &&
+                                            link.pathname.toLowerCase()===
+                                                '/hls/'+match[1].toLowerCase()+'/master.m3u8';
+                                        if(valid)
+                                            return '<html><head><meta name="'+
+                                                'asterion-selected-xchina-hls" content="true">'+
+                                                '</head><body><main><div id="video-player"'+
+                                                ' data-src="'+esc(link.href)+'"></div>'+
+                                                '</main></body></html>';
+                                    }catch(_){}
+                                }
+                            }
+                            // The original PimpBunny KVS flashvars contains a
+                            // publisher-signed /get_file/ video_url and ID.
+                            // Browser snapshots dropped the selected kt_player
+                            // and inline JS, making the existing strict parser
+                            // believe only short HTML5 preview files existed.
+                            if(publisher==='pimpbunny.com' &&
+                                /^\/videos\/[a-z0-9][a-z0-9-]{2,200}\/?$/i
+                                    .test(currentPath)){
+                                const players=[...document.querySelectorAll(
+                                    '#kt_player')].filter(el=>
+                                    !el.closest('aside,.related,.recommended,'+
+                                        '.recommendations,.ads,.advertisement,.sidebar,[data-ad]'));
+                                const scripts=[...document.querySelectorAll(
+                                    'script:not([src])')].map(el=>el.textContent||'')
+                                    .filter(js=>js.length>30 && js.length<120000 &&
+                                        js.includes('kt_player') &&
+                                        /\bvideo_url\b/.test(js) &&
+                                        /\bvideo_id\b/.test(js));
+                                if(players.length===1 && scripts.length===1 &&
+                                    !/<\/script/i.test(scripts[0]))
+                                    return '<html><body><main>'+
+                                        '<div id="kt_player"></div><script>'+
+                                        scripts[0]+'</script></main></body></html>';
+                            }
                             // Jav Guru's real shortcode player is not a normal
                             // iframe. The old synthetic DOM omitted its article
                             // ID, data-localize keys and inline iframe_url JSON,
@@ -830,6 +894,18 @@ object BrowserPageFetch {
                                         .javideoSelected(
                                             org.jsoup.Jsoup.parse(page,url),url)
                                         .isEmpty()
+                                } else if(host in setOf("xchina.co","en.xchina.co")) {
+                                    !page.contains("asterion-selected-xchina-hls") &&
+                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                        .containsMatchIn(page)
+                                } else if(host=="pimpbunny.com") {
+                                    !page.contains("id=\\"kt_player\\"") &&
+                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                        .containsMatchIn(page)
+                                } else if(host=="pornavhd.com") {
+                                    !page.contains("video.playerrecord.cfd/e/") &&
+                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                        .containsMatchIn(page)
                                 } else if(host=="rule34video.com") {
                                     com.asterion.videoflow.Rule34VideoOriginalSource
                                         .parse(page,url).isEmpty()
