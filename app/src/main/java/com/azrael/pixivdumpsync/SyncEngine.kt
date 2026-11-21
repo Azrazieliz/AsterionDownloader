@@ -670,6 +670,7 @@ class SyncEngine(private val context: Context) {
         val workerCount = minOf(MAX_PARALLEL_WORKS, tasks.size)
         val nextIndex = AtomicInteger(0)
         val completedCount = AtomicInteger(0)
+        val progressPublisher=MonotonicProgressPublisher()
         val hadError = AtomicBoolean(false)
         val fatal = AtomicReference<Throwable?>(null)
         val executor = Executors.newFixedThreadPool(workerCount)
@@ -729,9 +730,13 @@ class SyncEngine(private val context: Context) {
                                 }
                             } finally {
                                 val done = completedCount.incrementAndGet()
-                                val message = "$progressLabel • $done/${tasks.size}"
-                                SyncControl.updateMessage(message)
-                                progress(message)
+                                // Publish in completed-count order even if a
+                                // worker is preempted before its callback.
+                                progressPublisher.publish(done){visible->
+                                    val message="$progressLabel • $visible/${tasks.size}"
+                                    SyncControl.updateMessage(message)
+                                    progress(message)
+                                }
                             }
                         }
                     }
