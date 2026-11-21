@@ -6,6 +6,17 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.json.JSONArray
 
+/** Persisted retry inventory is not an active transfer queue. Failed galleries
+ * receive bounded, increasingly delayed retries so a broken publisher cannot
+ * generate minute-by-minute network churn or starve other providers.
+ */
+internal object GalleryRetryBackoff {
+    const val BASE_MS=60_000L
+    const val MAX_MS=6L*60L*60L*1000L
+    fun delayForFailure(attempt:Int):Long =
+        (BASE_MS shl (attempt.coerceIn(1,12)-1)).coerceAtMost(MAX_MS)
+}
+
 class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "galleryflow.db", null, 6) {
     private val signalContext=context.applicationContext
     override fun onCreate(db: SQLiteDatabase) {
@@ -137,20 +148,35 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
     }
 
     fun queueRetry(ref: GalleryRef, error: String) {
-        val row = ContentValues().apply {
-            put("source", ref.source.wireName)
-            put("entity_id", ref.entityStableId)
-            put("gallery_id", ref.stableId)
-            put("canonical_url", ref.canonicalUrl)
-            put("title", ref.title)
-            put("last_error", error.take(400))
-            put("retry_after", System.currentTimeMillis() + 60_000L)
-        }
-        writableDatabase.insertWithOnConflict(
-            "backfill_retries", null, row, SQLiteDatabase.CONFLICT_IGNORE)
-        writableDatabase.update("backfill_retries", row,
-            "source=? AND gallery_id=?",
-            arrayOf(ref.source.wireName, ref.stableId))
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            // Preserve every historical retry and the stable gallery identity.
+            // The existing attempts column previously stayed at zero forever,
+            // so 31k+ failures could each be retried again every minute.
+            var previous=0
+            db.rawQuery(
+                "SELECT attempts FROM backfill_retries WHERE source=? AND gallery_id=?",
+                arrayOf(ref.source.wireName,ref.stableId)
+            ).use { if(it.moveToFirst())previous=it.getInt(0).coerceAtLeast(0) }
+            val attempts=(previous.toLong()+1L).coerceAtMost(12L).toInt()
+            val row=ContentValues().apply {
+                put("source",ref.source.wireName)
+                put("entity_id",ref.entityStableId)
+                put("gallery_id",ref.stableId)
+                put("canonical_url",ref.canonicalUrl)
+                put("title",ref.title)
+                put("last_error",error.take(400))
+                put("attempts",attempts)
+                put("retry_after",System.currentTimeMillis()+
+                    GalleryRetryBackoff.delayForFailure(attempts))
+            }
+            db.insertWithOnConflict(
+                "backfill_retries",null,row,SQLiteDatabase.CONFLICT_IGNORE)
+            db.update("backfill_retries",row,"source=? AND gallery_id=?",
+                arrayOf(ref.source.wireName,ref.stableId))
+            db.setTransactionSuccessful()
+        }finally { db.endTransaction() }
     }
 
     fun clearRetry(ref: GalleryRef) {
