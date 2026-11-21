@@ -178,7 +178,7 @@ class SyncEngine(private val context: Context) {
                 !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                 continue
             val adapter = AdapterRegistry.forSource(entity.source,context)
-            val val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
+            val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
                 CosplayTeleVideoCompleteness.exactEntitySelection(
                     targetEntityId,entity.entityId,entity.kind)
             if (!adapter.enabled) {
@@ -277,7 +277,7 @@ class SyncEngine(private val context: Context) {
             }
             val selectedAlbum=entity.kind=="selected_album" ||
                 (targetEntityId!=null && entity.kind=="gallery_only")
-            val val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
+            val exactAlbumRequest=entity.source==SourceId.COSPLAYTELE &&
                 CosplayTeleVideoCompleteness.exactEntitySelection(
                     targetEntityId,entity.entityId,entity.kind)
             val prefix=if(selectedAlbum)
