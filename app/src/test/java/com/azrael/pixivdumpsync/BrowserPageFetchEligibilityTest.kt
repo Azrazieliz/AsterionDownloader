@@ -20,6 +20,17 @@ class BrowserPageFetchEligibilityTest {
         assertFalse(BrowserPageFetch.publicEligible(
             "https://cosplaytele.com.evil.example/selected-cosplay-set/"))
     }
+    @Test fun publicGalleryWebviewFallbackIsLimitedToFirstPartyHosts(){
+        assertTrue(BrowserPageFetch.publicEligible(
+            "https://www.4kgirl.com/example-cosplay/"))
+        assertTrue(BrowserPageFetch.publicEligible(
+            "https://www.4khd.com/content/20/selected.html"))
+        assertFalse(BrowserPageFetch.publicEligible(
+            "https://4kgirl.com.bad.example/example-cosplay/"))
+        assertFalse(BrowserPageFetch.publicEligible(
+            "http://4kgirl.com/example-cosplay/"))
+    }
+
     @Test fun hosterLookalikesAndPortsCannotUsePublicWebview(){
         for(raw in listOf(
             "https://upfiles.com.evil.example/nGfW",
