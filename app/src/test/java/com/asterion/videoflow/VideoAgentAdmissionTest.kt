@@ -28,7 +28,14 @@ class VideoAgentAdmissionTest {
         assertTrue(VideoAgentAdmission.secondaryNativeOnly(
             3_400_000_000L,true,12_000_000_000L,1_000_000_000L))
         assertTrue(VideoAgentAdmission.secondaryNativeOnly(
-            2_900_000_000L,false,12_000_000_000L,1_900_000_000L))
+            2_700_000_000L,false,12_000_000_000L,1_900_000_000L))
+        // The owner's November 21 diagnostic: 3.104 GB available,
+        // lowMemory=false; a genuine second selected-page extractor is eligible.
+        assertFalse(VideoAgentAdmission.secondaryNativeOnly(
+            3_104_866_304L,false,12_000_000_000L,1_900_000_000L))
+        // OS-reported pressure always wins, even when plenty of bytes remain.
+        assertTrue(VideoAgentAdmission.secondaryNativeOnly(
+            3_104_866_304L,true,12_000_000_000L,1_900_000_000L))
         // Older 8GB phones without headroom stay on native-only lane.
         assertTrue(VideoAgentAdmission.secondaryNativeOnly(
             3_400_000_000L,false,8_000_000_000L,900_000_000L))
