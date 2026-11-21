@@ -40,7 +40,10 @@ object BrowserPageFetch {
         // Reading the existing authorized WebView DOM never authorizes an
         // ad iframe, bypasses a site gate or invents a media URL.
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-        "bubblecum.lol","pornavhd.com","cosplaytele.com")
+        "bubblecum.lol","pornavhd.com","cosplaytele.com",
+        // Only normal first-party WebView retrieval after a 403 HTML response.
+        // An inaccessible challenge or login still fails; never fake a cover.
+        "4kgirl.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")

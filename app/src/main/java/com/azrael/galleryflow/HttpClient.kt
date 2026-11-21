@@ -89,6 +89,22 @@ open class HttpClient(private val context:android.content.Context?=null) {
             try{
                 val response=textResponse(url,referer)
                 return Jsoup.parse(response.body,response.finalUrl)
+            }catch(e:HttpStatusException){
+                // Isolated 4KGirl HTML fallback; do not alter accepted Kyora
+                // transfers or declare an inaccessible publisher successful.
+                val host=runCatching{URI(url).host.orEmpty().lowercase(Locale.ROOT)
+                    .removePrefix("www.")}.getOrDefault("")
+                if(host!="4kgirl.com" || e.code !in setOf(401,403) ||
+                    context==null ||
+                    !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
+                    throw e
+                val browser=runCatching{
+                    com.azrael.pixivdumpsync.BrowserPageFetch.html(context,url)
+                }.getOrElse{throw e}
+                val fallback=Jsoup.parse(browser,url)
+                if(fallback.select("article,.entry-content,.gridwp-grid-post,main a[href]")
+                        .isEmpty())throw e
+                return fallback
             }catch(e:java.net.SocketTimeoutException){
                 if(attempt++>=1 || !retryableGalleryHtml(url))throw e
                 // Delay only a failed, idempotent selected HTML GET.

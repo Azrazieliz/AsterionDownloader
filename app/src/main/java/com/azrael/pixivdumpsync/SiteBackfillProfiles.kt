@@ -119,7 +119,10 @@ false)continue
                 ?:link.closest(".gridwp-grid-post,.post,.gridwp-grid-post-item")
                     ?.selectFirst("img")
             val image=cover?.let{img->
-                listOf("data-original","data-src","src").firstNotNullOfOrNull{
+                if(host=="4kgirl.com"){
+                    // Responsive publisher covers must win over loading.gif.
+                    SitePreviewImage.best(img)
+                }else listOf("data-original","data-src","src").firstNotNullOfOrNull{
                     k->img.absUrl(k).takeIf{u->SourceIndexParser.safe(u)}
                 }
             }

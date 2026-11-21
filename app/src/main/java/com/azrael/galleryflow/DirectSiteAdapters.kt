@@ -47,6 +47,11 @@ internal abstract class DirectGalleryAdapter(
                 if (!seenPosts.add(id)) continue
                 val title = anchor.text().trim()
                     .ifBlank { anchor.attr("title").trim() }
+                    .ifBlank {
+                        if (source == SourceId.FOUR_K_GIRL)
+                            anchor.selectFirst("img[alt]")?.attr("alt")?.trim().orEmpty()
+                        else ""
+                    }
                     .ifBlank { id }
                 yield(
                     GalleryRef(
@@ -242,6 +247,16 @@ internal class FourKGirlAdapter(http: HttpClient) : DirectGalleryAdapter(
         "page", "category", "tag", "author", "search", "sitemaps",
         "wp-admin", "wp-content", "feed", "comments"
     )
+
+    // Grid-style first-party WordPress album cards are not always article h2s.
+    // Limit this discovery to 4KGirl; the original path filter still excludes
+    // category, navigation and off-site links.
+    override fun listingAnchors(doc: Document): List<Element> =
+        doc.select(
+            "article h2 a[href],article h3 a[href],.entry-title a[href],"+
+            ".gridwp-grid-post a[href],.gridwp-grid-post-item a[href],"+
+            ".post-card a[href],.post-item a[href],main article a:has(img)[href]"
+        )
 
     override fun isPostPath(path: String): Boolean {
         val parts = path.trim('/').split('/').filter { it.isNotBlank() }
