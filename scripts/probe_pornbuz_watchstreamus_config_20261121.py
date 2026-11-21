@@ -40,8 +40,8 @@ with tempfile.TemporaryDirectory(prefix="adl_buz_js_") as d:
  out=[]
  for src in player.scripts:
   uri=urllib.parse.urlsplit(src)
-  if uri.scheme!="https" or uri.hostname!="player.watchstreamus.com" or
-       not uri.path.endswith(".js"):continue
+  if (uri.scheme!="https" or uri.hostname!="player.watchstreamus.com" or
+       not uri.path.endswith(".js")):continue
   try:
    status,finalJs,js=get(src,embed)
    matches=re.findall(r"""(?i)https?://[^'"\s<>\\]{10,2100}(?:\.m3u8|\.mp4)(?:\?[^'"\s<>\\]{0,250})?""",js)
