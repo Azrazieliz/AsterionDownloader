@@ -425,9 +425,24 @@ internal object TorrentMetadataBridge {
                 return
             }
             val indices=selected.indices.filter{selected[it]}.joinToString(",")
-            // Main-process acceptance is not a peer-byte receipt. Persist
-            // exactly this selection before handing it to the isolated
-            // service, so VIEW TRANSFERS does not falsely show no jobs.
+            // Persist the EXACT selected file indices and folder BEFORE
+            // sending an Android foreground-service intent. The isolated
+            // :torrent process can be denied/killed before onStartCommand;
+            // previously no selection survived and Resume later failed.
+            val saved=a.getSharedPreferences("torrent_transfers",
+                Context.MODE_PRIVATE).edit()
+                .putString("job_indices_$hash",indices)
+                .putString("job_folder_$hash",folder)
+                .putBoolean("job_paused_$hash",false)
+                .putBoolean("job_cancelled_$hash",false)
+                .commit()
+            if(!saved){
+                AlertDialog.Builder(a).setTitle("Torrent selection not saved")
+                    .setMessage("Selected file indices could not be saved. "+
+                        "No transfer was launched; select again.")
+                    .setPositiveButton("Close",null).show()
+                return
+            }
             TorrentTransfers.record(a,"job_$hash",
                 "QUEUED · Selected files await native worker acknowledgement")
             runCatching{

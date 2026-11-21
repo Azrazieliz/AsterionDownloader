@@ -347,7 +347,7 @@ class TorrentTransferService : Service() {
             .setContentIntent(open).setOnlyAlertOnce(true)
             .setProgress(100, percent.coerceIn(0, 100), false).build()
     }
-    private fun startJob(id:String,folder:String,indices:String):Boolean {
+    @Synchronized private fun startJob(id:String,folder:String,indices:String):Boolean {
         if(getSharedPreferences("torrent_transfers",MODE_PRIVATE)
                 .getBoolean("job_cancelled_$id",false)){
             update(id,"Cancelled · user removed torrent from queue")
@@ -361,10 +361,16 @@ class TorrentTransferService : Service() {
         // owner-observed full-device crash; no competing metadata session.
         if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty()){
             if(id !in deferredJobs)deferredJobs.add(id)
+            // Android may terminate the :torrent process during metadata
+            // unwinding. Preserve THIS exact previously user-selected job.
+            getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+                .edit().putBoolean("job_deferred_$id",true).commit()
             update(id,"QUEUED · waiting for native metadata or current transfer to finish")
             return false
         }
         if(!inFlight.add(id))return false
+        getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+            .edit().remove("job_deferred_$id").commit()
         stopRequests.remove(id)
         val worker=thread(start=false,name="asterion-torrent-$id"){
             try {
@@ -413,6 +419,15 @@ class TorrentTransferService : Service() {
         worker.start()
         return true
     }
+    /** Reopen only jobs explicitly selected earlier and durably deferred by
+     * this very service. This is not unsolicited auto-download discovery.
+     */
+    @Synchronized private fun restoreDeferredSelections(){
+        val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        TorrentDeferredSelection.recover(prefs.all).forEach{id->
+            if(id !in deferredJobs)deferredJobs.add(id)
+        }
+    }
     /** Begin the next owner-selected torrent only after the previous JNI
      * session has fully returned. One native torrent worker at a time remains
      * mandatory. Saved file indices/targets are not reconstructed or guessed.
@@ -420,12 +435,17 @@ class TorrentTransferService : Service() {
     @Synchronized private fun startDeferredIfIdle():Boolean {
         if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty())return false
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        restoreDeferredSelections()
         while(true){
             val id=deferredJobs.poll()?:return false
             if(prefs.getBoolean("job_cancelled_$id",false) ||
-               prefs.getBoolean("job_paused_$id",false))continue
+               prefs.getBoolean("job_paused_$id",false)){
+                prefs.edit().remove("job_deferred_$id").commit()
+                continue
+            }
             val indices=prefs.getString("job_indices_$id","").orEmpty()
             if(indices.isBlank()){
+                prefs.edit().remove("job_deferred_$id").commit()
                 update(id,"FAILED: Previously selected files are unavailable")
                 continue
             }
@@ -443,6 +463,9 @@ class TorrentTransferService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // A process restart must not drop owner-selected jobs which were
+        // deferred while a metadata/transfer JNI session was unwinding.
+        restoreDeferredSelections()
         if(intent?.action==EXPORT){
             val target=intent.getStringExtra("job").orEmpty()
             if(!target.matches(Regex("[a-f0-9]{24}"))){
@@ -579,6 +602,7 @@ class TorrentTransferService : Service() {
         when(intent.action){
             CANCEL->{
                 deferredJobs.remove(id)
+                prefs.edit().remove("job_deferred_$id").commit()
                 // Do not unload the native engine on the UI process or erase
                 // resumable quarantine pieces while its writer is active.
                 // This durable tombstone blocks later automatic RESUME/ADD.
@@ -595,6 +619,7 @@ class TorrentTransferService : Service() {
             }
             PAUSE->{
                 deferredJobs.remove(id)
+                prefs.edit().remove("job_deferred_$id").commit()
                 paused.add(id)
                 prefs.edit().putBoolean("job_paused_$id",true).apply()
                 update(id,"Paused")
