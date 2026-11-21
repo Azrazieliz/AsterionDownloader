@@ -149,6 +149,19 @@ object KyoraCreatorPreviews {
                 obj.optString("error").ifBlank{"Old montage cache invalidated"})
         }
         val arr=obj.optJSONArray("entries")?:JSONArray()
+        // Old 4KGirl cards may have cached loading.gif as if it were a
+        // published photo. A fixed parser alone leaves those stale covers
+        // visible for 12 hours. Invalidate only objectively broken cache
+        // entries and refetch the approved publisher; other providers and
+        // already-valid 4KGirl photos remain untouched.
+        if(SiteControls.key(source)=="4kgirl.com" &&
+            (0 until arr.length()).any{i->
+                val cover=arr.optJSONObject(i)?.optString("cover").orEmpty()
+                val path=runCatching{URI(cover).path.orEmpty().lowercase()}
+                    .getOrDefault("")
+                cover.isBlank() || listOf("loading.gif","placeholder",
+                    "default-cover","no-image","spacer.gif").any{it in path}
+            })return null
         // An old preview cache can contain 4KHD pages under Buondua and
         // CosplayTele. Do not render even a single cross-provider entry.
         // Return no cache instead of storing a partially filtered snapshot,
