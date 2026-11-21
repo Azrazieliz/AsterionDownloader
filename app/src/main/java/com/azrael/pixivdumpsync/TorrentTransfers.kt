@@ -327,12 +327,13 @@ class TorrentTransferService : Service() {
         private val stopRequests = ConcurrentHashMap.newKeySet<String>()
         private val workers = ConcurrentHashMap<String,Thread>()
         private val exportWorkers = ConcurrentHashMap.newKeySet<Thread>()
+        // Process-wide, like the native SessionManager and transfer workers.
+        // Android can recreate the Service object before old JNI calls exit.
+        private val metadataWorkers=ConcurrentHashMap.newKeySet<Thread>()
+        // Worker sets become empty BEFORE SessionManager.stop() returns.
+        // Maintain this nonblocking guard across Service recreations.
+        private val nativeCleanup=java.util.concurrent.atomic.AtomicInteger(0)
     }
-    private val metadataWorkers=ConcurrentHashMap.newKeySet<Thread>()
-    // Worker sets become empty BEFORE libtorrent SessionManager.stop() returns.
-    // Keep the non-blocking cleanup lease until JNI is completely unwound;
-    // never block Android's main thread waiting on a native session mutex.
-    private val nativeCleanup=java.util.concurrent.atomic.AtomicInteger(0)
     // An ADD may reach the isolated service while the metadata callback is
     // still unwinding its native worker. Preserve the selected job instead
     // of falsely pausing it and leaving VIEW TRANSFERS without an engine.
