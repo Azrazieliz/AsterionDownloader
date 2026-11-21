@@ -182,7 +182,7 @@ object AssetsPanel {
                             "."+actual.lowercase()
                         ResourceDownloads.downloadFile(
                             a,file.url,"Assets",filename,file.referer)
-                        verifyStatus.text="Original "+actual+" verified · queued"
+                        verifyStatus.text="Publisher "+actual+" header confirmed · check Downloads for complete-file verification"
                     }.onFailure{failure->
                         verifyStatus.text="Original not queued: "+
                             (failure.message?:"Publisher file inaccessible").take(120)
