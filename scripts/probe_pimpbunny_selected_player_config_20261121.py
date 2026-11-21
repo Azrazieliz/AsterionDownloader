@@ -14,9 +14,10 @@ with tempfile.TemporaryDirectory(prefix="adl_pimpbunny_player_") as d:
  with closing(sqlite3.connect("file:"+str(root/"videoflow.sqlite")+"?mode=ro",uri=True)) as db:
   rows=db.execute("SELECT url FROM videos ORDER BY updated DESC LIMIT 1500").fetchall()
  selected=next((v[0] for v in rows if
-   (urllib.parse.urlsplit(v[0]).hostname or "").removeprefix("www.")=="pimpbunny.com"),None)
+   (urllib.parse.urlsplit(v[0]).hostname or "").removeprefix("www.")=="pimpbunny.com"
+   and urllib.parse.urlsplit(v[0]).path.startswith("/videos/")),None)
  if not selected:raise RuntimeError("No selected PimpBunny article in installed queue")
- req=urllib.request.Request(selected,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Encoding":"identity"})
+ req=urllib.request.Request(selected,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Encoding":"identity","Accept":"text/html,application/xhtml+xml","Accept-Language":"en-US,en;q=0.8"})
  try:
   with urllib.request.urlopen(req,timeout=18) as r:
    page=r.read(950000).decode("utf-8","replace");http=r.status
