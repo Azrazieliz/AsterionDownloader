@@ -222,6 +222,10 @@ val verifyFrozenVideoProviders by tasks.registering {
             "ThreeDHentaiSignedOriginal.kt" to "9bff43bbdf5d29479e4ac41636b21a2c3b159fa7",
             "Rule34VideoOriginalSource.kt" to "02d00276a554a92c685eef249656f9bcaf3e846f",
             "EpornerOriginalSource.kt" to "c9c4b21720bfbd702d48dea5be6a11dab38bc485",
+            // Owner-demonstrated working on November 21. Lock the source
+            // itself; only an explicitly approved provider change can
+            // revise this established baseline.
+            "BubblecumSelectedOriginalSource.kt" to "65af6f3b99abeace2b25c62836c882898a405e26",
             "FreePornVideosOriginalSource.kt" to "184e349e1b97800746578f79aa2bc1c9250fdeaa"
         )
         for ((filename, knownGoodSha) in expected) {
