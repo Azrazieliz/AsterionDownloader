@@ -46,7 +46,10 @@ Write-Output "SIGNER_CERTIFICATE_VERIFIED=$finger"
 # Gradle emits Android warnings on stderr even on success; PowerShell
 # ErrorActionPreference=Stop must not mistake those for fatal script errors.
 $ErrorActionPreference='Continue'
-& $gradle -p $w :app:assembleAcceptance --offline --no-daemon --console=plain *> $log
+# The previous Windows Test Executor exhausted native memory while
+# Android tasks ran on other Gradle workers. Serialize the final acceptance
+# verification/packaging without weakening or skipping any source/unit gate.
+& $gradle -p $w :app:assembleAcceptance --offline --no-daemon --max-workers=1 --console=plain *> $log
 $rc=$LASTEXITCODE
 $ErrorActionPreference='Stop'
 Get-Content $log -Tail 45
