@@ -120,8 +120,11 @@ class SyncForegroundService : Service() {
             // Backfill worker. stopSelfResult(latest startId) would tear down
             // that worker's service and silently lose the selected request.
             if(!PixivForegroundLifetimePolicy.keepExistingWorker(
-                    currentRun?.isDone==false)){
-                stopSelfResult(startId)
+                    currentRun!=null)){
+                // Also covers a synthetic deferred start with an older ID.
+                // No worker owns the service, so stop without relying on the
+                // original Android startId.
+                stopSelf()
                 return START_NOT_STICKY
             }
             // The existing foreground worker is still alive. Process
