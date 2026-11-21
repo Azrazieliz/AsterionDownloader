@@ -218,7 +218,7 @@ internal object ApprovedCosplayActions {
             "pimpbunny.com" ->
                 SiteBackfillProfiles.recognizesGalleryPage(site.url,tile.url)
             "kiutaku.com"->path.matches(Regex("""[0-9]{1,9}"""))
-            "4khd.com","cosplaytele.com"->
+            "4khd.com","cosplaytele.com","4kgirl.com","everia.club"->
                 SiteBackfillProfiles.recognizesGalleryPage(site.url,tile.url)
             else->true
         }){"Select an individual "+site.name+" album, not a category or source"}
