@@ -896,15 +896,15 @@ object BrowserPageFetch {
                                         .isEmpty()
                                 } else if(host in setOf("xchina.co","en.xchina.co")) {
                                     !page.contains("asterion-selected-xchina-hls") &&
-                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                    !Regex("""<video\s+src="https://[^"]+""")
                                         .containsMatchIn(page)
                                 } else if(host=="pimpbunny.com") {
-                                    !page.contains("id=\\"kt_player\\"") &&
-                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                    !page.contains("id=\"kt_player\"") &&
+                                    !Regex("""<video\s+src="https://[^"]+""")
                                         .containsMatchIn(page)
                                 } else if(host=="pornavhd.com") {
                                     !page.contains("video.playerrecord.cfd/e/") &&
-                                    !Regex("""<video\\s+src="https://[^"]+""")
+                                    !Regex("""<video\s+src="https://[^"]+""")
                                         .containsMatchIn(page)
                                 } else if(host=="rule34video.com") {
                                     com.asterion.videoflow.Rule34VideoOriginalSource
