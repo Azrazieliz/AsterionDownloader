@@ -261,6 +261,16 @@ tasks.matching { it.name == "packageAcceptance" }.configureEach {
  * length/hash/ETag/original-integrity assertions.
  */
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    // Windows' final acceptance gate previously crashed HotSpot with native
+    // allocation failures (hs_err_pid19812/22472), not failed JUnit cases.
+    // Isolate test class batches and avoid many concurrent GC/worker threads
+    // while keeping every existing acceptance assertion in force.
+    if (System.getProperty("os.name").contains("Windows", ignoreCase=true)) {
+        maxParallelForks=1
+        forkEvery=40
+        maxHeapSize="512m"
+        jvmArgs("-XX:+UseSerialGC")
+    }
     val scratch=project.layout.buildDirectory
         .dir("test-scratch/${name}").get().asFile
     systemProperty("java.io.tmpdir",scratch.absolutePath)
