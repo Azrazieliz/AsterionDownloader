@@ -25,6 +25,8 @@ data class AlohaSite(val name:String,val url:String,val area:AlohaArea){
 }
 object AlohaSources {
     private val sourceRows="""4KHD|https://www.4khd.com/|COSPLAY
+4KGirl|https://www.4kgirl.com/|COSPLAY
+Everia|https://everia.club/cosplay-gallery/|COSPLAY
 Buondua|https://buondua.com/|COSPLAY
 CosplayTele|https://cosplaytele.com/|COSPLAY
 Kiutaku|https://kiutaku.com/|COSPLAY
@@ -32,7 +34,6 @@ NotFans|https://notfans.com/|ADULT
 Archivebate|https://archivebate.com/|ADULT
 LiveCamRips|https://livecamrips.to/|ADULT
 Avple|https://avple.tv/|ADULT
-PimpBunny Photos|https://pimpbunny.com/models/|COSPLAY
 PimpBunny Videos|https://pimpbunny.com/|ADULT
 xChina|https://en.xchina.co/|ADULT
 Bubblecum|https://www.bubblecum.lol/|ADULT
@@ -72,14 +73,14 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==42 && sites.distinctBy{it.url}.size==42){"Incorrect approved Aloha source set"}
+            require(sites.size==43 && sites.distinctBy{it.url}.size==43){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
     // Native Pixiv, gallery, video, Koikatsu and torrent sources are not duplicated as
     // supplemental bookmark rows. Their original engines and saved data stay intact.
     internal val alreadyIntegratedHosts=setOf("4khd.com","buondua.com","cosplaytele.com",
-        "kiutaku.com","watchporn.to","pornhub.com","eporner.com",
+        "kiutaku.com","4kgirl.com","everia.club","watchporn.to","pornhub.com","eporner.com",
         "sukebei.nyaa.si","db.bepis.moe")
     val additions:List<AlohaSite> get()=all.filterNot{
         val siteHost=it.host.removePrefix("m.").removePrefix("fr.")
