@@ -62,6 +62,22 @@ class PerformerIdentityTest {
             "Caryn Beaumont","https://cums.net/model/caryn-beaumont-fake.example/"))
     }
 
+    @Test fun pimpBunnyProfileCanVerifyOnlyItsExactVisibleCreatorIdentity(){
+        val url="https://pimpbunny.com/models/lolabunny.yu/"
+        val doc=Jsoup.parse("""<html><head>
+          <link rel="canonical" href="$url"/></head>
+          <body><h1>Lolabunny.yu</h1>
+          <div class="videos"><a href="/videos/selected-scene-123/">Post</a></div>
+          </body></html>""",url)
+        assertTrue(PerformerIdentity.isProfileUrl("Lolabunny.yu",url))
+        assertTrue(PerformerIdentity.matchesEvidence("Lolabunny.yu",url,doc))
+        assertFalse(PerformerIdentity.isProfileUrl("Unrelated Model",url))
+        assertFalse(PerformerIdentity.matchesEvidence("Unrelated Model",url,doc))
+        assertFalse(PerformerIdentity.isProfileUrl("Lolabunny.yu",
+            "https://pimpbunny.com/videos/selected-scene-123/"))
+        assertFalse(PerformerIdentity.isProfileUrl("Lolabunny.yu",
+            "https://pimpbunny.com.evil.example/models/lolabunny.yu/"))
+    }
     @Test fun verifiableProfileRoutesAreDistinctFromVideoTitles(){
         assertFalse(PerformerIdentity.isProfileUrl(
             "Jane Example","https://www.xvideos.com/pornstars/jane-example"))

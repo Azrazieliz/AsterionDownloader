@@ -25,6 +25,7 @@ internal object PerformerIdentity {
     // verification requires an actual first-party person page.
     private val acceptedHosts=setOf(
         "pornhub.com","watchporn.to","fullporner.com","cums.net",
+        "pimpbunny.com",
         // xChina publishes first-party model /model/id-<opaque>.html
         // pages. The ID cannot be derived from a name; live profile
         // search + visible heading verification are mandatory.
@@ -47,6 +48,15 @@ internal object PerformerIdentity {
             host(address) !in acceptedHosts)return false
         val wanted=slug(name)
         if(wanted.isBlank())return false
+        if(host(address)=="pimpbunny.com"){
+            // First-party profile pages are photo/creator evidence, not
+            // proof that a third-party video with this name depicts them.
+            // These are discovered links: never accept invented source IDs.
+            val path=uri.path.orEmpty().trim('/')
+            val matched=Regex("""^models?/([a-z0-9._-]{2,120})$""",
+                RegexOption.IGNORE_CASE).matchEntire(path)?:return false
+            return slug(matched.groupValues[1])==wanted
+        }
         if(host(address)=="xchina.co"){
             // Real 2026 publisher URL:
             // https://en.xchina.co/model/id-5ff0cb8a616f1.html
