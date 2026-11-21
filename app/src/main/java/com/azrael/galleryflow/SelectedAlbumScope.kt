@@ -142,7 +142,7 @@ internal object SelectedAlbumScope {
                 nodes.filter{element->
                     element.closest(excluded)==null &&
                     element.closest(".gallery[class*=galleryid-]")==null &&
-                    nodes.none{parent->parent!==element && parent.contains(element)}
+                    nodes.none{parent->parent!==element && element.parents().contains(parent)}
                 }.joinToString(""){it.outerHtml()}
             }else ""
             photos+videoExtras
