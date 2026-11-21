@@ -133,21 +133,64 @@ object AssetsPanel {
             file.host+" · "+file.format+
             " · indexed file, not a completed download",
             11f,ui.secondary),ui.lp(a,4))
+        val verifyStatus=ui.text(a,"",11f,ui.secondary)
         tile.addView(ui.action(a,"DOWNLOAD ORIGINAL FILE",true){
-            // This is the returned HTTPS file itself, not a
-            // paid storefront or an unverified download link
-            // guessed from an unrelated landing page.
-            val filename=runCatching{
-                URI(file.url).path.substringAfterLast('/')
-            }.getOrDefault("")
-            val preferred=if(filename.endsWith(
-                "."+file.format.lowercase(),true))filename
-            else file.title.replace(
-                Regex("[^A-Za-z0-9._-]"),"_").take(95)+
-                "."+file.format.lowercase()
-            ResourceDownloads.downloadFile(
-                a,file.url,"Assets",preferred,file.referer)
+            // The federated catalogue sometimes labels an original GLB
+            // while serving a ZIP archive (verified with real ZIP bytes).
+            // Validate the actual publisher response before assigning an
+            // extension and entering the unified Downloads queue.
+            val federated=runCatching{
+                URI(file.url).host.equals("3d.shep.bot",true)
+            }.getOrDefault(false)
+            val requested=file.format.lowercase()
+            if(!federated){
+                val original=runCatching{
+                    URI(file.url).path.substringAfterLast('/')
+                }.getOrDefault("")
+                val filename=if(original.endsWith("."+requested,true))original
+                    else file.title.replace(
+                        Regex("[^A-Za-z0-9._-]"),"_").take(95)+
+                        "."+requested
+                ResourceDownloads.downloadFile(
+                    a,file.url,"Assets",filename,file.referer)
+                return@action
+            }
+            verifyStatus.text="Checking actual publisher file format…"
+            val token=Any()
+            verifyStatus.tag=token
+            thread(name="asterion-model-original-probe"){
+                val verified=runCatching{
+                    com.azrael.galleryflow.HttpClient(a.applicationContext)
+                        .open(file.url).use{stream->
+                            val header=ByteArray(16)
+                            var read=0
+                            while(read<header.size){
+                                val n=stream.input.read(header,read,header.size-read)
+                                if(n<0)break
+                                read+=n
+                            }
+                            ModelOriginalPayloadFormat.detect(header.copyOf(read))
+                                ?:error("Publisher did not return a GLB or ZIP original")
+                        }
+                }
+                a.runOnUiThread{
+                    if(a.isDestroyed || a.isFinishing ||
+                        verifyStatus.tag!==token)return@runOnUiThread
+                    verified.onSuccess{actual->
+                        val filename=file.title.replace(
+                            Regex("[^A-Za-z0-9._-]"),"_").take(95)+
+                            "."+actual.lowercase()
+                        ResourceDownloads.downloadFile(
+                            a,file.url,"Assets",filename,file.referer)
+                        verifyStatus.text="Original "+actual+" verified · queued"
+                    }.onFailure{failure->
+                        verifyStatus.text="Original not queued: "+
+                            (failure.message?:"Publisher file inaccessible").take(120)
+                    }
+                }
+            }
         },ui.lp(a,8))
+        tile.addView(verifyStatus,ui.lp(a,4))
         results.addView(tile,ui.lp(a,9))
     }
     fun render(a:Activity,body:LinearLayout,refresh:()->Unit={}){
