@@ -34,6 +34,31 @@ class CosplayTeleNativeAlbumScopeTest {
         SelectedAlbumScope.verifyAdvertisedCount(37,scoped.size)
     }
 
+    @Test fun wordpressPhotoGalleryDoesNotHideSiblingSelectedVideo(){
+        val doc=Jsoup.parse("""
+          <main><article id="post-123" class="post-123"><div class="entry-content">
+            <div class="gallery galleryid-123">
+              <a href="https://cdn.cosplaytele.com/set/1.jpg">
+                <img src="https://cdn.cosplaytele.com/set/thumb.jpg"/></a>
+            </div>
+            <div class="video-player">
+              <video src="https://cdn.cosplaytele.com/set/full.mp4" controls></video>
+            </div>
+            <a href="https://cdn.cosplaytele.com/set/alternate.webm">Video backup</a>
+            <div class="related">
+              <a href="https://cdn.cosplaytele.com/unrelated.mp4">Unrelated</a>
+            </div>
+          </div></article></main>
+        """,selected)
+        val content=SelectedAlbumScope.selectedContent(doc,selected)
+        val assets=directPageAssets(content,selected)
+        assertEquals(3,assets.size)
+        assertTrue(assets.any{it.url.endsWith("/set/1.jpg")})
+        assertTrue(assets.any{it.url.endsWith("/set/full.mp4")})
+        assertTrue(assets.any{it.url.endsWith("/set/alternate.webm")})
+        assertFalse(assets.any{it.url.contains("unrelated")})
+    }
+
     @Test fun aVideoOnlySelectedAlbumCanReachTheOriginalResolver(){
         val doc=Jsoup.parse("""
           <main><article><div class="entry-content">
