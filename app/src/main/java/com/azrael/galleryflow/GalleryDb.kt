@@ -197,6 +197,9 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         ).use{it.moveToFirst()}
 
     fun clearRetry(ref: GalleryRef) {
+        // Cancel All preserves historical retry rows as owner-cancelled
+        // inventory. A background scan must not erase that audit trail.
+        if(galleryCancelled(ref.source,ref.stableId))return
         writableDatabase.delete("backfill_retries", "source=? AND gallery_id=?",
             arrayOf(ref.source.wireName, ref.stableId))
     }
@@ -233,8 +236,9 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
 
     fun retryCount(source: SourceId, entityId: String): Int =
         readableDatabase.rawQuery(
-            "SELECT COUNT(*) FROM backfill_retries WHERE source=? AND entity_id=?",
-            arrayOf(source.wireName, entityId)
+            "SELECT COUNT(*) FROM backfill_retries WHERE source=? AND entity_id=? "+
+                "AND retry_after<?",
+            arrayOf(source.wireName, entityId, Long.MAX_VALUE.toString())
         ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
 
     fun addEntity(entity: SourceEntity) {
@@ -541,7 +545,12 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
             // A Cancel All action must also stop the 31k+ durable Gallery
             // retry records, not just hide 350 associated media rows.
             // Preserve the galleries and all completed MediaStore originals.
-            val retries=db.delete("backfill_retries",null,null)
+            // Do not delete 31k+ historic retries merely because the owner
+            // cancelled pending work. Disable their due time permanently
+            // until an exact gallery is deliberately selected again.
+            val retries=db.update("backfill_retries",ContentValues().apply{
+                put("retry_after",Long.MAX_VALUE)
+            },"retry_after<?",arrayOf(Long.MAX_VALUE.toString()))
             val galleries=db.update("galleries",ContentValues().apply{
                 put("state",TransferState.CANCELLED.dbValue)
             },"state IN ('pending','retrying','partial')",null)
