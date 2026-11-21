@@ -104,7 +104,8 @@ internal object SelectedAlbumScope {
     private fun articleBody(doc:Document):Element =
         bodySelectors.firstNotNullOfOrNull { selector ->
             doc.selectFirst(selector)?.takeIf { element ->
-                element.select("img,picture source,a[href]").isNotEmpty()
+                element.select("img,picture source,a[href],video,"+
+                    "video source,iframe[data-video],.video-player iframe").isNotEmpty()
             }
         }?:throw AdapterException(
             "Selected album lacks an identifiable publisher image body; "+
