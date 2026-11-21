@@ -6,11 +6,13 @@ $gradle='C:\Users\mimim\.gradle\wrapper\dists\gradle-8.13-bin\5xuhj0ry160q40clul
 $ks='D:\AsterionControlRelease\signing\downloader-acceptance\asterion-downloader-acceptance.p12'
 $dp='D:\AsterionControlRelease\signing\downloader-acceptance\password.dpapi'
 $apk=Join-Path $w 'app\build\outputs\apk\acceptance\app-acceptance.apk'
-$dest=Join-Path $HOME 'Downloads\AsterionDownloader-v1.3.77-Recovery-5c785da4-20261121.apk'
+# Release filename is set after the exact source SHA has been validated.
 $log='D:\AsterionControlRelease\diagnostics\downloader_1377_signed_build_20261121.log'
 $expected='8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19'
 if (-not (Test-Path $ks) -or -not (Test-Path $dp)) { throw 'Existing stable signer missing' }
 $head=(& git -C $w rev-parse HEAD).Trim()
+if ($head.Length -ne 40) { throw 'Source SHA is invalid' }
+$dest=Join-Path $HOME ('Downloads\AsterionDownloader-v1.3.77-Recovery-'+$head.Substring(0,8)+'-20261121.apk')
 $version=Get-Content (Join-Path $w 'app\build.gradle.kts') -Raw
 if ($version -notmatch 'versionCode\s*=\s*106' -or $version -notmatch 'versionName\s*=\s*"1.3.77"') {
     throw 'Wrong source version: refusing to create APK'
