@@ -81,7 +81,8 @@ object KyoraCreatorPreviews {
             if(photoMode){
                 val path=runCatching{URI(page).path.orEmpty().lowercase()}
                     .getOrDefault("")
-                return !com.asterion.videoflow.VideoSiteProfiles
+                return previewBelongsToSource(source,page) &&
+                    !com.asterion.videoflow.VideoSiteProfiles
                     .isVideoPage(page) &&
                     (Regex("""^/(?:models?|users?)/[a-z0-9._-]{2,120}(?:/(?:photos?|images?|galleries?)/[a-z0-9_./-]{1,120})?/?$""")
                         .matches(path) ||
