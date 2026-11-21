@@ -52,17 +52,21 @@ class XPhotoQueue(context:Context):SQLiteOpenHelper(context,"asterion_x_photos.s
         }
     }
     fun addSource(value:String):Boolean {
-        val uri=runCatching{URI(value.trim())}.getOrNull()?:return false
-        val host=uri.host.orEmpty().lowercase().removePrefix("www.")
-        if(host !in setOf("x.com","twitter.com","mobile.twitter.com",
-            "fxtwitter.com","vxtwitter.com"))return false
-        val path=uri.path.orEmpty().trim('/')
-        val handle=path.substringBefore('/')
-        if(!handle.matches(Regex("[A-Za-z0-9_]{1,15}")))return false
+        val profile=XProfileUrlPolicy.parse(value)?:return false
+        // Old owner subscriptions can use twitter.com or mixed-case URLs.
+        // Never add the same handle a second time under a new hostname;
+        // don't migrate existing records or disturb their saved cursors.
+        val already=readableDatabase.rawQuery(
+            "SELECT 1 FROM sources WHERE lower(handle)=? LIMIT 1",
+            arrayOf(profile.handle)).use{it.moveToFirst()}
+        if(already)return false
         val row=ContentValues().apply{
-            put("url",value.trim());put("handle",handle);put("updated",System.currentTimeMillis())
+            put("url",profile.canonical)
+            put("handle",profile.handle)
+            put("updated",System.currentTimeMillis())
         }
-        return writableDatabase.insertWithOnConflict("sources",null,row,SQLiteDatabase.CONFLICT_IGNORE)>0
+        return writableDatabase.insertWithOnConflict(
+            "sources",null,row,SQLiteDatabase.CONFLICT_IGNORE)>0
     }
     fun allSources():List<XSourceRecord> {
         val out=ArrayList<XSourceRecord>()
