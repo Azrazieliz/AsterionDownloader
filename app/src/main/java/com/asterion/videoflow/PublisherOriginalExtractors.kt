@@ -87,6 +87,11 @@ internal object PublisherOriginalExtractors {
         Site("cosplaytele.com",
             "article video[src],article video source[src],"+
             ".entry-content video[src],.entry-content video source[src],"+
+            // BrowserPageFetch intentionally serializes only the selected
+            // real HTML5 player into <main><div class=video-player>.
+            // Previously this exact fallback could never match its own DOM.
+            "main .video-player video[src],"+
+            "main .video-player video source[src],"+
             "main #player video[src],main #player source[src]")
 
     ).associateBy { it.host }
