@@ -68,9 +68,33 @@ open class HttpClient(private val context:android.content.Context?=null) {
         )
     }
 
+    /** First successful fetch is unchanged. One bounded retry is allowed
+     * ONLY for timed-out Kyora publisher HTML pages whose failures were
+     * recorded on the owner's phone. Media bytes, uploads, authenticated
+     * actions and every frozen video-provider implementation are untouched.
+     */
+    internal fun retryableGalleryHtml(address:String):Boolean {
+        val host=runCatching{URI(address).host.orEmpty().lowercase(Locale.ROOT)}
+            .getOrDefault("")
+        return host in setOf("buondua.net","www.buondua.net",
+            "buondua.com","www.buondua.com",
+            "cosplaytele.com","www.cosplaytele.com",
+            "kiutaku.com","www.kiutaku.com")
+    }
+
     open fun document(url: String, referer: String? = null): Document {
-        val response = textResponse(url, referer)
-        return Jsoup.parse(response.body, response.finalUrl)
+        var attempt=0
+        while(true){
+            if (!SyncControl.checkpoint()) throw SyncCancelledException()
+            try{
+                val response=textResponse(url,referer)
+                return Jsoup.parse(response.body,response.finalUrl)
+            }catch(e:java.net.SocketTimeoutException){
+                if(attempt++>=1 || !retryableGalleryHtml(url))throw e
+                // Delay only a failed, idempotent selected HTML GET.
+                Thread.sleep(500L)
+            }
+        }
     }
 
     fun resolveDownloadUrl(url: String, referer: String? = null, provider: String? = null): String =
