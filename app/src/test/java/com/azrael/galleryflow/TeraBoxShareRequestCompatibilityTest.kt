@@ -38,6 +38,23 @@ class TeraBoxShareRequestCompatibilityTest {
         })
     }
 
+    @Test fun publisherLogIdIsForwardedOnlyWhenItIsRealAndWellFormed(){
+        val html="""<script>window.config={"dp-logid":"7392083182045647"}</script>"""
+        val observed=resolver.publishedLogId(html)
+        assertEquals("7392083182045647",observed)
+        val values=resolver.shareListQueries(
+            "publicTokenAbc123","1shareCodeXYZ",null,observed).map(::pairs)
+        assertEquals(3,values.size)
+        assertTrue(values.all{it["dp-logid"]==observed})
+        val absent=resolver.shareListQueries(
+            "publicTokenAbc123","1shareCodeXYZ",null).map(::pairs)
+        assertTrue(absent.all{!it.containsKey("dp-logid")})
+        assertNull(resolver.publishedLogId("<script>window.config={}</script>"))
+        assertTrue(resolver.shareListQueries(
+            "publicTokenAbc123","1shareCodeXYZ",null,"not a token!").map(::pairs)
+            .all{!it.containsKey("dp-logid")})
+    }
+
     @Test fun cannotCreatePublicRequestWithoutActualShareIdentifiers(){
         assertThrows(IllegalArgumentException::class.java){
             resolver.shareListQueries("","shareX",null)
