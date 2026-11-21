@@ -167,7 +167,8 @@ object KeywordSources {
         for(i in 0 until minOf(found.length(),250)){
             val row=found.optJSONObject(i)?:continue
             val url=row.optString("url")
-            if(!eligibleDiscoveryUrl(url) || !SearchRanking.isVideoUrl(url))continue
+            if(!eligibleDiscoveryUrl(url) ||
+                !SearchRanking.isDiscoverablePage(url))continue
             val title=row.optString("title",url).take(220)
             val snippet=row.optString("content").take(500)
             results.add(RankedHit(title,url,provider.label,snippet))
@@ -391,17 +392,32 @@ object KeywordSources {
         }
         return hits.distinctBy{SearchRanking.canonicalKey(it.url)}
     }
-    private fun broadWebIndex(context:Context,keyword:String,
-                              area:VideoSearchArea,duck:Boolean):List<RankedHit>{
+    /**
+     * Page N uses the index's actual offset, not a higher display-only
+     * limit over the same first 50 hits. This is independent of the 27
+     * configured extraction providers; there is no fixed web-result ceiling
+     * and each further page must be explicitly requested by the user.
+     */
+    internal fun webIndexUrl(keyword:String,area:VideoSearchArea,
+                             duck:Boolean,page:Int):String{
+        require(page>=0){"Negative search page"}
         val scope=when(area){
             VideoSearchArea.HENTAI->" hentai animation video"
             VideoSearchArea.PORN->" adult video"
             VideoSearchArea.PIRACY_DARKWEB->" torrent download"
         }
-        val encoded=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
-        val url=if(duck)
-            "https://html.duckduckgo.com/html/?q="+encoded
-        else "https://www.bing.com/search?q="+encoded+"&count=50"
+        val query=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
+        val offset=page.toLong()*50L
+        return if(duck)
+            "https://html.duckduckgo.com/html/?q="+query+
+                "&s="+offset+"&dc="+(offset+1L)
+        else "https://www.bing.com/search?q="+query+
+            "&count=50&first="+(offset+1L)
+    }
+    private fun broadWebIndex(context:Context,keyword:String,
+                              area:VideoSearchArea,duck:Boolean,
+                              page:Int=0):List<RankedHit>{
+        val url=webIndexUrl(keyword,area,duck,page)
         val response=connection(context,url).ignoreHttpErrors(true)
             .maxBodySize(3_000_000).timeout(18_000).execute()
         require(response.statusCode() in 200..299){
@@ -423,15 +439,17 @@ object KeywordSources {
         })
 
     fun searchDetailed(context:Context,keyword:String,
-                       area:VideoSearchArea=VideoSearchArea.PORN):SearchOutcome {
+                       area:VideoSearchArea=VideoSearchArea.PORN,
+                       indexPage:Int=0):SearchOutcome {
         require(keyword.trim().isNotBlank()){"Enter a search term"}
+        require(indexPage>=0){"Negative search page"}
         val providers=searchProviders(context,area)
         val tasks=ArrayList<Pair<String,()->List<RankedHit>>>()
         // Internet indexes are PRIMARY. Individual provider adapters are
         // optional enrichment, never an allowlist or a prerequisite for search.
-        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
-        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true)}
-        for(provider in providers)tasks+=provider.label to {
+        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false,indexPage)}
+        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true,indexPage)}
+        if(indexPage==0)for(provider in providers)tasks+=provider.label to {
             when(provider.kind){
                 SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
                 SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
