@@ -175,6 +175,36 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        if(host=="xchina.co"){
+            // Current selected xChina articles identify their real HLS
+            // original in #video-player[data-src], NOT a <video> element.
+            // Publisher observed /video/<hex> -> /hls/<same-hex>/master.m3u8.
+            // The identical ID and first-party host are essential: never
+            // accept a recommendation, ad iframe or someone else's playlist.
+            val pageId=Regex("""(?i)^/video/(?:id-)?([a-f0-9]{10,32})(?:\\.html)?/?$""")
+                .matchEntire(URI(selected).path.orEmpty())?.groupValues?.get(1)
+            val players=doc.select("#video-player[data-src]").filter{
+                it.closest("aside,.related,.recommended,.recommendations,"+
+                    ".ads,.advertisement,.sidebar,[data-ad]")==null
+            }
+            val main=players.singleOrNull()
+            val source=main?.attr("data-src").orEmpty()
+            val link=pageId?.let{
+                url(selected,source)?.takeIf{published->
+                    val uri=URI(published)
+                    uri.host.orEmpty().lowercase(Locale.ROOT) in
+                        setOf("xchina.co","www.xchina.co",
+                            "en.xchina.co") &&
+                    uri.rawFragment==null && uri.port==-1 &&
+                    uri.path.orEmpty().equals(
+                        "/hls/$it/master.m3u8",ignoreCase=true)
+                }
+            }
+            if(link!=null)return listOf(Candidate(link,selected,host))
+            // No broad JavaScript media/related-card fallback may replace
+            // this selected original when the exact player lacks a source.
+            return emptyList()
+        }
         if(host=="pornbuz.com"){
             // PornBuz's second server is a publisher-labelled selected
             // Streamtape watch URL. Never infer the original from generic

@@ -142,6 +142,25 @@ class PublisherOriginalExtractorsTest {
         assertTrue(PublisherOriginalExtractors.fromHtml(selected,
             "<main><img src='https://cdn.cosplaytele.com/photo.jpg'/></main>").isEmpty())
     }
+    @Test fun xchinaTakesOnlyMatchingSelectedFirstPartyHls(){
+        val selected="https://en.xchina.co/video/6b0186908cd75"
+        val html="""<main><article><div
+          id="video-player" class="h-full w-full"
+          data-src="/hls/6b0186908cd75/master.m3u8"></div>
+          <aside class="related"><div
+            id="video-player" data-src="/hls/ffffffffffffff/master.m3u8"></div>
+          </aside></article></main>"""
+        assertEquals(listOf(
+            "https://en.xchina.co/hls/6b0186908cd75/master.m3u8"),
+            PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,
+            html.replace("/hls/6b0186908cd75/master.m3u8",
+                "/hls/ffffffffffffff/master.m3u8")).isEmpty())
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,
+            html.replace("data-src=\"/hls/6b0186908cd75/master.m3u8\"",
+                "data-src=\"https://unrelated.invalid/hls/6b0186908cd75/master.m3u8\"")).isEmpty())
+    }
+
     @Test fun pornavhdUsesOnlyObservedSelectedPlayerrecordIframe(){
         val selected=cases.getValue("pornavhd.com")
         val html="""<main><article>
