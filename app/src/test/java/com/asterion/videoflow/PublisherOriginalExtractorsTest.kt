@@ -126,6 +126,26 @@ class PublisherOriginalExtractorsTest {
         assertTrue(PublisherOriginalExtractors.fromHtml(selected,
             "<main><img src='https://cdn.cosplaytele.com/photo.jpg'/></main>").isEmpty())
     }
+    @Test fun pornavhdUsesOnlyObservedSelectedPlayerrecordIframe(){
+        val selected=cases.getValue("pornavhd.com")
+        val html="""<main><article>
+            <iframe src="https://video.playerrecord.cfd/e/tj9qby7osr0y"></iframe>
+            <div class="related"><iframe
+              src="https://video.playerrecord.cfd/e/another123456"></iframe></div>
+            <aside class="ads"><iframe
+              src="https://creative.whitetrafsa.com/widgets/v4/Universal"></iframe></aside>
+            </article></main>"""
+        val frames=PublisherOriginalExtractors.fromHtml(selected,html)
+        assertEquals(listOf("https://video.playerrecord.cfd/e/tj9qby7osr0y"),
+            frames.map{it.url})
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,frames.single().url))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://creative.whitetrafsa.com/e/tj9qby7osr0y"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://video.playerrecord.cfd/e/tj9qby7osr0y?ad=1"))
+    }
+
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
         val html="""<div id="player"><video src="https://cdn.example/original.mp4"></video></div>"""
         assertTrue(PublisherOriginalExtractors.fromHtml(

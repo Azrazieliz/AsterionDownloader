@@ -61,7 +61,12 @@ internal object PublisherOriginalExtractors {
             "main #player video[src],main #player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
             "article #player video[src],article #player source[src],"+
-            "meta[itemprop=contentUrl]"),
+            // The real 2026-11-21 selected PornAVHD player is hosted at
+            // video.playerrecord.cfd/e/<id>, not an inline MP4. Ads on the
+            // SAME article use different hosts and are never originals.
+            "main iframe[src^='https://video.playerrecord.cfd/e/'],"+
+            "article iframe[src^='https://video.playerrecord.cfd/e/'],"+
+            "meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("avple.tv",
             "main .video-player video[src],main .video-player source[src],"+
             "main #player video[src],main #player source[src],"+
@@ -134,6 +139,9 @@ internal object PublisherOriginalExtractors {
                 Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)
             "uncensoredhentai.xxx" -> h=="nhplayer.com" &&
                 Regex("""^/v/[A-Za-z0-9]{8,40}/?$""").matches(path)
+            "pornavhd.com" -> h=="video.playerrecord.cfd" &&
+                Regex("""^/e/[A-Za-z0-9_-]{8,100}/?$""").matches(path) &&
+                u.rawQuery.isNullOrBlank() && u.rawFragment==null
             "fullporner.com" -> h=="fullporner.com" &&
                 Regex("""^/player/[0-9]{1,12}/[0-9]{1,4}/?$""").matches(path)
             else -> VideoSiteProfiles.sameProvider("https://$host/",link) &&
