@@ -26,14 +26,29 @@ object SiteControls {
             else->host
         }
     }
-    fun sync(context:Context,url:String,default:Boolean=false):Boolean {
+    /**
+     * PimpBunny video watches and its photo gallery are separate modules.
+     * Keep the canonical host key unchanged for URL provenance, deduplication
+     * and earlier video preferences; separate only their control flags.
+     */
+    internal fun controlKey(url:String):String {
         val host=key(url)
+        if(host=="pimpbunny.com"){
+            val path=runCatching{URI(url).path.orEmpty().trim('/').lowercase(Locale.ROOT)}
+                .getOrDefault("")
+            if(path=="models" || path.startsWith("models/"))
+                return "$"+"{host}:photos"
+        }
+        return host
+    }
+    fun sync(context:Context,url:String,default:Boolean=false):Boolean {
+        val host=controlKey(url)
         if(host.isBlank() || ProviderRetirement.isRetired(url))return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("sync:$host",default)
     }
     fun backfill(context:Context,url:String,default:Boolean=false):Boolean {
-        val host=key(url)
+        val host=controlKey(url)
         if(host.isBlank() || ProviderRetirement.isRetired(url))return false
         return context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             .getBoolean("backfill:$host",default)
@@ -41,13 +56,13 @@ object SiteControls {
 
     /** Auto-discovery is not permission to download the site's contents. */
     fun explicitlyEnabled(context:Context,url:String):Boolean {
-        val host=key(url)
+        val host=controlKey(url)
         if(host.isBlank() || ProviderRetirement.isRetired(url))return false
         val p=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
         return p.contains("sync:$host") && p.getBoolean("sync:$host",false)
     }
     fun setSync(context:Context,url:String,enabled:Boolean){
-        val host=key(url)
+        val host=controlKey(url)
         require(host.isNotBlank())
         require(!enabled || !ProviderRetirement.isRetired(url)){
             "This provider was removed from Asterion"
@@ -56,7 +71,7 @@ object SiteControls {
             .edit().putBoolean("sync:$host",enabled).apply()
     }
     fun setBackfill(context:Context,url:String,enabled:Boolean){
-        val host=key(url)
+        val host=controlKey(url)
         require(host.isNotBlank())
         require(!enabled || !ProviderRetirement.isRetired(url)){
             "This provider was removed from Asterion"
@@ -74,14 +89,14 @@ object SiteControls {
      */
     fun applyToEngines(context:Context,url:String){
         val app=context.applicationContext
-        val host=key(url)
+        val host=controlKey(url)
         if(host.isBlank())return
         val live=sync(app,url)
         val historical=live
         val active=live
         runCatching {
             SourceIndexDb(app).use{db->
-                db.sources().filter{key(it.url)==host}.forEach{
+                db.sources().filter{controlKey(it.url)==host}.forEach{
                     db.enable(it.url,active)
                 }
             }
@@ -89,7 +104,7 @@ object SiteControls {
         runCatching{
             com.azrael.galleryflow.GalleryDb(app).use{db->
                 db.listEntities().filter{
-                    it.kind=="site" && key(it.canonicalUrl)==host
+                    it.kind=="site" && controlKey(it.canonicalUrl)==host
                 }.forEach{entity->
                     db.setSelected(entity.source,entity.entityId,active)
                     db.setLiveEnabled(entity.source,entity.entityId,live)
@@ -99,7 +114,7 @@ object SiteControls {
         runCatching{
             com.asterion.videoflow.VideoDb(app).use{db->
                 db.listWatches().filter{watch->
-                    if(key(watch.address)!=host)return@filter false
+                    if(controlKey(watch.address)!=host)return@filter false
                     val path=runCatching{
                         URI(watch.address).path.orEmpty().trim('/')
                     }.getOrDefault("")
