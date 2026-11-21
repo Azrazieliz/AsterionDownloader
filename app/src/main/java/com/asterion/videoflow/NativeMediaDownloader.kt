@@ -32,6 +32,7 @@ internal object NativeMediaDownloader {
         !SiteSpecificOriginalSources.isHosterPage(mediaUrl) &&
         (if(verifiedMp4)
             FreePornVideosOriginalSource.firstPartyFormat(sourceUrl,mediaUrl) ||
+                BubblecumSelectedOriginalSource.verifiedMedia(sourceUrl,mediaUrl) ||
                 Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl) ||
                 ThreeDHentaiSignedOriginal.firstPartyFormat(sourceUrl,mediaUrl) ||
                 (FullPornerOriginalSource.selectedPage(sourceUrl) &&
@@ -79,6 +80,7 @@ internal object NativeMediaDownloader {
                 uri.userInfo==null && uri.port==-1 &&
                 (uri.host.orEmpty().lowercase().removePrefix("www.")==
                     "freepornvideos.xxx" ||
+                    BubblecumSelectedOriginalSource.isPublisherFormat(address) ||
                     Rule34VideoOriginalSource.isPublisherMediaUrl(address) ||
                     ThreeDHentaiSignedOriginal.isSignedMediaUrl(address) ||
                     FullPornerOriginalSource.verifiedMediaHost(address))

@@ -36,6 +36,16 @@ class BubblecumSelectedOriginalSourceTest {
         assertFalse(BubblecumSelectedOriginalSource.verifiedMedia(
             "https://www.bubblecum.lol/models/","https://www.bubblecum.lol/get_file/0/abCD_efGh12345678901234567890/30645_1080p.mp4/"))
     }
+    @Test fun selectedSignedKvsMp4CanUseNativeOriginalLane(){
+        assertTrue(BubblecumSelectedOriginalSource.isPublisherFormat(full))
+        assertTrue(NativeMediaDownloader.isNativeEligible(
+            selected,full,verifiedMp4=true))
+        assertFalse(NativeMediaDownloader.isNativeEligible(
+            "https://www.bubblecum.lol/models/",full,verifiedMp4=true))
+        assertFalse(BubblecumSelectedOriginalSource.isPublisherFormat(
+            "https://media.bubblecum.com/get_file/0/abCD_efGh12345678901234567890/30645_1080p.mp4/"))
+    }
+
     @Test fun ambiguousPlayerOrConfigIsNotAnOriginal(){
         assertTrue(BubblecumSelectedOriginalSource.published(selected,
             page().replace("<div id=\"kt_player\"></div>","")).isEmpty())

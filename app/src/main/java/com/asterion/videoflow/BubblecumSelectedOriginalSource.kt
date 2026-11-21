@@ -16,16 +16,20 @@ internal object BubblecumSelectedOriginalSource {
     private val selectedVideoId=Regex(
         """(?is)(?:^|[,{]\s*)["']?video_id["']?\s*:\s*["']?([0-9]{1,12})""")
 
-    fun verifiedMedia(selected:String,media:String):Boolean {
-        if(!VideoSiteProfiles.isVideoPage(selected))return false
-        val page=runCatching{URI(selected)}.getOrNull()?:return false
+    fun isPublisherFormat(media:String):Boolean {
         val u=runCatching{URI(media.replace("\\/","/"))}.getOrNull()?:return false
-        return page.scheme=="https" && page.userInfo==null &&
-            page.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==HOST &&
-            u.scheme=="https" && u.userInfo==null && u.port==-1 &&
+        return u.scheme=="https" && u.userInfo==null && u.port==-1 &&
             u.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==HOST &&
             u.rawFragment==null && fullPath.matches(u.path.orEmpty()) &&
             !FullLengthVideoPolicy.isExplicitPreview("",media)
+    }
+
+    fun verifiedMedia(selected:String,media:String):Boolean {
+        if(!VideoSiteProfiles.isVideoPage(selected))return false
+        val page=runCatching{URI(selected)}.getOrNull()?:return false
+        return page.scheme=="https" && page.userInfo==null &&
+            page.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")==HOST &&
+            isPublisherFormat(media)
     }
 
     fun published(selected:String,html:String):List<String> {
