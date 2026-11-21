@@ -113,8 +113,16 @@ class SyncForegroundService : Service() {
         }catch(t:RuntimeException){
             android.util.Log.e("AsterionKurohaSync",
                 "Foreground promotion denied; saved jobs retained",t)
-            stopSelfResult(startId)
-            return START_NOT_STICKY
+            // This may be a SECOND command to an already-running Live or
+            // Backfill worker. stopSelfResult(latest startId) would tear down
+            // that worker's service and silently lose the selected request.
+            if(!PixivForegroundLifetimePolicy.keepExistingWorker(
+                    currentRun?.isDone==false)){
+                stopSelfResult(startId)
+                return START_NOT_STICKY
+            }
+            // The existing foreground worker is still alive. Process
+            // pause/stop/queued-backfill controls without killing its service.
         }
         when (intent?.action) {
             ACTION_PAUSE -> {
@@ -248,7 +256,11 @@ class SyncForegroundService : Service() {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         getSystemService(NotificationManager::class.java)
                             .cancel(NOTIFICATION_ID)
-                        stopSelfResult(startId)
+                        // A second control/start command can advance Android's
+                        // startId while this original worker is still active.
+                        // All queued work is now drained and currentRun=null;
+                        // stop the actual idle Service, not an obsolete ID.
+                        stopSelf()
                     }
                 }
             }
