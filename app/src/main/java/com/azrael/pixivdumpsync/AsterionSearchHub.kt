@@ -105,7 +105,7 @@ object AsterionSearchHub {
         }finally{
             workers.shutdownNow()
         }
-        val ranked=SearchRanking.deduplicate(term,items).map{
+        val ranked=SearchRanking.deduplicateDiscovery(term,items).map{
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
         val all=if(mode==0)ranked+peertube(term) else ranked
@@ -126,8 +126,8 @@ object AsterionSearchHub {
                addSource:()->Unit={}){
         p.addView(ui.text(a,"Search",23f,ui.white,true),ui.lp(a,14))
         p.addView(ui.text(a,
-            "Searches multiple independent web sources. Unavailable sources "+
-                "are reported; a single provider is never the entire web.",
+            "Searches the public indexed web, including sites not configured "+
+                "as providers. Search hits are candidates, not verified originals.",
             12f,ui.secondary),ui.lp(a,4))
 
         val prefs=preferences(a)
@@ -178,10 +178,12 @@ object AsterionSearchHub {
             // provider identity. Never invent a result to fill empty sites.
             val bySource=matching.groupBy{it.source}.values.map{it.iterator()}
             val filtered=ArrayList<Found>()
-            while(filtered.size<75){
+            val visibleLimit=prefs.getInt("visible_result_count_"+selected,75)
+                .coerceAtLeast(25)
+            while(filtered.size<visibleLimit){
                 var advanced=false
                 for(cursor in bySource){
-                    if(cursor.hasNext() && filtered.size<75){
+                    if(cursor.hasNext() && filtered.size<visibleLimit){
                         filtered+=cursor.next()
                         advanced=true
                     }
@@ -282,7 +284,7 @@ object AsterionSearchHub {
                     draw(found)
                 },ui.lp(a,8))
             }
-            if(showTextOnly)for(hit in withoutPreviews.take(30)){
+            if(showTextOnly)for(hit in withoutPreviews){
                 val row=ui.row(a).apply{
                     background=ui.touch(a,ui.surface,13)
                     setPadding(ui.px(a,10),ui.px(a,10),
@@ -322,9 +324,17 @@ object AsterionSearchHub {
                     })
                 results.addView(row,ui.lp(a,6))
             }
+            if(filtered.size<matching.size) {
+                results.addView(ui.action(a,
+                    "SHOW MORE RESULTS · "+(matching.size-filtered.size)+" REMAINING",false){
+                    prefs.edit().putInt("visible_result_count_"+selected,
+                        visibleLimit+50).apply()
+                    draw(found)
+                },ui.lp(a,9))
+            }
             if(filtered.isEmpty())
                 results.addView(ui.text(a,
-                    "No matching originals indexed. Try another title or provider.",
+                    "No matching pages found in this search. Try a different title.",
                     13f,ui.secondary),ui.lp(a,13))
         }
         picker.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener{
@@ -362,8 +372,8 @@ object AsterionSearchHub {
                         save(a,selectedAtStart,term,reply.results)
                         if(selected!=selectedAtStart)return@onSuccess
                         draw(reply.results)
-                        status.text=reply.results.size.toString()+" results · "+
-                            reply.searched+" checked sources"+
+                        status.text=reply.results.size.toString()+" matching web results · "+
+                            reply.searched+" completed search routes"+
                             if(reply.errors.isEmpty())"" else
                                 "\nUnavailable sources ("+reply.errors.size+"): "+
                                     reply.errors.take(3).joinToString("; ")
