@@ -309,10 +309,20 @@ object KeywordSources {
             val absolute=runCatching{
                 URI(doc.location()).resolve(node.attr("href")).toString()
             }.getOrNull()?:continue
+            val indexedTorrent=area==VideoSearchArea.PIRACY_DARKWEB &&
+                SearchRanking.isIndexPage(absolute)
+            // Owner-supplied websites may publish relevant video DETAIL
+            // pages without /video/ in their URL. The old "Custom site"
+            // search dropped them before checking the selected card.
+            // This exception is scoped ONLY to an explicit custom site,
+            // not to all anchors on every configured provider.
+            val customArticle=provider.label=="Custom site" &&
+                SearchRanking.isDiscoverablePage(absolute) &&
+                node.closest("article,.video-item,.video-card,.videoBox,"+
+                    ".thumb-block,.post-card,li.pcVideoListItem,main")!=null
             if(!eligibleDiscoveryUrl(absolute) ||
-                !(SearchRanking.isVideoUrl(absolute) ||
-                    (area==VideoSearchArea.PIRACY_DARKWEB &&
-                        SearchRanking.isIndexPage(absolute))))continue
+                !(SearchRanking.isVideoUrl(absolute) || indexedTorrent ||
+                    customArticle))continue
             val resultHost=runCatching{URI(absolute).host.orEmpty().removePrefix("www.")}.getOrDefault("")
             val searchHost=URI(url).host.orEmpty().removePrefix("www.")
             if(resultHost!=searchHost && !resultHost.endsWith("."+searchHost))continue
@@ -477,8 +487,12 @@ object KeywordSources {
         }
         val provider=SearchProvider(SearchProviderKind.HTML,address,"Custom site")
         return try {
-            SearchOutcome(SearchRanking.deduplicate(keyword,
-                html(context,provider,keyword,VideoSearchArea.PIRACY_DARKWEB)),1,emptyList())
+            val candidates=html(context,provider,keyword,
+                VideoSearchArea.PIRACY_DARKWEB)
+            val verifiedIndex=SearchRanking.deduplicateIndex(keyword,candidates)
+            val publicArticles=SearchRanking.deduplicateDiscovery(keyword,candidates)
+            SearchOutcome((publicArticles+verifiedIndex)
+                .distinctBy{SearchRanking.canonicalKey(it.url)},1,emptyList())
         }catch(t:Exception) {
             SearchOutcome(emptyList(),1,listOf(
                 "Custom site: ${t.message?:t.javaClass.simpleName}"))
