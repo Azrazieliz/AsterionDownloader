@@ -229,10 +229,13 @@ internal object OpenWebModelSearch {
     fun find(term:String,onFound:((List<Candidate>)->Unit)?=null):
         Pair<List<Candidate>,List<String>>{
         require(term.trim().length>=2){"Enter a model name"}
-        val names=listOf("Bing")
+        // Independent public search indexes, not the 27-provider federated
+        // catalog. An outage or block in one engine must not eliminate
+        // internet-wide 3D model discovery.
+        val names=listOf("Bing","DuckDuckGo")
         val errors=ArrayList<String>()
         val gathered=ArrayList<Candidate>()
-        val pool=Executors.newFixedThreadPool(4)
+        val pool=Executors.newFixedThreadPool(6)
         try{
             val completion=java.util.concurrent.ExecutorCompletionService<
                 Triple<String,List<Candidate>,String?>>(pool)
