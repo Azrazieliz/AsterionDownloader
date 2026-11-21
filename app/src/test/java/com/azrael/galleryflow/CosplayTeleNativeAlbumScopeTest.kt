@@ -34,6 +34,23 @@ class CosplayTeleNativeAlbumScopeTest {
         SelectedAlbumScope.verifyAdvertisedCount(37,scoped.size)
     }
 
+    @Test fun selectedVideoDownloadLinksAreNotDiscardedAsNonImageAnchors(){
+        val doc=Jsoup.parse("""
+          <main><article><div class="entry-content">
+            <h2>Selected cosplay 2 videos</h2>
+            <a href="https://cdn.cosplaytele.com/set/full-scene.mp4">Full video</a>
+            <a href="https://cosplaytele.com/unrelated-set/">Related set</a>
+            <a href="https://cdn.cosplaytele.com/set/highres.jpg"><img src="/thumb.jpg"/></a>
+          </div></article></main>
+        """,selected)
+        val scoped=SelectedAlbumScope.selectedContent(doc,selected)
+        val assets=directPageAssets(scoped,selected)
+        assertEquals(2,assets.size)
+        assertTrue(assets.any{it.kind==MediaKind.VIDEO &&
+            it.url.endsWith("/set/full-scene.mp4")})
+        assertFalse(scoped.select("a[href*=unrelated-set]").isNotEmpty())
+    }
+
     @Test fun selectedArticleDirectVideoIsRetainedButUnrelatedVideosAreExcluded(){
         val doc=Jsoup.parse("""
           <main><div class="recommended">
