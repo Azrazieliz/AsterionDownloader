@@ -329,6 +329,10 @@ class TorrentTransferService : Service() {
         private val exportWorkers = ConcurrentHashMap.newKeySet<Thread>()
     }
     private val metadataWorkers=ConcurrentHashMap.newKeySet<Thread>()
+    // An ADD may reach the isolated service while the metadata callback is
+    // still unwinding its native worker. Preserve the selected job instead
+    // of falsely pausing it and leaving VIEW TRANSFERS without an engine.
+    private val deferredJobs=java.util.concurrent.ConcurrentLinkedQueue<String>()
     override fun onBind(intent: Intent?): IBinder? = null
     private fun notification(message: String, percent: Int = 0): Notification {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -356,7 +360,8 @@ class TorrentTransferService : Service() {
         // One native torrent operation at a time on the device after an
         // owner-observed full-device crash; no competing metadata session.
         if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty()){
-            update(id,"Paused · another native torrent operation is active")
+            if(id !in deferredJobs)deferredJobs.add(id)
+            update(id,"QUEUED · waiting for native metadata or current transfer to finish")
             return false
         }
         if(!inFlight.add(id))return false
@@ -390,13 +395,17 @@ class TorrentTransferService : Service() {
                 inFlight.remove(id)
                 if(inFlight.isEmpty() && metadataWorkers.isEmpty() &&
                     exportWorkers.isEmpty()){
-                    // Native libtorrent's alerts loop otherwise survives
-                    // stopped Service instances and may keep the phone busy.
+                    // Complete and release the previous JNI worker before
+                    // a queued, exact user-selected torrent is admitted.
                     runCatching{TorrentTransfers.stopSessionWhenIdle()}
                         .onFailure{android.util.Log.e("AsterionTorrent",
                             "Native session shutdown failed",it)}
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    startDeferredIfIdle()
+                    if(inFlight.isEmpty() && metadataWorkers.isEmpty() &&
+                        exportWorkers.isEmpty()){
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
                 }
             }
         }
@@ -404,6 +413,30 @@ class TorrentTransferService : Service() {
         worker.start()
         return true
     }
+    /** Begin the next owner-selected torrent only after the previous JNI
+     * session has fully returned. One native torrent worker at a time remains
+     * mandatory. Saved file indices/targets are not reconstructed or guessed.
+     */
+    @Synchronized private fun startDeferredIfIdle():Boolean {
+        if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty())return false
+        val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
+        while(true){
+            val id=deferredJobs.poll()?:return false
+            if(prefs.getBoolean("job_cancelled_$id",false) ||
+               prefs.getBoolean("job_paused_$id",false))continue
+            val indices=prefs.getString("job_indices_$id","").orEmpty()
+            if(indices.isBlank()){
+                update(id,"FAILED: Previously selected files are unavailable")
+                continue
+            }
+            val folder=prefs.getString("job_folder_$id","Videos")?:"Videos"
+            if(startJob(id,folder,indices))return true
+            // A concurrent explicit selection may have taken the native
+            // engine first. startJob re-enqueues our exact selection.
+            if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty())return true
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try { startForeground(NOTIFICATION, notification("Preparing torrent…")) }
         catch(t:Exception){
@@ -517,8 +550,15 @@ class TorrentTransferService : Service() {
                         runCatching{TorrentTransfers.stopSessionWhenIdle()}
                             .onFailure{android.util.Log.e("AsterionTorrent",
                                 "Native session shutdown failed",it)}
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
+                        // A selected transfer arrived before metadata
+                        // cleanup completed. Run it now, not after a manual
+                        // RESUME or another visit to the Torrent screen.
+                        startDeferredIfIdle()
+                        if(metadataWorkers.isEmpty() && inFlight.isEmpty() &&
+                            exportWorkers.isEmpty()){
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        }
                     }
                 }
             }
@@ -538,6 +578,7 @@ class TorrentTransferService : Service() {
         }
         when(intent.action){
             CANCEL->{
+                deferredJobs.remove(id)
                 // Do not unload the native engine on the UI process or erase
                 // resumable quarantine pieces while its writer is active.
                 // This durable tombstone blocks later automatic RESUME/ADD.
@@ -553,6 +594,7 @@ class TorrentTransferService : Service() {
                 return START_NOT_STICKY
             }
             PAUSE->{
+                deferredJobs.remove(id)
                 paused.add(id)
                 prefs.edit().putBoolean("job_paused_$id",true).apply()
                 update(id,"Paused")
