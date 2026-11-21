@@ -11,7 +11,7 @@ import java.util.Locale
 object ProviderRetirement {
     // Both OMG aliases expose the same public 34/34 video identifiers as
     // FreePornVideos in the 2026-11-11 verified listing comparison.
-    private val retired=setOf("chaturbate.com","camstreams.tv","onscreens.me","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
+    private val retired=setOf("chaturbate.com","camstreams.tv","pornpics.com","celeb.st","onscreens.me","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
         "porntrex.com","xnxx.com","xvideos.com","peekvids.com","tnaflix.com",
         "mp4hentai.com","hentaihaven.xxx","helloporn.com")
 
@@ -80,7 +80,17 @@ object ProviderRetirement {
                     db.pauseProvider(domain)
                 }
             }.isSuccess
-            if(indexed && watched)
+            // A retired gallery provider must also stop its old Kyora
+            // subscriptions. Keep entities, original files, and history.
+            val galleries=runCatching {
+                com.azrael.galleryflow.GalleryDb(app).use { db ->
+                    db.listEntities().filter { belongs(it.canonicalUrl) }.forEach {
+                        db.setSelected(it.source,it.entityId,false)
+                        db.setLiveEnabled(it.source,it.entityId,false)
+                    }
+                }
+            }.isSuccess
+            if(indexed && watched && galleries)
                 pref.edit().putBoolean(key,true).apply()
         }
     }

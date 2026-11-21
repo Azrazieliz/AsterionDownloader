@@ -15,7 +15,7 @@ import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import kotlin.concurrent.thread
 
-/** User-approved provider subset (Pornhits and duplicate OMG retired) from the four identical Aloha exports.
+/** User-approved provider subset (Pornhits, duplicate OMG, Porn Pics, Celeb.st and CamStreams retired) from the four identical Aloha exports.
  * Previously supported sources remain in their original native engines. Rejected
  * personal, utilities, reference and unrelated bookmarks are not registered.
  */
@@ -28,16 +28,15 @@ object AlohaSources {
 Buondua|https://buondua.com/|COSPLAY
 CosplayTele|https://cosplaytele.com/|COSPLAY
 Kiutaku|https://kiutaku.com/|COSPLAY
-Porn Pics|https://www.pornpics.com/|COSPLAY
 NotFans|https://notfans.com/|ADULT
 Archivebate|https://archivebate.com/|ADULT
 LiveCamRips|https://livecamrips.to/|ADULT
 Avple|https://avple.tv/|ADULT
-PimpBunny|https://pimpbunny.com/|ADULT
+PimpBunny Photos|https://pimpbunny.com/models/|COSPLAY
+PimpBunny Videos|https://pimpbunny.com/|ADULT
 xChina|https://en.xchina.co/|ADULT
 Bubblecum|https://www.bubblecum.lol/|ADULT
 PornAVHD|https://pornavhd.com/|ADULT
-Celeb.st|https://celeb.st/feed/hot|COSPLAY
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 Porneec|https://porneec.com/|ADULT
 PornBuz|https://pornbuz.com/|ADULT
@@ -73,7 +72,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==43 && sites.distinctBy{it.url}.size==43){"Incorrect approved Aloha source set"}
+            require(sites.size==42 && sites.distinctBy{it.url}.size==42){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }

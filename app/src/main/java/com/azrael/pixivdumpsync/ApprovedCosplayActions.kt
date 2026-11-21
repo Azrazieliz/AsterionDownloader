@@ -62,8 +62,7 @@ internal object ApprovedCosplayActions {
     internal fun albumRoot(host:String,name:String):SourceEntity?=when(host){
         "kiutaku.com"->SourceEntity(SourceId.KIUTAKU,
             "site:kiutaku.com",name,"https://kiutaku.com/","site")
-        "pornpics.com"->SourceEntity(SourceId.GENERIC,
-            "site:pornpics.com",name,"https://www.pornpics.com/","site")
+
         else->null
     }
 
@@ -91,7 +90,7 @@ internal object ApprovedCosplayActions {
     }
 
     /** Real Kyora root for ALL approved cosplay providers, including
-     * generic-only PornPics/Celeb.st. A preview/index refresh is NOT a
+     * generic-only photo publishers. A preview/index refresh is NOT a
      * backfill, and a generic legacy row must never replace a native root.
      */
     private fun galleryRoot(context:android.content.Context,
@@ -213,10 +212,11 @@ internal object ApprovedCosplayActions {
             path !in setOf("tag","tags","category","categories","search")){
             "Select a specific gallery rather than a website landing page"
         }
-        // A PornPics category/channel link or Kiutaku profile/tag is not
+        // A profile-only link or Kiutaku tag is not
         // an album. Do not persist phantom galleries when tapped.
         require(when(site.host){
-            "pornpics.com"->path.matches(Regex("""(?i)galleries/[^/]+"""))
+            "pimpbunny.com" ->
+                SiteBackfillProfiles.recognizesGalleryPage(site.url,tile.url)
             "kiutaku.com"->path.matches(Regex("""[0-9]{1,9}"""))
             "4khd.com","cosplaytele.com"->
                 SiteBackfillProfiles.recognizesGalleryPage(site.url,tile.url)

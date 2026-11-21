@@ -10,6 +10,7 @@ class AllSiteGalleryCoverageTest {
     @Test fun approvedPornCatalogExcludesRetiredProvider() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
         assertEquals(21,sites.size)
+        assertFalse(AlohaSources.all.any{it.host in setOf("pornpics.com","celeb.st")})
         assertFalse(sites.any{it.host in setOf("pornhits.com","omg.porn","omg.xxx",
             "porntrex.com","xnxx.com","pornone.com","sunporno.com",
             "xvideos.com","peekvids.com","tnaflix.com","helloporn.com")})

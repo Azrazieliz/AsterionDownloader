@@ -52,12 +52,12 @@ internal object SiteBackfillProfiles {
             Regex("^/[0-9]{1,9}/?$"),"cosplay"),
         Profile("cosplaytele.com","COSPLAY",cosplay,
             Regex("^/[a-z0-9][a-z0-9_-]{2,180}/?$"),"cosplay"),
-        Profile("pornpics.com","COSPLAY",
-            cosplay+",.gallery-thumb a[href],.thumb a[href],.galleries a[href]",
-            Regex("^/(?:galleries|gallery)/[^/?#]+(?:/[^/?#]+)?/?$"),"cosplay"),
-        Profile("celeb.st","COSPLAY",
-            cosplay+",.feed a[href],.media-list a[href]",
-            Regex("^/(?:(?:p|post|posts|gallery|photos|media)/[^/?#]+|creator/[^/?#]+/(?:images|videos|posts))/?$"),
+        // PimpBunny separates model/photo pages from selected /videos/
+        // publications. A model portrait is not a downloadable photo set:
+        // index only explicit first-party photo/gallery post URLs.
+        Profile("pimpbunny.com","COSPLAY",
+            cosplay+",main .gallery a[href],main .photos a[href],main .photo-grid a[href]",
+            Regex("""^/(?:photos?|images?|galleries?)/[a-z0-9][a-z0-9_/-]{2,180}/?$|^/models?/[a-z0-9_-]+/(?:photos?|images?|galleries?)/[a-z0-9][a-z0-9_/-]{0,180}/?$"""),
             "cosplay")
     ).associateBy{it.host}
 
@@ -172,8 +172,8 @@ false)continue
             List<IndexedItem>{
         val host=runCatching{URI(item.url).host?.lowercase(Locale.ROOT)
             ?.removePrefix("www.")}.getOrNull()
-        if(host !in setOf("kiutaku.com","cosplaytele.com","pornpics.com",
-                "archivebate.com","celeb.st"))return emptyList()
+        if(host !in setOf("kiutaku.com","cosplaytele.com",
+                "archivebate.com"))return emptyList()
         val results=LinkedHashMap<String,IndexedItem>()
         val banned=Regex("(?i)(?:thumb|thumbnail|preview|sample|avatar|logo|icon|sprite|placeholder|spinner)")
         fun record(raw:String,label:String){
