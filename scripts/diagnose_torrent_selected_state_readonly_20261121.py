@@ -14,7 +14,16 @@ def read(path):
 def load(name):
  raw=read("shared_prefs/"+name+".xml")
  if not raw:return {}
- doc=ET.fromstring(raw)
+ safe=raw.lstrip("\ufeff \r\n\t")
+ if not safe.startswith(("<",)):
+  print(json.dumps({"name":name,"malformed_xml":True,
+     "length":len(raw),"codepoint_prefix":[ord(c) for c in raw[:7]]}),flush=True)
+  return {}
+ try:doc=ET.fromstring(safe)
+ except ET.ParseError as e:
+  print(json.dumps({"name":name,"invalid_xml":True,
+     "length":len(raw),"codepoint_prefix":[ord(c) for c in raw[:7]]}),flush=True)
+  return {}
  return {x.get("name",""):(x.get("value") if x.get("value") is not None else x.text or "")
    for x in doc if x.get("name")}
 prefs=load("torrent_transfers")
