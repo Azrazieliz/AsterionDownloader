@@ -1175,8 +1175,8 @@ object VideoEngine {
             setOf("avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
                 "bubblecum.lol","pornavhd.com","camstreams.tv")
         val strictIframe=NetworkRoute.siteKey(item.url) in
-            setOf("javideo.net","helloporn.com","uncensoredhentai.xxx") ||
-            strictNewProvider
+            setOf("javideo.net","helloporn.com","uncensoredhentai.xxx",
+                "livecamrips.to") || strictNewProvider
         val strictSelectedArticle=NetworkRoute.siteKey(item.url) in
             setOf("mp4hentai.com","hentaihaven.xxx") &&
             VideoSiteProfiles.isVideoPage(item.url)

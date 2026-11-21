@@ -672,6 +672,9 @@ internal object SiteSpecificOriginalSources {
                 Regex("""^/e/[A-Za-z0-9_-]{8,100}/?$""")
                     .matches(path) && frame.rawQuery.isNullOrBlank() &&
                 frame.rawFragment==null
+            "livecamrips.to" -> host(player)=="vidara.to" &&
+                Regex("""^/[A-Za-z0-9_-]{8,50}/?$""").matches(path) &&
+                frame.rawQuery.isNullOrBlank() && frame.rawFragment==null
             else->false
         }
     }

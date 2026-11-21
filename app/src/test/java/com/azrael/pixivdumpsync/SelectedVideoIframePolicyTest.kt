@@ -17,7 +17,9 @@ class SelectedVideoIframePolicyTest {
             "https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/" to
                 "https://nhplayer.com/v/Z2flAXXPucyCbVJ/",
             "https://roshy.tv/video/exact-scene/" to
-                "https://kamehaus.net/e/abcdefGHI1"
+                "https://kamehaus.net/e/abcdefGHI1",
+            "https://livecamrips.to/video/11248256" to
+                "https://vidara.to/KJq6mx17bB2/"
         )
         for((source,frame) in cases){
             assertTrue("selected iframe blocked: "+frame,

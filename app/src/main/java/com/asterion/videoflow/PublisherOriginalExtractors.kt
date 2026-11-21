@@ -134,9 +134,16 @@ internal object PublisherOriginalExtractors {
         return when(host) {
             "archivebate.com" -> h=="mixdrop.ag" &&
                 Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)
-            "livecamrips.to" -> h in setOf(
-                "mdzsmutpcvykb.net","mixdrop.ag","mixdrop.co","mixdrop.to") &&
-                Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)
+            "livecamrips.to" -> (
+                // Live public selected #iframe-video currently embeds
+                // vidara.to/<opaque-id>; older selected Mixdrop hosters
+                // remain valid. Unrelated adverts/frames cannot qualify.
+                (h=="vidara.to" &&
+                    Regex("""^/[A-Za-z0-9_-]{8,50}/?$""").matches(path) &&
+                    u.rawQuery.isNullOrBlank() && u.rawFragment==null) ||
+                (h in setOf("mdzsmutpcvykb.net",
+                    "mixdrop.ag","mixdrop.co","mixdrop.to") &&
+                    Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path)))
             "uncensoredhentai.xxx" -> h=="nhplayer.com" &&
                 Regex("""^/v/[A-Za-z0-9]{8,40}/?$""").matches(path)
             "pornavhd.com" -> h=="video.playerrecord.cfd" &&

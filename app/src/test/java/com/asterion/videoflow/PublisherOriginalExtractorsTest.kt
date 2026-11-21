@@ -96,6 +96,26 @@ class PublisherOriginalExtractorsTest {
             PublisherOriginalExtractors.fromHtml(
                 cases.getValue("archivebate.com"),html).map{it.url})
     }
+    @Test fun liveCamRipsUsesOnlyObservedExactSelectedVidaraFrame(){
+        val selected=cases.getValue("livecamrips.to")
+        val html="""<main><section class="video-player">
+          <iframe id="iframe-video"
+            src="https://vidara.to/KJq6mx17bB2/" ></iframe>
+          <iframe src="https://creative.whitetrafsa.com/widgets/v4/Universal"></iframe>
+          <aside class="related"><iframe id="iframe-video"
+            src="https://vidara.to/AnotherId12345"></iframe></aside>
+          </section></main>"""
+        val frames=PublisherOriginalExtractors.fromHtml(selected,html)
+        assertEquals(listOf("https://vidara.to/KJq6mx17bB2/"),
+            frames.map{it.url})
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,frames.single().url))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://vidara.to/watch/OtherId12345"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://vidara.to/KJq6mx17bB2/?preview=1"))
+    }
+
     @Test fun uncensoredExactNhplayerRejectsOtherExternalIframes(){
         val html="""<iframe src="https://nhplayer.com/v/ABCDE12345/"></iframe>
           <iframe src="https://commenthub.io/v/ABCDE12345/"></iframe>"""
