@@ -14,7 +14,7 @@ internal object TorrentDeferredSelection {
             .filter{values["job_deferred_$it"]==true &&
                 values["job_cancelled_$it"]!=true &&
                 values["job_paused_$it"]!=true}
-            .filter{values["job_folder_$it"] in allowed}
+            .filter{(values["job_folder_$it"] as? String)?.let(allowed::contains)==true}
             .filter{id->
                 val raw=values["job_indices_$id"] as? String ?:return@filter false
                 raw.isNotBlank() && raw.length<=130_000 &&
