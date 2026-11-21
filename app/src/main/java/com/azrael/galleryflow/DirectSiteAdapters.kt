@@ -243,6 +243,12 @@ internal class FourKGirlAdapter(http: HttpClient) : DirectGalleryAdapter(
         "wp-admin", "wp-content", "feed", "comments"
     )
 
+    override fun listingAnchors(doc: Document): List<Element> =
+        (super.listingAnchors(doc) + doc.select(
+            ".gridwp-grid-post a[href],.post-grid a[href],.post-card a[href],"+
+            ".gallery-item a[href],.post-thumbnail a[href],.gridwp-grid-post-item a[href]"
+        )).distinct()
+
     override fun isPostPath(path: String): Boolean {
         val parts = path.trim('/').split('/').filter { it.isNotBlank() }
         return parts.size == 1 && parts[0].lowercase(Locale.ROOT) !in reserved
