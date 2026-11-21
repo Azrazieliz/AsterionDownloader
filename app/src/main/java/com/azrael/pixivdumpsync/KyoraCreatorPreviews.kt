@@ -125,7 +125,7 @@ object KyoraCreatorPreviews {
                     (host=="mitaku.net" || host.endsWith(".mitaku.net") ||
                      host=="kiutaku.com" || host.endsWith(".kiutaku.com")) &&
                     path.contains("/wp-content/uploads/") &&
-                    Regex("""(?i)\\.(?:jpe?g|png|webp|avif)$""").containsMatchIn(path) &&
+                    Regex("""(?i)\.(?:jpe?g|png|webp|avif)$""").containsMatchIn(path) &&
                     listOf("thumb","thumbnail","preview","cover",
                         "collage","montage","avatar","logo").none{it in path}
             }
