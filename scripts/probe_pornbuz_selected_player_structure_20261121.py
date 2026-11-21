@@ -76,3 +76,35 @@ with tempfile.TemporaryDirectory(prefix="adl_pornbuz_main_") as d:
       "mp4_mentions":len(re.findall(r"\.mp4",code,re.I)),
       "has_file_key":bool(re.search(r"\bfile\s*:",code))})
   print(json.dumps({"variable":variable,"configs":result[:2]}),flush=True)
+
+ # Exact JWPlayer article-owned PLAYBACK config, never advertising.
+ for script in inline:
+  marker=re.search(r"(?is)(?:window\.)?VK_PLAYBACK\s*=\s*",script)
+  if marker is None:continue
+  try:
+   payload=json.JSONDecoder().raw_decode(script[marker.end():].lstrip())[0]
+   value=payload.get("src") if isinstance(payload,dict) else None
+   if not isinstance(value,str):raise ValueError("No selected playback source")
+   media=urllib.parse.urljoin(ef,value);u=urllib.parse.urlsplit(media)
+   parsed={"format":payload.get("format"),
+     "source_host":u.hostname,"source_ext":u.path.rsplit(".",1)[-1][:10] if "." in u.path else "",
+     "signed_query":bool(u.query),"copies":len(payload.get("copies") or []),
+     "has_source":u.scheme=="https" and bool(u.hostname)}
+   if u.scheme=="https" and u.hostname and u.path.endswith(".m3u8"):
+    try:
+     req=urllib.request.Request(media,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
+       "Referer":ef,"Accept-Encoding":"identity"})
+     with urllib.request.urlopen(req,timeout=18) as res:
+      bodyText=res.read(170000).decode("utf-8","replace")
+      parsed["manifest_status"]=res.status
+      parsed["hls"]=bodyText.startswith("#EXTM3U")
+      parsed["master_variants"]=bodyText.count("#EXT-X-STREAM-INF")
+      parsed["segment_count"]=sum(bool(x.strip()) and not x.startswith("#") for x in bodyText.splitlines())
+      parsed["endlist"]="#EXT-X-ENDLIST" in bodyText
+      parsed["runtime_s"]=round(sum(float(x) for x in re.findall(r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",bodyText)),1)
+    except urllib.error.HTTPError as e:parsed["manifest_status"]=e.code
+    except Exception as e:parsed["manifest_error"]=type(e).__name__
+   print(json.dumps({"stage":"EXACT_VK_PLAYBACK_HLS","data":parsed}),flush=True)
+  except Exception as e:
+   print(json.dumps({"stage":"EXACT_VK_PLAYBACK_UNRESOLVED","error":type(e).__name__}),flush=True)
+  break
