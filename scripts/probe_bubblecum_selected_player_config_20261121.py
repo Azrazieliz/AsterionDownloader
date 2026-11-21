@@ -22,16 +22,16 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
    page=r.read(950000).decode("utf-8","replace");http=r.status
  except urllib.error.HTTPError as e:
   page=e.read(70000).decode("utf-8","replace");http=e.code
- scripts=re.findall(r"""(?is)<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>""",page)
+ scripts=re.findall(r"""(?is)<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>""",page)
  out=[]
  for s in scripts:
-  if not re.search(r"(?i)\\bvideo_url\\b|flashvars|kt_player",s):continue
+  if not re.search(r"(?i)\bvideo_url\b|flashvars|kt_player",s):continue
   keyed=[k for k in ("video_url","video_alt_url","video_url_text","video_id","video_duration",
                     "flashvars","kt_player","sources","playlist","format","video_url_1080p",
-                    "video_url_720p","video_url_480p") if re.search(r"\\b"+k+r"\\b",s,re.I)]
+                    "video_url_720p","video_url_480p") if re.search(r"\b"+k+r"\b",s,re.I)]
   sources=[]
   for key in ("video_url","video_alt_url","video_url_1080p","video_url_720p","video_url_480p"):
-   m=re.search(r"""(?i)(?:["']?)"""+key+r"""(?:["']?)\\s*[:=]\\s*["']([^"'<>\\s]{10,2200})["']""",s)
+   m=re.search(r"""(?i)(?:["']?)"""+key+r"""(?:["']?)\s*[:=]\s*["']([^"'<>\s]{10,2200})["']""",s)
    if not m:continue
    url=m.group(1).replace("\\/","/")
    u=urllib.parse.urlsplit(urllib.parse.urljoin(selected,url))
@@ -41,8 +41,8 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
       "query":bool(u.query)})
   out.append({"chars":len(s),"keys":keyed,"originals":sources,
      "mentions_preview":bool(re.search("preview",s,re.I)),
-     "runtime_attribute":bool(re.search(r"video_duration\\s*[:=]",s,re.I))})
+     "runtime_attribute":bool(re.search(r"video_duration\s*[:=]",s,re.I))})
  print(json.dumps({"host":"bubblecum.lol","http":http,"selected_path_kind":"video" if "/video/" in urllib.parse.urlsplit(selected).path else "other",
    "candidate_scripts":out[:6],"html_get_file_count":page.count("/get_file/"),
-   "preview_mp4_count":len(re.findall(r"(?i)preview(?:_[a-z0-9]+)?\\.mp4",page)),
+   "preview_mp4_count":len(re.findall(r"(?i)preview(?:_[a-z0-9]+)?\.mp4",page)),
    "actual_video_player_id":bool(re.search(r"""(?i)id=["'](?:kt_player|video-player)["']""",page))}),flush=True)
