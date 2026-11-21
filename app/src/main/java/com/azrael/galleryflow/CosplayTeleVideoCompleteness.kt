@@ -8,13 +8,18 @@ package com.azrael.galleryflow
 internal object CosplayTeleVideoCompleteness {
     data class Audit(val expectedVideos:Int,val verifiedVideos:Int,val complete:Boolean)
 
-    /** Dispatch only one explicitly selected, incomplete video-bearing album
-     * whose publisher did not expose a usable video archive. Never auto-queue
-     * on site-wide backfill, or for albums with no advertised videos. */
+    /** Only an exact owner selection may queue its missing selected video.
+     * The caller audits actual on-disk video receipts AFTER native downloads.
+     * A published archive LINK is not a successful archive transfer: if its
+     * videos are still missing, the same selected article may safely retry
+     * through the existing VideoFlow engine. Deduplication stays in VideoDb.
+     * Never queue videos on unrelated site-wide history enumeration.
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun queueVideoFallback(exactSelection:Boolean,audit:Audit?,
                            archiveAvailable:Boolean):Boolean =
         exactSelection && audit!=null && !audit.complete &&
-            audit.expectedVideos>0 && !archiveAvailable
+            audit.expectedVideos>0
 
     /** Legacy single-album entities are explicit selections only for an
      * owner-targeted row. Automatic site backfill must not rearm a cancelled
