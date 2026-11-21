@@ -5,7 +5,7 @@ No media bytes, signed original URLs, titles, or credentials are exported.
 import argparse,json,re,pathlib,tempfile,sqlite3,subprocess,urllib.parse,urllib.request,urllib.error
 from contextlib import closing
 p=argparse.ArgumentParser();p.add_argument("--device",required=True);p.add_argument("--package",default="com.azrael.pixivdumpsync.acceptance");a=p.parse_args()
-with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
+with tempfile.TemporaryDirectory(prefix="adl_pimpbunny_player_") as d:
  root=pathlib.Path(d)
  for name in ("videoflow.sqlite","videoflow.sqlite-wal","videoflow.sqlite-shm"):
   r=subprocess.run(["adb","-s",a.device,"exec-out","run-as",a.package,"cat","databases/"+name],
@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
  with closing(sqlite3.connect("file:"+str(root/"videoflow.sqlite")+"?mode=ro",uri=True)) as db:
   rows=db.execute("SELECT url FROM videos ORDER BY updated DESC LIMIT 1500").fetchall()
  selected=next((v[0] for v in rows if
-   (urllib.parse.urlsplit(v[0]).hostname or "").removeprefix("www.")=="pimpbunny.lol"),None)
+   (urllib.parse.urlsplit(v[0]).hostname or "").removeprefix("www.")=="pimpbunny.com"),None)
  if not selected:raise RuntimeError("No selected PimpBunny article in installed queue")
  req=urllib.request.Request(selected,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36","Accept-Encoding":"identity"})
  try:
@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
    url=m.group(1).replace("\\/","/")
    u=urllib.parse.urlsplit(urllib.parse.urljoin(selected,url))
    if (key=="video_url" and original is None and
-       u.scheme=="https" and u.hostname in ("pimpbunny.lol","www.pimpbunny.lol") and
+       u.scheme=="https" and u.hostname in ("pimpbunny.com","www.pimpbunny.com") and
        u.path.startswith("/get_file/") and ".mp4" in u.path.lower()):
      original=u.geturl()
    sources.append({"key":key,"host":u.hostname,
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
   out.append({"chars":len(s),"keys":keyed,"originals":sources,
      "mentions_preview":bool(re.search("preview",s,re.I)),
      "runtime_attribute":bool(re.search(r"video_duration\s*[:=]",s,re.I))})
- print(json.dumps({"host":"pimpbunny.lol","http":http,"selected_path_kind":"video" if "/video/" in urllib.parse.urlsplit(selected).path else "other",
+ print(json.dumps({"host":"pimpbunny.com","http":http,"selected_path_kind":"video" if "/video/" in urllib.parse.urlsplit(selected).path else "other",
    "candidate_scripts":out[:6],"html_get_file_count":page.count("/get_file/"),
    "preview_mp4_count":len(re.findall(r"(?i)preview(?:_[a-z0-9]+)?\.mp4",page)),
    "actual_video_player_id":bool(re.search(r"""(?i)id=["'](?:kt_player|video-player)["']""",page))}),flush=True)
