@@ -36,10 +36,12 @@ class SearchRankingTest {
         assertTrue(hits.any{it.url.contains("porneec.com")})
         assertFalse(hits.any{it.url.contains("spankbang.com")})
     }
-    @Test fun dedicatedThreeSearchCategoriesHaveDifferentActualSources(){
+    @Test fun categoriesKeepDedicatedSitesWhileGeneralWebStaysIndependent(){
         val categories=VideoSearchArea.values().toList()
         assertEquals(listOf(VideoSearchArea.HENTAI,VideoSearchArea.PORN,
-            VideoSearchArea.PIRACY_DARKWEB),categories)
+            VideoSearchArea.PIRACY_DARKWEB,VideoSearchArea.GENERAL),categories)
+        assertTrue(KeywordSources.siteDefinitions(VideoSearchArea.GENERAL)
+            .isEmpty())
         val hentai=KeywordSources.siteDefinitions(VideoSearchArea.HENTAI)
         val porn=KeywordSources.siteDefinitions(VideoSearchArea.PORN)
         val piracy=KeywordSources.siteDefinitions(VideoSearchArea.PIRACY_DARKWEB)
