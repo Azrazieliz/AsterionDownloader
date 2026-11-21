@@ -95,11 +95,12 @@ open class HttpClient(private val context:android.content.Context?=null) {
     }
 
     private fun accessibleFourKGirlBrowser(url:String):Document? {
-        if(context==null ||
-            !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
+        // Kotlin cannot smart-cast a nullable class property inside a lambda.
+        val appContext=context ?:return null
+        if(!com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
             return null
         val browser=runCatching{
-            com.azrael.pixivdumpsync.BrowserPageFetch.html(context,url)
+            com.azrael.pixivdumpsync.BrowserPageFetch.html(appContext,url)
         }.getOrNull()?:return null
         val doc=Jsoup.parse(browser,url)
         return doc.takeUnless{
