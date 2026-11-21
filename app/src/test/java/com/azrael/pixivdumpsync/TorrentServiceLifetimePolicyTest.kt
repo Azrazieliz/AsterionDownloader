@@ -13,6 +13,12 @@ class TorrentServiceLifetimePolicyTest {
         assertFalse(TorrentServiceLifetimePolicy.mayStop(0,2,0))
     }
 
+    @Test fun nativeCleanupRetainsServiceEvenAfterWorkerListsAreEmpty(){
+        assertFalse(TorrentServiceLifetimePolicy.mayStop(0,0,0,1))
+        assertFalse(TorrentServiceLifetimePolicy.mayStop(0,0,0,2))
+        assertTrue(TorrentServiceLifetimePolicy.mayStop(0,0,0,0))
+    }
+
     @Test fun activeTransfersAndExportsKeepIsolatedServiceAlive(){
         assertFalse(TorrentServiceLifetimePolicy.mayStop(1,0,0))
         assertFalse(TorrentServiceLifetimePolicy.mayStop(0,0,1))
