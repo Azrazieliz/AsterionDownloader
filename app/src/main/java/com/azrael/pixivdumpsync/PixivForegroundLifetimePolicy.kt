@@ -5,4 +5,6 @@ package com.azrael.pixivdumpsync
  */
 internal object PixivForegroundLifetimePolicy {
     fun keepExistingWorker(active:Boolean):Boolean=active
+    fun ownsCompletion(finishedGeneration:Long,currentGeneration:Long):Boolean =
+        finishedGeneration==currentGeneration
 }
