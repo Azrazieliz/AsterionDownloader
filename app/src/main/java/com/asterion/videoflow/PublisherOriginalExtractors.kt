@@ -176,12 +176,17 @@ internal object PublisherOriginalExtractors {
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
         if(host=="bubblecum.lol"){
-            // The publisher's real KVS flashvars.video_url belongs to one
-            // selected #kt_player. Page-wide VideoObject and trailers do not.
-            return BubblecumSelectedOriginalSource.published(selected,html)
-                .map{Candidate(it,selected,host)}
+            // Prefer the actual selected KVS flashvars.video_url when the
+            // publisher renders #kt_player. On a genuine older HTML5 article
+            // without KVS, preserve the original approved main-player CSS
+            // extractor instead of introducing an unnecessary regression.
+            if(doc.select("#kt_player").isNotEmpty()){
+                return BubblecumSelectedOriginalSource.published(selected,html)
+                    .map{Candidate(it,selected,host)}
+            }
         }
-        if(host=="xchina.co"){
+        if(host=="xchina.co" &&
+            doc.select("#video-player[data-src]").isNotEmpty()){
             // Current selected xChina articles identify their real HLS
             // original in #video-player[data-src], NOT a <video> element.
             // Publisher observed /video/<hex> -> /hls/<same-hex>/master.m3u8.
