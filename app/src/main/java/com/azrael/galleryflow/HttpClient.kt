@@ -169,12 +169,13 @@ open class HttpClient(private val context:android.content.Context?=null) {
             // m.4khd.com often adds the official TeraBox link AFTER its
             // first-party JavaScript initializes. Static HTML returning
             // only a page shell does not prove the selected archive absent.
+            val browserContext=context
             val browserBridge=if(staticBridge.isNullOrBlank() &&
-                host=="m.4khd.com" && context!=null &&
+                host=="m.4khd.com" && browserContext!=null &&
                 com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url)){
                 runCatching{
                     val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
-                        context,url,referer)
+                        browserContext,url,referer)
                     val rendered=Jsoup.parse(html,url)
                     rendered.selectFirst("a#custom_button[href]")
                         ?.absUrl("href")?.takeIf{isTeraBoxHost(hostOf(it))}
