@@ -598,6 +598,31 @@ class SyncEngine(private val context: Context) {
                     missingVideos.expectedVideos+" advertised; "+
                     "photos retained, no preview counted as a video")
             }
+            if(meta.source==SourceId.COSPLAYTELE &&
+                CosplayTeleVideoCompleteness.queueVideoFallback(
+                    exactSelection,missingVideos,
+                    mediaItems.any{it.kind==MediaKind.ARCHIVE}) &&
+                com.azrael.pixivdumpsync.AppPower.enabled(context) &&
+                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(
+                    meta.canonicalUrl)){
+                // The owner's explicitly selected album stays in Kyora for
+                // its photos. A missing declared VIDEO is queued once as the
+                // very same selected article in VideoFlow; no other source
+                // or unrelated scene is substituted. Schedule after the
+                // gallery worker releases media buffers, not immediately.
+                val queued=runCatching{
+                    com.asterion.videoflow.VideoDb(context).use{db->
+                        db.addVideo(meta.canonicalUrl,
+                            "CosplayTele video: "+meta.title)
+                    }
+                }.getOrDefault(false)
+                if(queued){
+                    com.asterion.videoflow.Scheduling.requestRetry(
+                        context,90_000L)
+                    progress("CosplayTele video queued separately in Videos"+
+                        " after selected gallery; photos preserved")
+                }
+            }
             val diskComplete=officialArchiveComplete &&
                 GalleryOriginalSetPolicy.complete(requiredIds,validIds) &&
                 (missingVideos?.complete!=false)

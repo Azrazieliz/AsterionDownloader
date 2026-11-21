@@ -75,7 +75,12 @@ internal object PublisherOriginalExtractors {
         Site("onlyhentaistuff.com","#player iframe[src],.video-player iframe[src],article video[src],meta[itemprop=contentUrl]",allowPlayerIframe=true),
         Site("uncensoredhentai.xxx","iframe[src*='nhplayer.com/v/']",allowPlayerIframe=true),
         Site("3dhentaix.com","main .video-player video[src][data-duration],main .video-player source[src][data-duration]",requireDuration=true),
-        Site("rule34video.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]")
+        Site("rule34video.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
+        // Existing CosplayTele publisher; VIDEO fallback is selected-post only.
+        Site("cosplaytele.com",
+            "article video[src],article video source[src],"+
+            ".entry-content video[src],.entry-content video source[src],"+
+            "main #player video[src],main #player source[src]")
 
     ).associateBy { it.host }
 
@@ -85,7 +90,7 @@ internal object PublisherOriginalExtractors {
     // data and global contentUrl meta fields are not selected-player evidence.
     private val selectedPlayerOnlyHosts=setOf(
         "avple.tv","pimpbunny.com","xchina.co",
-        "bubblecum.lol","pornavhd.com")
+        "bubblecum.lol","pornavhd.com","cosplaytele.com")
 
     val coveredHosts:Set<String> get()=sites.keys
 
@@ -344,7 +349,7 @@ internal object PublisherOriginalExtractors {
                 ?.let{listOf(Candidate(it,selected,host))}.orEmpty()
         }
         if(host in setOf("avple.tv","pimpbunny.com","xchina.co",
-                "bubblecum.lol","pornavhd.com")){
+                "bubblecum.lol","pornavhd.com","cosplaytele.com")){
             // Public listings are not media evidence. Their exact selected
             // pages often initialize the genuine player only after JS:
             // inspect the SAME approved watch through the existing browser

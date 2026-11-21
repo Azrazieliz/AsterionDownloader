@@ -8,6 +8,14 @@ package com.azrael.galleryflow
 internal object CosplayTeleVideoCompleteness {
     data class Audit(val expectedVideos:Int,val verifiedVideos:Int,val complete:Boolean)
 
+    /** Dispatch only one explicitly selected, incomplete video-bearing album
+     * whose publisher did not expose a usable video archive. Never auto-queue
+     * on site-wide backfill, or for albums with no advertised videos. */
+    fun queueVideoFallback(exactSelection:Boolean,audit:Audit?,
+                           archiveAvailable:Boolean):Boolean =
+        exactSelection && audit!=null && !audit.complete &&
+            audit.expectedVideos>0 && !archiveAvailable
+
     fun audit(expected:Int?,selected:List<MediaRef>,
               records:List<MediaRecord>,onDisk:Set<String>):Audit {
         val required=expected?.coerceAtLeast(0) ?: 0

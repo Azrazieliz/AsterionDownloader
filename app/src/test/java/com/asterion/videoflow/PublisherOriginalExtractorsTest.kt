@@ -33,7 +33,8 @@ class PublisherOriginalExtractorsTest {
         "pimpbunny.com" to "https://pimpbunny.com/videos/selected-scene-123",
         "xchina.co" to "https://en.xchina.co/video/6b00b2b6032b1",
         "bubblecum.lol" to "https://www.bubblecum.lol/video/selected-scene-title/",
-        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/"
+        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/",
+        "cosplaytele.com" to "https://cosplaytele.com/selected-cosplay-set/"
     )
 
     @Test fun eachExistingVideoPublisherHasItsOwnNamedParser(){
@@ -109,6 +110,21 @@ class PublisherOriginalExtractorsTest {
             </div></main>"""
         assertEquals(listOf("https://cdn.example/selected/master.m3u8"),
             PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
+    }
+    @Test fun cosplayTeleFallbackUsesExactArticleVideoNotImageOrRelatedVideo(){
+        val selected=cases.getValue("cosplaytele.com")
+        val html="""<main>
+          <article><div class="entry-content">
+          <img src="https://cdn.cosplaytele.com/selected.jpg"/>
+          <video src="https://cdn.cosplaytele.com/selected-full.mp4"></video>
+          </div></article>
+          <aside class="recommended">
+          <video src="https://cdn.cosplaytele.com/unrelated.mp4"></video>
+          </aside></main>"""
+        assertEquals(listOf("https://cdn.cosplaytele.com/selected-full.mp4"),
+            PublisherOriginalExtractors.fromHtml(selected,html).map{it.url})
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,
+            "<main><img src='https://cdn.cosplaytele.com/photo.jpg'/></main>").isEmpty())
     }
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
         val html="""<div id="player"><video src="https://cdn.example/original.mp4"></video></div>"""

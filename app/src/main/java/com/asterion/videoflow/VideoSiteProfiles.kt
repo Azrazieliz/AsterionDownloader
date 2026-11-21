@@ -62,7 +62,10 @@ internal object VideoSiteProfiles {
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         // Actual 3DHentai video pages use a single top-level title slug.
         Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
-        Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+"""))
+        Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
+        // Selected CosplayTele article, never its category or gallery index.
+        // Only user-selected missing videos enter this fallback engine.
+        Route("cosplaytele.com",Regex("""(?i)^/[a-z0-9][a-z0-9_-]{2,180}/?$"""))
 
     ).associateBy{it.domain}
     private fun domain(raw:String):String=runCatching{

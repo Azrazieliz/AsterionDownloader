@@ -51,6 +51,19 @@ class CosplayTeleVideoCompletenessTest {
             receipts,setOf("in-archive","foreign","archive")).complete)
     }
 
+    @Test fun fallbackRequiresExactSelectedUnfulfilledVideoWithoutArchive(){
+        val missing=CosplayTeleVideoCompleteness.Audit(2,0,false)
+        assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,missing,false))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            false,missing,false))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,missing,true))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,CosplayTeleVideoCompleteness.Audit(2,2,true),false))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,null,false))
+    }
     @Test fun noAdvertisedCountDoesNotInventVideoRequirement(){
         val result=CosplayTeleVideoCompleteness.audit(null,emptyList(),
             emptyList(),emptySet())

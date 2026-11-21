@@ -85,7 +85,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(28,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(29,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
@@ -99,6 +99,15 @@ class VideoSiteProfilesTest {
             "https://www.omg.porn/fr/2257/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.omg.porn/fr/"))
+    }
+    @Test fun cosplayTeleFallbackAcceptsOnlySelectedPostNotAListing(){
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://cosplaytele.com/selected-cosplay-set/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://cosplaytele.com/category/videos/"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://cosplaytele.com/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://cosplaytele.com/page/2"))
     }
     @Test fun liveHentaiProviderPostRoutesAreNotReleaseCalendarsOrCategories(){
         assertTrue(VideoSiteProfiles.isVideoPage(
