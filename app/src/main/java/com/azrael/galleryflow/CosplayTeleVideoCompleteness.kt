@@ -37,7 +37,7 @@ internal object CosplayTeleVideoCompleteness {
         val archivePrefixes=selected.asSequence().filter{
             it.kind==MediaKind.ARCHIVE
         }.map{"archive:"+it.normalizedUrl+"#"}.toList()
-        val videoExtension=Regex("""(?i)\\.(?:mp4|m4v|mkv|webm|mov|avi|ts)$""")
+        val videoExtension=Regex("""(?i)\.(?:mp4|m4v|mkv|webm|mov|avi|ts)$""")
         // The DB may retain duplicate receipt rows; one media identity
         // counts as one completed original, not multiple saved videos.
         val verifiedIds=records.asSequence().filter{record->
