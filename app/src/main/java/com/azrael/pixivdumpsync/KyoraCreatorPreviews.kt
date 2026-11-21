@@ -249,6 +249,24 @@ object KyoraCreatorPreviews {
             result.putIfAbsent(page,Preview(page,cover,title,duration))
             if(result.size>=24)break
         }
+        // 4KGirl can place the image BESIDE a post-heading link inside
+        // .gridwp-grid-post. The generic a:has(img) parser never sees it.
+        // Reuse the existing first-party listing parser, preserving the
+        // exact publisher post URL and actual linked cover, not a site logo.
+        if(provider=="4kgirl.com"){
+            val listings=runCatching{
+                SiteBackfillProfiles.entries(doc,base,"COSPLAY",System.currentTimeMillis())
+            }.getOrNull().orEmpty()
+            for(item in listings){
+                if(!SiteBackfillProfiles.recognizesGalleryPage(base,item.url))continue
+                val cover=item.preview?.takeIf{SourceIndexParser.safe(it)}?:continue
+                val path=runCatching{URI(cover).path.lowercase()}.getOrDefault("")
+                if(listOf("logo","avatar","icon","banner","sprite","pixel")
+                        .any{it in path})continue
+                result.putIfAbsent(item.url,Preview(item.url,cover,item.title))
+                if(result.size>=24)break
+            }
+        }
         return result.values.toList()
     }
     fun load(a:Activity,url:String,force:Boolean=false,
