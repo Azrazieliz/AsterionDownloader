@@ -40,7 +40,9 @@ object BrowserPageFetch {
         // Reading the existing authorized WebView DOM never authorizes an
         // ad iframe, bypasses a site gate or invents a media URL.
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-        "bubblecum.lol","pornavhd.com","cosplaytele.com")
+        "bubblecum.lol","pornavhd.com","cosplaytele.com",
+        // Public gallery rendering fallback only. No challenge solving.
+        "4kgirl.com","4khd.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
