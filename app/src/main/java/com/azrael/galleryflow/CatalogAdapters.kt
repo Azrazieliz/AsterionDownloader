@@ -541,8 +541,18 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
         // recommendations elsewhere on the page.
         val selectedText = first.selectFirst(
             "article,.entry-content,.post-content,main")?.text().orEmpty()
+        // The publisher can embed a player without spelling out "1 video".
+        // Inspect ONLY the isolated selected article, not sidebar iframes.
+        // This is an inventory requirement, never proof of an original file.
+        val selectedPlayerPresent=docs.any { (pageUrl,pageDoc) ->
+            val isolated=SelectedAlbumScope.selectedContent(pageDoc,pageUrl)
+            isolated.select("video,video source,.video-player iframe[src],"+
+                "iframe[data-video],a[href$=.mp4],a[href*=.mp4?],"+
+                "a[href$=.webm],a[href*=.webm?]").isNotEmpty()
+        }
         val expectedVideos = maxOf(advertisedVideoCount(title),
-            advertisedVideoCount(selectedText.take(20000)))
+            advertisedVideoCount(selectedText.take(20000)),
+            if(selectedPlayerPresent)1 else 0)
         return meta.copy(expectedVideoCount=expectedVideos.takeIf{it>0}) to
             planCosplayTeleAlbumMedia(gallery.stableId,
                 gallery.canonicalUrl,direct,chosen,password,expectedVideos)
