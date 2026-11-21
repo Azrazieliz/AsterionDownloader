@@ -10,6 +10,16 @@ class FourKGirlListingRecoveryTest {
     private val home="https://www.4kgirl.com/"
     private val post="https://www.4kgirl.com/artist-photo-set/"
 
+    @Test fun twoHundredWithEmptyShellIsNotACompletedGalleryCheck() {
+        val client=HttpClient()
+        assertTrue(client.unusableFourKGirlShell(home,
+            "<html><body>Access denied</body></html>"))
+        assertFalse(client.unusableFourKGirlShell(home,
+            "<main><article><h2>Published gallery</h2></article></main>"))
+        assertFalse(client.unusableFourKGirlShell("https://everia.club/",
+            "<html><body>Access denied</body></html>"))
+    }
+
     @Test fun wordpressGridImageOnlyCardsAreRealAlbumsNotCategories() {
         val fake=object:HttpClient(){
             override fun document(url:String,referer:String?):Document{

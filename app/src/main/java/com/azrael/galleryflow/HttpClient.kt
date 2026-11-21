@@ -82,32 +82,54 @@ open class HttpClient(private val context:android.content.Context?=null) {
             "kiutaku.com","www.kiutaku.com")
     }
 
+    /** 4KGirl sometimes sends HTTP 200 with a 138-byte empty denial shell.
+     * It is NOT evidence of a scanned gallery, nor evidence of a thumbnail.
+     */
+    internal fun unusableFourKGirlShell(url:String,html:String):Boolean {
+        val host=runCatching{URI(url).host.orEmpty().lowercase(Locale.ROOT)
+            .removePrefix("www.")}.getOrDefault("")
+        if(host!="4kgirl.com" || html.length>4096)return false
+        val doc=Jsoup.parse(html,url)
+        return doc.select("article,.entry-content,.gridwp-grid-post,main a[href]")
+            .isEmpty()
+    }
+
+    private fun accessibleFourKGirlBrowser(url:String):Document? {
+        if(context==null ||
+            !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
+            return null
+        val browser=runCatching{
+            com.azrael.pixivdumpsync.BrowserPageFetch.html(context,url)
+        }.getOrNull()?:return null
+        val doc=Jsoup.parse(browser,url)
+        return doc.takeUnless{
+            it.select("article,.entry-content,.gridwp-grid-post,main a[href]")
+                .isEmpty()
+        }
+    }
+
     open fun document(url: String, referer: String? = null): Document {
         var attempt=0
         while(true){
             if (!SyncControl.checkpoint()) throw SyncCancelledException()
             try{
                 val response=textResponse(url,referer)
+                // A successful HTTP code can still be an unusable site shell.
+                // Try ONLY the ordinary first-party browser, then fail visibly.
+                if(unusableFourKGirlShell(url,response.body)){
+                    return accessibleFourKGirlBrowser(url)
+                        ?:throw AdapterException("4KGirl supplied an empty 200 OK "+
+                            "access shell, not publisher albums. Connect an "+
+                            "accessible site session before retrying.")
+                }
                 return Jsoup.parse(response.body,response.finalUrl)
             }catch(e:HttpStatusException){
-                // Isolated 4KGirl HTML fallback; do not alter accepted Kyora
-                // transfers or declare an inaccessible publisher successful.
                 val host=runCatching{URI(url).host.orEmpty().lowercase(Locale.ROOT)
                     .removePrefix("www.")}.getOrDefault("")
-                if(host!="4kgirl.com" || e.code !in setOf(401,403) ||
-                    context==null ||
-                    !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
-                    throw e
-                val browser=runCatching{
-                    com.azrael.pixivdumpsync.BrowserPageFetch.html(context,url)
-                }.getOrElse{throw e}
-                val fallback=Jsoup.parse(browser,url)
-                if(fallback.select("article,.entry-content,.gridwp-grid-post,main a[href]")
-                        .isEmpty())throw e
-                return fallback
+                if(host!="4kgirl.com" || e.code !in setOf(401,403))throw e
+                return accessibleFourKGirlBrowser(url)?:throw e
             }catch(e:java.net.SocketTimeoutException){
                 if(attempt++>=1 || !retryableGalleryHtml(url))throw e
-                // Delay only a failed, idempotent selected HTML GET.
                 Thread.sleep(500L)
             }
         }
