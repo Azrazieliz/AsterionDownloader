@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory(prefix="adl_bubble_player_") as d:
      capture_output=True,timeout=20)
   if r.returncode==0 and r.stdout:(root/name).write_bytes(r.stdout)
  with closing(sqlite3.connect("file:"+str(root/"videoflow.sqlite")+"?mode=ro",uri=True)) as db:
-  rows=db.execute("SELECT url FROM videos WHERE request_origin='user' ORDER BY updated DESC LIMIT 500").fetchall()
+  rows=db.execute("SELECT url FROM videos ORDER BY updated DESC LIMIT 1500").fetchall()
  selected=next((v[0] for v in rows if
    (urllib.parse.urlsplit(v[0]).hostname or "").removeprefix("www.")=="pimpbunny.lol"),None)
  if not selected:raise RuntimeError("No selected PimpBunny article in installed queue")
