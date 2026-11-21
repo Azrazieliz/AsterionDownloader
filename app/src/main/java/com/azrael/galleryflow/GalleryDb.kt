@@ -281,7 +281,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         val sql="""SELECT e.display_name,g.source,g.gallery_id,g.title,g.media_count,g.state,
           (SELECT m.content_uri FROM media m WHERE m.source=g.source
            AND m.gallery_id=g.gallery_id AND m.content_uri IS NOT NULL
-           AND m.state='complete' ORDER BY m.media_index LIMIT 1),
+           AND m.state='complete' AND m.mime_type LIKE 'image/%' ORDER BY m.media_index LIMIT 1),
           (SELECT m.url FROM media m WHERE m.source=g.source
            AND m.gallery_id=g.gallery_id ORDER BY m.media_index LIMIT 1)
           FROM galleries g JOIN entities e ON e.source=g.source AND e.entity_id=g.entity_id
@@ -310,7 +310,7 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
             SELECT g.source, g.gallery_id, g.title, g.media_count, g.state,
               (SELECT m.content_uri FROM media m WHERE m.source=g.source
                AND m.gallery_id=g.gallery_id AND m.content_uri IS NOT NULL
-               AND m.state='complete' ORDER BY m.media_index LIMIT 1),
+               AND m.state='complete' AND m.mime_type LIKE 'image/%' ORDER BY m.media_index LIMIT 1),
           (SELECT m.url FROM media m WHERE m.source=g.source
            AND m.gallery_id=g.gallery_id ORDER BY m.media_index LIMIT 1)
             FROM galleries g WHERE g.entity_id=?

@@ -128,7 +128,11 @@ object AsterionCosplayGallery {
             val public=snapshots[host]?.entries.orEmpty()
 
             val nativeTiles=galleries.mapNotNull{item->
-                val cover=item.firstUri?:item.firstUrl
+                // A saved ZIP/archive is not a cover, and a pending 4KHD
+                // full-resolution bridge is HTML rather than an image.
+                // Only genuine image originals may become gallery thumbnails.
+                val cover=item.firstUri?:
+                    item.firstUrl?.takeIf{KyoraGalleryCoverPolicy.isImageUrl(it)}
                 if(cover.isNullOrBlank())null
                 else KurohaMediaPreview.Tile(
                     url="gallery:"+item.galleryId,
