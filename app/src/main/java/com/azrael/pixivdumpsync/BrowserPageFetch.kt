@@ -539,6 +539,34 @@ object BrowserPageFetch {
                             // documented player iframe. Never serialize ad,
                             // social/comment or recommendation iframe URLs.
                             const publisher=location.hostname.replace(/^www\./,'');
+                            // Only a first-party selected page's own poster
+                            // metadata, not a card from a related-video list.
+                            // The compact browser snapshot previously stripped
+                            // OG images, so poster repair still saw zero images
+                            // even when the authorized Android browser worked.
+                            const selectedPoster=(()=>{
+                                const meta=document.querySelector(
+                                    'meta[property="og:image:secure_url"],'+
+                                    'meta[property="og:image"],'+
+                                    'meta[name="twitter:image"],'+
+                                    'meta[property="twitter:image"]');
+                                const actualVideo=document.querySelector(
+                                    'main video[poster],article video[poster],'+
+                                    '.video-player video[poster]');
+                                const raw=meta?.getAttribute('content')||
+                                    actualVideo?.getAttribute('poster')||'';
+                                if(!raw)return '';
+                                try{
+                                    const image=new URL(raw,location.href);
+                                    if(image.protocol!=='https:' ||
+                                        image.username || image.password ||
+                                        image.port || image.hash ||
+                                        /\.(?:svg|html?|js|css)$/i
+                                            .test(image.pathname))return '';
+                                    return '<meta property="og:image" content="'+
+                                        esc(image.href)+'">';
+                                }catch(_){return '';}
+                            })();
                             // The exact 4KHD official archive bridge injects
                             // #custom_button only after its public JS loads.
                             // Serialize its real link or report a pending
@@ -593,7 +621,8 @@ object BrowserPageFetch {
                                 if(names.length===1){
                                     const data=JSON.stringify(window[names[0]]);
                                     if(data && data.length<350000)
-                                        return '<html><script>var '+names[0]+
+                                        return '<html><head>'+selectedPoster+
+                                            '</head><script>var '+names[0]+
                                             ' = '+data.replace(/</g,'\\u003c')+
                                             ';</script></html>';
                                 }
@@ -765,7 +794,7 @@ object BrowserPageFetch {
                                             link.pathname.toLowerCase()===
                                                 '/hls/'+match[1].toLowerCase()+'/master.m3u8';
                                         if(valid)
-                                            return '<html><head><meta name="'+
+                                            return '<html><head>'+selectedPoster+'<meta name="'+
                                                 'asterion-selected-xchina-hls" content="true">'+
                                                 '</head><body><main><div id="video-player"'+
                                                 ' data-src="'+esc(link.href)+'"></div>'+
@@ -793,7 +822,8 @@ object BrowserPageFetch {
                                         /\bvideo_id\b/.test(js));
                                 if(players.length===1 && scripts.length===1 &&
                                     !/<\/script/i.test(scripts[0]))
-                                    return '<html><body><main>'+
+                                    return '<html><head>'+selectedPoster+
+                                        '</head><body><main>'+
                                         '<div id="kt_player"></div><script>'+
                                         scripts[0]+'</script></main></body></html>';
                             }
@@ -817,14 +847,15 @@ object BrowserPageFetch {
                                         ).join('');
                                     const config=(extra.textContent||'').slice(0,100_000);
                                     if(selected && config.includes('iframe_url'))
-                                        return '<html><body><article id="post-'+postId+'">'+
+                                        return '<html><head>'+selectedPoster+
+                                            '</head><body><article id="post-'+postId+'">'+
                                             selected+'</article><script>'+config+
                                             '</script></body></html>';
                                 }
                             }
                             const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
-                                '</title>'+(mirroredPending?
+                                '</title>'+selectedPoster+(mirroredPending?
                                     '<meta name="asterion-host-list-pending" content="true">':
                                     '')+'</head><body><h1>'+esc(realH1)+
                                 '</h1><h4>'+esc(chapterTitle)+
