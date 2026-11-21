@@ -69,9 +69,12 @@ object KyoraCreatorPreviews {
         if(ProviderRetirement.isRetired(source) ||
             ProviderRetirement.isRetired(page))return false
         val provider=SiteControls.key(source)
-        // Scope to the observed OnScreens profile-card regression; other
-        // publishers keep their existing approved media-path behavior.
-        return provider!="onscreens.me" ||
+        // PimpBunny's homepage presents model portraits alongside real
+        // recordings. Never promote a portrait/model page into a video tile;
+        // only a recognized /videos/<selected-scene> is a video candidate.
+        // Cached profile-cover rows from older releases stay in storage but
+        // disappear from the VIDEO shelf, not from legitimate photo modules.
+        return provider !in setOf("onscreens.me","pimpbunny.com") ||
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
     }
 

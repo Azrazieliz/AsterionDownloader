@@ -65,7 +65,7 @@ object AsterionAdultHub {
     // A real source-owned media cover may precede native original indexing.
     // Exclude category/menu links and never claim a cover proves a download.
     internal fun publicMedia(url:String,title:String,cover:String):Boolean{
-        if(SiteControls.key(url)=="onscreens.me" &&
+        if(SiteControls.key(url) in setOf("onscreens.me","pimpbunny.com") &&
             !com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url))
             return false
         if(!SourceIndexParser.safe(url) ||
@@ -86,7 +86,7 @@ object AsterionAdultHub {
      */
     internal fun realMedia(item:IndexedItem):Boolean {
         if(item.area in setOf("ADULT","HENTAI","VIDEOS") &&
-            SiteControls.key(item.source)=="onscreens.me" &&
+            SiteControls.key(item.source) in setOf("onscreens.me","pimpbunny.com") &&
             !com.asterion.videoflow.VideoSiteProfiles.isVideoPage(item.url))
             return false
         if(item.area in setOf("ADULT","HENTAI","VIDEOS")){
@@ -257,7 +257,7 @@ object AsterionAdultHub {
                 !it.thumbnail.isNullOrBlank() &&
                 SearchRanking.validUrl(it.thumbnail) &&
                 IndexedMediaQuality.isMedia(it.url,it.title,it.thumbnail,area) &&
-                (SiteControls.key(it.url)!="onscreens.me" ||
+                (SiteControls.key(it.url) !in setOf("onscreens.me","pimpbunny.com") ||
                     com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url)) &&
                 SiteControls.key(it.url) in approvedHosts}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
