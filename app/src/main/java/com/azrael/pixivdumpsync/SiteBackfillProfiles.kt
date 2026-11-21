@@ -37,6 +37,10 @@ internal object SiteBackfillProfiles {
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
         Profile("nhentai.xxx","COMICS",comics,
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
+        Profile("4kgirl.com","COSPLAY",cosplay,
+            Regex("^/[a-z0-9][a-z0-9_-]{2,190}/?$"),"cosplay"),
+        Profile("everia.club","COSPLAY",cosplay,
+            Regex("^/\\d{4}/\\d{2}/\\d{2}/[a-z0-9][a-z0-9_-]{1,190}/?$"),"cosplay"),
         Profile("4khd.com","COSPLAY",
             cosplay+",main article a[href],.post-list a[href]",
             Regex("^/content/[0-9]{1,8}/[a-z0-9][a-z0-9_-]{2,180}\\.html/?$"),
@@ -74,11 +78,16 @@ internal object SiteBackfillProfiles {
         val profile=profiles[host]?.takeIf{it.area=="COSPLAY"}?:return false
         val matched=SiteControls.key(source)==SiteControls.key(target) &&
             profile.path.matches(url.path.orEmpty().lowercase(Locale.ROOT))
-        val reserved=host=="cosplaytele.com" &&
-            url.path.orEmpty().trim('/').lowercase(Locale.ROOT) in
+        val reserved=when(host){
+            "cosplaytele.com"->url.path.orEmpty().trim('/').lowercase(Locale.ROOT) in
                 setOf("home","page","category","categories","tag","tags",
                     "search","model","models","gallery","galleries",
                     "login","register","about","contact","privacy","terms")
+            "4kgirl.com"->url.path.orEmpty().trim('/').lowercase(Locale.ROOT) in
+                setOf("page","category","tag","author","search","sitemaps",
+                    "wp-admin","wp-content","feed","comments")
+            else->false
+        }
         return url.scheme=="https" && url.userInfo==null &&
             matched && !reserved
     }
