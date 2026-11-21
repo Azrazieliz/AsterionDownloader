@@ -333,6 +333,20 @@ class TorrentTransferService : Service() {
     // still unwinding its native worker. Preserve the selected job instead
     // of falsely pausing it and leaving VIEW TRANSFERS without an engine.
     private val deferredJobs=java.util.concurrent.ConcurrentLinkedQueue<String>()
+    /** A second UI command must never stop the :torrent service while the
+     * first command still owns a native JNI metadata/transfer operation.
+     * stopSelfResult(latest startId) otherwise tears down ALL earlier starts.
+     */
+    @Synchronized private fun stopIfIdle(startId:Int) {
+        if(!TorrentServiceLifetimePolicy.mayStop(
+                inFlight.size,metadataWorkers.size,exportWorkers.size))return
+        // Preserve owner-selected jobs that arrived while JNI was unwinding.
+        if(deferredJobs.isNotEmpty() && startDeferredIfIdle())return
+        if(!TorrentServiceLifetimePolicy.mayStop(
+                inFlight.size,metadataWorkers.size,exportWorkers.size))return
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelfResult(startId)
+    }
     override fun onBind(intent: Intent?): IBinder? = null
     private fun notification(message: String, percent: Int = 0): Notification {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -460,7 +474,9 @@ class TorrentTransferService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try { startForeground(NOTIFICATION, notification("Preparing torrent…")) }
         catch(t:Exception){
-            stopSelf()
+            android.util.Log.w("AsterionTorrent",
+                "Foreground promotion denied; preserving active native workers",t)
+            stopIfIdle(startId)
             return START_NOT_STICKY
         }
         // A process restart must not drop owner-selected jobs which were
@@ -469,7 +485,7 @@ class TorrentTransferService : Service() {
         if(intent?.action==EXPORT){
             val target=intent.getStringExtra("job").orEmpty()
             if(!target.matches(Regex("[a-f0-9]{24}"))){
-                stopSelfResult(startId)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
             // Export never initializes libtorrent, but simultaneous disk
@@ -531,8 +547,7 @@ class TorrentTransferService : Service() {
                 intent?.getStringExtra("job")
                     ?.takeIf{it.matches(Regex("[a-f0-9]{24}"))}
                     ?.let{update(it,"Paused · "+admitted.reason)}
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelfResult(startId)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
         }
@@ -550,7 +565,7 @@ class TorrentTransferService : Service() {
                     putString("error","Native torrent worker already busy; "+
                         "no parallel metadata JNI will be started")
                 })
-                stopSelfResult(startId)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
             val worker=thread(start=false,name="asterion-torrent-metadata"){
@@ -591,12 +606,12 @@ class TorrentTransferService : Service() {
         }
         val id=intent?.getStringExtra("job")
         if(id.isNullOrBlank()){
-            stopSelfResult(startId)
+            stopIfIdle(startId)
             return START_NOT_STICKY
         }
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
         if(!id.matches(Regex("[a-f0-9]{24}"))){
-            stopSelfResult(startId)
+            stopIfIdle(startId)
             return START_NOT_STICKY
         }
         when(intent.action){
@@ -613,8 +628,7 @@ class TorrentTransferService : Service() {
                 workers[id]?.interrupt()
                 update(id,"Cancelled · selected torrent removed from queue; "+
                     "private pieces retained for explicit security review")
-                if(inFlight.isEmpty() && exportWorkers.isEmpty())
-                    stopSelfResult(startId)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
             PAUSE->{
@@ -623,8 +637,7 @@ class TorrentTransferService : Service() {
                 paused.add(id)
                 prefs.edit().putBoolean("job_paused_$id",true).apply()
                 update(id,"Paused")
-                if(inFlight.isEmpty() && exportWorkers.isEmpty())
-                    stopSelfResult(startId)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
             RESUME->{
@@ -658,7 +671,7 @@ class TorrentTransferService : Service() {
                 return START_NOT_STICKY
             }
         }
-        stopSelfResult(startId)
+        stopIfIdle(startId)
         return START_NOT_STICKY
     }
     /** Android 15+ expires dataSync foreground time. Unlike a redelivered
