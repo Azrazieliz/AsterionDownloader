@@ -64,6 +64,58 @@ class CosplayTeleVideoCompletenessTest {
         assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
             true,null,false))
     }
+    @Test fun discoveredVideoWithNoPublisherCountIsStillMandatory(){
+        val video=media("selected-video",MediaKind.VIDEO,
+            "https://cdn.example/selected.mp4")
+        val before=CosplayTeleVideoCompleteness.audit(null,listOf(video),
+            emptyList(),emptySet())
+        assertEquals(1,before.expectedVideos)
+        assertFalse(before.complete)
+        val after=CosplayTeleVideoCompleteness.audit(null,listOf(video),
+            listOf(saved("selected-video",video.url,"selected.mp4")),
+            setOf("selected-video"))
+        assertTrue(after.complete)
+    }
+
+    @Test fun underreportedVideoCountCannotHideAnotherSelectedOriginal(){
+        val first=media("first",MediaKind.VIDEO,"https://cdn.example/one.mp4")
+        val second=media("second",MediaKind.VIDEO,"https://cdn.example/two.mp4")
+        val partial=CosplayTeleVideoCompleteness.audit(1,
+            listOf(first,second),listOf(saved("first",first.url,"one.mp4")),
+            setOf("first"))
+        assertEquals(2,partial.expectedVideos)
+        assertEquals(1,partial.verifiedVideos)
+        assertFalse(partial.complete)
+        val complete=CosplayTeleVideoCompleteness.audit(1,
+            listOf(first,second),listOf(saved("first",first.url,"one.mp4"),
+                saved("second",second.url,"two.mp4")),setOf("first","second"))
+        assertTrue(complete.complete)
+    }
+
+    @Test fun oneArchiveOriginalCannotBeCountedTwice(){
+        val archive=media("archive",MediaKind.ARCHIVE,
+            "https://mediafire.com/file/official/selected.zip")
+        val one="archive:"+archive.normalizedUrl+"#album/one.mp4"
+        val receipt=saved("member-one",one,"one.mp4")
+        val result=CosplayTeleVideoCompleteness.audit(2,listOf(archive),
+            listOf(receipt,receipt),setOf("member-one"))
+        assertEquals(1,result.verifiedVideos)
+        assertFalse(result.complete)
+    }
+
+    @Test fun onlyExplicitOwnerTargetCanEnableSelectedAlbumFallback(){
+        val policy=CosplayTeleVideoCompleteness
+        assertTrue(policy.exactEntitySelection("album-1","album-1",
+            "selected_album"))
+        assertTrue(policy.exactEntitySelection("album-1","album-1",
+            "gallery_only"))
+        assertFalse(policy.exactEntitySelection(null,"album-1",
+            "selected_album"))
+        assertFalse(policy.exactEntitySelection("other","album-1",
+            "selected_album"))
+        assertFalse(policy.exactEntitySelection("site","site","site"))
+    }
+
     @Test fun noAdvertisedCountDoesNotInventVideoRequirement(){
         val result=CosplayTeleVideoCompleteness.audit(null,emptyList(),
             emptyList(),emptySet())
