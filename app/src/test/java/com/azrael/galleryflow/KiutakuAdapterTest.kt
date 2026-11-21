@@ -7,6 +7,21 @@ import org.junit.Test
 
 class KiutakuAdapterTest {
     @Test
+    fun legitimateWpContentUploadsAreNotMistakenForAds() {
+        val doc=Jsoup.parse("""
+           <article><div class="article-fulltext">
+             <img src="https://mitaku.net/wp-content/uploads/2026/11/7466-01.jpg"
+                  width="1400" height="2000"/>
+             <img src="https://mitaku.net/wp-content/uploads/2026/11/ad-banner.jpg"
+                  width="1400" height="700"/>
+           </div></article>
+        """.trimIndent(),"https://kiutaku.com/7466")
+        assertEquals(listOf(
+            "https://mitaku.net/wp-content/uploads/2026/11/7466-01.jpg"),
+            KiutakuAdapter(HttpClient()).imageCandidates(doc))
+    }
+
+    @Test
     fun selectedAlbumUsesArticleFulltextNotNeighborRecommendations() {
         val doc=Jsoup.parse("""
             <article>

@@ -198,8 +198,14 @@ class KiutakuAdapter(private val http: HttpClient) : SourceAdapter {
     private fun isGalleryImage(img: Element, url: String): Boolean {
         if (!url.startsWith("http://") && !url.startsWith("https://")) return false
         val lower = url.lowercase(Locale.ROOT)
-        if (listOf("logo","icon","avatar","emoji","ads","banner","favicon","pixel").any { it in lower }) return false
         val path = runCatching { URI(url).path.lowercase(Locale.ROOT) }.getOrDefault(lower)
+        // Never reject the substring "ads" inside the legitimate
+        // /wp-content/uploads/ path. That rejected every Kiutaku full-size
+        // photo hosted by Mitaku before its download could even start.
+        // Reject actual ad/avatar/logo path TOKENS instead of substrings.
+        val decorative=Regex(
+            """(?i)(?:^|[/_.-])(?:logo|icon|avatar|emoji|ads?|advert(?:isement)?|banner|favicon|pixel)(?:$|[/_.-])""")
+        if(decorative.containsMatchIn(path))return false
         val imageLike = IMAGE_EXTENSIONS.any { path.endsWith(it) } ||
             img.attr("alt").contains("photo", ignoreCase = true) ||
             img.classNames().any { it.contains("image", ignoreCase = true) }
