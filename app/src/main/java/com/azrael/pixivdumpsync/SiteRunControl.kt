@@ -130,6 +130,8 @@ object SiteRunControl {
 
     private fun runOne(context:Context,address:String,area:String,
                        stop:()->Boolean):Boolean {
+        if(ProviderRetirement.isRetired(address))
+            error("Retired provider; saved originals and history remain")
         if(stop() || !AppPower.enabled(context))return false
         var source=currentSource(context,address,area)
         val generic=source?.adapter=="generic" ||

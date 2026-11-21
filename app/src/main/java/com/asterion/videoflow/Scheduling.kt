@@ -101,6 +101,11 @@ object Scheduling {
         jobs.cancel(SECONDARY_PERIODIC)
     }
     fun ensure(context:Context){
+        // Remove an obsolete periodic SECONDARY job installed by older
+        // releases even if the primary periodic schedule already exists.
+        // Never cancel active downloads; only the idle periodic wakeup.
+        context.getSystemService(JobScheduler::class.java)
+            .cancel(SECONDARY_PERIODIC)
         if(!com.azrael.pixivdumpsync.AppPower.enabled(context)){
             cancel(context);return
         }
