@@ -102,6 +102,26 @@ with tempfile.TemporaryDirectory(prefix="adl_pornbuz_main_") as d:
       parsed["segment_count"]=sum(bool(x.strip()) and not x.startswith("#") for x in bodyText.splitlines())
       parsed["endlist"]="#EXT-X-ENDLIST" in bodyText
       parsed["runtime_s"]=round(sum(float(x) for x in re.findall(r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",bodyText)),1)
+      if parsed["master_variants"]==1:
+       lines=[x.strip() for x in bodyText.splitlines()]
+       variants=[lines[i+1] for i,x in enumerate(lines[:-1]) if x.startswith("#EXT-X-STREAM-INF:")]
+       child=urllib.parse.urljoin(media,variants[0])
+       ch=urllib.parse.urlsplit(child)
+       if (ch.scheme=="https" and ch.hostname==u.hostname and
+           ch.path.endswith(".m3u8") and not ch.fragment):
+        try:
+         request=urllib.request.Request(child,headers={"User-Agent":"Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
+           "Referer":media,"Accept-Encoding":"identity"})
+         with urllib.request.urlopen(request,timeout=18) as sub:
+          childBody=sub.read(220000).decode("utf8","replace")
+          parsed["child_http"]=sub.status
+          parsed["child_hls"]=childBody.startswith("#EXTM3U")
+          parsed["child_host"]=urllib.parse.urlsplit(sub.url).hostname
+          parsed["child_segments"]=sum(bool(v.strip()) and not v.startswith("#") for v in childBody.splitlines())
+          parsed["child_endlist"]="#EXT-X-ENDLIST" in childBody
+          parsed["child_runtime_s"]=round(sum(float(x) for x in re.findall(r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",childBody)),1)
+        except urllib.error.HTTPError as e:parsed["child_http"]=e.code
+        except Exception as e:parsed["child_error"]=type(e).__name__
     except urllib.error.HTTPError as e:parsed["manifest_status"]=e.code
     except Exception as e:parsed["manifest_error"]=type(e).__name__
    print(json.dumps({"stage":"EXACT_VK_PLAYBACK_HLS","data":parsed}),flush=True)
