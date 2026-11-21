@@ -40,7 +40,7 @@ object BrowserPageFetch {
         // Reading the existing authorized WebView DOM never authorizes an
         // ad iframe, bypasses a site gate or invents a media URL.
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-        "bubblecum.lol","pornavhd.com","camstreams.tv")
+        "bubblecum.lol","pornavhd.com","cosplaytele.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -131,7 +131,7 @@ object BrowserPageFetch {
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com",
             "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-            "bubblecum.lol","pornavhd.com","camstreams.tv")
+            "bubblecum.lol","pornavhd.com","cosplaytele.com")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {

@@ -12,6 +12,14 @@ class BrowserPageFetchEligibilityTest {
         assertTrue(BrowserPageFetch.publicEligible(
             "https://www.mirrored.to/files/DF7298C6/file.mp4_links"))
     }
+    @Test fun exactCosplayTelePageEligibleWithoutRetiredCamStreams(){
+        assertTrue(BrowserPageFetch.publicEligible(
+            "https://cosplaytele.com/selected-cosplay-set/"))
+        assertFalse(BrowserPageFetch.publicEligible(
+            "https://camstreams.tv/videos/1363858/retired-recording/"))
+        assertFalse(BrowserPageFetch.publicEligible(
+            "https://cosplaytele.com.evil.example/selected-cosplay-set/"))
+    }
     @Test fun hosterLookalikesAndPortsCannotUsePublicWebview(){
         for(raw in listOf(
             "https://upfiles.com.evil.example/nGfW",
