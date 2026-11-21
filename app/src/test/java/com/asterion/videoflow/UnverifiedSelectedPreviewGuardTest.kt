@@ -9,7 +9,7 @@ class UnverifiedSelectedPreviewGuardTest {
         for(host in listOf("taiav.com","javideo.net",
             "livecamrips.to","uncensoredhentai.xxx","avple.tv",
             "pimpbunny.com","en.xchina.co","bubblecum.lol",
-            "pornavhd.com","camstreams.tv")){
+            "pornavhd.com","camstreams.tv","pornbuz.com")){
             assertTrue(host,UnverifiedSelectedPreviewGuard.shouldHold(
                 "https://"+host+"/video/selected",noReference,null))
         }
