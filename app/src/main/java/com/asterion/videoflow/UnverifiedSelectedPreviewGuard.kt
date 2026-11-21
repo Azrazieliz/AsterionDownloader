@@ -26,8 +26,13 @@ internal object UnverifiedSelectedPreviewGuard {
                 .removePrefix("www.").removePrefix("en.")
         }.getOrDefault("")
         if(host !in affected)return false
+        val suspicious=actualDurationMs in 1 until UNVERIFIED_PREVIEW_SECONDS*1000L
+        // PornBuz's Server 2 can itself expose a playable ~20s teaser.
+        // An "expected" duration recorded from that very teaser is not
+        // independent publisher proof: never let it validate itself as full.
+        if(host=="pornbuz.com")return suspicious
         if(knownOriginalSeconds!=null && knownOriginalSeconds>0L)
-            return false // Main full-length validator checks this reference.
-        return actualDurationMs in 1 until UNVERIFIED_PREVIEW_SECONDS*1000L
+            return false // Other providers retain their established policy.
+        return suspicious
     }
 }
