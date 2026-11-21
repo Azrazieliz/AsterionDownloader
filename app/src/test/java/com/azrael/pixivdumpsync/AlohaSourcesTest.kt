@@ -6,13 +6,13 @@ import org.junit.Test
 class AlohaSourcesTest {
     @Test fun userApprovedBookmarksOnly() {
         val sites=AlohaSources.all
-        assertEquals(42,sites.size)
-        assertEquals(42,sites.map{it.url}.toSet().size)
+        assertEquals(43,sites.size)
+        assertEquals(43,sites.map{it.url}.toSet().size)
         assertTrue(sites.all{it.url.startsWith("https://")})
         assertTrue(sites.none{it.url.contains("slot-id=")})
         assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
             it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK})
-        assertEquals(5,AlohaSources.by(AlohaArea.COSPLAY).size)
+        assertEquals(6,AlohaSources.by(AlohaArea.COSPLAY).size)
         assertEquals(21,AlohaSources.by(AlohaArea.ADULT).size)
         assertTrue(AlohaSources.by(AlohaArea.VIDEOS).isEmpty())
         assertEquals(3,AlohaSources.by(AlohaArea.TORRENTS).size)
@@ -21,8 +21,10 @@ class AlohaSourcesTest {
         assertFalse(sites.any{it.host=="cums.net"})
         assertFalse(sites.any{it.host=="camstreams.tv"})
         assertFalse(sites.any{it.host in setOf("pornpics.com","celeb.st")})
-        assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{
-            it.host=="pimpbunny.com" && it.url.endsWith("/models/") })
+        assertFalse(AlohaSources.by(AlohaArea.COSPLAY).any{
+            it.host=="pimpbunny.com" })
+        assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="4kgirl.com"})
+        assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="everia.club"})
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{
             it.host=="pimpbunny.com" && it.url=="https://pimpbunny.com/" })
         assertEquals("pimpbunny.com:photos",
@@ -41,7 +43,7 @@ class AlohaSourcesTest {
     }
     @Test fun onlyMissingSourcesAreShownInAlohaAdditions() {
         val newSites=AlohaSources.additions
-        assertEquals(33,newSites.size)
+        assertEquals(32,newSites.size)
         assertEquals(32,newSites.map{it.host}.toSet().size)
         assertTrue(newSites.any{it.host=="fullporner.com"})
         assertTrue(newSites.any{it.host=="porneec.com"})
@@ -55,7 +57,8 @@ class AlohaSourcesTest {
         assertTrue(newSites.any{it.host=="freewebnovel.com"})
         assertTrue(newSites.any{it.host=="onejav.com"})
         assertFalse(newSites.any{it.host=="pornhits.com" || it.host=="omg.porn" || it.host=="omg.xxx"})
-        assertFalse(newSites.any{it.host=="cosplaytele.com"})
+        assertFalse(newSites.any{it.host=="cosplaytele.com" ||
+            it.host=="4kgirl.com" || it.host=="everia.club"})
         assertFalse(newSites.any{it.host=="sukebei.nyaa.si"})
         assertFalse(newSites.any{it.host=="db.bepis.moe"})
     }
