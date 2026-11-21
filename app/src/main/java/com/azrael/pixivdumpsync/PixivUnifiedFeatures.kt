@@ -226,6 +226,14 @@ internal object PixivUnifiedFeatures {
             }.show()
     }
 
+    /** Manual artist BACKFILL is durable even during Live; the existing
+     * Kuroha service queues and prioritizes it. The old artist-card button
+     * blocked that working service path whenever SyncControl.running=true.
+     * Leave ordinary Live/DIRECT admission unchanged.
+     */
+    internal fun permitArtistRequest(running:Boolean,mode:SyncMode):Boolean =
+        !running || mode==SyncMode.BACKFILL
+
     fun artistExtras(a:Activity,p:LinearLayout,artist:ArtistRecord,refresh:()->Unit){
         val record=AppDb(a).use{it.artistProgress(artist.userId,artist.knownTotal)}
         val status=artist.archiveStatus.uppercase(java.util.Locale.ROOT)
@@ -260,16 +268,16 @@ internal object PixivUnifiedFeatures {
             })
         }else{
             row.addView(ui.action(a,actionLabel,false){
-                if(SyncControl.snapshot().running){
+                // Preserve the earlier error until the service has
+                // actually started; it clears it when it enters RUNNING.
+                // An active Live pass is NOT a reason to reject this owner's
+                // BACKFILL: the existing service persists the request and
+                // makes Live yield at its next safe checkpoint.
+                val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
+                    else SyncMode.LIVE
+                if(!permitArtistRequest(SyncControl.snapshot().running,mode))
                     notice(a,"Pixiv sync is already active")
-                }else{
-                    // Preserve the earlier error until the service has
-                    // actually started; it clears it when it enters RUNNING.
-                    // A failed foreground start must not erase diagnostics.
-                    val mode=if(hasPartial || neverStarted)SyncMode.BACKFILL
-                        else SyncMode.LIVE
-                    service(a,mode,artist=artist.userId)
-                }
+                else service(a,mode,artist=artist.userId)
             },LinearLayout.LayoutParams(0,-2,1f).apply{
                 leftMargin=ui.px(a,6)
             })
