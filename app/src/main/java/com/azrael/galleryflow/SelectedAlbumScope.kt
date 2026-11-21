@@ -136,7 +136,11 @@ internal object SelectedAlbumScope {
             val candidate=runCatching{URI(isolated.baseUri()).resolve(anchor.attr("href"))}
                 .getOrNull()
             val path=candidate?.path.orEmpty().lowercase(Locale.ROOT)
-            if(Regex("""\.(?:jpe?g|png|gif|webp|avif)$""").containsMatchIn(path)) {
+            if(Regex("""\.(?:mp4|m4v|webm|mov)$""").containsMatchIn(path)) {
+                // Selected CosplayTele videos were previously removed here
+                // because plain media anchors have no img/picture child.
+                // Retain only direct video-file links, never related posts.
+            }else if(Regex("""\.(?:jpe?g|png|gif|webp|avif)$""").containsMatchIn(path)) {
                 // Keep one representation when an explicit original wraps a
                 // responsive picture, whose source URLs are alternate encodings.
                 if(anchor.select("img,picture").isNotEmpty()){
