@@ -34,6 +34,43 @@ class PornBuzSelectedFullHlsTest {
         assertNull(PornBuzOriginalSource.selectedHls(player,
             html.replace(master,"https://other.invalid/path/master.m3u8")))
     }
+    @Test fun fullPublisherMultivariantMasterChoosesHighestPublishedQuality(){
+        val playlist="#EXTM3U\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480\\n"+
+            "480p/index.m3u8?sig=abc\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\\n"+
+            "720p/index.m3u8?sig=def\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=3500000,RESOLUTION=1920x1080\\n"+
+            "1080p/index.m3u8?sig=ghi\\n"
+        val children=PornBuzOriginalSource.rankedChildManifests(master,playlist)
+        assertEquals(3,children.size)
+        assertEquals(
+            "https://player.watchstreamus.com/hls/recording/1080p/index.m3u8?sig=ghi",
+            children.first())
+        assertEquals(
+            "https://player.watchstreamus.com/hls/recording/480p/index.m3u8?sig=abc",
+            children.last())
+        // A master with multiple selected renditions is not ambiguous;
+        // each actual child still has to prove full finalized runtime.
+        assertNull(PornBuzOriginalSource.childManifest(master,playlist))
+    }
+
+    @Test fun maliciousOrPreviewMasterRenditionsCannotBecomeOriginals(){
+        val playlist="#EXTM3U\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=9500000\\n"+
+            "https://ad.example/video/master.m3u8\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=1000000\\n"+
+            "https://player.watchstreamus.com/hls/preview-20sec.m3u8\\n"+
+            "#EXT-X-STREAM-INF:BANDWIDTH=1800000\\n"+
+            "https://player.watchstreamus.com/hls/recording/full.m3u8?sig=real\\n"
+        val children=PornBuzOriginalSource.rankedChildManifests(master,playlist)
+        assertEquals(listOf(
+            "https://player.watchstreamus.com/hls/recording/full.m3u8?sig=real"),
+            children)
+        assertTrue(PornBuzOriginalSource.rankedChildManifests(master,
+            "#EXTM3U\\n#EXTINF:5,\\nsegment.ts").isEmpty())
+    }
+
     @Test fun oneFinalSelectedHlsWithLongRuntimePassesButTeaserFails(){
         val masterText="#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000\n"+
             "scene/index.m3u8?sig=child\n"
