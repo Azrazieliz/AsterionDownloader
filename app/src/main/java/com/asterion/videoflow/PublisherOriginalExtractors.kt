@@ -92,7 +92,14 @@ internal object PublisherOriginalExtractors {
             // Previously this exact fallback could never match its own DOM.
             "main .video-player video[src],"+
             "main .video-player video source[src],"+
-            "main #player video[src],main #player source[src]")
+            "main #player video[src],main #player source[src],"+
+            // Some selected articles provide a first-party embed rather than
+            // inline HTML5 media. Keep only the actual selected-player
+            // wrapper; iframeAllowed also requires the SAME publisher and a
+            // recognized embed/player route, rejecting arbitrary offsite ads.
+            "article .video-player iframe[src],"+
+            ".entry-content .video-player iframe[src],"+
+            "main .video-player iframe[src]",allowPlayerIframe=true)
 
     ).associateBy { it.host }
 
