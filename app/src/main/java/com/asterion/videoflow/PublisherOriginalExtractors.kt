@@ -346,10 +346,12 @@ internal object PublisherOriginalExtractors {
                         }.execute()
                     if(response.statusCode()!=200)null else
                         PornBuzOriginalSource.selectedHls(
-                            exact,response.body())?.takeIf{playlist->
-                                PornBuzOriginalSource.verifiedFullHls(
-                                    context,selected,exact,playlist)
-                            }?.let{Candidate(it,exact,host)}
+                            exact,response.body())?.let{master->
+                                PornBuzOriginalSource.verifiedFullHlsUrl(
+                                    context,selected,exact,master)
+                            }?.let{verifiedRendition->
+                                Candidate(verifiedRendition,exact,host)
+                            }
                 }.getOrNull()
             }
             if(primary!=null)return listOf(primary)
