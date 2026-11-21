@@ -64,53 +64,45 @@ class TeraBoxResolver(private val http: HttpClient) {
         depth: Int
     ): List<RemoteFile> {
         if (depth > 4) return emptyList()
-        val query = buildString {
-            append("app_id=250528")
-            append("&web=1")
-            append("&channel=dubox")
-            append("&clienttype=0")
-            append("&page=1")
-            append("&num=100")
-            append("&by=name")
-            append("&order=asc")
-            append("&jsToken=").append(enc(jsToken))
-            append("&shorturl=").append(enc(shortUrl))
-            if (directory.isNullOrBlank()) {
-                append("&root=1")
-            } else {
-                append("&dir=").append(enc(directory))
-            }
-        }
-
+        // Public shares currently have multiple first-party request shapes.
+        // The prior implementation always forced channel=dubox and
+        // clienttype=0; some shares reply errno=-4 with this shape even
+        // when their own /share/list contract accepts the minimal fields.
+        // We never invent a token, guess a password or bypass verification.
+        val queries = shareListQueries(jsToken,shortUrl,directory)
         val hosts = linkedSetOf(
             apiBase(sharePage),
+            "https://www.1024tera.com",
             "https://www.terabox.com",
-            "https://www.terabox.app",
-            "https://www.1024tera.com"
+            "https://www.terabox.app"
         )
 
         var lastError: String? = null
-        for (base in hosts) {
+        for (base in hosts) for ((variant,query) in queries.withIndex()) {
             val response = try {
-                http.textResponse("$base/share/list?$query", sharePage, "application/json,text/plain,*/*")
+                http.textResponse("$base/share/list?$query", sharePage,
+                    "application/json,text/plain,*/*")
             } catch (t: Throwable) {
-                lastError = t.message
+                lastError = t.message?.take(150)
                 continue
             }
-
             val json = try {
                 JSONObject(response.body)
             } catch (_: Throwable) {
-                lastError = "Invalid TeraBox share-list response"
+                lastError = "TeraBox share-list response was not JSON"
                 continue
             }
-            val errno = json.optInt("errno", 0)
+            val errno = json.optInt("errno", -1)
             if (errno != 0) {
-                lastError = json.optString("errmsg").takeIf { it.isNotBlank() }
-                    ?: "TeraBox errno $errno"
+                lastError = "public share/list error $errno on "+
+                    URI(base).host+" request shape "+(variant+1)
+                // A password/captcha requirement is not a retryable route.
+                if(errno in setOf(400141,4000020,400210))throw
+                    InteractiveProviderRequiredException(
+                        "TeraBox",sharePage,
+                        "Share requires its normal website verification.")
                 continue
             }
-
             val list = json.optJSONArray("list") ?: JSONArray()
             val files = mutableListOf<RemoteFile>()
             for (i in 0 until list.length()) {
@@ -141,6 +133,33 @@ class TeraBoxResolver(private val http: HttpClient) {
             )
         }
         return emptyList()
+    }
+
+    /** Equivalent first-party public-share forms, in conservative order.
+     * Do not derive a guessed access token or send a private account cookie to
+     * third-party domains. Only the public share's actual jsToken is reused. */
+    internal fun shareListQueries(token:String,shortUrl:String,dir:String?):List<String> {
+        require(token.length in 4..512 && shortUrl.length in 3..250)
+        val standard=linkedMapOf(
+            "app_id" to "250528",
+            "jsToken" to token,
+            "shorturl" to shortUrl,
+            "page" to "1",
+            "num" to "100"
+        )
+        standard[if(dir.isNullOrBlank())"root" else "dir"]=
+            dir?.takeIf{it.isNotBlank()}?:"1"
+        fun build(extra:Map<String,String>):String =
+            (standard+extra).entries.joinToString("&"){
+                enc(it.key)+"="+enc(it.value)
+            }
+        return listOf(
+            build(emptyMap()),
+            build(mapOf("web" to "1","channel" to "0",
+                "clienttype" to "0","by" to "name","order" to "asc")),
+            build(mapOf("web" to "1","channel" to "dubox",
+                "clienttype" to "0","by" to "name","order" to "asc"))
+        ).distinct()
     }
 
     private fun extractJsToken(html: String): String? {
