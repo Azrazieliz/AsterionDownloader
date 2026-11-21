@@ -477,7 +477,8 @@ internal object PublisherOriginalExtractors {
                 ?.let{listOf(Candidate(it,selected,host))}.orEmpty()
         }
         if(host in setOf("avple.tv","pimpbunny.com","xchina.co",
-                "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com")){
+                "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com",
+                "livecamrips.to")){
             // Public listings are not media evidence. Their exact selected
             // pages often initialize the genuine player only after JS:
             // inspect the SAME approved watch through the existing browser
