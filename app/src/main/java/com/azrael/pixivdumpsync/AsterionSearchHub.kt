@@ -22,7 +22,7 @@ object AsterionSearchHub {
     private fun preferences(a:Activity)=a.getSharedPreferences("asterion_unified_search",0)
     private fun stored(a:Activity,mode:Int):List<Found> = runCatching{
         val array=JSONArray(preferences(a).getString("results_"+mode,"[]"))
-        (0 until minOf(100,array.length())).mapNotNull{i->
+        (0 until minOf(1200,array.length())).mapNotNull{i->
             val x=array.optJSONObject(i)?:return@mapNotNull null
             val url=x.optString("url")
             if(!SearchRanking.validUrl(url) && !url.startsWith("magnet:?"))return@mapNotNull null
@@ -32,7 +32,7 @@ object AsterionSearchHub {
     }.getOrDefault(emptyList())
     private fun save(a:Activity,mode:Int,term:String,results:List<Found>){
         val data=JSONArray()
-        for(hit in results.take(100))data.put(JSONObject().apply{
+        for(hit in results.take(1200))data.put(JSONObject().apply{
             put("title",hit.title);put("url",hit.url);put("source",hit.source)
             put("thumbnail",hit.thumbnail);put("filename",hit.filename);put("detail",hit.detail)
         })
@@ -51,7 +51,7 @@ object AsterionSearchHub {
             Found(hit.optString("name"),link,"PeerTube",hit.optString("thumbnailUrl"))
         }
     }.getOrDefault(emptyList())
-    private fun search(a:Activity,term:String,mode:Int):Reply {
+    private fun search(a:Activity,term:String,mode:Int,indexPage:Int=0):Reply {
         val ctx=a.applicationContext
         if(mode>=3){
             val catalog=CatalogDiscovery.search(term,mode==3)
@@ -74,7 +74,7 @@ object AsterionSearchHub {
             val completion=java.util.concurrent.ExecutorCompletionService<
                 Triple<VideoSearchArea,SearchOutcome?,String?>>(workers)
             for(area in areas)completion.submit(java.util.concurrent.Callable{
-                runCatching{KeywordSources.searchDetailed(ctx,term,area)}
+                runCatching{KeywordSources.searchDetailed(ctx,term,area,indexPage)}
                     .fold({Triple(area,it,null)},{
                         Triple(area,null,(it.message?:it.javaClass.simpleName).take(130))
                     })
@@ -108,7 +108,7 @@ object AsterionSearchHub {
         val ranked=SearchRanking.deduplicateDiscovery(term,items).map{
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
-        val all=if(mode==0)ranked+peertube(term) else ranked
+        val all=if(mode==0 && indexPage==0)ranked+peertube(term) else ranked
         // Names are ordered identities: "Bella Alice" must not include
         // "Barbara Bella and Alice Marshall" merely because both tokens
         // appeared in unrelated parts of a title. Descriptive torrent/game
@@ -117,7 +117,7 @@ object AsterionSearchHub {
             SearchExactness.matchesPhrase(term,it.title) &&
                 !IndexedMediaQuality.navigationTitle(it.title)
         }.distinctBy{SearchRanking.canonicalKey(it.url)}
-        SearchResultsDb(ctx).use{db->
+        if(indexPage==0)SearchResultsDb(ctx).use{db->
             db.save("SEARCH:"+mode+":"+term,items)
         }
         return Reply(unique,errors,checked+if(mode==0)1 else 0)
@@ -332,6 +332,58 @@ object AsterionSearchHub {
                     draw(found)
                 },ui.lp(a,9))
             }
+            if(selected<=2 && prefs.getString("query_"+selected,"")
+                    .orEmpty().isNotBlank()){
+                // A display-only SHOW MORE button reuses the SAME 50 index
+                // hits. This runs an actual second internet search with Bing
+                // and DuckDuckGo page offsets, and appends unique publisher
+                // pages without requiring any configured provider.
+                results.addView(ui.action(a,"SEARCH NEXT WEB PAGE",false){
+                    val requestedMode=selected
+                    val requestedTerm=prefs.getString(
+                        "query_"+requestedMode,"").orEmpty().trim()
+                    if(requestedTerm.isBlank())return@action
+                    val nextPage=prefs.getInt(
+                        "index_page_"+requestedMode,0).coerceAtLeast(0)+1
+                    val version=searchVersion.incrementAndGet()
+                    status.text="Searching more of the internet · page "+
+                        (nextPage+1)+" (original results preserved)"
+                    cancelSearch.visibility=android.view.View.VISIBLE
+                    searchWorker=thread(name="asterion-web-search-next-page"){
+                        val answer=runCatching{
+                            search(a,requestedTerm,requestedMode,nextPage)
+                        }
+                        a.runOnUiThread{
+                            if(a.isFinishing || a.isDestroyed ||
+                                searchVersion.get()!=version)return@runOnUiThread
+                            cancelSearch.visibility=android.view.View.GONE
+                            answer.onSuccess{reply->
+                                val previous=stored(a,requestedMode)
+                                val oldKeys=previous.map{
+                                    SearchRanking.canonicalKey(it.url)
+                                }.toHashSet()
+                                val fresh=reply.results.filter{
+                                    oldKeys.add(SearchRanking.canonicalKey(it.url))
+                                }
+                                val combined=(previous+fresh).take(1200)
+                                save(a,requestedMode,requestedTerm,combined)
+                                prefs.edit().putInt("index_page_"+requestedMode,
+                                    nextPage).apply()
+                                if(selected==requestedMode)draw(combined)
+                                status.text=fresh.size.toString()+
+                                    " new results from web page "+(nextPage+1)+
+                                    " · "+combined.size+" retained"+
+                                    if(reply.errors.isEmpty())"" else
+                                        " · "+reply.errors.size+
+                                        " index routes unavailable"
+                            }.onFailure{
+                                status.text="Internet paging failed: "+
+                                    it.message.orEmpty().take(160)
+                            }
+                        }
+                    }
+                },ui.lp(a,9))
+            }
             if(filtered.isEmpty())
                 results.addView(ui.text(a,
                     "No matching pages found in this search. Try a different title.",
@@ -370,6 +422,8 @@ object AsterionSearchHub {
                     cancelSearch.visibility=android.view.View.GONE
                     found.onSuccess{reply->
                         save(a,selectedAtStart,term,reply.results)
+                        prefs.edit().putInt(
+                            "index_page_"+selectedAtStart,0).apply()
                         if(selected!=selectedAtStart)return@onSuccess
                         draw(reply.results)
                         status.text=reply.results.size.toString()+" matching web results · "+
