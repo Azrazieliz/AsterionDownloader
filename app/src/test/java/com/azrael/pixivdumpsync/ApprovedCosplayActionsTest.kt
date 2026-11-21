@@ -17,13 +17,11 @@ class ApprovedCosplayActionsTest {
 
     @Test fun manualAlbumChecksReuseOneProviderRootNotScatteredSources(){
         val kiutaku=ApprovedCosplayActions.albumRoot("kiutaku.com","Kiutaku")!!
-        val pornpics=ApprovedCosplayActions.albumRoot("pornpics.com","Porn Pics")!!
         assertEquals("site:kiutaku.com",kiutaku.stableId)
-        assertEquals("site:pornpics.com",pornpics.stableId)
         assertEquals(com.azrael.galleryflow.SourceId.KIUTAKU,kiutaku.source)
-        assertEquals(com.azrael.galleryflow.SourceId.GENERIC,pornpics.source)
         assertEquals("site",kiutaku.kind)
-        assertEquals("site",pornpics.kind)
+        assertNull(ApprovedCosplayActions.albumRoot("pornpics.com","Removed"))
+        assertNull(ApprovedCosplayActions.albumRoot("celeb.st","Removed"))
         assertNull(ApprovedCosplayActions.albumRoot("another-site.com","Other"))
     }
 

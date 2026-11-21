@@ -204,6 +204,9 @@ object AsterionUnifiedFollowing {
     fun kyora(a:Activity,p:LinearLayout,refresh:()->Unit,
               creatorsOnly:Boolean=false){
         val followed=GalleryDb(a).use{it.listEntities()}
+            // Do not resurrect retired PornPics/Celeb collections from old
+            // subscriptions, but leave their originals and history in place.
+            .filter{!ProviderRetirement.isRetired(it.canonicalUrl)}
             .filter{!creatorsOnly || it.kind !in setOf(
                 "site","selected_album","gallery_only")}
         if(creatorsOnly && followed.isEmpty())return

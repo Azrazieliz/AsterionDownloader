@@ -12,9 +12,15 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
     override val enabled = true
     override val statusLabel = "Public HTML • image and gallery discovery"
 
-    override fun matches(url: String): Boolean = runCatching { validUri(url); true }.getOrDefault(false)
+    override fun matches(url: String): Boolean = runCatching {
+        validUri(url)
+        !com.azrael.pixivdumpsync.ProviderRetirement.isRetired(url)
+    }.getOrDefault(false)
 
     override fun resolveEntity(inputUrl: String): SourceEntity {
+        require(!com.azrael.pixivdumpsync.ProviderRetirement.isRetired(inputUrl)){
+            "This gallery provider was removed; historical files remain"
+        }
         val uri = validUri(inputUrl)
         val url = canonical(uri)
         val doc = http.document(url)
@@ -28,6 +34,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
     }
 
     override fun enumerateGalleries(entity: SourceEntity): Sequence<GalleryRef> = sequence {
+        if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(entity.canonicalUrl))
+            throw AdapterException("Retired provider: saved originals preserved")
         val url = canonical(validUri(entity.canonicalUrl))
         if (entity.kind == "selected_album") {
             // A directly tapped album is the ONLY requested gallery. The
@@ -87,6 +95,8 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
     }
 
     override fun fetchGallery(gallery: GalleryRef): Pair<GalleryMeta, List<MediaRef>> {
+        if(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(gallery.canonicalUrl))
+            throw AdapterException("Retired provider: saved originals preserved")
         val url = canonical(validUri(gallery.canonicalUrl))
         val visitedAlbumPages = linkedSetOf<String>()
         val photoLinks = linkedSetOf<String>()

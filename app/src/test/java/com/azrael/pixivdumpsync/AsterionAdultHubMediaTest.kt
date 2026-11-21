@@ -19,4 +19,19 @@ class AsterionAdultHubMediaTest {
         assertFalse(AsterionAdultHub.realMedia(entry(
             "https://foreign.example/video/actual-episode/")))
     }
+    @Test fun pimpbunnyCreatorPortraitIsNotIndexedAsVideo(){
+        val source="https://pimpbunny.com/"
+        val cover="https://pimpbunny.com/thumbs/model.jpg"
+        val model="https://pimpbunny.com/models/lolabunny-yu/"
+        val video="https://pimpbunny.com/videos/actual-scene-123/"
+        assertFalse(KyoraCreatorPreviews.acceptedVideoCard(source,model))
+        assertTrue(KyoraCreatorPreviews.acceptedVideoCard(source,video))
+        assertFalse(AsterionAdultHub.publicMedia(model,"Lolabunny",cover))
+        assertTrue(AsterionAdultHub.publicMedia(video,"Actual scene",cover))
+        assertFalse(AsterionAdultHub.realMedia(IndexedItem(
+            model,"Lolabunny",cover,source,"ADULT","video",1L,false)))
+        assertTrue(AsterionAdultHub.realMedia(IndexedItem(
+            video,"Actual scene",cover,source,"ADULT","video",1L,false)))
+    }
+
 }

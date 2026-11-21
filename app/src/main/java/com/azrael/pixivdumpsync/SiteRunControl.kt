@@ -109,7 +109,8 @@ object SiteRunControl {
         if(!AppPower.enabled(context) ||
             area !in setOf("ADULT","HENTAI","VIDEOS","CREATORS","COSPLAY",
                 "ASSETS","STUDIO","MMD","LIVE2D","ANIMATION","MODS",
-                "BOOKS","COMICS") || !SourceIndexParser.safe(address))return false
+                "BOOKS","COMICS") || !SourceIndexParser.safe(address) ||
+            ProviderRetirement.isRetired(address))return false
         val app=context.applicationContext
         if(active.containsKey(key(address)))return false
         changeRequest(app,area,address,true)

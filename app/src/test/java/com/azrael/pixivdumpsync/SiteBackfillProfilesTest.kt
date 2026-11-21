@@ -104,7 +104,7 @@ class SiteBackfillProfilesTest {
            </main>""",home)
         assertTrue(SourceIndexParser.entries(page,home,"COSPLAY",100L).isEmpty())
     }
-    @Test fun sixKyoraProvidersRecognizeOnlyRealFirstPartyGalleryRoutes(){
+    @Test fun retainedKyoraProvidersRecognizeOnlyOriginalGalleryPages(){
         val cases=listOf(
             "https://www.4khd.com/" to
                 "https://www.4khd.com/content/20/set-name.html",
@@ -114,23 +114,28 @@ class SiteBackfillProfilesTest {
                 "https://cosplaytele.com/selected-gallery/",
             "https://kiutaku.com/" to
                 "https://kiutaku.com/7440/",
-            "https://www.pornpics.com/" to
-                "https://www.pornpics.com/galleries/example/",
-            "https://celeb.st/feed/hot" to
-                "https://celeb.st/creator/sample-123/images")
+            "https://pimpbunny.com/models/" to
+                "https://pimpbunny.com/models/creator-1/photos/set-12/")
         for((source,album) in cases)
             assertTrue("$source should own $album",
                 SiteBackfillProfiles.recognizesGalleryPage(source,album))
+        for(retired in listOf(
+            "https://www.pornpics.com/galleries/example/",
+            "https://celeb.st/creator/sample-123/images")){
+            assertFalse(ProviderRetirement.isRetired("https://pimpbunny.com/models/"))
+            assertTrue(ProviderRetirement.isRetired(retired))
+            assertFalse(SiteBackfillProfiles.supports(SiteControls.key(retired)))
+        }
         assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
-            "https://cosplaytele.com/",
-            "https://cosplaytele.com/category/"))
+            "https://pimpbunny.com/models/",
+            "https://pimpbunny.com/models/some-creator/"))
         assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
-            "https://buondua.com/",
-            "https://buondua.net/search"))
+            "https://pimpbunny.com/models/",
+            "https://pimpbunny.com/videos/scene-title/"))
         assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
-            "https://kiutaku.com/","https://kiutaku.com/tag/123/"))
+            "https://cosplaytele.com/","https://cosplaytele.com/category/"))
         assertFalse(SiteBackfillProfiles.recognizesGalleryPage(
-            "https://celeb.st/feed/hot","https://celeb.st/feed/random"))
+            "https://buondua.com/","https://buondua.net/search"))
     }
 
     @Test fun otherProvidersStillUseOriginalGenericPath(){
