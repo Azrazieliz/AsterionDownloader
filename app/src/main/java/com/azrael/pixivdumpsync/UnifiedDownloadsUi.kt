@@ -546,8 +546,11 @@ object UnifiedDownloadsUi {
                 store.readableDatabase.query("media",
                     arrayOf("source","media_id","filename","url","state",
                         "updated_at"),
-                    "state IN ('downloading','pending','retrying',"+
-                        "'permanent_error','inaccessible')",
+                    // Pending/retrying rows are GalleryDB inventory, not
+                    // user-submitted active transfers. Showing them here as
+                    // red "Needs action" contradicted ISSUES 0 and created
+                    // hundreds of phantom queued jobs. Data is untouched.
+                    "state IN ('downloading','permanent_error','inaccessible')",
                     null,null,null,"updated_at DESC","80").use { cursor ->
                     while(cursor.moveToNext()){
                         val publisher=cursor.getString(0).orEmpty()
