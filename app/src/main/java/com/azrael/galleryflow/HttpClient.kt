@@ -160,12 +160,28 @@ open class HttpClient(private val context:android.content.Context?=null) {
         if (host == "m.4khd.com" || host.endsWith(".4khd.com")) {
             val page = textResponse(url, referer)
             val doc = Jsoup.parse(page.body, page.finalUrl)
-            val bridgeTarget =
+            val staticBridge =
                 doc.selectFirst("#custom_button[href],a[href*=terabox],a[href*=1024tera],a[href*=teraboxapp]")
                     ?.absUrl("href")
                     ?.takeIf { it.isNotBlank() }
                     ?: extractTeraBoxUrl(page.body)
                     ?: extractRedirect(doc)
+            // m.4khd.com often adds the official TeraBox link AFTER its
+            // first-party JavaScript initializes. Static HTML returning
+            // only a page shell does not prove the selected archive absent.
+            val browserBridge=if(staticBridge.isNullOrBlank() &&
+                host=="m.4khd.com" && context!=null &&
+                com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url)){
+                runCatching{
+                    val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                        context,url,referer)
+                    val rendered=Jsoup.parse(html,url)
+                    rendered.selectFirst("a#custom_button[href]")
+                        ?.absUrl("href")?.takeIf{isTeraBoxHost(hostOf(it))}
+                        ?:extractTeraBoxUrl(html)
+                }.getOrNull()
+            }else null
+            val bridgeTarget=staticBridge?:browserBridge
 
             if (!bridgeTarget.isNullOrBlank() && bridgeTarget != url) {
                 return resolveDownloadUrlInternal(
