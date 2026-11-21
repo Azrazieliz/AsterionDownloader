@@ -51,18 +51,22 @@ class CosplayTeleVideoCompletenessTest {
             receipts,setOf("in-archive","foreign","archive")).complete)
     }
 
-    @Test fun fallbackRequiresExactSelectedUnfulfilledVideoWithoutArchive(){
+    @Test fun fallbackRequiresExactSelectedUnfulfilledVideoReceipt(){
         val missing=CosplayTeleVideoCompleteness.Audit(2,0,false)
         assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
             true,missing,false))
         assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
             false,missing,false))
-        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+        // A publisher archive link is not evidence that its video bytes
+        // were saved; allow the exact article's VideoFlow recovery.
+        assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
             true,missing,true))
         assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
-            true,CosplayTeleVideoCompleteness.Audit(2,2,true),false))
+            true,CosplayTeleVideoCompleteness.Audit(2,2,true),true))
         assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
-            true,null,false))
+            true,null,true))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,CosplayTeleVideoCompleteness.Audit(0,0,true),true))
     }
     @Test fun discoveredVideoWithNoPublisherCountIsStillMandatory(){
         val video=media("selected-video",MediaKind.VIDEO,
