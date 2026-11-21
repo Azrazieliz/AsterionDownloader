@@ -79,8 +79,14 @@ object KyoraCreatorPreviews {
      * inside its site card. CDN cover hosts can differ; page hosts cannot.
      * This is intentionally limited to cached/gallery-page attribution.
      */
-    internal fun previewBelongsToSource(source:String,page:String):Boolean =
-        SourceIndexParser.safe(page) && SourceIndexParser.sameSite(source,page)
+    internal fun previewBelongsToSource(source:String,page:String):Boolean {
+        if(!SourceIndexParser.safe(page))return false
+        if(SourceIndexParser.sameSite(source,page))return true
+        // BuonDua's approved catalog and native-original hosts are aliases;
+        // no other cross-domain gallery links are allowed.
+        return SiteControls.key(source)=="buondua.net" &&
+            SiteControls.key(page)=="buondua.net"
+    }
 
     fun cached(context:Context,source:String):Snapshot?=runCatching {
         if(ProviderRetirement.isRetired(source))return null
@@ -150,7 +156,7 @@ object KyoraCreatorPreviews {
                 !acceptedVideoCard(base,page))continue
             val target=runCatching{URI(page)}.getOrNull()?:continue
             if(target.scheme!="https" ||
-                !SourceIndexParser.sameSite(base,page))continue
+                !previewBelongsToSource(base,page))continue
             val card=anchor.closest(
                 ".video-item,.video-card,.item,.thumb,.video-block,.card,.item-inner,"+
                 ".movie-card,.hots-card,.uk-card-media-top")
@@ -217,7 +223,7 @@ object KyoraCreatorPreviews {
                 var page:org.jsoup.nodes.Document?=null
                 for(hop in 0..4){
                     require(SourceIndexParser.safe(current) &&
-                        SourceIndexParser.sameSite(url,current)){
+                        previewBelongsToSource(url,current)){
                         "Provider redirect moved to a different domain; verify updated source"
                     }
                     val response=Jsoup.connect(current).timeout(15000)
@@ -234,7 +240,7 @@ object KyoraCreatorPreviews {
                             ?:error("Provider redirect has no destination")
                         val next=URI(current).resolve(location).toString()
                         require(SourceIndexParser.safe(next) &&
-                            SourceIndexParser.sameSite(url,next)){
+                            previewBelongsToSource(url,next)){
                             "Provider redirected to a different website; source ownership unverified"
                         }
                         current=next

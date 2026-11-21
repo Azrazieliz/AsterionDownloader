@@ -115,14 +115,16 @@ object AsterionCosplayGallery {
             val source=registered.firstOrNull{SiteControls.key(it.url)==host}
             val galleryEntities=nativeBySite[host].orEmpty()
             val galleries=GalleryDb(a).use{db->
-                galleryEntities.flatMap{db.galleryCards(it.entityId,5)}
+                galleryEntities.flatMap{db.galleryCards(it.entityId,5,it.source)}
             }.distinctBy{it.galleryId}.take(12)
             // Restore the complete Kyora gallery/creator previews.
             // Filtering all covers by known POST routes hides legitimate
             // albums on JavaScript-backed sites before their adapter can
             // index them. Keep all covers visible; only verified exact
             // album URLs get the original-file download action.
-            val indexedItems=bySite[host].orEmpty()
+            val indexedItems=bySite[host].orEmpty().filter{item->
+                SourceIndexParser.safe(item.url) && SiteControls.key(item.url)==host
+            }
             val public=snapshots[host]?.entries.orEmpty()
 
             val nativeTiles=galleries.mapNotNull{item->

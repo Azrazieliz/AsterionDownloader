@@ -239,7 +239,7 @@ internal object UnifiedKyoraFeatures {
             val galleryKey="albums:"+entity.entityId
             val shownAlbums=prefs.getInt(galleryKey,3).coerceIn(3,100)
             val albums=GalleryDb(a).use{
-                it.galleryCards(entity.entityId,shownAlbums+1)}
+                it.galleryCards(entity.entityId,shownAlbums+1,entity.source)}
             for(album in albums.take(shownAlbums)){
                 add(a,card,"OPEN · "+album.title.take(65)+
                     " ("+album.count+" images)"){

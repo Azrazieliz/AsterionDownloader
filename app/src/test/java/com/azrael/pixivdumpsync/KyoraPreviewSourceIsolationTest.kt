@@ -36,4 +36,16 @@ class KyoraPreviewSourceIsolationTest {
         assertTrue(KyoraCreatorPreviews.previewBelongsToSource(
             source,"https://www.cosplaytele.com/gallery/123"))
     }
+    @Test fun buonDuaApprovedCatalogAliasRetainsNativeOriginals(){
+        val catalog="https://buondua.com/"
+        val original="https://buondua.net/albums/genuine-gallery"
+        assertTrue(KyoraCreatorPreviews.previewBelongsToSource(catalog,original))
+        assertTrue(KyoraCreatorPreviews.previewBelongsToSource(original,
+            "https://buondua.com/albums/genuine-gallery"))
+        assertFalse(KyoraCreatorPreviews.previewBelongsToSource(catalog,
+            "https://www.4khd.com/content/12345/other.html"))
+        assertFalse(KyoraCreatorPreviews.previewBelongsToSource(catalog,
+            "https://buondua.net.evil.example/albums/stolen"))
+    }
+
 }
