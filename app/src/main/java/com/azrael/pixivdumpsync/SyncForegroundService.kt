@@ -14,6 +14,12 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
+/** Manual backfill can ask an active Live pass to yield at existing checkpoints. */
+internal object PixivManualBackfillPriority {
+    fun shouldPreempt(running:Boolean,mode:SyncMode?,stopping:Boolean):Boolean =
+        running && mode==SyncMode.LIVE && !stopping
+}
+
 class SyncForegroundService : Service() {
     companion object {
         const val ACTION_START = "com.azrael.pixivdumpsync.START"
@@ -152,9 +158,21 @@ class SyncForegroundService : Service() {
             if(mode==SyncMode.BACKFILL){
                 val size=runCatching{enqueueBackfill(selectedOnly,targetArtistId)}
                 size.onSuccess{position->
-                    SyncControl.updateMessage("Pixiv backfill queued behind active "+
-                        (SyncControl.snapshot().mode?.name?:"sync")+" · "+position+
-                        " manual request(s) pending")
+                    val current=SyncControl.snapshot()
+                    if(PixivManualBackfillPriority.shouldPreempt(
+                            current.running,current.mode,current.stopping)){
+                        // The manual request is durably queued first. Then
+                        // Live yields through its normal checkpoints. Do not
+                        // cancel the Future: it can claim isDone before the
+                        // worker releases the original Pixiv database lease.
+                        SyncControl.stop()
+                        SyncControl.updateMessage("Pixiv manual backfill prioritized · "+
+                            position+" queued; finishing current Live request")
+                    }else{
+                        SyncControl.updateMessage("Pixiv backfill queued behind active "+
+                            (current.mode?.name?:"sync")+" · "+position+
+                            " manual request(s) pending")
+                    }
                 }.onFailure{failure->
                     android.util.Log.e("AsterionPixivBackfill",
                         "Could not persist manual request",failure)

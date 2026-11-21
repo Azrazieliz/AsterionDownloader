@@ -425,6 +425,11 @@ internal object TorrentMetadataBridge {
                 return
             }
             val indices=selected.indices.filter{selected[it]}.joinToString(",")
+            // Main-process acceptance is not a peer-byte receipt. Persist
+            // exactly this selection before handing it to the isolated
+            // service, so VIEW TRANSFERS does not falsely show no jobs.
+            TorrentTransfers.record(a,"job_$hash",
+                "QUEUED · Selected files await native worker acknowledgement")
             runCatching{
                 a.startForegroundService(Intent(a,TorrentTransferService::class.java).apply{
                     action=TorrentTransferService.ADD
@@ -435,11 +440,14 @@ internal object TorrentMetadataBridge {
                         ownerReviewed)
                 })
             }.onSuccess{
-                Toast.makeText(a,"Starting selected torrent files",
+                Toast.makeText(a,"Torrent request queued · check Transfers for actual bytes",
                     Toast.LENGTH_LONG).show()
-            }.onFailure{
+            }.onFailure{error->
+                TorrentTransfers.record(a,"job_$hash",
+                    "FAILED: Torrent worker launch denied · "+
+                    (error.message?:error.javaClass.simpleName).take(140))
                 AlertDialog.Builder(a).setTitle("Torrent worker unavailable")
-                    .setMessage(it.message?:"Could not start selected torrent transfer")
+                    .setMessage(error.message?:"Could not start selected torrent transfer")
                     .setPositiveButton("Close",null).show()
             }
         }
