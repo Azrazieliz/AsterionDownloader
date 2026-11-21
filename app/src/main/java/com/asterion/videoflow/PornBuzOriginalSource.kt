@@ -80,20 +80,38 @@ internal object PornBuzOriginalSource {
             !url.path.orEmpty().contains("preview",true) &&
             !url.path.orEmpty().contains("trailer",true)
 
-    fun childManifest(master:String,manifest:String):String? {
+    /** Publisher master can legitimately advertise 480p/720p/1080p.
+     * The former singleOrNull() discarded ALL three variants, causing the
+     * unverified Server 2 teaser fallback even when the real HLS existed.
+     * Only same-player HTTPS .m3u8 children named in this master qualify.
+     */
+    internal fun rankedChildManifests(master:String,manifest:String):List<String>{
+        if(!manifest.startsWith("#EXTM3U"))return emptyList()
         val lines=manifest.lines().map(String::trim)
-        if(!manifest.startsWith("#EXTM3U"))return null
-        val candidates=lines.indices.mapNotNull{i->
-            if(!lines[i].startsWith("#EXT-X-STREAM-INF:") ||
-                i+1>=lines.size)return@mapNotNull null
-            val child=lines[i+1].takeIf{it.isNotBlank() &&
-                !it.startsWith("#")}?:return@mapNotNull null
+        val found=LinkedHashMap<String,Long>()
+        for(i in 0 until lines.size-1){
+            val line=lines[i]
+            if(!line.startsWith("#EXT-X-STREAM-INF:"))continue
+            val child=lines[i+1].takeIf{
+                it.isNotBlank() && !it.startsWith("#")
+            }?:continue
             val uri=runCatching{URI(master).resolve(child)}.getOrNull()
-                ?:return@mapNotNull null
-            uri.takeIf(::isSelectedManifest)?.toString()
-        }.distinct()
-        return candidates.singleOrNull()
+                ?:continue
+            if(!isSelectedManifest(uri))continue
+            val bandwidth=Regex("""(?:^|,)BANDWIDTH=([0-9]{1,12})(?:,|$)""")
+                .find(line.substringAfter(':'))?.groupValues?.get(1)
+                ?.toLongOrNull()?:0L
+            found.putIfAbsent(uri.toString(),bandwidth)
+        }
+        return found.entries.sortedWith(
+            compareByDescending<Map.Entry<String,Long>>{it.value}
+                .thenBy{it.key}
+        ).take(8).map{it.key}
     }
+
+    // Compatibility for single-rendition callers and existing fixtures.
+    fun childManifest(master:String,manifest:String):String? =
+        rankedChildManifests(master,manifest).singleOrNull()
 
     fun finalizedFullRuntimeSeconds(manifest:String):Double? {
         if(!manifest.startsWith("#EXTM3U") ||
@@ -113,10 +131,18 @@ internal object PornBuzOriginalSource {
      * observed 20-second teaser being incorrectly saved as the original.
      */
     fun verifiedFullHls(context:android.content.Context,
-                        selected:String,frame:String,master:String):Boolean {
+                        selected:String,frame:String,master:String):Boolean =
+        verifiedFullHlsUrl(context,selected,frame,master)!=null
+
+    /** Return the *verified* full-duration media playlist, not an HLS
+     * master where yt-dlp could independently select an unverified teaser.
+     * Longest/finalized first-party playlists are checked by actual EXTINF.
+     */
+    fun verifiedFullHlsUrl(context:android.content.Context,
+                           selected:String,frame:String,master:String):String? {
         if(!owns(selected) || !isSelectedMainFrame(frame) ||
             !runCatching{isSelectedManifest(URI(master))}
-                .getOrDefault(false))return false
+                .getOrDefault(false))return null
         fun manifest(url:String,referer:String):String? {
             val response=runCatching {
                 org.jsoup.Jsoup.connect(url)
@@ -135,11 +161,19 @@ internal object PornBuzOriginalSource {
             if(response.statusCode()!=200)return null
             return response.body().takeIf{it.startsWith("#EXTM3U")}
         }
-        val text=manifest(master,frame)?:return false
-        val child=childManifest(master,text)
-        val body=if(child!=null)manifest(child,master)?:return false
-            else text
-        return finalizedFullRuntimeSeconds(body)!=null
+        val text=manifest(master,frame)?:return null
+        val children=rankedChildManifests(master,text)
+        if(children.isEmpty())
+            return master.takeIf{finalizedFullRuntimeSeconds(text)!=null}
+        for(child in children){
+            val mediaPlaylist=manifest(child,master)?:continue
+            if(finalizedFullRuntimeSeconds(mediaPlaylist)!=null)
+                return child
+        }
+        // Every rendition must fail closed if it is missing, unfinalized,
+        // or a short preview. Preserve the old server route for diagnostic
+        // fallback only; never assert success from player metadata alone.
+        return null
     }
 
     fun published(article:String,html:String):List<String> {
