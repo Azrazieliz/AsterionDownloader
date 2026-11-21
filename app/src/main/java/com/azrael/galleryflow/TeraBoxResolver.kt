@@ -110,7 +110,10 @@ class TeraBoxResolver(private val http: HttpClient) {
                 val isDir = item.optInt("isdir", 0) == 1 || item.optString("isdir") == "1"
                 if (isDir) {
                     val path = item.optString("path").takeIf { it.isNotBlank() } ?: continue
-                    files += listFiles(response.finalUrl, jsToken, shortUrl, path, depth + 1)
+                    // Keep the ORIGINAL public share URL as Referer through
+                    // nested directory traversal. An API /share/list URL is
+                    // not the authorized share page and can cause errno=-4.
+                    files += listFiles(sharePage, jsToken, shortUrl, path, depth + 1)
                     continue
                 }
                 val name = item.optString("server_filename").ifBlank { "file-$i" }
