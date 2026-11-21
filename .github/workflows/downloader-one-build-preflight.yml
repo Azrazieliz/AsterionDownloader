@@ -14,6 +14,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# Only the newest branch HEAD matters for a source-only release preflight.
+# Cancel superseded checks to avoid redundant runner work and false reports
+# about failures from temporary half-applied multi-file repair commits.
+concurrency:
+  group: downloader-source-preflight-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   source-tests-only:
     runs-on: ubuntu-latest
