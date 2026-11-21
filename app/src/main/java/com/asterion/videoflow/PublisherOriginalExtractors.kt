@@ -30,7 +30,9 @@ internal object PublisherOriginalExtractors {
         // in one iframe#iframe-video. Other iframes/ads are not originals.
         Site("livecamrips.to","iframe#iframe-video[src]",allowPlayerIframe=true),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
-        Site("notfans.com","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
+        Site("notfans.com","main #player video[src],main #player source[src],"+
+            "article .video-player video[src],article .video-player source[src],"+
+            "main .video-player video[src],main .video-player source[src]"),
         Site("fullporner.com","#player iframe[src],.player iframe[src],iframe[src*='/player/'],meta[itemprop=contentUrl]",allowPlayerIframe=true),
 
         Site("freepornvideos.xxx","#player video[src],#player source[src],.video-player source[src],meta[itemprop=contentUrl]"),
@@ -95,7 +97,7 @@ internal object PublisherOriginalExtractors {
     // data and global contentUrl meta fields are not selected-player evidence.
     private val selectedPlayerOnlyHosts=setOf(
         "avple.tv","pimpbunny.com","xchina.co",
-        "bubblecum.lol","pornavhd.com","cosplaytele.com")
+        "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com")
 
     val coveredHosts:Set<String> get()=sites.keys
 
@@ -470,7 +472,7 @@ internal object PublisherOriginalExtractors {
                 ?.let{listOf(Candidate(it,selected,host))}.orEmpty()
         }
         if(host in setOf("avple.tv","pimpbunny.com","xchina.co",
-                "bubblecum.lol","pornavhd.com","cosplaytele.com")){
+                "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com")){
             // Public listings are not media evidence. Their exact selected
             // pages often initialize the genuine player only after JS:
             // inspect the SAME approved watch through the existing browser
