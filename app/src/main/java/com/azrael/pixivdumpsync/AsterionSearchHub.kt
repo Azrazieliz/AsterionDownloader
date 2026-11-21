@@ -72,8 +72,19 @@ object AsterionSearchHub {
         }
         val errors=ArrayList<String>();val items=ArrayList<RankedHit>()
         var checked=0
-        val workers=java.util.concurrent.Executors.newFixedThreadPool(areas.size)
+        // PeerTube is a separate general-web source. Never add its possible
+        // 18-second socket wait AFTER the main 32-second search deadline.
+        val sharedDeadline=System.nanoTime()+
+            java.util.concurrent.TimeUnit.SECONDS.toNanos(32)
+        val workers=java.util.concurrent.Executors.newFixedThreadPool(
+            areas.size+if(mode==0 && indexPage==0)1 else 0)
+        var peerFuture:java.util.concurrent.Future<List<Found>>?=null
+        var peerResults:List<Found> = emptyList()
         try{
+            if(mode==0 && indexPage==0)
+                peerFuture=workers.submit(java.util.concurrent.Callable{
+                    peertube(term)
+                })
             val completion=java.util.concurrent.ExecutorCompletionService<
                 Triple<VideoSearchArea,SearchOutcome?,String?>>(workers)
             for(area in areas)completion.submit(java.util.concurrent.Callable{
@@ -85,11 +96,9 @@ object AsterionSearchHub {
             // One overall 35s budget for combined category search. Waiting
             // 35s per future in order could stall All for 70 seconds and
             // discard the fast category when another provider was blocked.
-            val deadline=System.nanoTime()+
-                java.util.concurrent.TimeUnit.SECONDS.toNanos(32)
             var finished=0
             while(finished<areas.size){
-                val remaining=deadline-System.nanoTime()
+                val remaining=sharedDeadline-System.nanoTime()
                 if(remaining<=0L)break
                 val ready=completion.poll(remaining,
                     java.util.concurrent.TimeUnit.NANOSECONDS)?:break
@@ -105,13 +114,22 @@ object AsterionSearchHub {
             if(finished<areas.size)
                 errors+=(areas.size-finished).toString()+
                     " search categories exceeded the combined deadline"
+            peerFuture?.let{future->
+                val remaining=(sharedDeadline-System.nanoTime())
+                    .coerceAtLeast(0L)
+                peerResults=runCatching{
+                    future.get(remaining,
+                        java.util.concurrent.TimeUnit.NANOSECONDS)
+                }.getOrDefault(emptyList())
+                if(!future.isDone)errors+="PeerTube exceeded the shared web deadline"
+            }
         }finally{
             workers.shutdownNow()
         }
         val ranked=SearchRanking.deduplicateDiscovery(term,items).map{
             Found(it.title,it.url,it.source,it.thumbnail.orEmpty(),"",it.description)
         }
-        val all=if(mode==0 && indexPage==0)ranked+peertube(term) else ranked
+        val all=ranked+peerResults
         // Names are ordered identities: "Bella Alice" must not include
         // "Barbara Bella and Alice Marshall" merely because both tokens
         // appeared in unrelated parts of a title. Descriptive torrent/game
