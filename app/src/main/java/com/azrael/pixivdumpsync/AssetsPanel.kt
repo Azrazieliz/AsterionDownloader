@@ -109,6 +109,47 @@ object AssetsPanel {
             }
         }
     }
+    /** Render a genuine indexed file's complete source and original action. */
+    private fun appendIndexedOriginal(a:Activity,results:LinearLayout,
+                                      file:OpenWebModelSearch.Candidate){
+        val tile=ui.card(a)
+        // An indexed file may carry a genuine OG image
+        // from its own model detail page. Older web
+        // cards showed text-only even where a poster
+        // existed, making model discovery look broken.
+        file.thumbnail?.let{poster->
+            val preview=ImageView(a).apply{
+                scaleType=ImageView.ScaleType.CENTER_CROP
+                contentDescription="Model preview · "+file.title
+                setImageResource(R.drawable.ic_source_video)
+            }
+            tile.addView(preview,LinearLayout.LayoutParams(
+                -1,ui.px(a,136)))
+            RemoteImageLoader.load(a,preview,poster,file.url)
+        }
+        tile.addView(ui.text(a,file.title,15f,ui.white,true),
+            ui.lp(a,6))
+        tile.addView(ui.text(a,
+            file.host+" · "+file.format+
+            " · indexed file, not a completed download",
+            11f,ui.secondary),ui.lp(a,4))
+        tile.addView(ui.action(a,"DOWNLOAD ORIGINAL FILE",true){
+            // This is the returned HTTPS file itself, not a
+            // paid storefront or an unverified download link
+            // guessed from an unrelated landing page.
+            val filename=runCatching{
+                URI(file.url).path.substringAfterLast('/')
+            }.getOrDefault("")
+            val preferred=if(filename.endsWith(
+                "."+file.format.lowercase(),true))filename
+            else file.title.replace(
+                Regex("[^A-Za-z0-9._-]"),"_").take(95)+
+                "."+file.format.lowercase()
+            ResourceDownloads.downloadFile(
+                a,file.url,"Assets",preferred,file.referer)
+        },ui.lp(a,8))
+        results.addView(tile,ui.lp(a,9))
+    }
     fun render(a:Activity,body:LinearLayout,refresh:()->Unit={}){
         // A focused workspace, not three independent galleries and provider
         // administration panels stacked on the same phone screen.
@@ -162,6 +203,15 @@ object AssetsPanel {
             // cannot be overwritten by a stale asynchronous response.
             val requestToken=Any()
             results.tag=requestToken
+            // All result-card mutations run on the UI thread.
+            val published=LinkedHashSet<String>()
+            fun appendIncremental(files:List<OpenWebModelSearch.Candidate>){
+                for(file in files){
+                    if(published.size>=72)break
+                    if(!published.add(SearchRanking.canonicalKey(file.url)))continue
+                    appendIndexedOriginal(a,results,file)
+                }
+            }
             modelWorker=thread(name="asset-search"){
                 // The earlier serial fetches could keep the first source's
                 // successful result hidden behind a 19-second second-source
@@ -178,7 +228,16 @@ object AssetsPanel {
                     }
                     val web=pool.submit<Pair<
                         List<OpenWebModelSearch.Candidate>,List<String>>>{
-                        OpenWebModelSearch.find(q)
+                        OpenWebModelSearch.find(q){batch->
+                            a.runOnUiThread{
+                                if(a.isDestroyed || a.isFinishing ||
+                                    results.parent==null ||
+                                    results.tag!==requestToken)return@runOnUiThread
+                                appendIncremental(batch)
+                                status.text=published.size.toString()+
+                                    " indexed model-file links · checking other sources…"
+                            }
+                        }
                     }
                     // Catalog fetches already run concurrently. Waiting on
                     // each unbounded Future.get() in declaration order
@@ -268,46 +327,8 @@ object AssetsPanel {
                     var webCount=0
                     web.onSuccess{(candidates,failures)->
                         errors.addAll(failures)
-                        for(file in candidates.take(72)){
-                            val tile=ui.card(a)
-                            // An indexed file may carry a genuine OG image
-                            // from its own model detail page. Older web
-                            // cards showed text-only even where a poster
-                            // existed, making model discovery look broken.
-                            file.thumbnail?.let{poster->
-                                val preview=ImageView(a).apply{
-                                    scaleType=ImageView.ScaleType.CENTER_CROP
-                                    contentDescription="Model preview · "+file.title
-                                    setImageResource(R.drawable.ic_source_video)
-                                }
-                                tile.addView(preview,LinearLayout.LayoutParams(
-                                    -1,ui.px(a,136)))
-                                RemoteImageLoader.load(a,preview,poster,file.url)
-                            }
-                            tile.addView(ui.text(a,file.title,15f,ui.white,true),
-                                ui.lp(a,6))
-                            tile.addView(ui.text(a,
-                                file.host+" · "+file.format+
-                                " · indexed file, not a completed download",
-                                11f,ui.secondary),ui.lp(a,4))
-                            tile.addView(ui.action(a,"DOWNLOAD ORIGINAL FILE",true){
-                                // This is the returned HTTPS file itself, not a
-                                // paid storefront or an unverified download link
-                                // guessed from an unrelated landing page.
-                                val filename=runCatching{
-                                    URI(file.url).path.substringAfterLast('/')
-                                }.getOrDefault("")
-                                val preferred=if(filename.endsWith(
-                                    "."+file.format.lowercase(),true))filename
-                                else file.title.replace(
-                                    Regex("[^A-Za-z0-9._-]"),"_").take(95)+
-                                    "."+file.format.lowercase()
-                                ResourceDownloads.downloadFile(
-                                    a,file.url,"Assets",preferred,file.referer)
-                            },ui.lp(a,8))
-                            results.addView(tile,ui.lp(a,9))
-                            webCount++
-                        }
+                        appendIncremental(candidates.take(72))
+                        webCount=published.size
                     }.onFailure{errors+="Open web unavailable: "+
                         (it.cause?.message?:it.message).orEmpty().take(120)}
                     status.text=buildString{

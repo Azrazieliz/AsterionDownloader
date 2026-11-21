@@ -226,7 +226,8 @@ internal object OpenWebModelSearch {
     }
 
     /** Errors stay visible, never substituted with paid pages or fake assets. */
-    fun find(term:String):Pair<List<Candidate>,List<String>>{
+    fun find(term:String,onFound:((List<Candidate>)->Unit)?=null):
+        Pair<List<Candidate>,List<String>>{
         require(term.trim().length>=2){"Enter a model name"}
         val names=listOf("Bing")
         val errors=ArrayList<String>()
@@ -273,6 +274,16 @@ internal object OpenWebModelSearch {
                 finished++
                 val (label,candidates,error)=result.get()
                 gathered.addAll(candidates)
+                if(onFound!=null && candidates.isNotEmpty()){
+                    // Apply the same literal relevance check used for the
+                    // completed search; never publish unrelated cards early.
+                    val matching=candidates.filter{
+                        SearchExactness.matches(term,it.title+" "+
+                            URI(it.url).path.substringAfterLast('/')
+                                .replace('_',' ').replace('-',' '))
+                    }
+                    if(matching.isNotEmpty())runCatching{onFound(matching)}
+                }
                 if(error!=null)errors.add(label+": "+error)
             }
             if(finished<submitted)errors.add(
