@@ -35,7 +35,8 @@ internal object VideoDiagnosticsReport {
                 .append(" bytes; low-memory: ").append(memory.lowMemory)
                 .append("; secondary native-only: ")
                 .append(VideoAgentAdmission.secondaryNativeOnly(
-                    memory.availMem,memory.lowMemory)).append('\n')
+                    memory.availMem,memory.lowMemory,
+                    memory.totalMem,memory.threshold)).append('\n')
         }
         builder.append("Expected embedded extractor: ")
             .append(VideoExtractorVersion.VERSION)

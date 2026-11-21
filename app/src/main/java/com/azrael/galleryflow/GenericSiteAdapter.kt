@@ -187,8 +187,12 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
             val meta=GalleryMeta(gallery.source,gallery.stableId,
                 gallery.entityStableId,url,title?:gallery.title,tags,
                 publishedAt,visitedAlbumPages.toList(),creator)
+            // Some valid first-party 4KHD articles omit the photo count.
+            // Never block their official selected TeraBox original on absent
+            // text metadata. Preserve a nullable count, and verify each
+            // actual archive image independently after download. Unknown
+            // completeness must not be represented as a publisher match.
             val expected=SelectedAlbumScope.advertisedCount(meta.title,gallery.title)
-                ?:throw AdapterException("4KHD did not publish a photo count for this album")
             val bridge=officialArchives.first()
             val normalized=URI(bridge).let{
                 URI(it.scheme,it.authority,it.path,null,null).toString()

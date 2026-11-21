@@ -6,6 +6,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FourKhdOriginalArchiveTest {
+    @Test fun countAbsentDoesNotBlockAnOfficialSelectedArchive(){
+        val selected="https://www.4khd.com/content/20/set-without-count.html"
+        val fake=object:HttpClient(){
+            override fun document(url:String,referer:String?):Document{
+                assertEquals(selected,url)
+                return Jsoup.parse("""
+                    <main><article>
+                      <h1>A cosplay photo set</h1>
+                      <a href="https://m.4khd.com/realSet2026">
+                        Download full HD original on TeraBox</a>
+                      <div class="gallery"><img
+                        src="https://cdn.4khd.com/preview.jpg"></div>
+                    </article></main>
+                """.trimIndent(),url)
+            }
+        }
+        val (_,media)=FourKhdAdapter(fake).fetchGallery(GalleryRef(
+            SourceId.FOUR_K_HD,"20/set-without-count",
+            "site:all",selected,"A cosplay photo set"))
+        assertEquals(1,media.size)
+        assertEquals(MediaKind.ARCHIVE,media.single().kind)
+        assertEquals("4KHD",media.single().provider)
+        assertNull("Unknown publisher photo count must stay unknown",
+            media.single().expectedArchivePhotos)
+        assertFalse(media.any{it.url.contains("preview.jpg")})
+    }
+
     @Test fun selectingAnAlbumQueuesRealFullHdArchiveNotPreviewJpegs(){
         val selected="https://www.4khd.com/content/14/yeha-yeha-pure2.html"
         val fake=object:HttpClient(){

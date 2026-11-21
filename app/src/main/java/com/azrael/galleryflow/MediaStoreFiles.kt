@@ -424,8 +424,14 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
     }
 
     private fun verifyArchivePhotos(archive: MediaRef, files: List<ExtractedDownload>) {
-        val expected=archive.expectedArchivePhotos ?: return
+        val expected=archive.expectedArchivePhotos
+        // Original 4KHD archives still need per-image signature/size
+        // verification when the publisher does not disclose a photo count.
+        // Other providers keep their existing verifier behavior untouched.
+        if(expected==null && archive.provider!="4KHD")return
         val images=files.filter { it.media.kind==MediaKind.IMAGE }
+        if(archive.provider=="4KHD" && images.isEmpty())
+            throw AdapterException("4KHD official archive contained no original photos")
         SelectedAlbumScope.verifyAdvertisedCount(expected, images.size)
         for(image in images){
             val first=context.contentResolver.openInputStream(Uri.parse(image.result.contentUri))
