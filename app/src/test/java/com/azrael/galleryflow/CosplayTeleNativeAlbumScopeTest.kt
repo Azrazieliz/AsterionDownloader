@@ -34,6 +34,22 @@ class CosplayTeleNativeAlbumScopeTest {
         SelectedAlbumScope.verifyAdvertisedCount(37,scoped.size)
     }
 
+    @Test fun aVideoOnlySelectedAlbumCanReachTheOriginalResolver(){
+        val doc=Jsoup.parse("""
+          <main><article><div class="entry-content">
+            <div class="video-player"><iframe data-video="selected"
+              src="https://player.example/embed/selected"></iframe></div>
+          </div></article></main>
+        """,selected)
+        val isolated=SelectedAlbumScope.selectedContent(doc,selected)
+        assertEquals(1,isolated.select(".video-player iframe[data-video]").size)
+        val planned=planCosplayTeleAlbumMedia("video-only",selected,
+            directPageAssets(isolated,selected),null,null,1)
+        assertTrue(planned.isEmpty())
+        assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
+            true,CosplayTeleVideoCompleteness.Audit(1,0,false),false))
+    }
+
     @Test fun selectedVideoDownloadLinksAreNotDiscardedAsNonImageAnchors(){
         val doc=Jsoup.parse("""
           <main><article><div class="entry-content">
