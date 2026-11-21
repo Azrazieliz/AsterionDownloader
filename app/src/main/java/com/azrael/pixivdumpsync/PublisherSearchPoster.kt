@@ -53,10 +53,30 @@ internal object PublisherSearchPoster {
         SiteSession.cookie(context,page)?.takeIf{it.isNotBlank()}
             ?.let{connection.header("Cookie",it)}
         val response=connection.execute()
-        if(response.statusCode() !in 200..299)return null
         val mime=response.contentType().orEmpty().lowercase(java.util.Locale.ROOT)
-        if(!mime.startsWith("text/html") &&
-            !mime.startsWith("application/xhtml+xml"))return null
-        return fromHtml(response.body(),response.url().toString())
+        val direct=if(response.statusCode() in 200..299 &&
+            (mime.startsWith("text/html") ||
+             mime.startsWith("application/xhtml+xml")))
+            fromHtml(response.body(),response.url().toString())
+        else null
+        if(direct!=null)return direct
+        // Publisher watch/player routes can work through the already
+        // authorized Android browser while raw Jsoup returns 403 or a
+        // static JS shell with no poster. Reuse the SAME public/connected
+        // browser session as selected media, but read only first-party
+        // page metadata. An access gate is never bypassed and never
+        // interpreted as a successful thumbnail.
+        val host=runCatching{URI(page).host.orEmpty().lowercase()
+            .removePrefix("www.")}.getOrDefault("")
+        val eligible=host in setOf(
+            "pornhub.com","fullporner.com","jav.guru","livecamrips.to",
+            "eporner.com","pimpbunny.com","pornavhd.com","xchina.co") &&
+            (BrowserPageFetch.publicEligible(page) ||
+             SiteSession.bound(context,page))
+        if(!eligible || response.statusCode() !in
+                setOf(200,401,403))return null
+        return runCatching{
+            fromHtml(BrowserPageFetch.html(context,page),page)
+        }.getOrNull()
     }
 }
