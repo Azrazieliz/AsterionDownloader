@@ -371,8 +371,7 @@ object KeywordSources {
             }else raw
             if(!url.startsWith("https://",true) ||
                 !eligibleDiscoveryUrl(url) ||
-                !(SearchRanking.isVideoUrl(url) ||
-                    SearchRanking.isIndexPage(url)))continue
+                !SearchRanking.isDiscoverablePage(url))continue
             val title=a.text().trim().take(220)
             if(title.length<3)continue
             val parent=a.closest(".result,li.b_algo")
@@ -418,14 +417,16 @@ object KeywordSources {
         require(keyword.trim().isNotBlank()){"Enter a search term"}
         val providers=searchProviders(context,area)
         val tasks=ArrayList<Pair<String,()->List<RankedHit>>>()
+        // Internet indexes are PRIMARY. Individual provider adapters are
+        // optional enrichment, never an allowlist or a prerequisite for search.
+        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
+        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true)}
         for(provider in providers)tasks+=provider.label to {
             when(provider.kind){
                 SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
                 SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
             }
         }
-        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false)}
-        // Direct publisher searches and one independent web index are sufficient.
         val scheduled=prioritizedTasks(tasks)
         val pool=java.util.concurrent.Executors.newFixedThreadPool(
             minOf(12,scheduled.size))
@@ -464,7 +465,7 @@ object KeywordSources {
             if(area==VideoSearchArea.PIRACY_DARKWEB)
                 SearchRanking.deduplicateIndex(keyword,collected.filter{
                     eligibleDiscoveryUrl(it.url)})
-            else SearchRanking.deduplicate(keyword,collected.filter{
+            else SearchRanking.deduplicateDiscovery(keyword,collected.filter{
                 eligibleDiscoveryUrl(it.url)}),
             finished,errors)
     }
