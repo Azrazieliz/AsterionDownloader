@@ -5,6 +5,32 @@ import org.junit.Test
 
 /** Search discovery must not be constrained by installed provider adapters. */
 class InternetWideDiscoveryRegressionTest {
+    @Test fun generalVideoWebSearchIsNotRestrictedToAdultSiteCatalogs(){
+        assertTrue(KeywordSources.siteDefinitions(VideoSearchArea.GENERAL).isEmpty())
+        val url=KeywordSources.webIndexUrl(
+            "documentary 2026",VideoSearchArea.GENERAL,false,0)
+        assertTrue(url.contains("q=documentary+2026+video"))
+        assertFalse(url.contains("adult"))
+        assertFalse(url.contains("hentai"))
+        val adult=KeywordSources.webIndexUrl(
+            "documentary 2026",VideoSearchArea.PORN,false,0)
+        assertTrue(adult.contains("adult+video"))
+    }
+
+    @Test fun nextWebPageUsesRealSearchEngineOffsets(){
+        val bing=KeywordSources.webIndexUrl(
+            "rare show",VideoSearchArea.GENERAL,false,2)
+        val duck=KeywordSources.webIndexUrl(
+            "rare show",VideoSearchArea.GENERAL,true,2)
+        assertTrue(bing.contains("first=101"))
+        assertTrue(duck.contains("s=100"))
+        assertTrue(duck.contains("dc=101"))
+        assertThrows(IllegalArgumentException::class.java){
+            KeywordSources.webIndexUrl(
+                "rare show",VideoSearchArea.GENERAL,false,-1)
+        }
+    }
+
     @Test fun unfamiliarPublisherArticleSurvivesIndexedSearch(){
         val html="""
           <li class="b_algo"><h2>
