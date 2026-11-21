@@ -25,6 +25,10 @@ class AlohaSourcesTest {
             it.host=="pimpbunny.com" && it.url.endsWith("/models/") })
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{
             it.host=="pimpbunny.com" && it.url=="https://pimpbunny.com/" })
+        assertEquals("pimpbunny.com:photos",
+            SiteControls.controlKey("https://pimpbunny.com/models/"))
+        assertEquals("pimpbunny.com",
+            SiteControls.controlKey("https://pimpbunny.com/videos/actual-scene/"))
         assertFalse(sites.any{it.host=="onscreens.me"})
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{it.host=="archivebate.com"})
         assertTrue(sites.none{it.host in setOf("mp4hentai.com","hentaihaven.xxx","helloporn.com")})

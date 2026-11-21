@@ -138,6 +138,33 @@ class SiteBackfillProfilesTest {
             "https://buondua.com/","https://buondua.net/search"))
     }
 
+    @Test fun pimpbunnyModelPortraitsAreNotPromotedToPhotoAlbums(){
+        val source="https://pimpbunny.com/models/"
+        val html="""<main><article class="model">
+          <a href="/models/lolabunny-yu/">
+            <img src="https://pimpbunny.com/posters/lolabunny.webp"
+                 alt="Lolabunny profile portrait"/></a>
+          <div class="photo-grid"><a href="/photos/model-set-123/">
+            <img src="https://pimpbunny.com/previews/set-123.webp"
+                 alt="Model photos set"/></a></div>
+          <div class="video-card"><a href="/videos/actual-scene-123/">
+            <img src="https://pimpbunny.com/posters/video.webp"
+                 alt="Video scene"/></a></div></article></main>"""
+        val records=SourceIndexParser.entries(
+            Jsoup.parse(html,source),source,"COSPLAY",100L)
+        assertEquals(1,records.size)
+        assertEquals("https://pimpbunny.com/photos/model-set-123/",
+            records.single().url)
+        assertEquals("cosplay",records.single().kind)
+        val portraitsOnly=SourceIndexParser.entries(
+            Jsoup.parse("""<main><article>
+                <a href="/models/lolabunny-yu/">
+                  <img src="/portrait.webp" alt="Creator portrait"/></a>
+                </article></main>""",source),source,"COSPLAY",100L)
+        assertTrue("A model portrait is not a published photo album",
+            portraitsOnly.isEmpty())
+    }
+
     @Test fun otherProvidersStillUseOriginalGenericPath(){
         assertNull(SiteBackfillProfiles.entries(
             Jsoup.parse("<a href='/something'>Example</a>","https://other.example/"),

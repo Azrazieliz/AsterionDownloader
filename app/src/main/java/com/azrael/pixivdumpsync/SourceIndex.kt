@@ -562,6 +562,11 @@ internal object SourceIndexParser {
         // Prefer a validated source-specific listing path over arbitrary
         // navigation links. Generic indexing remains for other providers.
         val dedicated=SiteBackfillProfiles.entries(doc,base,area,clock)
+        // For PimpBunny, /models/ contains profile portraits, not proven
+        // photo albums. An empty first-party photo listing must NEVER fall
+        // through to a permissive generic model/thumbnail scraper.
+        if(area=="COSPLAY" && SiteControls.key(base)=="pimpbunny.com" &&
+            dedicated!=null && dedicated.isEmpty())return emptyList()
         if(!dedicated.isNullOrEmpty())return dedicated.filter{
             // The dedicated adapter has already validated its host, HTML
             // selector and provider-specific media URL shape. Applying the
