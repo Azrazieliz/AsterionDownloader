@@ -25,6 +25,8 @@ class BrowserPageFetchEligibilityTest {
             "https://www.4kgirl.com/example-cosplay/"))
         assertTrue(BrowserPageFetch.publicEligible(
             "https://www.4khd.com/content/20/selected.html"))
+        assertTrue(BrowserPageFetch.publicEligible(
+            "https://m.4khd.com/oWQ6zQ"))
         assertFalse(BrowserPageFetch.publicEligible(
             "https://4kgirl.com.bad.example/example-cosplay/"))
         assertFalse(BrowserPageFetch.publicEligible(
