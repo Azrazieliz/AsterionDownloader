@@ -94,6 +94,12 @@ internal object VideoSiteProfiles {
         if(Regex("""(?i)/(?:category|categories|tag|tags|models?|actors?|search|page)/""")
                 .containsMatchIn(uri.path.orEmpty()))return false
         val cleanPath=uri.path.orEmpty().trim('/').lowercase(Locale.ROOT)
+        if(domain(url)=="cosplaytele.com" && cleanPath in setOf(
+                "home","page","category","categories","tag","tags","search",
+                "model","models","gallery","galleries","video","videos",
+                "comments","login","register","about","contact","privacy",
+                "terms","wp-admin","wp-login","wp-content","wp-includes",
+                "wp-json"))return false
         if(domain(url)=="porneec.com" && cleanPath in setOf(
                 "privacy-policy","contact-us","terms-and-conditions",
                 "all-videos","all-categories","video-collection",

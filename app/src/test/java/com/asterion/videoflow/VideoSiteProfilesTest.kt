@@ -108,6 +108,12 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage("https://cosplaytele.com/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://cosplaytele.com/page/2"))
+        for(path in listOf("video","videos","models","galleries",
+                "comments","wp-admin","wp-json","about")){
+            assertFalse("Navigation must not be a selected original: "+path,
+                VideoSiteProfiles.isVideoPage(
+                    "https://cosplaytele.com/"+path+"/"))
+        }
     }
     @Test fun liveHentaiProviderPostRoutesAreNotReleaseCalendarsOrCategories(){
         assertTrue(VideoSiteProfiles.isVideoPage(
