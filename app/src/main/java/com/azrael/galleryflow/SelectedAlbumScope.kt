@@ -110,7 +110,10 @@ internal object SelectedAlbumScope {
             "Selected album lacks an identifiable publisher image body; "+
                 "refusing to mix it with related galleries")
 
-    fun originals(doc:Document,selectedUrl:String):List<AlbumImageExtractor.Item> {
+    /** The existing post-body isolation, also reused by the native
+     * CosplayTele adapter. Never mine entire-page URLs or recommendation cards.
+     */
+    internal fun selectedContent(doc:Document,selectedUrl:String):Document {
         val body=articleBody(doc)
         val post=body.closest("article")
         val postId=post?.classNames()?.firstNotNullOfOrNull {
@@ -145,6 +148,11 @@ internal object SelectedAlbumScope {
                 candidate.path.trimEnd('/')!=URI(selectedUrl).path.trimEnd('/'))
                 anchor.remove()
         }
+        return isolated
+    }
+
+    fun originals(doc:Document,selectedUrl:String):List<AlbumImageExtractor.Item> {
+        val isolated=selectedContent(doc,selectedUrl)
         val originals=AlbumImageExtractor.originals(isolated,selectedUrl)
         val seen=LinkedHashMap<String,AlbumImageExtractor.Item>()
         for(item in originals){

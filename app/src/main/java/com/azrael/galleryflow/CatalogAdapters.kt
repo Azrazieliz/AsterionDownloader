@@ -522,8 +522,14 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
             title, tags, published(first) ?: gallery.publishedAt, docs.keys.toList()
         )
 
-        val direct = docs.flatMap { (pageUrl, pageDoc) -> directPageAssets(pageDoc, pageUrl) }
-            .distinctBy { normalizedUrl(it.url) }
+        // The legacy whole-page directPageAssets pass included related posts,
+        // footer cards and serialized recommendations in the same album.
+        // Reuse the existing publisher-owned post isolation before selecting
+        // real image/video originals; preserve official archive extraction.
+        val direct = docs.flatMap { (pageUrl, pageDoc) ->
+            directPageAssets(
+                SelectedAlbumScope.selectedContent(pageDoc,pageUrl),pageUrl)
+        }.distinctBy { normalizedUrl(it.url) }
 
         val candidates = providerLinks(first)
         val chosen = candidates.sortedBy { providerPriority(it.second) }.firstOrNull()
