@@ -62,9 +62,8 @@ internal object VideoSiteProfiles {
         Route("uncensoredhentai.xxx",Regex("""(?i)^/(?:videos|video|watch)/[^/?#]+""")),
         // Actual 3DHentai video pages use a single top-level title slug.
         Route("3dhentaix.com",Regex("""(?i)^/(?:[a-z0-9][a-z0-9_-]{2,180}/?|(?:videos|video|watch)/[^/?#]+)$""")),
-        Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+""")),
-        // Verified /videos/<numeric-id>/<selected-title>/ CamStreams VOD.
-        Route("camstreams.tv",Regex("""(?i)^/videos/[0-9]{4,12}/[a-z0-9][a-z0-9-]{3,225}/?$"""))
+        Route("rule34video.com",Regex("""(?i)^/(?:video|videos)/[^/?#]+"""))
+
     ).associateBy{it.domain}
     private fun domain(raw:String):String=runCatching{
         var host=URI(raw).host.orEmpty().lowercase(Locale.ROOT)

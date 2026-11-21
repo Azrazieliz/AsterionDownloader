@@ -9,7 +9,7 @@ import org.junit.Test
 class AllSiteGalleryCoverageTest {
     @Test fun approvedPornCatalogExcludesRetiredProvider() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
-        assertEquals(22,sites.size)
+        assertEquals(21,sites.size)
         assertFalse(sites.any{it.host in setOf("pornhits.com","omg.porn","omg.xxx",
             "porntrex.com","xnxx.com","pornone.com","sunporno.com",
             "xvideos.com","peekvids.com","tnaflix.com","helloporn.com")})
@@ -63,7 +63,7 @@ class AllSiteGalleryCoverageTest {
     @Test fun failedPageStillHasItsOwnSourceIdentity() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
         assertFalse(sites.any{it.name=="CUMS"})
-        assertTrue(sites.any{it.name=="CamStreams"})
+        assertFalse(sites.any{it.name=="CamStreams"})
         assertFalse(sites.any{it.name=="OnScreens"})
         assertEquals("OneJAV",AlohaSources.by(AlohaArea.TORRENTS)
             .single{it.host=="onejav.com"}.name)

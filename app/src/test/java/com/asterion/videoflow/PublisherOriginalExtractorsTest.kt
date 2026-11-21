@@ -33,14 +33,15 @@ class PublisherOriginalExtractorsTest {
         "pimpbunny.com" to "https://pimpbunny.com/videos/selected-scene-123",
         "xchina.co" to "https://en.xchina.co/video/6b00b2b6032b1",
         "bubblecum.lol" to "https://www.bubblecum.lol/video/selected-scene-title/",
-        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/",
-        "camstreams.tv" to "https://camstreams.tv/videos/1363858/selected-cam-recording/"
+        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/"
     )
 
     @Test fun eachExistingVideoPublisherHasItsOwnNamedParser(){
         assertEquals(VideoSiteProfiles.coveredHosts,
             PublisherOriginalExtractors.coveredHosts)
         assertEquals(cases.keys,PublisherOriginalExtractors.coveredHosts)
+        assertFalse(VideoSiteProfiles.isVideoPage("https://camstreams.tv/videos/1363858/selected-cam-recording/"))
+        assertFalse(PublisherOriginalExtractors.owns("https://camstreams.tv/videos/1363858/selected-cam-recording/"))
         for((host,selected) in cases) {
             assertTrue("Route unexpectedly unrecognized: $host",
                 VideoSiteProfiles.isVideoPage(selected))
