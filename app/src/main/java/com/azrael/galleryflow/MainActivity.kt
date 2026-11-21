@@ -321,7 +321,7 @@ class MainActivity : Activity() {
                 "Backfill continues past failed albums. Run Backfill again to retry them."),
                 ui.lp(this@MainActivity, 11))
         }
-        val galleries = GalleryDb(this).use { it.galleryCards(entity.entityId) }
+        val galleries = GalleryDb(this).use { it.galleryCards(entity.entityId,source=entity.source) }
         section("Downloaded galleries", galleries.size.toString() + " RECENT")
         if (galleries.isEmpty()) {
             panel.addView(message("No galleries downloaded",

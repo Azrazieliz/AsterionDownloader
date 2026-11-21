@@ -332,7 +332,7 @@ object AsterionAccountPanels {
             ui.text(a,"No cosplay sources linked in this installation.",13f,ui.secondary))
         for(entity in entities){
             val c=card(a,p)
-            val galleries=GalleryDb(a).use{it.galleryCards(entity.entityId,6)}
+            val galleries=GalleryDb(a).use{it.galleryCards(entity.entityId,6,entity.source)}
             if(galleries.isNotEmpty()){
                 add(a,c,ui.text(a,"RECENT ORIGINAL GALLERIES",12f,ui.secondary,true),7)
                 val images=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
