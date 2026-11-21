@@ -64,7 +64,9 @@ data class GalleryMeta(
     val pageUrls: List<String>,
     // Optional original publisher metadata. Existing persisted gallery
     // records retain their schema; no unverified artist/date is fabricated.
-    val creator: String? = null
+    val creator: String? = null,
+    /** A publisher's explicit video count; zero/unknown does not invent media. */
+    val expectedVideoCount: Int? = null
 )
 
 data class MediaRef(

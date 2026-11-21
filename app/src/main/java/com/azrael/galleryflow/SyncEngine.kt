@@ -588,8 +588,19 @@ class SyncEngine(private val context: Context) {
                         files.exists(it.contentUri))
             }.map{it.mediaId}.toSet()
             val requiredIds=mediaItems.map{it.stableId}.toSet()
+            val missingVideos=if(meta.source==SourceId.COSPLAYTELE)
+                CosplayTeleVideoCompleteness.audit(meta.expectedVideoCount,
+                    mediaItems,records,validIds) else null
+            if(missingVideos!=null && !missingVideos.complete){
+                stats.incompleteGalleries++
+                progress("CosplayTele video originals incomplete: "+
+                    missingVideos.verifiedVideos+" saved, "+
+                    missingVideos.expectedVideos+" advertised; "+
+                    "photos retained, no preview counted as a video")
+            }
             val diskComplete=officialArchiveComplete &&
-                GalleryOriginalSetPolicy.complete(requiredIds,validIds)
+                GalleryOriginalSetPolicy.complete(requiredIds,validIds) &&
+                (missingVideos?.complete!=false)
 
             if (allComplete && diskComplete) {
                 db.setGalleryState(meta.source, meta.stableId, TransferState.COMPLETE)

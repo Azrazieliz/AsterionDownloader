@@ -543,8 +543,9 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
             "article,.entry-content,.post-content,main")?.text().orEmpty()
         val expectedVideos = maxOf(advertisedVideoCount(title),
             advertisedVideoCount(selectedText.take(20000)))
-        return meta to planCosplayTeleAlbumMedia(gallery.stableId,
-            gallery.canonicalUrl,direct,chosen,password,expectedVideos)
+        return meta.copy(expectedVideoCount=expectedVideos.takeIf{it>0}) to
+            planCosplayTeleAlbumMedia(gallery.stableId,
+                gallery.canonicalUrl,direct,chosen,password,expectedVideos)
     }
 
     private fun postPages(first: Document, baseUrl: String): List<String> {
