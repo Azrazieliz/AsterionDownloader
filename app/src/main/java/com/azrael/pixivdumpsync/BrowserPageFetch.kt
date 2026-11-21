@@ -576,7 +576,29 @@ object BrowserPageFetch {
                                 /^\/(?:link\/)?[A-Za-z0-9_-]{4,90}\/?$/.test(location.pathname)){
                                 const button=document.querySelector(
                                     'a#custom_button[href]');
-                                if(!button)return '<html><head>'+
+                                // A button with href="#" exists before the
+                                // publisher initializes its genuine TeraBox
+                                // share. It must NOT satisfy readiness.
+                                let ready=false;
+                                try{
+                                    const destination=new URL(
+                                        button?.getAttribute('href')||'',location.href);
+                                    const h=destination.hostname.toLowerCase();
+                                    const allowed=['terabox.com','terabox.app',
+                                        'teraboxapp.com','1024tera.com',
+                                        '1024terabox.com','4funbox.com',
+                                        'nephobox.com','mirrobox.com',
+                                        'momerybox.com'];
+                                    ready=destination.protocol==='https:' &&
+                                        allowed.some(host=>h===host ||
+                                            h.endsWith('.'+host)) &&
+                                        !destination.username &&
+                                        !destination.password &&
+                                        !destination.port && !destination.hash &&
+                                        (destination.pathname.length>3 ||
+                                            destination.searchParams.has('surl'));
+                                }catch(_){}
+                                if(!ready)return '<html><head>'+
                                     '<meta name="asterion-4khd-link-pending" content="true">'+
                                     '</head></html>';
                             }
