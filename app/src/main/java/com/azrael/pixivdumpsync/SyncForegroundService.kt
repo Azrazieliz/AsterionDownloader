@@ -39,6 +39,9 @@ class SyncForegroundService : Service() {
 
     private val executor = Executors.newSingleThreadExecutor()
     @Volatile private var currentRun: Future<*>? = null
+    // Main-thread service ownership. A previous worker's completion
+    // callback must never clear a newer manually requested Pixiv job.
+    private var runGeneration=0L
     @Volatile private var lastNotificationAt = 0L
     private val mainHandler=Handler(Looper.getMainLooper())
     private val deferredLock=Any()
@@ -192,6 +195,7 @@ class SyncForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        val thisGeneration=++runGeneration
         currentRun = executor.submit {
             try {
                 if (autoTriggered) {
@@ -248,6 +252,8 @@ class SyncForegroundService : Service() {
                 // periodic JobScheduler pass and must not wait for the OS to
                 // start a second foreground service minutes later.
                 mainHandler.post {
+                    if(!PixivForegroundLifetimePolicy.ownsCompletion(
+                            thisGeneration,runGeneration))return@post
                     currentRun=null
                     val next=if(AppPower.enabled(this))popBackfill() else null
                     if(next!=null){
