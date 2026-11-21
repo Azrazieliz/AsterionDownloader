@@ -98,6 +98,42 @@ object SearchRanking {
         return Regex("(?i)(/(?:watch|watch-video|watching|video|videos|view_video|viewkey|movie|movies|shorts|reel|reels|clip|clips|scene|scenes|embed|post|posts)(?:[/_-]|$)|\\.(?:mp4|webm|m3u8|mpd)$)")
             .containsMatchIn(path)
     }
+    /**
+     * Internet-wide discovery is not the same as provider-supported extraction.
+     * A search index may know a publisher's article even when its URL has none
+     * of the known /video/ patterns. Keep such candidates for human review;
+     * a later original resolver must still verify actual media bytes.
+     */
+    fun isDiscoverablePage(url:String):Boolean {
+        if(!validUrl(url) || ProviderRetirement.isRetired(url) || isIndexPage(url))return false
+        val uri=runCatching{URI(url)}.getOrNull()?:return false
+        val host=uri.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")
+        if(host in setOf("bing.com","duckduckgo.com","google.com","yahoo.com",
+                         "search.yahoo.com"))return false
+        val path=uri.path.orEmpty().lowercase(Locale.ROOT).trimEnd('/')
+        if(path.isBlank() || path=="/")return false
+        if(Regex("(?i).*/(?:search|category|categories|tag|tags|browse|login|signup|account)(?:/.*)?$").matches(path))
+            return false
+        return true
+    }
+
+    /** Retain independent index hits from ANY public publisher, not only
+     * providers known to VideoSiteProfiles. Preserve exact-match ranking and
+     * retired-site protections. No candidate is labelled a verified original. */
+    fun deduplicateDiscovery(query:String,hits:List<RankedHit>):List<RankedHit> {
+        val unique=linkedMapOf<String,RankedHit>()
+        for(hit in hits) {
+            if(!isDiscoverablePage(hit.url))continue
+            val score=relevance(query,hit.title,hit.description)
+            if(score<=0)continue
+            val normalized=hit.copy(score=score)
+            val key=canonicalKey(hit.url)
+            if(unique[key]?.score?.let{it>=score}==true)continue
+            unique[key]=normalized
+        }
+        return unique.values.sortedWith(compareByDescending<RankedHit>{it.score}
+            .thenBy{it.title.lowercase(Locale.ROOT)})
+    }
     /** Torrent-index detail pages can be discovered, but cannot be queued as videos. */
     fun isIndexPage(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull()?:return false
