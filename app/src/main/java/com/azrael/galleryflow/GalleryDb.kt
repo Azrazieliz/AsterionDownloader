@@ -19,6 +19,13 @@ internal object GalleryRetryBackoff {
 
 class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "galleryflow.db", null, 6) {
     private val signalContext=context.applicationContext
+    override fun onOpen(db:SQLiteDatabase) {
+        super.onOpen(db)
+        // Existing installed 31k+ retry rows must remain untouched; an
+        // additive due-time index prevents repeated full-table sorting.
+        if(!db.isReadOnly)db.execSQL("CREATE INDEX IF NOT EXISTS "+
+            "idx_gallery_retries_due ON backfill_retries(source,entity_id,retry_after)")
+    }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entities(
             source TEXT NOT NULL,
@@ -178,6 +185,16 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
             db.setTransactionSuccessful()
         }finally { db.endTransaction() }
     }
+
+    /** Owner cancellation survives all automatic backfill and live scans.
+     * Only an explicit tap may re-arm the same selected gallery.
+     */
+    fun galleryCancelled(source:SourceId,galleryId:String):Boolean =
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM galleries WHERE source=? AND gallery_id=? "+
+                "AND state='cancelled' LIMIT 1",
+            arrayOf(source.wireName,galleryId)
+        ).use{it.moveToFirst()}
 
     fun clearRetry(ref: GalleryRef) {
         writableDatabase.delete("backfill_retries", "source=? AND gallery_id=?",

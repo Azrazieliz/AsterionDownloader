@@ -15,6 +15,15 @@ internal object GalleryBackfillBudget {
         visited>=if(previousFailure)1 else NEW_GALLERIES_PER_PASS
 }
 
+/** Persisted historical rows do not belong to a current publisher-selected
+ * set simply because they share a gallery ID. The download transaction must
+ * prove EVERY requested original, not every unrelated legacy scrape row.
+ */
+internal object GalleryOriginalSetPolicy {
+    fun complete(requested:Set<String>,valid:Set<String>):Boolean =
+        requested.isNotEmpty() && requested.all{it in valid}
+}
+
 class SyncEngine(private val context: Context) {
     data class Stats(
         var entities: Int = 0,
@@ -127,8 +136,12 @@ class SyncEngine(private val context: Context) {
         val ref=GalleryRef(entity.source,id,entity.entityId,selected,
             title?.take(160)?.ifBlank{rawUrl}.orEmpty().ifBlank{rawUrl})
         val adapter=AdapterRegistry.forSource(entity.source,context)
+        // An exact owner selection is the only action allowed to override a
+        // previously cancelled gallery and its unsaved media identities.
+        db.rearmCancelledSelectedAlbum(entity.source,selected)
         progress("Downloading only selected gallery: "+ref.title)
-        if(processGallery(entity,ref,adapter,db,files,flow,stats,progress)){
+        if(processGallery(entity,ref,adapter,db,files,flow,stats,progress,
+                exactSelection=true)){
             db.clearRetry(ref)
         }else{
             db.queueRetry(ref,"Exact selected album incomplete")
@@ -375,9 +388,16 @@ class SyncEngine(private val context: Context) {
         files: MediaStoreFiles,
         flow: FlowLinkEmitter,
         stats: Stats,
-        progress: (String) -> Unit
+        progress: (String) -> Unit,
+        exactSelection:Boolean=false
     ): Boolean {
         stats.galleriesSeen++
+        // Cancel All must not be undone by an automatic sync or rescan. Do
+        // not touch the gallery, its retry inventory, or any owner files.
+        if(!exactSelection && db.galleryCancelled(ref.source,ref.stableId)){
+            progress("Owner-cancelled gallery skipped • "+ref.title)
+            return true
+        }
         db.upsertGallery(ref, TransferState.PENDING)
         return try {
             val (meta, mediaItems) = adapter.fetchGallery(ref)
@@ -558,13 +578,18 @@ class SyncEngine(private val context: Context) {
                 }
             }
             val records = db.galleryMedia(meta.source, meta.stableId)
-            val diskComplete = officialArchiveComplete &&
-                records.isNotEmpty() &&
-                records.size >= mediaItems.size &&
-                records.all {
-                    it.state == TransferState.SKIPPED ||
-                        (it.state == TransferState.COMPLETE && files.exists(it.contentUri))
-                }
+            // The installed DB contains old unrelated/gallery-wide media
+            // rows. They are inventory, not members of the authoritative
+            // selected original list. Keep every historical record intact,
+            // but do not let unrelated failed rows veto correct originals.
+            val validIds=records.asSequence().filter {
+                it.state==TransferState.SKIPPED ||
+                    (it.state==TransferState.COMPLETE &&
+                        files.exists(it.contentUri))
+            }.map{it.mediaId}.toSet()
+            val requiredIds=mediaItems.map{it.stableId}.toSet()
+            val diskComplete=officialArchiveComplete &&
+                GalleryOriginalSetPolicy.complete(requiredIds,validIds)
 
             if (allComplete && diskComplete) {
                 db.setGalleryState(meta.source, meta.stableId, TransferState.COMPLETE)
