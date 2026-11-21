@@ -41,6 +41,7 @@ object BrowserPageFetch {
         // ad iframe, bypasses a site gate or invents a media URL.
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
         "bubblecum.lol","pornavhd.com","cosplaytele.com",
+        "notfans.com",
         // Public gallery rendering fallback only. No challenge solving.
         "4kgirl.com","4khd.com","m.4khd.com")
     fun publicEligible(url:String):Boolean {
@@ -134,7 +135,7 @@ object BrowserPageFetch {
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com",
             "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-            "bubblecum.lol","pornavhd.com","cosplaytele.com")
+            "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             when(host) {
