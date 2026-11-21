@@ -37,7 +37,9 @@ internal object SiteBackfillProfiles {
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
         Profile("nhentai.xxx","COMICS",comics,
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
-        Profile("4kgirl.com","COSPLAY",cosplay,
+        Profile("4kgirl.com","COSPLAY",
+            cosplay+",.gridwp-grid-post a[href],"+
+                ".gridwp-grid-post-item a[href],main a:has(img)[href]",
             Regex("^/[a-z0-9][a-z0-9_-]{2,190}/?$"),"cosplay"),
         Profile("everia.club","COSPLAY",cosplay,
             Regex("^/\\d{4}/\\d{2}/\\d{2}/[a-z0-9][a-z0-9_-]{1,190}/?$"),"cosplay"),

@@ -41,6 +41,21 @@ class FourKGirlListingRecoveryTest {
         assertEquals("Artist photo set",albums.single().title)
     }
 
+    @Test fun siteIndexerAdmitsGridCardWithoutArticleWrapper() {
+        val doc=Jsoup.parse("""
+            <main><div class="gridwp-grid-post">
+              <a href="/artist-photo-set/">
+                <img alt="Artist photo set" data-src="/cover.webp"/>
+              </a>
+            </div></main>
+        """.trimIndent(),home)
+        val entries=SiteBackfillProfiles.entries(doc,home,"COSPLAY",123L)
+        assertNotNull(entries)
+        assertEquals(1,entries!!.size)
+        assertEquals(post,entries.single().url)
+        assertEquals("https://www.4kgirl.com/cover.webp",entries.single().preview)
+    }
+
     @Test fun siteIndexUsesPublisherResponsiveCoverNotLoadingPlaceholder() {
         val doc=Jsoup.parse("""
             <main><article class="post">
