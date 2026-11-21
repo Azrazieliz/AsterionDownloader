@@ -427,8 +427,11 @@ internal fun planCosplayTeleAlbumMedia(
     if(directItems.isNotEmpty() && (!missingAdvertisedVideo || archive==null))
         return directItems
     if(archive==null) {
-        if(directItems.isEmpty())throw AdapterException(
+        if(directItems.isEmpty() && declaredVideos<=0)throw AdapterException(
             "CosplayTele album exposed neither direct media nor a published archive")
+        // Exact user-selected video-only pages may contain an embedded player
+        // but no direct URL. Preserve an INCOMPLETE inventory so SyncEngine
+        // can queue this selected article into VideoFlow; never save HTML.
         return directItems
     }
     val (address,provider)=archive
