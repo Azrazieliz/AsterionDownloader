@@ -20,6 +20,30 @@ class CosplayTeleRenderedPlayerRegressionTest {
         assertEquals("https://cdn.example.org/media/selected-full.mp4",
             candidates.single().url)
     }
+    @Test fun selectedFirstPartyIframeIsAllowedWithoutGeneralAdFrameAccess(){
+        val html="""
+            <article><div class="video-player">
+              <iframe src="https://cosplaytele.com/embed/selected-video-1234"></iframe>
+            </div></article>
+        """
+        val found=PublisherOriginalExtractors.fromHtml(selected,html)
+        assertEquals(1,found.size)
+        assertEquals("https://cosplaytele.com/embed/selected-video-1234",
+            found.single().url)
+    }
+    @Test fun offsiteAndRecommendationFramesNeverBecomeVideoOriginals(){
+        val html="""
+            <main>
+              <div class="video-player">
+                <iframe src="https://ads.example.net/embed/advertised-clip"></iframe>
+              </div>
+              <aside class="related"><div class="video-player">
+                <iframe src="https://cosplaytele.com/embed/other-gallery"></iframe>
+              </div></aside>
+            </main>
+        """
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,html).isEmpty())
+    }
     @Test fun unrelatedSidebarVideoIsNotSelected(){
         val html="""
           <main><aside class="related"><div class="video-player">
