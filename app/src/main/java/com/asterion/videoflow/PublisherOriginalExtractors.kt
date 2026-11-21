@@ -181,7 +181,7 @@ internal object PublisherOriginalExtractors {
             // Publisher observed /video/<hex> -> /hls/<same-hex>/master.m3u8.
             // The identical ID and first-party host are essential: never
             // accept a recommendation, ad iframe or someone else's playlist.
-            val pageId=Regex("""(?i)^/video/(?:id-)?([a-f0-9]{10,32})(?:\\.html)?/?$""")
+            val pageId=Regex("""(?i)^/video/(?:id-)?([a-f0-9]{10,32})(?:\.html)?/?$""")
                 .matchEntire(URI(selected).path.orEmpty())?.groupValues?.get(1)
             val players=doc.select("#video-player[data-src]").filter{
                 it.closest("aside,.related,.recommended,.recommendations,"+
