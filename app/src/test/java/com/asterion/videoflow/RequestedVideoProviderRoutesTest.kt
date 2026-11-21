@@ -10,13 +10,15 @@ class RequestedVideoProviderRoutesTest {
         val sites=AlohaSources.all.map{it.host}.toSet()
         assertTrue(sites.containsAll(setOf(
             "avple.tv","pimpbunny.com","en.xchina.co",
-            "bubblecum.lol","pornavhd.com","camstreams.tv")))
+            "bubblecum.lol","pornavhd.com")))
         assertFalse("OnScreens must not reappear in catalog",
             "onscreens.me" in sites)
         assertTrue(ProviderRetirement.isRetired(
             "https://www.onscreens.me/profile"))
-        assertFalse(ProviderRetirement.isRetired(
+        assertTrue(ProviderRetirement.isRetired(
             "https://camstreams.tv/videos/1363858/example/"))
+        assertFalse("CamStreams is no longer an owner-approved source",
+            "camstreams.tv" in sites)
     }
 
     @Test fun genuineSelectedWatchRoutesAndListingsRemainDistinct(){
@@ -28,7 +30,7 @@ class RequestedVideoProviderRoutesTest {
             "https://www.bubblecum.lol/video/selected-scene-example/"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://pornavhd.com/2026/11/14/selected_release_20261114/"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://camstreams.tv/videos/1363858/selected-recording/"))
         for(url in listOf("https://www.bubblecum.lol/models/",
             "https://camstreams.tv/models/","https://pimpbunny.com/categories/",
@@ -47,7 +49,6 @@ class RequestedVideoProviderRoutesTest {
             "https://en.xchina.co/video/6b00b2b6032b1",
             "https://www.bubblecum.lol/video/selected-scene-example/",
             "https://pornavhd.com/2026/11/14/selected_20261114/",
-            "https://camstreams.tv/videos/1363858/selected-recording/",
             "https://avple.tv/watch/selected-scene-123"
         )
         val player="""<main>
@@ -70,7 +71,6 @@ class RequestedVideoProviderRoutesTest {
             "https://en.xchina.co/video/6b00b2b6032b1",
             "https://www.bubblecum.lol/video/selected-scene-example/",
             "https://pornavhd.com/2026/11/14/selected_20261114/",
-            "https://camstreams.tv/videos/1363858/selected-recording/",
             "https://avple.tv/watch/selected-scene-123")
         val unrelatedMeta="""<head>
           <script type="application/ld+json">{

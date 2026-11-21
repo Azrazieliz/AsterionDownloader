@@ -66,6 +66,8 @@ class VideoSiteProfilesTest {
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.tnaflix.com/video/example"))
         assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://camstreams.tv/videos/1363858/selected-recording/"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
             "https://pornone.com/dirty-talk/example-video/279567143/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://www.sunporno.com/v/115776/example-video/"))
@@ -83,7 +85,7 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(29,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(28,VideoSiteProfiles.coveredHosts.size)
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
