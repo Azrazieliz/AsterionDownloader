@@ -265,8 +265,9 @@ object AsterionCosplayGallery {
             val verifiedGalleries=galleries.count{it.state=="complete"}
             val queuedCount=queuedGalleryJobs.count{it.siteHost==host}
             card.addView(ui.text(a,
-                visual.size.toString()+" gallery covers · "+
-                    verifiedGalleries+" recently saved galleries"+
+                visual.size.toString()+
+                    (if(host=="pimpbunny.com")" model/photo previews" else " gallery covers")+
+                    " · "+verifiedGalleries+" recently saved galleries"+
                     (if(queuedCount>0)
                         " · "+queuedCount+" pending Kyora requests (not downloaded)"
                     else "")+" · "+checked,

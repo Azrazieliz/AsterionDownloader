@@ -69,13 +69,28 @@ object KyoraCreatorPreviews {
         if(ProviderRetirement.isRetired(source) ||
             ProviderRetirement.isRetired(page))return false
         val provider=SiteControls.key(source)
-        // PimpBunny's homepage presents model portraits alongside real
-        // recordings. Never promote a portrait/model page into a video tile;
-        // only a recognized /videos/<selected-scene> is a video candidate.
-        // Cached profile-cover rows from older releases stay in storage but
-        // disappear from the VIDEO shelf, not from legitimate photo modules.
-        return provider !in setOf("onscreens.me","pimpbunny.com") ||
-            com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
+        // The owner approved TWO distinct PimpBunny module views:
+        // /models/ -> Cosplay model/photo previews; homepage -> Porn videos.
+        // They share the same host and cached parser, so host-only rejection
+        // erased every model portrait from the approved Cosplay photo shelf.
+        // No model portrait is allowed to masquerade as a playable video.
+        if(provider=="pimpbunny.com"){
+            val sourcePath=runCatching{URI(source).path.orEmpty()
+                .trimEnd('/').lowercase()}.getOrDefault("")
+            val photoMode=sourcePath=="/models"
+            if(photoMode){
+                val path=runCatching{URI(page).path.orEmpty().lowercase()}
+                    .getOrDefault("")
+                return !com.asterion.videoflow.VideoSiteProfiles
+                    .isVideoPage(page) &&
+                    (Regex("""^/(?:models?|users?)/[a-z0-9._-]{2,120}(?:/(?:photos?|images?|galleries?)/[a-z0-9_./-]{1,120})?/?$""")
+                        .matches(path) ||
+                    Regex("""^/(?:photos?|images?|galleries?)/[a-z0-9_./-]{3,180}/?$""")
+                        .matches(path))
+            }
+            return com.asterion.videoflow.VideoSiteProfiles.isVideoPage(page)
+        }
+        return provider!="onscreens.me"
     }
 
     /** Only a selected gallery belonging to THIS publisher may be displayed
