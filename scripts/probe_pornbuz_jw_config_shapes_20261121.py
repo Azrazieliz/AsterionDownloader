@@ -21,10 +21,10 @@ def get(url,ref=None):
  with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=15) as res:
   return res.url,res.read(650000).decode("utf8","replace")
 def clean(src):
- src=re.sub(r"https?://[^'\"<>\\\s,;)}]{6,1000}","[URL]",src)
- src=re.sub(r"(?i)(?:token|cookie|authorization|key)\\s*[:=]\\s*['\"][^'\"]+['\"]","[SENSITIVE]",src)
- src=re.sub(r"['\"][A-Za-z0-9+/=_-]{35,}['\"]","'[OPAQUE]'",src)
- return re.sub(r"\\s+"," ",src)[:270]
+ src=re.sub(r"(?i)https?://[^\\s'\\\"<>]+","[URL]",src)
+ src=re.sub(r"['\\\"][^'\\\"\\n]{12,}['\\\"]","'[STRING]'",src)
+ src=re.sub(r"\\b[A-Za-z0-9_]{38,}\\b","[OPAQUE]",src)
+ return re.sub(r"\\s+"," ",src)[:240]
 p=argparse.ArgumentParser();p.add_argument("--device",required=True);p.add_argument("--package",default="com.azrael.pixivdumpsync.acceptance");a=p.parse_args()
 with tempfile.TemporaryDirectory(prefix="adl_buz_js_shape_") as d:
  root=pathlib.Path(d)
@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="adl_buz_js_shape_") as d:
  for num,script in enumerate(doc.scripts):
   if urllib.parse.urlsplit(script).hostname!="player.watchstreamus.com":continue
   _,js=get(script,embed)
-  marks=list(re.finditer(r"(?i)jwplayer|playlist|sources|fetch\\s*\\(|duration|file\\s*[:=]|mediaId|manifest|\\bapi\\b",js))
+  marks=list(re.finditer(r"(?i)jwplayer|playlist|sources|fetch\s*\(|duration|file\s*[:=]|mediaId|manifest|\bapi\b",js))
   if not marks:continue
   snippets=[]
   for m in marks[:7]:
