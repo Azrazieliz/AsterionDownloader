@@ -4,6 +4,7 @@ on:
     branches:
       - work/downloader-single-build-staging-20261112
       - repair/downloads-nine-providers-backfill-diagnostics-20261116
+      - repair/downloader-global-search-20261121
     paths:
       - '.github/workflows/downloader-one-build-preflight.yml'
       - 'app/src/**'
