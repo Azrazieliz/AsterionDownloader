@@ -40,6 +40,7 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
             "diagnostics.snapshot",
             "diagnostics.crash_summary",
             "diagnostics.video_jobs",
+            "diagnostics.torrent_jobs",
             "diagnostics.events"
         )
         private fun signer(context:Context):String {
@@ -197,6 +198,33 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
             .put("urls_or_titles_exported",false)
     }
 
+    /**
+     * Cross-process read-only native torrent metrics. Never starts JNI,
+     * contains no swarm URLs, tracker addresses, filenames or payload data.
+     * Accessible only through the existing doubly owner-approved Control
+     * integration, not a generic shell or exported JSON endpoint.
+     */
+    private fun torrentJobs(limit:Int):JSONObject {
+        require(limit in 1..20){"Invalid torrent diagnostic limit"}
+        val now=System.currentTimeMillis()
+        val rows=JSONArray()
+        for(item in TorrentTransfers.snapshots(app(),limit)){
+            rows.put(JSONObject()
+                .put("job",item.id.take(8))
+                .put("state",item.stage)
+                .put("verified_bytes",item.verifiedBytes)
+                .put("wanted_bytes",item.wantedBytes)
+                .put("payload_bytes_per_sec",item.speedBytesPerSec)
+                .put("connected_peers",item.peers)
+                .put("metrics_age_ms",if(item.updated<=0L)-1L
+                    else (now-item.updated).coerceAtLeast(0L)))
+        }
+        return JSONObject().put("entries",rows)
+            .put("sampled",rows.length())
+            .put("titles_urls_trackers_exported",false)
+            .put("native_engine_started",false)
+    }
+
     override fun call(method:String, arg:String?, extras:Bundle?):Bundle{
         authorizeCaller()
         val app=app()
@@ -236,6 +264,7 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
             val data=when(action){
                 "diagnostics.capabilities"->capabilities()
                 "diagnostics.video_jobs"->videoJobs(input.optInt("limit",12))
+                "diagnostics.torrent_jobs"->torrentJobs(input.optInt("limit",12))
                 "diagnostics.events"->DownloaderEventJournal.recent(app,
                     input.optLong("since",0L),input.optInt("limit",18))
                 "diagnostics.crash_summary"->crashSummary()
@@ -243,6 +272,7 @@ class AsterionControlDiagnosticsProvider:ContentProvider() {
                     .put("capabilities",capabilities())
                     .put("crashes",crashSummary())
                     .put("jobs",videoJobs(input.optInt("limit",10)))
+                    .put("torrents",torrentJobs(10))
                 else->error("Unreachable action")
             }
             val output=response(true,"completed",data)
