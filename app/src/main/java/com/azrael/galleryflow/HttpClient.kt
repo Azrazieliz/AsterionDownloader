@@ -89,6 +89,22 @@ open class HttpClient(private val context:android.content.Context?=null) {
             try{
                 val response=textResponse(url,referer)
                 return Jsoup.parse(response.body,response.finalUrl)
+            }catch(e:HttpStatusException){
+                val host=runCatching{URI(url).host.orEmpty()
+                    .lowercase(Locale.ROOT).removePrefix("www.")}
+                    .getOrDefault("")
+                // If 4KGirl denies plain HTML but serves its public page in
+                // the ordinary browser, read the actual authorized DOM.
+                // A blocked browser page still fails the gallery parser.
+                if(e.code==403 && context!=null &&
+                    host in setOf("4kgirl.com","4khd.com") &&
+                    (com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url) ||
+                     SiteSession.bound(context,url))){
+                    val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                        context,url,referer)
+                    return Jsoup.parse(html,url)
+                }
+                throw e
             }catch(e:java.net.SocketTimeoutException){
                 if(attempt++>=1 || !retryableGalleryHtml(url))throw e
                 // Delay only a failed, idempotent selected HTML GET.
