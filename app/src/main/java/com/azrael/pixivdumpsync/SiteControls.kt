@@ -37,7 +37,7 @@ object SiteControls {
             val path=runCatching{URI(url).path.orEmpty().trim('/').lowercase(Locale.ROOT)}
                 .getOrDefault("")
             if(path=="models" || path.startsWith("models/"))
-                return "$"+"{host}:photos"
+                return host+":photos"
         }
         return host
     }
