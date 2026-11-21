@@ -55,14 +55,8 @@ internal object SiteBackfillProfiles {
             cosplay+",main a[href],.gallery-grid a[href]",
             Regex("^/[0-9]{1,9}/?$"),"cosplay"),
         Profile("cosplaytele.com","COSPLAY",cosplay,
-            Regex("^/[a-z0-9][a-z0-9_-]{2,180}/?$"),"cosplay"),
-        // PimpBunny separates model/photo pages from selected /videos/
-        // publications. A model portrait is not a downloadable photo set:
-        // index only explicit first-party photo/gallery post URLs.
-        Profile("pimpbunny.com","COSPLAY",
-            cosplay+",main .gallery a[href],main .photos a[href],main .photo-grid a[href]",
-            Regex("""^/(?:photos?|images?|galleries?)/[a-z0-9][a-z0-9_/-]{2,180}/?$|^/models?/[a-z0-9_-]+/(?:photos?|images?|galleries?)/[a-z0-9][a-z0-9_/-]{0,180}/?$"""),
-            "cosplay")
+            Regex("^/[a-z0-9][a-z0-9_-]{2,180}/?$"),"cosplay")
+        // PimpBunny remains an approved video-only provider.
     ).associateBy{it.host}
 
     fun supports(host:String):Boolean=host.lowercase(Locale.ROOT)
