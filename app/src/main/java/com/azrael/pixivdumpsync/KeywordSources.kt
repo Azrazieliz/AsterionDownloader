@@ -423,6 +423,30 @@ object KeywordSources {
         }
         return hits.distinctBy{SearchRanking.canonicalKey(it.url)}
     }
+    /** Bing can answer HTTP 200 with a JS shell instead of organic links.
+     * Its public first-party RSS response supplies real publisher links
+     * without scraping unrelated site navigation. RSS is first-page ONLY:
+     * do not mislabel identical items as a later search page.
+     */
+    internal fun parseBingRss(xml:String):List<RankedHit>{
+        if(xml.length !in 80..3_000_000)return emptyList()
+        val doc=Jsoup.parse(xml,"https://www.bing.com/",
+            org.jsoup.parser.Parser.xmlParser())
+        if(doc.selectFirst("rss > channel")==null)return emptyList()
+        val found=LinkedHashMap<String,RankedHit>()
+        for(item in doc.select("rss > channel > item").take(60)){
+            val title=item.selectFirst("title")?.text()?.trim()?.take(220)
+                ?.takeIf{it.length>=3}?:continue
+            val link=item.selectFirst("link")?.text()?.trim().orEmpty()
+            val url=organicPublisherDestination(link,"Bing Web")?:continue
+            val description=item.selectFirst("description")?.text().orEmpty()
+                .take(400)
+            found.putIfAbsent(SearchRanking.canonicalKey(url),
+                RankedHit(title,url,"Bing Web",description))
+        }
+        return found.values.toList()
+    }
+
     /** Bing organic web index, paged and never mistaken for original media. */
     internal fun webIndexUrl(keyword:String,area:VideoSearchArea,page:Int):String{
         require(page>=0){"Negative search page"}
@@ -444,7 +468,25 @@ object KeywordSources {
         require(response.statusCode() in 200..299){
             "Web index HTTP "+response.statusCode()
         }
-        return parseWebIndex(response.body(),response.url().toString(),"Bing Web")
+        val htmlHits=parseWebIndex(
+            response.body(),response.url().toString(),"Bing Web")
+        if(htmlHits.isNotEmpty())return htmlHits
+        // Bing's HTTP 200 JavaScript shell has no result cards. Retrying
+        // the first page in supported RSS format is preferable to silently
+        // reporting zero web results. Explicit later pages cannot reuse
+        // first-page RSS results and must surface an index-shape failure.
+        check(page==0){"Bing returned no parseable organic page "+(page+1)}
+        val rssUrl=webIndexUrl(keyword,area,0)+"&format=rss"
+        val rss=connection(context,rssUrl).ignoreHttpErrors(true)
+            .maxBodySize(3_000_000).timeout(12_000).execute()
+        require(rss.statusCode() in 200..299){
+            "Bing RSS HTTP "+rss.statusCode()
+        }
+        val rssHits=parseBingRss(rss.body())
+        check(rssHits.isNotEmpty()){
+            "Bing returned no parseable publisher links in HTML or RSS"
+        }
+        return rssHits
     }
 
     /** Broad web indexes must start in the FIRST search batch. The old
