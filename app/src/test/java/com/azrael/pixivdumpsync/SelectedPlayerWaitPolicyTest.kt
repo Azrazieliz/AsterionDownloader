@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SelectedPlayerWaitPolicyTest {
+    @Test fun javideoInspectionScheduleFitsWithinBrowserDeadline(){
+        val initial=SelectedPlayerWaitPolicy.inspectionDelayMs(true,0)
+        val repeated=SelectedPlayerWaitPolicy.inspectionDelayMs(true,1)
+        assertEquals(1_800L,initial)
+        assertEquals(200L,repeated)
+        val required=initial+SelectedPlayerWaitPolicy.maxPolls("javideo.net")*
+            (repeated+1_400L)
+        assertTrue("JAVIDEO retries must leave navigation time",required<40_000L)
+        assertEquals(1_800L,SelectedPlayerWaitPolicy.inspectionDelayMs(false,8))
+        assertEquals(200L,SelectedPlayerWaitPolicy.inspectionDelayMs(
+            true,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com")))
+    }
     @Test fun signedPlaybackJSHasAdditionalBoundedTime(){
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("3dhentaix.com"))
         assertTrue(SelectedPlayerWaitPolicy.maxPolls("3dhentaix.com")>
