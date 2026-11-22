@@ -4,7 +4,7 @@ Do not claim a completed video from an HTTP 200 catalog or a preview."""
 import json,re,urllib.parse,urllib.request,urllib.error
 from collections import Counter
 from bs4 import BeautifulSoup
-BASE="https://dsysav.com/"
+BASE="https://dsysav.com/en"
 UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
 def fetch(url):
  try:
@@ -45,7 +45,7 @@ if code==200:
 # DSYSAV public homepage is a JS-only shell: server response returned
 # no first-party href at all. Inspect the same public site in real desktop
 # Chrome before concluding there are no selected posts; do not click gates.
-if code==200 and not out.get("internal_count"):
+if code==200 and not out.get("candidate_count"):
  from selenium import webdriver
  from selenium.webdriver.chrome.options import Options
  from selenium.common.exceptions import TimeoutException
