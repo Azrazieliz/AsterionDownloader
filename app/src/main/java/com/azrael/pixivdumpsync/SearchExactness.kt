@@ -38,8 +38,13 @@ object SearchExactness {
     fun mediaMatches(query:String,title:String):Boolean {
         val requested=terms(query)
         if(requested.isEmpty())return false
-        return if(requested.size>=2)matchesPhrase(query,title)
-            else matches(query,title)
+        // A model name must match full tokens, not a prefix such as
+        // "Alice" matching "Alicez". Loose prefix matching still exists
+        // for explicit autocomplete via matches()/matchesPhrase().
+        return if(requested.size>=2){
+            val actual=terms(title)
+            actual.windowed(requested.size).any{it==requested}
+        }else matches(query,title)
     }
 
     fun matches(query:String,title:String):Boolean {
