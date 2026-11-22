@@ -717,6 +717,19 @@ object BrowserPageFetch {
                                     return /^\/(?:u\/)?watch\/\d{1,16}\/?$/.test(currentPath) &&
                                         host==='mixdrop.ag' &&
                                         /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname);
+                                if(publisher==='pornbuz.com')
+                                    return /^\/video\/[a-z0-9][a-z0-9-]{7,190}-\d{3,10}\/?$/i
+                                        .test(currentPath) &&
+                                        !!el.closest('article .video-player-area,'+
+                                            'main .video-player') &&
+                                        !el.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,'+
+                                            '.sidebar,[data-ad]') &&
+                                        ['player.watchstreamus.com',
+                                            'cdn.watchstreamus.com'].includes(host) &&
+                                        /^\/embed\/[A-Za-z0-9_-]{5,150}\/?$/
+                                            .test(u.pathname) &&
+                                        !u.search && !u.hash;
                                 if(publisher==='livecamrips.to')
                                     return /^\/video\/\d{5,12}\/?$/.test(currentPath) &&
                                         el.id==='iframe-video' &&
