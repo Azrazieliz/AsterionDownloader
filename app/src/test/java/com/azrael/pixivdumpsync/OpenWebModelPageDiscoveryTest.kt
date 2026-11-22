@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpenWebModelPageDiscoveryTest {
+    @Test fun yahooMeasuredOrganicLinkResolvesOnlyPublisherDetailPage(){
+        val actual="https://creator.example.org/free-sword-model"
+        val redirect="https://r.search.yahoo.com/_ylt=metadata/RU="+
+            java.net.URLEncoder.encode(actual,"UTF-8")+"/RK=2/RS=metadata"
+        val html="<div class='algo-sr'><div class='compTitle'><h3>"+
+            "<a href='"+redirect+"'>Free medieval sword 3D model</a>"+
+            "</h3></div></div>"
+        val pages=OpenWebModelPageDiscovery.landingLinks(
+            html,"https://search.yahoo.com/search?p=sword","Yahoo","sword")
+        assertEquals(listOf(actual),pages)
+    }
+
     @Test fun indexedSwordModelPageRevealsActualFilesNotAnotherPaidPage(){
         val results="""<div class="algo-sr"><div class="compTitle"><h3><a
             href="https://creator.example.org/free-medieval-sword-3d-model">
