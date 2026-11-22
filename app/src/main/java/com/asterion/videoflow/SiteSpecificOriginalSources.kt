@@ -668,6 +668,8 @@ internal object SiteSpecificOriginalSources {
             "uncensoredhentai.xxx"->host(player)=="nhplayer.com" &&
                 Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
                     .matches(path) && frame.rawQuery.isNullOrBlank()
+            "pornbuz.com"->PornBuzOriginalSource.owns(selected) &&
+                PornBuzOriginalSource.isSelectedMainFrame(player)
             "pornavhd.com"->host(player)=="video.playerrecord.cfd" &&
                 Regex("""^/e/[A-Za-z0-9_-]{8,100}/?$""")
                     .matches(path) && frame.rawQuery.isNullOrBlank() &&
