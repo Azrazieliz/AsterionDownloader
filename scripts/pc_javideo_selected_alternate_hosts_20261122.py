@@ -28,7 +28,12 @@ try:
   if len(choices)==1:button=choices[0];break
   time.sleep(.6)
  if button is None:raise RuntimeError("NO_SELECTED_ALTERNATE_SERVER_BUTTON")
- button.click()
+ # The publisher layers a decorative <span> above the real selected button;
+ # Chrome mouse click can be intercepted although the normal button remains
+ # active. Trigger ONLY the exact user-selected first-party button action.
+ d.execute_script("arguments[0].scrollIntoView({block:'center'});",button)
+ try:button.click()
+ except Exception:d.execute_script("arguments[0].click();",button)
  frame=None
  for _ in range(24):
   if urllib.parse.urlsplit(d.current_url).path!="/en/fc2ppv-4994603":
