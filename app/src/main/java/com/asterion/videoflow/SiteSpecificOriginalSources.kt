@@ -736,17 +736,17 @@ internal object SiteSpecificOriginalSources {
     ):List<Source> {
         if(host(selected) !in setOf("pornavhd.com","livecamrips.to") ||
             !selectedExtractorFrame(selected,frame))return emptyList()
-        val direct=selectedIframeMedia(context,selected,Source(frame,selected))
-        if(direct.isNotEmpty())return direct
-        // Legacy Mixdrop embeds can hide media from both static HTML and
-        // Android HTML5 currentSrc. yt-dlp already handles Mixdrop player
-        // inputs; preserve only the one publisher-selected #iframe-video
-        // for that established extractor, never its arbitrary watch page.
+        // The already publisher-attested Mixdrop #iframe-video belongs to
+        // the existing yt-dlp player extractor. Its HTML5 currentSrc is not
+        // available to the isolated Android browser and probing that shell
+        // first spent an entire 12s+browser timeout without media bytes.
+        // Route this exact selected iframe immediately; extraction success
+        // still requires fully transferred, playable original media.
         if(host(selected)=="livecamrips.to" &&
             host(frame) in setOf("mixdrop.ag","mixdrop.co","mixdrop.to",
                 "mdzsmutpcvykb.net"))
             return listOf(Source(frame,selected))
-        return emptyList()
+        return selectedIframeMedia(context,selected,Source(frame,selected))
     }
 
     /** Real recording-player access failures are not unsupported video IDs.
