@@ -1081,6 +1081,11 @@ object UnifiedDownloadsUi {
 
     private fun sameVisualTree(old:View,fresh:View):Boolean{
         if(old.javaClass!=fresh.javaClass)return false
+        // A selected video's poster identity can change without changing
+        // the number or shape of Downloads controls. Keeping the old view
+        // would leave its image/callback bound to another selected item.
+        if(old is ImageView && fresh is ImageView && old.tag!=fresh.tag)
+            return false
         if(old is android.view.ViewGroup &&
             fresh is android.view.ViewGroup){
             if(old.childCount!=fresh.childCount)return false
@@ -1092,6 +1097,17 @@ object UnifiedDownloadsUi {
     }
 
     private fun updateVisualValues(old:View,fresh:View){
+        // A background poster loaded into the shared thumbnail cache must
+        // become visible even when the Downloads card structure is unchanged.
+        // Never replace an already-loaded original with a pending placeholder.
+        if(old is ImageView && fresh is ImageView &&
+            old.tag==fresh.tag &&
+            fresh.contentDescription?.toString()=="Video thumbnail" &&
+            old.contentDescription?.toString()!="Video thumbnail"){
+            old.setImageDrawable(fresh.drawable)
+            old.scaleType=fresh.scaleType
+            old.contentDescription=fresh.contentDescription
+        }
         if(old is TextView && fresh is TextView){
             if(old.text!=fresh.text)old.text=fresh.text
             if(old.currentTextColor!=fresh.currentTextColor)
