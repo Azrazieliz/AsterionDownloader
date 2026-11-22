@@ -135,9 +135,12 @@ object AsterionSearchHub {
         // appeared in unrelated parts of a title. Descriptive torrent/game
         // searches keep their existing broader word matching elsewhere.
         val unique=all.filter{
-            SearchExactness.matchesPhrase(term,it.title) &&
+            SearchExactness.mediaMatches(term,it.title) &&
                 !IndexedMediaQuality.navigationTitle(it.title)
         }.distinctBy{SearchRanking.canonicalKey(it.url)}
+         .sortedWith(compareByDescending<Found>{
+             SearchExactness.matchesPhrase(term,it.title)
+         })
         if(indexPage==0)SearchResultsDb(ctx).use{db->
             db.save("SEARCH:"+mode+":"+term,items)
         }
