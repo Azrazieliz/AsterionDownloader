@@ -21,6 +21,25 @@ class PornBuzSelectedFullHlsTest {
             html.replace("<div class=\"responsive-player\">","<div class=\"other\">")))
     }
 
+    @Test fun compactBrowserSnapshotPreservesOnlyTrustedPrimaryFrame(){
+        val selectedHtml="""<main><div class="video-player">
+            <iframe src="$player" allowfullscreen></iframe>
+            </div><aside class="related">
+            <iframe src="https://player.watchstreamus.com/embed/ADfake123"></iframe>
+            </aside></main>"""
+        assertEquals(player,PornBuzOriginalSource.selectedMainPlayer(
+            selected,selectedHtml))
+        assertNull(PornBuzOriginalSource.selectedMainPlayer(selected,
+            selectedHtml.replace(player,
+                "https://player.watchstreamus.com.evil.example/embed/abcd12345")))
+        assertNull(PornBuzOriginalSource.selectedMainPlayer(
+            selected,"""<main><aside class="related"><div class="video-player">
+                <iframe src="$player"></iframe>
+                </div></aside></main>"""))
+        assertNull(PornBuzOriginalSource.selectedMainPlayer(
+            "https://pornbuz.com/",selectedHtml))
+    }
+
     @Test fun alternateAttestedCdnPlayerAndHlsRemainBoundToSelectedArticle(){
         val cdnPlayer=player.replace("player.watchstreamus.com",
             "cdn.watchstreamus.com")
