@@ -7,20 +7,21 @@ class SelectedRecordingNetworkOriginalTest {
     private val selected="https://pornavhd.com/2026/11/21/selected-full-recording/"
     private val player="https://video.playerrecord.cfd/e/Abc123Def456"
     private val media="https://z6v2p9a8.bkcdn.net/media/recording-original.mp4"
-    @Test fun selectedBrowserRequestIsOnlyAProvenancedCandidateNotACompleteFile(){
-        assertTrue(SelectedRecordingNetworkOriginal.isAttestedPlayer(
+    @Test fun removedPornavhdProviderCanNeverResumeNetworkMediaCapture(){
+        // The owner retired PornAVHD. Preserve old saved files but never
+        // treat a legacy selected player as an active source again.
+        assertTrue(com.azrael.pixivdumpsync.ProviderRetirement.isRetired(selected))
+        assertFalse(VideoSiteProfiles.isVideoPage(selected))
+        assertFalse(SelectedRecordingNetworkOriginal.isAttestedPlayer(
             selected,player))
-        assertTrue(SelectedRecordingNetworkOriginal.approvedObservedRequest(
+        assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
             selected,player,media,false,player))
-        assertTrue(SelectedRecordingNetworkOriginal.approvedObservedRequest(
-            selected,player,media,false,"https://video.playerrecord.cfd/"))
-        // Exact selected WebView context is attested even if the browser's
-        // referrer policy strips the cross-origin Referer header.
-        assertTrue(SelectedRecordingNetworkOriginal.approvedObservedRequest(
+        assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
             selected,player,media,false,null))
         assertTrue(UnverifiedSelectedPreviewGuard.shouldHold(
             selected,3000L,null))
     }
+
     @Test fun neverPromoteAdsBadHostsOtherPlayersOrUnselectedPages(){
         val bad=listOf(
             "https://ads.example/other.mp4",
