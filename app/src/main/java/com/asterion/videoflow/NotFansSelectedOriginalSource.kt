@@ -33,16 +33,21 @@ internal object NotFansSelectedOriginalSource {
         return videoPath.matchEntire(page.path.orEmpty())?.groupValues?.get(1)
     }
 
-    fun verifiedDownload(selected:String,media:String):Boolean {
-        val selectedId=selectedId(selected)?:return false
+    fun isPublisherFormat(media:String):Boolean {
         val file=uri(media)?:return false
         val match=filePath.matchEntire(file.path.orEmpty())?:return false
-        if(match.groupValues[1]!=selectedId ||
-            match.groupValues[2]!=selectedId)return false
-        // The documented public download action explicitly marks the file
-        // instead of an inline player route. No arbitrary get_file links.
+        if(match.groupValues[1]!=match.groupValues[2])return false
+        // The site's documented public download action explicitly marks the
+        // file; a generic PHP endpoint or another site's link does not pass.
         val params=file.rawQuery?.split('&').orEmpty()
         return params.count{it.equals("download=true",ignoreCase=true)}==1
+    }
+
+    fun verifiedDownload(selected:String,media:String):Boolean {
+        val selectedId=selectedId(selected)?:return false
+        if(!isPublisherFormat(media))return false
+        val path=uri(media)?.path.orEmpty()
+        return filePath.matchEntire(path)?.groupValues?.get(1)==selectedId
     }
 
     fun published(selected:String,html:String):List<String> {
