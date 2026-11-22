@@ -323,6 +323,26 @@ class ReportedSiteSpecificOriginalsTest {
             "https://nhplayer.com/v/Z2flAXXPucyCbVJ/?ad=1",server,original))
     }
 
+    @Test fun selectedNhPlayerOpaqueDataServerFollowsTheSameSelectedMediaGate(){
+        val frame="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
+        val token="https://nhplayer.com/player.php?data=selected_opaque_token"
+        val file="https://r2.1hanime.com/media/episode-3.mp4?verify=opaque-token"
+        assertTrue(SiteSpecificOriginalSources.selectedNhPlayerServerQuery(
+            "data=selected_opaque_token"))
+        assertTrue(SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            frame,token,file))
+        assertEquals(token,SiteSpecificOriginalSources.selectedNhPlayerServer(
+            frame,"<ul class='servers'><li data-id='$token'></li></ul>"))
+        for(bad in listOf("data=", "data=a",
+            "data=selected_opaque_token&other=1",
+            "data=selected_opaque_token&data=another_token",
+            "redirect=https://ads.example/video",
+            "i=token&s=1", "i=token&s=1&vid="))
+            assertFalse(bad,SiteSpecificOriginalSources
+                .selectedNhPlayerServerQuery(bad))
+        assertFalse(SiteSpecificOriginalSources.selectedNhPlayerAjaxOriginal(
+            frame,token,file.replace("r2.1hanime.com","ads.example")))
+    }
     @Test fun uncensoredHentaiResolvesOnlyItsExactNhplayerIframe(){
         val page="https://uncensoredhentai.xxx/watch/episode-3/"
         val player="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
