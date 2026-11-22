@@ -26,21 +26,11 @@ object SiteControls {
             else->host
         }
     }
-    /**
-     * PimpBunny video watches and its photo gallery are separate modules.
-     * Keep the canonical host key unchanged for URL provenance, deduplication
-     * and earlier video preferences; separate only their control flags.
+    /** PimpBunny is an approved video-only provider, not a Cosplay/gallery
+     * photo source. Keep its prior saved preferences and records on disk,
+     * but never create a synthetic second :photos site control from /models/.
      */
-    internal fun controlKey(url:String):String {
-        val host=key(url)
-        if(host=="pimpbunny.com"){
-            val path=runCatching{URI(url).path.orEmpty().trim('/').lowercase(Locale.ROOT)}
-                .getOrDefault("")
-            if(path=="models" || path.startsWith("models/"))
-                return host+":photos"
-        }
-        return host
-    }
+    internal fun controlKey(url:String):String = key(url)
     fun sync(context:Context,url:String,default:Boolean=false):Boolean {
         val host=controlKey(url)
         if(host.isBlank() || ProviderRetirement.isRetired(url))return false
