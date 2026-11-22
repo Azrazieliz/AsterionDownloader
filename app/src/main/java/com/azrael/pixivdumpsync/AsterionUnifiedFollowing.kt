@@ -365,18 +365,44 @@ object AsterionUnifiedFollowing {
                 a.runOnUiThread{
                     if(a.isFinishing || a.isDestroyed)return@runOnUiThread
                     if(proof==null){
-                        // Do not offer an "unverified performer" follow as
-                        // a substitute for the failed identity check. That
-                        // previously let gibberish and misleading video title
-                        // matches appear exactly like real performers.
-                        android.app.AlertDialog.Builder(a)
-                            .setTitle("No verified source reached")
-                            .setMessage("No accessible supported video-performer profile "+
-                                "or independent creator publication was confirmed for \""+
-                                name.take(80)+"\". This does NOT mean the "+
-                                "person does not exist. Nothing was followed; "+
-                                "third-party video title matches need review.")
-                            .setPositiveButton("CLOSE",null).show()
+                        // Name-only discovery is useful when a real performer
+                        // publishes no supported profile. It is always
+                        // explicitly labelled UNVERIFIED and never auto-queues
+                        // source videos; the owner must review each match.
+                        // Keep verification as the only path to genuine
+                        // profile-attributed performer subscriptions.
+                        val notice="No accessible supported performer profile "+
+                            "was confirmed for \""+name.take(80)+"\". "+
+                            "This does not mean the person does not exist. "+
+                            "Title matches are NOT verified identity evidence."
+                        val dialog=android.app.AlertDialog.Builder(a)
+                            .setTitle("Profile not verified")
+                            .setMessage(notice)
+                            .setNegativeButton("CLOSE",null)
+                        if(PerformerFollowPolicy.canTrackUnverified(name)){
+                            dialog.setPositiveButton("TRACK NAME MATCHES"){_,_->
+                                val saved=NameWatchDb(a).use{db->
+                                    db.add(name) || db.list().any{
+                                        it.name.equals(name,ignoreCase=true) &&
+                                            it.source.isBlank()
+                                    }
+                                }
+                                if(saved){
+                                    CreatorNames.remember(a,name,"PERFORMERS",true)
+                                    val id=NameWatchDb(a).use{db->
+                                        db.list().firstOrNull{
+                                            it.name.equals(name,ignoreCase=true) &&
+                                                it.source.isBlank()
+                                        }?.id
+                                    }
+                                    if(id!=null)
+                                        NameCrawler.scanCreator(a.applicationContext,id)
+                                    notice(a,"Tracking unverified title matches for review")
+                                }else notice(a,"Could not save the name-only watch")
+                                refresh()
+                            }
+                        }
+                        dialog.show()
                     }else{
                         val id=NameWatchDb(a).use{
                             it.addVerified(proof.displayName,proof.profileUrl)
