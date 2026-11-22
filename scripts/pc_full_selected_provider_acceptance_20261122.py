@@ -247,6 +247,34 @@ def player_candidate(name,selected,frame):
     if len(unique)==1:return next(iter(unique.values()))
    except Exception:pass
    time.sleep(.8)
+  if name=="javideo":
+   # The exact publisher film offers labelled alternate servers. Only one
+   # active in-article STAPE#01 frame is permitted after normal Play failed;
+   # a muted ad, related card, or guessed host never becomes a candidate.
+   try:
+    d.switch_to.default_content()
+    buttons=[x for x in d.find_elements(By.XPATH,
+      "//button[normalize-space(.)='STAPE#01']")
+      if x.is_displayed() and x.is_enabled()]
+    if len(buttons)==1:
+     buttons[0].click()
+     for _ in range(12):
+      frames=d.find_elements(By.CSS_SELECTOR,
+        ".embed-responsive.player:not(.d-none) iframe[src]")
+      urls=list(dict.fromkeys(x.get_attribute("src") or "" for x in frames))
+      valid=[]
+      for u in urls:
+       if not safe_url(u):continue
+       p=urllib.parse.urlsplit(u)
+       if (host(u) in ("streamtape.com","streamtape.to",
+           "streamtape.net","streamtape.site","sbtape.com")
+           and re.fullmatch(r"/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?",p.path)
+           and not p.query and not p.fragment):valid.append(u)
+      if len(urls)==1 and len(valid)==1:
+       return {"source":valid[0],"referer":selected,"duration":0,
+        "reason":"same selected JAVIDEO film - publisher-labelled STAPE#01"}
+      time.sleep(.6)
+   except Exception:pass
   return {"reason":"actual publisher iframe produced no uniquely attributable full media"}
  finally:d.quit()
 
@@ -257,6 +285,7 @@ def full_file(selected,candidate):
   out=Path(tmp)
   cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
    "--no-mtime","--no-warnings","--retries","2","--fragment-retries","2",
+   "--abort-on-unavailable-fragments",
    "--socket-timeout","14","--max-filesize","1200M","--format","bestvideo+bestaudio/best",
    "--add-header","Referer:"+candidate["referer"],"-o",str(out/"original.%(ext)s"),url]
   try:p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=280)
@@ -268,7 +297,7 @@ def full_file(selected,candidate):
   meta=json.loads(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration,size:stream=codec_type","-of","json",str(f)],timeout=20,text=True))
   seconds=float(meta.get("format",{}).get("duration") or 0)
   tracks=[x["codec_type"] for x in meta.get("streams",[])]
-  if seconds<90 or "video" not in tracks:raise RuntimeError("PREVIEW_OR_UNPLAYABLE")
+  if seconds<90 or "video" not in tracks or "audio" not in tracks:raise RuntimeError("PREVIEW_OR_UNPLAYABLE")
   if candidate.get("duration",0)>=90 and abs(seconds-candidate["duration"])>max(10,candidate["duration"]*.1):raise RuntimeError("PLAYER_FILE_DURATION_MISMATCH")
   h=hashlib.sha256()
   with f.open("rb") as inp:
