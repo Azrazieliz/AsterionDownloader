@@ -1,0 +1,31 @@
+name: Asterion Downloader — DSAV fallback complete selected original PC acceptance
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_dsav_selected_complete_original_20261122.py'
+      - '.github/workflows/downloader-pc-dsav-full-original-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dsav-real-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare actual browser and playable media validation
+        run: |
+          python3 -m py_compile scripts/pc_dsav_selected_complete_original_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Capture exact selected public HLS and download all original bytes
+        run: python3 scripts/pc_dsav_selected_complete_original_20261122.py
+      - name: Retain only final evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-dsav-complete-selected-original-receipt
+          path: pc-dsav-complete-receipt.json
+          retention-days: 14
