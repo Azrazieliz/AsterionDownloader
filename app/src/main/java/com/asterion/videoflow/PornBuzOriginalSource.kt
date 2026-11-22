@@ -12,6 +12,13 @@ import java.util.Locale
 internal object PornBuzOriginalSource {
     private val selectedArticle=Regex(
         """(?i)^/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?$""")
+    // Publisher-selected WatchStreamUS player and its observed CDN alias.
+    // No arbitrary related frame or advertising host is eligible.
+    private val trustedPlayerHosts=setOf(
+        "player.watchstreamus.com","cdn.watchstreamus.com")
+    private fun trustedPlayerHost(value:String):Boolean =
+        value.lowercase(Locale.ROOT) in trustedPlayerHosts
+
     private val playerId=Regex(
         """^/(?:v|e|embed)/[A-Za-z0-9_-]{6,100}(?:/[A-Za-z0-9_.%-]{3,250})?/?$""")
     fun owns(raw:String):Boolean {
@@ -42,7 +49,7 @@ internal object PornBuzOriginalSource {
     internal fun isSelectedMainFrame(raw:String):Boolean {
         val uri=runCatching{URI(raw)}.getOrNull()?:return false
         return uri.scheme=="https" && uri.userInfo==null && uri.port==-1 &&
-            uri.host.orEmpty().lowercase(Locale.ROOT)=="player.watchstreamus.com" &&
+            uri.host.orEmpty().lowercase(Locale.ROOT) in trustedPlayerHosts &&
             uri.rawQuery.isNullOrBlank() && uri.rawFragment==null &&
             Regex("""^/embed/[A-Za-z0-9_-]{5,150}/?$""")
                 .matches(uri.path.orEmpty())
@@ -97,7 +104,7 @@ internal object PornBuzOriginalSource {
 
     private fun isSelectedManifest(url:URI):Boolean =
         url.scheme=="https" && url.userInfo==null && url.port==-1 &&
-            url.host.orEmpty().lowercase(Locale.ROOT)=="player.watchstreamus.com" &&
+            url.host.orEmpty().lowercase(Locale.ROOT) in trustedPlayerHosts &&
             url.fragment==null &&
             url.path.orEmpty().matches(Regex("""(?i)^/[^?#]{5,1500}\.m3u8$""")) &&
             !url.path.orEmpty().contains("preview",true) &&
