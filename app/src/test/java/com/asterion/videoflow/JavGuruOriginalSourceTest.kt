@@ -206,6 +206,17 @@ class JavGuruOriginalSourceTest {
             selected,wrapper,next,"LU"))
         assertTrue(JavGuruPythonSelectedPlayer.eligible(
             selected,wrapper,next,"SB"))
+        // The shortcode decoder already permits the publisher's www host
+        // and an encoded poster background longer than 480 query bytes.
+        val longWrapper="https://www.jav.guru/searcho/?ed="+
+            "a".repeat(40)+"&bg="+"p".repeat(490)
+        val wwwNext="https://www.jav.guru/searcho/?er="+
+            "a".repeat(32)
+        assertTrue(JavGuruPythonSelectedPlayer.eligible(
+            selected,longWrapper,wwwNext,"LU"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected,"https://jav.guru.evil.example/searcho/?ed="+
+                "a".repeat(40),next,"LU"))
         assertFalse(JavGuruPythonSelectedPlayer.eligible(
             selected,wrapper,next,"JK"))
         assertFalse(JavGuruPythonSelectedPlayer.eligible(
