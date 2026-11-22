@@ -62,4 +62,5 @@ class PublisherSearchPosterTest {
         assertEquals(1,found.size)
         assertEquals("https://example.org/video/123",found.first().url)
         assertTrue(found.first().description.contains("Actual"))
-    }}
+    }
+}
