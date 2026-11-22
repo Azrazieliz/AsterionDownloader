@@ -23,9 +23,11 @@ internal object PeerTubeResultPolicy {
         val uri=runCatching{java.net.URI(raw)}.getOrNull()?:return false
         if(uri.scheme!="https" || uri.port!=-1 ||
             uri.fragment!=null || !uri.rawQuery.isNullOrEmpty())return false
-        return SearchRanking.isVideoUrl(raw) ||
-            Regex("""^/w/[A-Za-z0-9_-]{10,100}/?$""")
-                .matches(uri.path.orEmpty())
+        // SepiaSearch is a PeerTube index; return only PeerTube's exact
+        // selected-watch routes. The generic "/videos" heuristic also
+        // admits category/listing pages and must not classify them as media.
+        return Regex("""^/(?:w|videos/watch)/[A-Za-z0-9_-]{10,100}/?$""")
+            .matches(uri.path.orEmpty())
     }
 }
 
