@@ -66,4 +66,28 @@ class ThumbnailCacheRetentionTest {
         assertArrayEquals(ByteArray(24){9},output.toByteArray())
     }
 
+    @Test fun deletesOnlyAbandonedThumbnailPartFiles() {
+        val root=Files.createTempDirectory("asterion-preview-orphans-").toFile()
+        try {
+            val now=System.currentTimeMillis()
+            val abandoned=File(root,"a".repeat(64)+".part").apply {
+                writeBytes(ByteArray(18))
+                setLastModified(now-900_000L)
+            }
+            val active=File(root,"b".repeat(64)+".part").apply {
+                writeBytes(ByteArray(18))
+                setLastModified(now-1_000L)
+            }
+            val foreign=File(root,"resumable-download.part").apply {
+                writeBytes(ByteArray(18))
+                setLastModified(now-900_000L)
+            }
+            assertEquals(1,ThumbnailCacheRetention.prune(root,active,
+                maxBytes=1000L,maxEntries=1000,now=now))
+            assertFalse(abandoned.exists())
+            assertTrue(active.exists())
+            assertTrue(foreign.exists())
+        } finally { root.deleteRecursively() }
+    }
+
 }
