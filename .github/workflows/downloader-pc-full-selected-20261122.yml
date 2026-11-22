@@ -24,7 +24,7 @@ jobs:
         # PornAVHD exposed only a short preview. Don't waste runner time.
         # Focus the publisher whose genuine frame was wrongly filtered.
         # Other failures retain their previous receipts; xChina already passed.
-        provider: [pornbuz, javideo, uncensoredhentai]
+        provider: [pornbuz]
     steps:
       - uses: actions/checkout@v4
       - name: Real Chrome and exact PC download dependencies

@@ -82,7 +82,24 @@ def chrome_watch(name,url):
   try:d.get(url)
   except Exception:pass  # Slow JS-loaded players can still have an inspectable DOM.
   out={"urls":[],"players":[],"manifest_hosts":[],"duration":[]}
+  pornbuz_play_attempted=False
   for tick in range(24):
+   if name=="pornbuz" and not pornbuz_play_attempted:
+    # One normal Chromium user gesture on the exact selected main player.
+    # Never click a sidebar, thumbnail, advertisement, login, or suggested video.
+    try:
+     controls=d.find_elements(By.CSS_SELECTOR,
+       ".video-player-area .video-player .responsive-player "
+       "button[aria-label='Play'], "
+       ".video-player-area .video-player .responsive-player "
+       "button[title='Play'], "
+       ".video-player-area .video-player .responsive-player "
+       ".vjs-big-play-button")
+     controls=[c for c in controls if c.is_displayed() and c.is_enabled()]
+     if len(controls)==1:
+      controls[0].click()
+      pornbuz_play_attempted=True
+    except Exception:pass
    if name=="javideo":
     try:d.execute_script("""var b=document.querySelector('#clickfakeplayer');if(b&&!b.dataset.asterionPcClicked){b.dataset.asterionPcClicked='1';b.click()}""")
     except Exception:pass
