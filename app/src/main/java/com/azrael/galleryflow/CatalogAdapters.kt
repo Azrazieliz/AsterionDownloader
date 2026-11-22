@@ -530,8 +530,42 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
         // Reuse the existing publisher-owned post isolation before selecting
         // real image/video originals; preserve official archive extraction.
         val direct = docs.flatMap { (pageUrl, pageDoc) ->
-            directPageAssets(
-                SelectedAlbumScope.selectedContent(pageDoc,pageUrl),pageUrl)
+            val selected=SelectedAlbumScope.selectedContent(pageDoc,pageUrl)
+            val originals=directPageAssets(selected,pageUrl)
+            // WordPress photo galleries can place full video players in
+            // sibling, SAME-ARTICLE iframes. Until now these frames were
+            // retained as inventory, but every video was delegated to a
+            // separate VideoFlow job, invisible to GalleryFlow completion.
+            // Bring only a uniquely attributable actual media file back
+            // into the normal GalleryFlow video receipt path.
+            val videoFrames=selected.select("iframe[src]")
+                .map{it.absUrl("src")}
+                .filter{com.asterion.videoflow.SiteSpecificOriginalSources
+                    .selectedExtractorFrame(gallery.canonicalUrl,it)}
+                .distinct().take(8)
+            val embedded=videoFrames.mapNotNull{frame->
+                val initial=runCatching{
+                    http.document(frame,pageUrl).outerHtml()
+                }.getOrNull()
+                val fromStatic=initial?.let{
+                    com.asterion.videoflow.PublisherOriginalExtractors
+                        .cosplayTeleEmbeddedOriginal(
+                            gallery.canonicalUrl,frame,it)
+                }
+                val fromBrowser=if(fromStatic==null)runCatching{
+                    http.selectedCosplayTelePlayerHtml(
+                        gallery.canonicalUrl,frame)
+                }.getOrNull()?.let{
+                    com.asterion.videoflow.PublisherOriginalExtractors
+                        .cosplayTeleEmbeddedOriginal(
+                            gallery.canonicalUrl,frame,it)
+                } else null
+                val exact=fromStatic?:fromBrowser
+                exact?.url?.takeIf{videoMime(it)!=null}?.let{file->
+                    DirectPageAsset(file,frame,MediaKind.VIDEO,videoMime(file))
+                }
+            }
+            (originals+embedded).distinctBy{normalizedUrl(it.url)}
         }.distinctBy { normalizedUrl(it.url) }
 
         val selectedArchiveArticle=SelectedAlbumScope.selectedArchiveArticle(
