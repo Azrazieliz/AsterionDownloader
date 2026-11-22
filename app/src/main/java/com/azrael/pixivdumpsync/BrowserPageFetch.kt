@@ -938,7 +938,13 @@ object BrowserPageFetch {
                                             ['xchina.co','www.xchina.co','en.xchina.co']
                                                 .includes(link.hostname.toLowerCase()) &&
                                             !link.username && !link.password &&
-                                            !link.port && !link.search && !link.hash &&
+                                            !link.port && !link.hash &&
+                                            // Selected first-party HLS masters may carry
+                                            // short-lived signed query parameters. The
+                                            // exact article ID, host and manifest path
+                                            // remain mandatory; never drop a valid source
+                                            // merely because its signature is in ?query.
+                                            link.search.length<=2048 &&
                                             link.pathname.toLowerCase()===
                                                 '/hls/'+match[1].toLowerCase()+'/master.m3u8';
                                         if(valid)
