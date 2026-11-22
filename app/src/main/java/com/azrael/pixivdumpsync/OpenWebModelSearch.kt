@@ -34,7 +34,7 @@ internal object OpenWebModelSearch {
     internal fun parseWebIndex(html:String,base:String,engine:String):List<Candidate> {
         val doc=Jsoup.parse(html,base)
         val anchors=if(engine=="Yahoo")
-            doc.select("div.algo-sr .compTitle h3 a[href],"+
+            doc.select("div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
                 "div.dd.algo .compTitle h3 a[href]")
         else doc.select("li.b_algo h2 a[href]")
         val discovered=LinkedHashMap<String,Candidate>()
