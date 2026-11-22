@@ -19,7 +19,9 @@ class SelectedVideoIframePolicyTest {
             "https://roshy.tv/video/exact-scene/" to
                 "https://kamehaus.net/e/abcdefGHI1",
             "https://livecamrips.to/video/11248256" to
-                "https://vidara.to/KJq6mx17bB2/"
+                "https://vidara.to/KJq6mx17bB2/",
+            "https://pornavhd.com/2026/11/21/verified-selected-title/" to
+                "https://video.playerrecord.cfd/e/selectedPlayer12345"
         )
         for((source,frame) in cases){
             assertTrue("selected iframe blocked: "+frame,
@@ -48,6 +50,25 @@ class SelectedVideoIframePolicyTest {
         assertFalse(SelectedVideoIframePolicy.allow(source,
             "https://voe.sx/e/wx8walm5hqkj",false))
     }
+    @Test fun publisherSelectedRecordingPlayersCannotBeUsedAsGenericBrowserSources(){
+        val selected="https://pornavhd.com/2026/11/21/verified-selected-title/"
+        val trusted="https://video.playerrecord.cfd/e/selectedPlayer12345"
+        assertTrue(com.asterion.videoflow.SiteSpecificOriginalSources
+            .selectedExtractorFrame(selected,trusted))
+        assertFalse(BrowserPageFetch.publicEligible(trusted))
+        assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
+            .selectedExtractorFrame("https://pornavhd.com/",trusted))
+        assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
+            .selectedExtractorFrame(selected,
+                "https://video.playerrecord.cfd.evil.example/e/selectedPlayer12345"))
+        assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
+            .selectedExtractorFrame(selected,
+                trusted+"?other=1"))
+        assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
+            .selectedExtractorFrame(selected,
+                "https://vidara.to/KJq6mx17bB2/"))
+    }
+
     @Test fun selectedPlayersCannotBeReusedForUnrelatedPublishers() {
         val random="https://hentaihaven.xxx/watch/renseijutsushi-collet-episode-1/"
         assertFalse(SelectedVideoIframePolicy.allow(random,
