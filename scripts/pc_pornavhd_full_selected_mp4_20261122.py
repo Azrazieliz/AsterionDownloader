@@ -23,7 +23,7 @@ def safe(raw):
  host=(p.hostname or "").lower()
  if(p.scheme!="https" or not host.endswith(".bkcdn.net") or
     p.username or p.password or p.port not in (None,443) or p.fragment or
-    not re.fullmatch(r"/[A-Za-z0-9_.%/-]{5,1500}\\.mp4",p.path,re.I) or
+    not re.fullmatch(r"/[A-Za-z0-9_.%/-]{5,1500}\.mp4",p.path,re.I) or
     "preview" in p.path.lower() or "trailer" in p.path.lower()):return False
  try:
   if not ipaddress.ip_address(host).is_global:return False
