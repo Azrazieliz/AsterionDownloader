@@ -145,14 +145,16 @@ internal object SelectedAlbumScope {
                             URI(doc.baseUri().ifBlank{selectedUrl})
                                 .resolve(element.attr("src"))
                         }.getOrNull()
-                        candidate!=null && candidate.scheme=="https" &&
+                        (element.hasAttr("data-video") &&
+                            element.closest(".video-player")!=null) ||
+                        (candidate!=null && candidate.scheme=="https" &&
                             candidate.userInfo==null && candidate.port==-1 &&
                             candidate.rawQuery.isNullOrBlank() &&
                             candidate.rawFragment==null &&
                             candidate.host.orEmpty().lowercase(Locale.ROOT)
                                 .removePrefix("www.")=="cosplaytele.com" &&
                             Regex("""(?i)^/(?:embed|player|video)/[a-z0-9_-]{5,100}/?$""")
-                                .matches(candidate.path.orEmpty())
+                                .matches(candidate.path.orEmpty()))
                     }else true
                     selectedFirstPartyFrame &&
                     element.closest(excluded)==null &&
