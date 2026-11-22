@@ -33,15 +33,13 @@ internal object OpenWebModelSearch {
 
     internal fun parseWebIndex(html:String,base:String,engine:String):List<Candidate> {
         val doc=Jsoup.parse(html,base)
-        val anchors=if(engine=="Yahoo")
-            doc.select("div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
-                "div.dd.algo .compTitle h3 a[href]")
-        else doc.select("li.b_algo h2 a[href]")
+        if(engine!="Bing")return emptyList()
+        val anchors=doc.select("li.b_algo h2 a[href]")
         val discovered=LinkedHashMap<String,Candidate>()
         for(anchor in anchors.take(120)){
             val raw=anchor.absUrl("href").ifBlank{anchor.attr("href")}
             val url=KeywordSources.organicPublisherDestination(
-                raw,if(engine=="Yahoo")"Yahoo Web" else "Bing Web")
+                raw,"Bing Web")
                 ?:continue
             val uri=runCatching{URI(url)}.getOrNull()?:continue
             val ext=extension(url)?:continue
@@ -49,8 +47,7 @@ internal object OpenWebModelSearch {
                 uri.rawFragment!=null || !SearchRanking.validUrl(url) ||
                 ProviderRetirement.isRetired(url))continue
             val host=uri.host.orEmpty().lowercase(Locale.ROOT)
-            if(host.isBlank() || host=="search.yahoo.com" ||
-                host.endsWith(".search.yahoo.com"))continue
+            if(host.isBlank())continue
             val name=anchor.text().trim().take(180)
                 .ifBlank{uri.path.substringAfterLast('/').take(120)}
             if(name.isBlank() || IndexedMediaQuality.navigationTitle(name))continue
@@ -176,9 +173,8 @@ internal object OpenWebModelSearch {
             term.trim()+" 3d model filetype:glb OR filetype:fbx OR filetype:obj OR filetype:blend"
         else term.trim()+" free 3d model download original glb fbx obj"
         val q=URLEncoder.encode(phrase,"UTF-8")
-        val target=if(engine=="Yahoo")
-            "https://search.yahoo.com/search?p="+q+"&b=1"
-        else "https://www.bing.com/search?q="+q+"&count=50"
+        require(engine=="Bing"){"Unsupported search index"}
+        val target="https://www.bing.com/search?q="+q+"&count=50"
         val response=Jsoup.connect(target)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
             .timeout(9_000).maxBodySize(2_000_000)
@@ -225,10 +221,9 @@ internal object OpenWebModelSearch {
     fun find(term:String,onFound:((List<Candidate>)->Unit)?=null):
         Pair<List<Candidate>,List<String>>{
         require(term.trim().length>=2){"Enter a model name"}
-        // Independent public search indexes, not the 27-provider federated
-        // catalog. An outage or block in one engine must not eliminate
-        // internet-wide 3D model discovery.
-        val names=listOf("Bing","Yahoo")
+        // Public web index plus independent federated and CC0 catalogs.
+        // Keep genuine downloadable files only, not landing-page results.
+        val names=listOf("Bing")
         val errors=ArrayList<String>()
         val gathered=ArrayList<Candidate>()
         val pool=Executors.newFixedThreadPool(6)
@@ -259,11 +254,8 @@ internal object OpenWebModelSearch {
                         })
                 })
             }
-            // The old code waited 22 seconds for EACH of four futures in
-            // submission order (up to 88 seconds) and could miss a faster
-            // provider simply because the first request was blocked.
-            // Collect whichever independent engine completes first inside
-            // ONE global search deadline.
+            // Collect independent catalog and index results under one
+            // interactive deadline rather than waiting per source.
             val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(22)
             var finished=0
             while(finished<submitted){
