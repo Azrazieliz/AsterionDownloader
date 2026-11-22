@@ -287,6 +287,32 @@ def player_candidate(name,selected,frame):
           if len(play)==1:
            try:play[0].click();clicked=True
            except Exception:pass
+         # Streamtape's selected public player may publish its ordinary
+         # /get_video control in #robotlink instead of video.currentSrc.
+         # Read only the selected iframe DOM, never other player requests.
+         published=d.execute_script("""return [...document.querySelectorAll(
+           '#robotlink,#norobotlink,#videolink,#ideoolink,#ideoooolink')]
+           .map(x=>x.textContent.trim())
+           .filter(x=>x.includes('/get_video?')).slice(0,5);""")
+         media_urls=[]
+         for raw in published:
+          raw=raw.strip()
+          if raw.startswith('//'):raw='https:'+raw
+          elif raw.startswith('/'):raw=urllib.parse.urljoin(chosen,raw)
+          if not safe_url(raw):continue
+          uri=urllib.parse.urlsplit(raw)
+          params=urllib.parse.parse_qs(uri.query,keep_blank_values=True)
+          frame_id=urllib.parse.urlsplit(chosen).path.strip('/').split('/')[1]
+          if (host(raw) in ('streamtape.com','streamtape.to',
+              'streamtape.net','streamtape.site','sbtape.com')
+              and uri.path=='/get_video' and uri.fragment==''
+              and len(params.get('id',[]))==1
+              and params['id'][0]==frame_id
+              and all(k in ('id','expires','ip','token','stream','dl') for k in params)):
+           media_urls.append(raw)
+         if len(set(media_urls))==1:
+          return {'source':media_urls[0],'referer':chosen,'duration':0,
+            'reason':'same selected JAVIDEO film - STAPE#01 player robotlink'}
          current=d.execute_script("""return [...document.querySelectorAll('video')]
            .filter(v=>!v.closest('aside,.related,.recommendations,.ads,'+
              '.advertisement,.sidebar,[data-ad]'))
