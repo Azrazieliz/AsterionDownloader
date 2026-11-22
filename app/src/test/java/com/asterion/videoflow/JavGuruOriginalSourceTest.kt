@@ -23,6 +23,24 @@ class JavGuruOriginalSourceTest {
       </script>
     </html>"""
 
+    @Test fun partialSelectedWordpressButtonsStillRecoverAdvertisedJk(){
+        val html=org.jsoup.Jsoup.parse(post.replace(
+            "</ul>",
+            "<li><a class='wp-btn-iframe__shortcode' "+
+                "data-localize='jjjjjjjjjj'>STREAM JK</a></li></ul>"),selected)
+        val initial=JavGuruOriginalSource.published(selected,html.outerHtml())
+        assertEquals(listOf("LU"),initial.map{it.server})
+        assertTrue(SiteSpecificOriginalSources.missingPublishedJkControl(
+            html,selected,initial))
+        val recovered=listOf(JavGuruOriginalSource.Player("JK",wrapper))+initial
+        assertFalse(SiteSpecificOriginalSources.missingPublishedJkControl(
+            html,selected,recovered))
+        val unrelated=org.jsoup.Jsoup.parse(post.replace(
+            "</html>","<aside><a class='wp-btn-iframe__shortcode'>"+
+                "STREAM JK</a></aside></html>"),selected)
+        assertFalse(SiteSpecificOriginalSources.missingPublishedJkControl(
+            unrelated,selected,initial))
+    }
     @Test fun onlyExactSelectedWordpressStreamNotAdvertisementOrRelatedPost(){
         assertEquals(
             listOf(JavGuruOriginalSource.Player("LU",wrapper)),
