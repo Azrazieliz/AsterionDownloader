@@ -135,7 +135,9 @@ object RemoteImageLoader {
             if (target.get()?.tag != imageKey) return@execute
             // The same thumbnail may occur on multiple cards in a refresh.
             // Coalesce cache writes by URL without serializing all thumbnails.
-            val bitmap = FileSaveLockPolicy.forFilename("thumbnail:"+imageKey) {
+            // Both full-proportion and compact cards share the same disk file.
+            // Serialize by URL so they cannot race over its .part cache file.
+            val bitmap = FileSaveLockPolicy.forFilename("thumbnail:"+url) {
                 memory.get(imageKey) ?: runCatching {
                 val dir = File(app.cacheDir, "kuroha_images").apply { mkdirs() }
                 val file = File(dir, sha256(url))
