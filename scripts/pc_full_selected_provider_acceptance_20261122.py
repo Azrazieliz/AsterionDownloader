@@ -18,9 +18,9 @@ FIXED={
  "avple":"https://avple.tv/video/1000101415221",
  "livecamrips":"https://livecamrips.to/",
  "pornavhd":"https://pornavhd.com/",
- "pornbuz":"https://pornbuz.com/",
+ "pornbuz":"https://pornbuz.com/video/promotional-pussy-ryan-reid-brazzers-93753/",
  "xchina":"https://en.xchina.co/",
- "dsav":"https://dsav123.wiki/"
+ "dsav":"https://dsysav.com/"
 }
 def host(url):return (urllib.parse.urlsplit(url).hostname or "").lower()
 def safe_url(url):
@@ -42,6 +42,8 @@ def driver():
  d=webdriver.Chrome(options=opt);d.set_page_load_timeout(26);return d
 def select(name,home,html):
  if name in ("javideo","uncensoredhentai","avple"):return home
+ if name=="pornbuz" and re.fullmatch(r"/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?",urllib.parse.urlsplit(home).path,re.I):
+  return home
  if name in ("livecamrips","pornavhd","dsav"):return None
  doc=BeautifulSoup(html,"html.parser")
  for a in doc.select("a[href]"):
@@ -73,7 +75,8 @@ def frame_from_markup(name,article,html):
 def chrome_watch(name,url):
  d=driver()
  try:
-  d.get(url)
+  try:d.get(url)
+  except Exception:pass  # Slow JS-loaded players can still have an inspectable DOM.
   out={"urls":[],"players":[],"manifest_hosts":[],"duration":[]}
   for tick in range(24):
    if name=="javideo":
@@ -109,7 +112,10 @@ def chrome_watch(name,url):
 def player_candidate(name,selected,frame):
  d=driver()
  try:
-  d.get(frame)
+  d.execute_cdp_cmd("Network.enable",{})
+  d.execute_cdp_cmd("Network.setExtraHTTPHeaders",{"headers":{"Referer":selected}})
+  try:d.get(frame)
+  except Exception:pass
   results=[]
   for tick in range(19):
    try:
@@ -156,9 +162,9 @@ def full_file(selected,candidate):
   out=Path(tmp)
   cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
    "--no-mtime","--no-warnings","--retries","2","--fragment-retries","2",
-   "--socket-timeout","14","--max-filesize","350M","--format","bestvideo+bestaudio/best",
+   "--socket-timeout","14","--max-filesize","1200M","--format","bestvideo+bestaudio/best",
    "--add-header","Referer:"+candidate["referer"],"-o",str(out/"original.%(ext)s"),url]
-  try:p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=130)
+  try:p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=280)
   except subprocess.TimeoutExpired:raise RuntimeError("FULL_TRANSFER_TIMEOUT")
   if p.returncode:raise RuntimeError("EXTRACTOR_FAILED:"+p.stdout[-350:].replace(url,"[selected-source]"))
   files=[x for x in out.iterdir() if x.is_file() and x.stat().st_size>2_000_000 and not x.name.endswith(".part")]
