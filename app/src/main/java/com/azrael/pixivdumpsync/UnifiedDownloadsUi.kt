@@ -812,18 +812,25 @@ object UnifiedDownloadsUi {
                 onRemove=if(torrent.stage in setOf(
                     "QUEUED","WAITING_PEERS","TRANSFERRING",
                     "PAUSED","FAILED","VERIFYING")) ({
-                    // This calls the existing isolated torrent worker.
-                    // No native peer engine is initialized by the UI. Keep
-                    // quarantine payloads until explicit owner security review.
-                    runCatching{
-                        a.startForegroundService(
-                            Intent(a,TorrentTransferService::class.java)
-                                .setAction(TorrentTransferService.CANCEL)
-                                .putExtra("job",torrent.id))
-                    }.onFailure{
-                        Toast.makeText(a,"Torrent cancellation unavailable: "+
-                            (it.message?:"Service failed").take(120),
+                    // Persist the existing cross-process tombstone BEFORE
+                    // dispatching Android's foreground-service signal. The
+                    // service may reject a start after OOM/FGS restrictions;
+                    // active native workers also inspect this marker directly.
+                    // Never erase original files or quarantined pieces.
+                    if(!TorrentTransfers.markCancelled(a,torrent.id)){
+                        Toast.makeText(a,"Could not save torrent cancellation",
                             Toast.LENGTH_LONG).show()
+                    }else{
+                        runCatching{
+                            a.startForegroundService(
+                                Intent(a,TorrentTransferService::class.java)
+                                    .setAction(TorrentTransferService.CANCEL)
+                                    .putExtra("job",torrent.id))
+                        }.onFailure{
+                            android.util.Log.w("AsterionTorrent",
+                                "Cancellation marker saved; service signal unavailable",it)
+                        }
+                        DownloadStateSignals.changed(a)
                     }
                 }) else null,
                 transferStage=torrent.stage,
