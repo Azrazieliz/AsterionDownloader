@@ -93,7 +93,11 @@ if code==200 and not out.get("candidate_count"):
    out["chrome_player_hosts"]=[v.get("host") for v in result.get("players",[]) if v.get("host")]
    out["chrome_frame_hosts"]=[urllib.parse.urlsplit(u).hostname for u in result.get("frames",[])]
    out["chrome_body_hint"]=result.get("bodyHint","")[:100]
-   if links:break
+   watch_links=[u for u in links if urllib.parse.urlsplit(u).path.rstrip("/") == "/en/watch"]
+   out["chrome_watch_link_count"]=len(watch_links)
+   out["chrome_watch_query_keys"]=[sorted(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)) for u in watch_links[:8]]
+   out["chrome_watch_unique_urls"]=len(set(watch_links))
+   if watch_links:break
  except Exception as error:out["chrome_error"]=type(error).__name__
  finally:browser.quit()
 
