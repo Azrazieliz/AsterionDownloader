@@ -434,7 +434,7 @@ internal object PublisherOriginalExtractors {
             val frame=PornBuzOriginalSource.selectedMainPlayer(
                 selected,page.outerHtml())
             val primary=frame?.let{exact->
-                runCatching{
+                val static=runCatching{
                     val response=org.jsoup.Jsoup.connect(exact)
                         .userAgent(NativeMediaDownloader.USER_AGENT)
                         .header("Referer",selected)
@@ -455,6 +455,21 @@ internal object PublisherOriginalExtractors {
                                 Candidate(verifiedRendition,exact,host)
                             }
                 }.getOrNull()
+                static ?: runCatching{
+                    // A public HTTP client can see a placeholder while the
+                    // selected JWPlayer initializes its HLS in WebView.
+                    // Reuse only the already published exact primary frame.
+                    com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                        context,exact,selected)
+                }.getOrNull()?.let{rendered->
+                    val playlist=PornBuzOriginalSource.selectedHls(
+                        exact,rendered) ?: PornBuzOriginalSource
+                        .selectedRenderedHls(exact,rendered)
+                    playlist?.let{master->
+                        PornBuzOriginalSource.verifiedFullHlsUrl(
+                            context,selected,exact,master)
+                    }?.let{Candidate(it,exact,host)}
+                }
             }
             if(primary!=null)return listOf(primary)
             return fromHtml(selected,page.outerHtml())
