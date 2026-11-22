@@ -19,14 +19,14 @@ class OpenWebModelSearchTest {
     }
 
     @Test fun webOriginalsCanComeFromAnyPublicHostWithoutRegisteringProviders(){
-        val html="""<div class="algo-sr"><div class="compTitle"><h3><a
-          href="https://artist.example.org/models/character.glb">Character model GLB</a></h3></div></div>
-          <div class="algo-sr"><div class="compTitle"><h3><a
-          href="https://cdn.other.example/assets/character.fbx">Character rigged FBX</a></h3></div></div>
-          <div class="algo-sr"><div class="compTitle"><h3><a
-          href="https://market.example.org/paid/character">Character paid store</a></h3></div></div>"""
+        val html="""<li class="b_algo"><h2><a
+          href="https://artist.example.org/models/character.glb">Character model GLB</a></h2></li>
+          <li class="b_algo"><h2><a
+          href="https://cdn.other.example/assets/character.fbx">Character rigged FBX</a></h2></li>
+          <li class="b_algo"><h2><a
+          href="https://market.example.org/paid/character">Character paid store</a></h2></li>"""
         val results=OpenWebModelSearch.parseWebIndex(html,
-            "https://search.yahoo.com/search?p=character","Yahoo")
+            "https://www.bing.com/search?q=character","Bing")
         assertEquals(2,results.size)
         assertEquals(setOf("GLB","FBX"),results.map{it.format}.toSet())
         assertTrue(results.none{it.host=="market.example.org"})
