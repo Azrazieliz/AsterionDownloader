@@ -53,12 +53,12 @@ def main():
      pages=json.load(response)
     targets=[p for p in pages if p.get("type")=="page"
          and urllib.parse.urlsplit(p.get("url","")).hostname in ("livecamrips.to","www.livecamrips.to")
-         and p.get("webSocketDebuggerUrl","").startswith("ws://127.0.0.1:")]
+         and p.get("webSocketDebuggerUrl","").startswith(("ws://127.0.0.1:","ws://localhost:"))]
     if len(targets)!=1:
      latest={"page_count":len(targets)}
      time.sleep(1.0)
      continue
-    url=targets[0]["webSocketDebuggerUrl"]
+    url=targets[0]["webSocketDebuggerUrl"].replace("ws://localhost:","ws://127.0.0.1:",1)
     connection=websocket.create_connection(url,timeout=5,origin="http://127.0.0.1")
     try:
      connection.send(json.dumps({"id":1,"method":"Runtime.evaluate",
@@ -89,9 +89,9 @@ def main():
      result["publisher_challenge"]=bool(data.get("challenge"))
      result["selected_player_host"]=data.get("frame_hosts",[None])[0] if data.get("frame_count")==1 else None
      result["selected_player_count"]=data.get("frame_count")
-     if data.get("host") in ("livecamrips.to","www.livecamrips.to") and
-           data.get("path")=="/video/14759344" and
-           not data.get("challenge") and data.get("frame_count")==1:
+     if (data.get("host") in ("livecamrips.to","www.livecamrips.to")
+         and data.get("path")=="/video/14759344"
+         and not data.get("challenge") and data.get("frame_count")==1):
       result["normal_browser_exact_player"]=True
       break
     finally:
