@@ -13,9 +13,9 @@ class VideoHlsDispatchTest {
             "https://media.example/full/manifest.mpd"))
     }
     @Test fun signedPublisherRuntimeIsPrimedBeforeFetchingExpiringHls() {
-        // The previously working JK native HLS source must never prewarm
-        // a second heavy Python runtime before its first selected fragment.
-        assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
+        // The restored LU/SB non-JK source must initialize Python BEFORE
+        // obtaining the selected publisher's short-lived HLS signature.
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://jav.guru/1077002/doks-695-original-scene/"))
         assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://www.pornhub.com/view_video.php?viewkey=ph1234567"))
