@@ -49,7 +49,11 @@ internal object VideoHlsDispatch {
             (host=="taiav.com" && VideoSiteProfiles.isVideoPage(url)) ||
             // The owner-selected PornBuz primary player issues a signed
             // JWPlayer HLS. Warm Python before resolving its signature.
-            (host=="pornbuz.com" && VideoSiteProfiles.isVideoPage(url))
+            (host=="pornbuz.com" && VideoSiteProfiles.isVideoPage(url)) ||
+            // DSYSAV's first-party signed DASH chunks are short-lived;
+            // initialize the retained Python transfer runtime BEFORE the
+            // exact watch ID's API response signs original segments.
+            (host=="dsysav.com" && VideoSiteProfiles.isVideoPage(url))
     }
 
     fun isSelectedManifest(url:String):Boolean {
