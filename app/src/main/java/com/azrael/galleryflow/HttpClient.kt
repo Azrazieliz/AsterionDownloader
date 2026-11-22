@@ -187,7 +187,22 @@ open class HttpClient(private val context:android.content.Context?=null) {
         }
 
         if (host == "m.4khd.com" || host.endsWith(".4khd.com")) {
-            val page = textResponse(url, referer)
+            // The selected bridge can return HTTP 403 (or 200 masking 403)
+            // to Jsoup while remaining accessible in the authorized browser.
+            // Previously the exception escaped BEFORE the existing official
+            // TeraBox/first-party link resolver was ever attempted.
+            val page = try {
+                textResponse(url, referer)
+            } catch (blocked: HttpStatusException) {
+                if (blocked.code != 403 || context == null ||
+                    !com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url))
+                    throw blocked
+                val rendered = com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                    context,url,referer)
+                if (GalleryAccessGate.isMaskedForbidden(url,200,rendered))
+                    throw blocked
+                TextResponse(rendered,url,"text/html")
+            }
             val doc = Jsoup.parse(page.body, page.finalUrl)
             // A placeholder #custom_button can have href="#",
             // javascript:void(0), or the current bridge page. Those are
