@@ -10,7 +10,7 @@ class RequestedVideoProviderRoutesTest {
         val sites=AlohaSources.all.map{it.host}.toSet()
         assertTrue(sites.containsAll(setOf(
             "avple.tv","pimpbunny.com","en.xchina.co",
-            "bubblecum.lol","pornavhd.com")))
+            "bubblecum.lol")))
         assertFalse("OnScreens must not reappear in catalog",
             "onscreens.me" in sites)
         assertTrue(ProviderRetirement.isRetired(
@@ -28,7 +28,9 @@ class RequestedVideoProviderRoutesTest {
             "https://en.xchina.co/video/6b00b2b6032b1"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://www.bubblecum.lol/video/selected-scene-example/"))
-        assertTrue(VideoSiteProfiles.isVideoPage(
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://pornavhd.com/2026/11/14/selected_release_20261114/"))
+        assertTrue(ProviderRetirement.isRetired(
             "https://pornavhd.com/2026/11/14/selected_release_20261114/"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://camstreams.tv/videos/1363858/selected-recording/"))
@@ -48,7 +50,6 @@ class RequestedVideoProviderRoutesTest {
             "https://pimpbunny.com/videos/selected-scene-123",
             "https://en.xchina.co/video/6b00b2b6032b1",
             "https://www.bubblecum.lol/video/selected-scene-example/",
-            "https://pornavhd.com/2026/11/14/selected_20261114/",
             "https://avple.tv/watch/selected-scene-123"
         )
         val player="""<main>
@@ -70,7 +71,7 @@ class RequestedVideoProviderRoutesTest {
             "https://pimpbunny.com/videos/selected-scene-123",
             "https://en.xchina.co/video/6b00b2b6032b1",
             "https://www.bubblecum.lol/video/selected-scene-example/",
-            "https://pornavhd.com/2026/11/14/selected_20261114/",
+
             "https://avple.tv/watch/selected-scene-123")
         val unrelatedMeta="""<head>
           <script type="application/ld+json">{
