@@ -24,6 +24,21 @@ class SelectedBrowserPlayerHandoffRegressionTest {
         assertTrue(PublisherOriginalExtractors.fromHtml(selected,unrelated).isEmpty())
     }
 
+    @Test fun xChinaSignedMasterKeepsSelectedArticleIdentity(){
+        val article="https://en.xchina.co/video/abcdef123456"
+        // Publisher-signed HLS master queries must survive the compact
+        // Android browser -> selected-original handoff unchanged.
+        val signed="https://en.xchina.co/hls/abcdef123456/master.m3u8?expires=1795363200&sig=media123"
+        val html="""<html><body><main><div id="video-player"
+           data-src="$signed"></div></main></body></html>"""
+        val originals=PublisherOriginalExtractors.fromHtml(article,html)
+        assertEquals(listOf(signed),originals.map{it.url})
+        val mismatch=html.replace("/hls/abcdef123456/","/hls/deadbeef1234/")
+        assertTrue(PublisherOriginalExtractors.fromHtml(article,mismatch).isEmpty())
+        val foreign=html.replace("en.xchina.co/hls","unrelated.invalid/hls")
+        assertTrue(PublisherOriginalExtractors.fromHtml(article,foreign).isEmpty())
+    }
+
     @Test fun pimpBunnySelectedFlashvarsSurviveExactRenderedKvsSnapshot(){
         val selected="https://pimpbunny.com/videos/selected-real-scene-12345/"
         val media="https://pimpbunny.com/get_file/0/real-selected-scene-original-123456789.mp4"
