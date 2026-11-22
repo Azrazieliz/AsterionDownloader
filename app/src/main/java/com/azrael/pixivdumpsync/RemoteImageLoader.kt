@@ -42,16 +42,26 @@ internal object ThumbnailPayloadLimit {
 
 internal object ThumbnailCacheRetention {
     private val hashedName=Regex("^[a-f0-9]{64}$")
+    private val pendingName=Regex("^[a-f0-9]{64}\\.part$")
     fun prune(dir:File,protected:File,maxBytes:Long=256L*1024*1024,
               maxEntries:Int=2500,now:Long=System.currentTimeMillis()):Int {
         if(!dir.isDirectory)return 0
-        val entries=dir.listFiles()?.filter{
+        val files=dir.listFiles()?:return 0
+        // Only abandoned thumbnail temporary files are eligible. A live
+        // writer is allowed a full ten minutes; never touch downloaded
+        // originals, transfer parts, or any other cache directory.
+        var removed=0
+        for(entry in files){
+            if(entry.isFile && pendingName.matches(entry.name) &&
+                entry.absolutePath!=protected.absolutePath &&
+                now-entry.lastModified()>600_000L && entry.delete())
+                removed++
+        }
+        val entries=files.filter{
             it.isFile && hashedName.matches(it.name)
-        }?.sortedWith(compareBy<File>{it.lastModified()}.thenBy{it.name})
-            ?:return 0
+        }.sortedWith(compareBy<File>{it.lastModified()}.thenBy{it.name})
         var total=entries.sumOf{it.length().coerceAtLeast(0L)}
         var count=entries.size
-        var removed=0
         for(entry in entries){
             if(total<=maxBytes && count<=maxEntries)break
             if(entry.absolutePath==protected.absolutePath ||
