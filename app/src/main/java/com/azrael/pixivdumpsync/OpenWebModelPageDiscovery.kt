@@ -24,7 +24,7 @@ internal object OpenWebModelPageDiscovery {
     fun landingLinks(html:String,base:String,engine:String,term:String):List<String>{
         val document=Jsoup.parse(html,base)
         val anchors=if(engine=="Yahoo")
-            document.select("div.algo-sr .compTitle h3 a[href],"+
+            document.select("div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
                 "div.dd.algo .compTitle h3 a[href]")
         else document.select("li.b_algo h2 a[href]")
         val found=LinkedHashSet<String>()
