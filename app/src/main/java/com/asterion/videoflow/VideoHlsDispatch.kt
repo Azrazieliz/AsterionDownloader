@@ -30,7 +30,7 @@ internal object VideoHlsDispatch {
         // existing Python HLS engine BEFORE resolving the publisher relay.
         // JK-native optimization had removed this warmup for ALL JAV Guru
         // articles, leaving non-JK transfers to expire during Python startup.
-        if(JavGuruOriginalSource.selectedArticle(url))return true
+        if(JavGuruNonJkRouting.selectedArticle(url))return true
         // The selected HentaiHaven episode also resolves its publisher
         // HLS only after the page is read. Avoid expiring that manifest
         // while starting the embedded Python runtime on Android.
