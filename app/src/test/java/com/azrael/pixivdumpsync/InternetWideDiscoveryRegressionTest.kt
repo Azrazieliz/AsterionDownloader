@@ -20,11 +20,11 @@ class InternetWideDiscoveryRegressionTest {
     @Test fun nextWebPageUsesRealSearchEngineOffsets(){
         val bing=KeywordSources.webIndexUrl(
             "rare show",VideoSearchArea.GENERAL,false,2)
-        val duck=KeywordSources.webIndexUrl(
+        val yahoo=KeywordSources.webIndexUrl(
             "rare show",VideoSearchArea.GENERAL,true,2)
         assertTrue(bing.contains("first=101"))
-        assertTrue(duck.contains("s=100"))
-        assertTrue(duck.contains("dc=101"))
+        assertTrue(yahoo.contains("b=21"))
+        assertFalse(yahoo.contains("duckduckgo"))
         assertThrows(IllegalArgumentException::class.java){
             KeywordSources.webIndexUrl(
                 "rare show",VideoSearchArea.GENERAL,false,-1)
