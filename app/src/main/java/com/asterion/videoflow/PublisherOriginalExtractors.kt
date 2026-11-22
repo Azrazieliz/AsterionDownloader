@@ -100,7 +100,13 @@ internal object PublisherOriginalExtractors {
             // recognized embed/player route, rejecting arbitrary offsite ads.
             "article .video-player iframe[src],"+
             ".entry-content .video-player iframe[src],"+
-            "main .video-player iframe[src]",allowPlayerIframe=true)
+            "main .video-player iframe[src],"+
+            // Real first-party embedded players can be siblings of the
+            // WordPress photo gallery without a .video-player wrapper.
+            // iframeAllowed still requires the same publisher and exact
+            // /embed|player|video/ route; related/ad frames are excluded.
+            "article .entry-content iframe[src],"+
+            "article .post-content iframe[src]",allowPlayerIframe=true)
 
     ).associateBy { it.host }
 
