@@ -41,7 +41,7 @@ internal object PornBuzOriginalSource {
             // Authorized WebView snapshots necessarily flatten the same
             // selected iframe into <main><div class=video-player>. That
             // must not erase the proven owner-selected primary stream.
-            "article .video-player-area .video-player .responsive-player iframe[src],"+
+            ".video-player-area .video-player .responsive-player iframe[src],"+
             "main .video-player iframe[src]")
             .filter{it.closest("aside,.related,.recommended,.recommendations,"+
                 ".ads,.advertisement,.sidebar,[data-ad]")==null}
