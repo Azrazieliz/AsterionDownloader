@@ -1,0 +1,29 @@
+name: Asterion Downloader — PC PornAVHD selected recording trace
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_pornavhd_published_player_20261122.py'
+      - '.github/workflows/downloader-pc-pornavhd-probe-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-published-player-trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read selected public PornAVHD article and its exact player only
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 scripts/pc_pornavhd_published_player_20261122.py | tee pc-pornavhd-player-trace.log
+      - name: Preserve public source evidence only
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-pornavhd-selected-player-trace
+          path: pc-pornavhd-player-trace.log
+          if-no-files-found: ignore
+          retention-days: 14
