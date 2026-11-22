@@ -27,8 +27,8 @@ class SelectedPlayerWaitPolicyTest {
             iframe,server,"<html><video src='https://ads.example/"+ 
             "chosen.mp4?verify=token'></video></html>"))
         assertEquals(9,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com"))
-        assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("javideo.net"))
-        assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("play.javideo.net"))
+        assertEquals(21,SelectedPlayerWaitPolicy.maxPolls("javideo.net"))
+        assertEquals(15,SelectedPlayerWaitPolicy.maxPolls("play.javideo.net"))
     }
     @Test fun selectedRecordingIframesGetBoundedMediaRenderTime() {
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("video.playerrecord.cfd"))
