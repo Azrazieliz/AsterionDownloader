@@ -8,9 +8,9 @@ class AlohaProviderSearchTest {
         val providers=listOf(
             "JAV Guru" to "slow", "Porneec" to "slow",
             "Bing Web" to "broad", "Pornhub" to "publisher",
-            "DuckDuckGo Web" to "broad")
+            "Yahoo Web" to "broad")
         val scheduled=KeywordSources.prioritizedTasks(providers)
-        assertEquals(listOf("Bing Web","DuckDuckGo Web"),
+        assertEquals(listOf("Bing Web","Yahoo Web"),
             scheduled.take(2).map{it.first})
         assertEquals(providers.size,scheduled.size)
         assertEquals(providers.toSet(),scheduled.toSet())
