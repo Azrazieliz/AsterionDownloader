@@ -10,6 +10,7 @@ import java.net.URI
 import java.net.URLEncoder
 import java.net.URLDecoder
 import java.util.Base64
+import java.util.Locale
 
 /**
  * Multi-source video discovery. Providers may index ordinary websites, adult sites,
