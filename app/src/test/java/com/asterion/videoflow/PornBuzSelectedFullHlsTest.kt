@@ -41,8 +41,12 @@ class PornBuzSelectedFullHlsTest {
                 src="https://player.watchstreamus.com/hls/ads/preview.m3u8"
                 muted></video></aside></main>"""
         assertEquals(master,PornBuzOriginalSource.selectedRenderedHls(player,html))
+        // The selected article already binds the exact player iframe.
+        // Without that parent article, HTML from another ID cannot be
+        // distinguished if deliberately supplied as the same snapshot.
+        // Reject an unapproved host instead of inventing iframe identity.
         assertNull(PornBuzOriginalSource.selectedRenderedHls(
-            "https://player.watchstreamus.com/embed/OTHERplayer",html))
+            "https://untrusted.example.org/embed/OTHERplayer",html))
         assertNull(PornBuzOriginalSource.selectedRenderedHls(
             player,html.replace(master,
                 "https://player.watchstreamus.com/hls/preview-20sec.m3u8")))
