@@ -153,13 +153,9 @@ object BrowserPageFetch {
                     Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
                         .matches(Uri.parse(url).path.orEmpty()) ||
                     (Uri.parse(url).path=="/player.php" &&
-                        runCatching {
-                            Uri.parse(url).queryParameterNames==
-                                setOf("i","s","vid") &&
-                                listOf("i","s","vid").all {
-                                    !Uri.parse(url).getQueryParameter(it).isNullOrBlank()
-                                }
-                        }.getOrDefault(false))
+                        com.asterion.videoflow.SiteSpecificOriginalSources
+                            .selectedNhPlayerServerQuery(
+                                Uri.parse(url).encodedQuery))
                 "voe.sx","kamehaus.net" ->
                     Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                         .matches(Uri.parse(url).path.orEmpty())
@@ -383,9 +379,13 @@ object BrowserPageFetch {
                                             parsed.hostname!=='nhplayer.com' ||
                                             parsed.port || parsed.username || parsed.password ||
                                             parsed.pathname!=='/player.php' || parsed.hash ||
-                                            keys.join(',')!=='i,s,vid' ||
-                                            ['i','s','vid'].some(k=>
-                                                !parsed.searchParams.get(k)))continue;
+                                            !((keys.join(',')==='i,s,vid' &&
+                                            ['i','s','vid'].every(k=>
+                                                !!parsed.searchParams.get(k))) ||
+                                          (keys.join(',')==='data' &&
+                                            /^[A-Za-z0-9._~%+=-]{8,1400}$/
+                                                .test(parsed.searchParams.get('data')||'')))
+                                        )continue;
                                         found.add(parsed.href);
                                     }catch(_){}
                                 }
@@ -398,7 +398,13 @@ object BrowserPageFetch {
                                     location.pathname!=='/player.php')return '';
                                 const keys=[...new URLSearchParams(
                                     location.search).keys()].sort();
-                                if(keys.join(',')!=='i,s,vid')return '';
+                                if(!((keys.join(',')==='i,s,vid' &&
+                                    ['i','s','vid'].every(k=>
+                                        !!new URLSearchParams(location.search).get(k))) ||
+                                    (keys.join(',')==='data' &&
+                                        /^[A-Za-z0-9._~%+=-]{8,1400}$/
+                                            .test(new URLSearchParams(location.search)
+                                                .get('data')||''))))return '';
                                 const value=typeof window.videoReady==='string'
                                     ?window.videoReady:'';
                                 try{
