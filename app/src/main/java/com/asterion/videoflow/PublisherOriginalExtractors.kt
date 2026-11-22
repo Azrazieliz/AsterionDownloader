@@ -428,6 +428,24 @@ internal object PublisherOriginalExtractors {
             val originals=initial.filter{direct(it.url)}
             if(originals.size==1)return originals
             if(originals.size>1)return emptyList()
+            if(host=="livecamrips.to"){
+                // A publisher-attested #iframe-video already present in the
+                // first article response is sufficient to call the *exact*
+                // selected Vidara/Mixdrop resolver. Do not start a second
+                // WebView read (another potential 45-second timeout) just to
+                // rediscover the same player. Never use related/ad frames.
+                val selectedFrames=initial.filter{
+                    SiteSpecificOriginalSources.selectedExtractorFrame(
+                        selected,it.url)
+                }
+                if(selectedFrames.size==1){
+                    val frame=selectedFrames.single()
+                    val resolved=SiteSpecificOriginalSources
+                        .selectedRecordingFrameOriginals(context,selected,frame.url)
+                        .map{Candidate(it.url,it.referer,host)}
+                    if(resolved.isNotEmpty())return resolved
+                }
+            }
             val rendered=runCatching{
                 com.azrael.pixivdumpsync.BrowserPageFetch
                     .html(context,selected)
