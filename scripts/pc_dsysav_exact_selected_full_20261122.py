@@ -209,7 +209,19 @@ try:
                     if re.search(r"(?i)(?:duration|seconds|status|code|error)",path):
                         paths.append({"field":path[:90],"value":value})
             describe(parsed)
+            def schema_shape(value,depth=0):
+                if depth>=4:return type(value).__name__
+                if isinstance(value,dict):
+                    return {str(k)[:65]:schema_shape(v,depth+1) for k,v in list(value.items())[:30]}
+                if isinstance(value,list):
+                    return {"count":len(value),"first":schema_shape(value[0],depth+1) if value else None}
+                if isinstance(value,str):
+                    url=urllib.parse.urlsplit(value) if value.startswith(("https://","http://")) else None
+                    return {"kind":"url" if url else "string",
+                            "host":url.hostname if url else None,"length":len(value)}
+                return {"kind":type(value).__name__}
             api_signals.append({"top_level_keys":list(parsed)[:35] if isinstance(parsed,dict) else [],
+                                "schema":schema_shape(parsed),
                                 "response_bytes":len(raw),"signals":paths[:45]})
         except Exception as error:
             api_signals.append({"reader_error":type(error).__name__})
