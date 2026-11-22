@@ -20,8 +20,13 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Verify available media metadata inspector
-        run: ffprobe -version | head -n 1
+      - name: Install FFprobe for actual playable-file validation
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          command -v ffprobe
+          ffprobe -version | head -n 1
       - name: Download all bytes from one publisher-linked selected MP4 and verify SHA and ffprobe duration
         shell: bash
         run: |
@@ -39,12 +44,19 @@ jobs:
   pc-javguru-jk-exact-full:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      ASTERION_PC_STAGE_ROOT: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - name: Install AES decoder (published ordinary HLS AES-128)
         run: python3 -m pip install --disable-pip-version-check cryptography
-      - name: Verify available media metadata inspector
-        run: ffprobe -version | head -n 1
+      - name: Install FFprobe for actual playable-file validation
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          command -v ffprobe
+          ffprobe -version | head -n 1
       - name: Verify complete exact owner-selected JK HLS fragment stream, SHA and actual duration
         shell: bash
         run: |
