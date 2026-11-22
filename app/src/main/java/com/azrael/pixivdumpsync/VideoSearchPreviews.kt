@@ -71,6 +71,23 @@ object VideoSearchPreviews {
             }
         }
         if(skip)return
+        // Downloads re-renders lightweight temporary card trees to update
+        // text/progress in place. Those throwaway image views must NOT enqueue
+        // network reads or retain 2 MB response buffers in the poster pool.
+        // A real attached view starts its fetch once; detached snapshots
+        // remain placeholders, with the same stable poster identity tag.
+        if(!image.isAttachedToWindow){
+            image.addOnAttachStateChangeListener(
+                object:android.view.View.OnAttachStateChangeListener{
+                    override fun onViewAttachedToWindow(v:android.view.View){
+                        image.removeOnAttachStateChangeListener(this)
+                        if(!a.isFinishing && !a.isDestroyed && image.tag==key)
+                            display(a,image,url,referer)
+                    }
+                    override fun onViewDetachedFromWindow(v:android.view.View){}
+                })
+            return
+        }
         val app=a.applicationContext
         val view=java.lang.ref.WeakReference(image)
         // Do not retain Activity/ImageView references in the unbounded
