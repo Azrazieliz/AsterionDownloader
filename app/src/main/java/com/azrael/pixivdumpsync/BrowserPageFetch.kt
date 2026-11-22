@@ -1256,10 +1256,13 @@ object BrowserPageFetch {
                                     // Only the selected iframe appears after
                                     // JAVIDEO's Play button; its HTML5 video is
                                     // a separate advert, not the original.
-                                    com.asterion.videoflow.SiteSpecificOriginalSources
-                                        .javideoSelected(
-                                            org.jsoup.Jsoup.parse(page,url),url)
-                                        .isEmpty()
+                                    // The default play.javideo.net iframe
+                                    // never published the selected original.
+                                    // Keep polling for the owner's genuine
+                                    // STAPE#01 iframe while its first-party
+                                    // click listener initializes.
+                                    !SelectedPlayerWaitPolicy
+                                        .selectedJavideoStapeReady(url,page)
                                 } else if(host in setOf("xchina.co","en.xchina.co")) {
                                     !page.contains("asterion-selected-xchina-hls") &&
                                     !Regex("""<video\s+src="https://[^"]+""")
