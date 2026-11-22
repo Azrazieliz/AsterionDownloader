@@ -17,7 +17,18 @@ result={"provider":"dsav","selected_article":SELECTED,"selected_article_host":ho
         "complete_selected_original":False}
 d=driver()
 try:
-    d.get(SELECTED)
+    # This public Next/JS catalog initializes its browser session on /
+    # before video navigation. A cold deep link produced an empty player,
+    # whereas same-browser homepage -> selected article yielded HLS 200.
+    try:d.get("https://dsav123.wiki/")
+    except Exception:pass
+    time.sleep(2)
+    try:d.get(SELECTED)
+    except Exception:pass
+    time.sleep(3)
+    try:d.execute_script("""const v=document.querySelector('main video,article video,video');
+      if(v){v.scrollIntoView({block:'center'});const p=v.play();if(p?.catch)p.catch(()=>{});}""")
+    except Exception:pass
 except Exception:
     pass
 try:
