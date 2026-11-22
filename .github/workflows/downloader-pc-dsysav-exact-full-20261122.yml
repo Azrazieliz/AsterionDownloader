@@ -17,7 +17,7 @@ jobs:
       - name: Install real browser and full-file FFprobe transfer requirements
         run: |
           python3 -m py_compile scripts/pc_dsysav_exact_selected_full_20261122.py
-          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 'yt-dlp==2026.10.26'
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 pycryptodome 'yt-dlp==2026.10.26'
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
       - name: Complete exact publicly selected DSYSAV original or fail

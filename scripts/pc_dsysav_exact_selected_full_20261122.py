@@ -220,8 +220,33 @@ try:
                     return {"kind":"url" if url else "string",
                             "host":url.hostname if url else None,"length":len(value)}
                 return {"kind":type(value).__name__}
+            decrypted_schema=None
+            encrypted=parsed.get("data") if isinstance(parsed,dict) else None
+            if isinstance(encrypted,str) and 40<len(encrypted)<200000:
+                try:
+                    # Inspect only the already-observed public first-party
+                    # response, using the same client-side AES-CBC format
+                    # published by the site. No invented API signatures,
+                    # challenge bypass or fragment-token generation.
+                    import base64
+                    from Crypto.Cipher import AES
+                    cipher=base64.b64decode(encrypted,validate=True)
+                    if len(cipher)%16:raise ValueError("Unaligned publisher response")
+                    raw_dec=AES.new(b"OPQT123412FRANME",AES.MODE_CBC,b"MRDCQP12QPM13412").decrypt(cipher)
+                    padding=raw_dec[-1]
+                    if padding not in range(1,17) or raw_dec[-padding:]!=bytes([padding])*padding:
+                        raise ValueError("Invalid publisher padding")
+                    plaintext=raw_dec[:-padding].decode("utf-8")
+                    decoded=json.loads(plaintext)
+                    selected_id=urllib.parse.parse_qs(urllib.parse.urlsplit(selected).query).get("v",[""])[0]
+                    decrypted_schema={"shape":schema_shape(decoded),
+                                      "selected_article_id_present":bool(selected_id and selected_id in plaintext),
+                                      "decoded_json":True}
+                except Exception as failure:
+                    decrypted_schema={"decoded_json":False,"reason":type(failure).__name__}
             api_signals.append({"top_level_keys":list(parsed)[:35] if isinstance(parsed,dict) else [],
                                 "schema":schema_shape(parsed),
+                                "decoded_schema":decrypted_schema,
                                 "response_bytes":len(raw),"signals":paths[:45]})
         except Exception as error:
             api_signals.append({"reader_error":type(error).__name__})
