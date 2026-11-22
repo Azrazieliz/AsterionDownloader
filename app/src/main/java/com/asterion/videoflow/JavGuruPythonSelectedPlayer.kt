@@ -41,7 +41,7 @@ internal object JavGuruPythonSelectedPlayer {
             // Only the publisher-generated second iframe token, never an
             // arbitrary /searcho/ URL or an ad/related page.
             URI(playerRelay).rawQuery.orEmpty().matches(
-                Regex("""^[evs]r=[A-Za-z0-9]{15,180}$"""))
+                Regex("""^[evsxtho]r=[A-Za-z0-9]{15,180}$"""))
 
     /** Called on the existing VideoFlow extraction worker AFTER the embedded
      * Python runtime is primed and AFTER the frozen exact-post relay decoder
