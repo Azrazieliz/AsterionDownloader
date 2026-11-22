@@ -11,6 +11,15 @@ import org.junit.Test
 class ReportedSiteSpecificOriginalsTest {
     private val video="https://cdn.publisher.test/full-original-1080p.mp4"
 
+    @Test fun nhPlayerHtmlIsNeverPresentedAsAnOriginalToUnsupportedPython(){
+        assertFalse(SiteSpecificOriginalSources
+            .allowGenericIframeExtractorFallback("uncensoredhentai.xxx"))
+        assertTrue(SiteSpecificOriginalSources
+            .allowGenericIframeExtractorFallback("fullporner.com"))
+        assertTrue(SiteSpecificOriginalSources
+            .allowGenericIframeExtractorFallback("hqpornerxxx.com"))
+    }
+
     @Test fun mp4HentaiExtractsVideoOnlyNeverSelectedHtmlOrArticleLinks() {
         val page="https://mp4hentai.com/2026/11/sample-animation-episode/"
         val html="""<article>
