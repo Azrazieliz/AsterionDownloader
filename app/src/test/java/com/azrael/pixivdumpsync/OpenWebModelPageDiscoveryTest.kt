@@ -4,24 +4,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpenWebModelPageDiscoveryTest {
-    @Test fun yahooMeasuredOrganicLinkResolvesOnlyPublisherDetailPage(){
+    @Test fun bingOrganicLinkResolvesOnlyPublisherDetailPage(){
         val actual="https://creator.example.org/free-sword-model"
-        val redirect="https://r.search.yahoo.com/_ylt=metadata/RU="+
-            java.net.URLEncoder.encode(actual,"UTF-8")+"/RK=2/RS=metadata"
-        val html="<div class='algo-sr'><div class='compTitle'><h3>"+
-            "<a href='"+redirect+"'>Free medieval sword 3D model</a>"+
-            "</h3></div></div>"
+        val b64=java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(actual.toByteArray(Charsets.UTF_8))
+        val html="<li class='b_algo'><h2><a href='"+
+            "https://www.bing.com/ck/a?u=a1"+b64+
+            "'>Free medieval sword 3D model</a></h2></li>"
         val pages=OpenWebModelPageDiscovery.landingLinks(
-            html,"https://search.yahoo.com/search?p=sword","Yahoo","sword")
+            html,"https://www.bing.com/search?q=sword","Bing","sword")
         assertEquals(listOf(actual),pages)
     }
 
     @Test fun indexedSwordModelPageRevealsActualFilesNotAnotherPaidPage(){
-        val results="""<div class="algo-sr"><div class="compTitle"><h3><a
+        val results="""<li class="b_algo"><h2><a
             href="https://creator.example.org/free-medieval-sword-3d-model">
-            Free medieval sword 3D model</a></h3></div></div>"""
+            Free medieval sword 3D model</a></h2></li>"""
         val urls=OpenWebModelPageDiscovery.landingLinks(results,
-            "https://search.yahoo.com/search?p=sword","Yahoo","sword")
+            "https://www.bing.com/search?q=sword","Bing","sword")
         assertEquals(listOf("https://creator.example.org/free-medieval-sword-3d-model"),urls)
         val page="""<html><title>Free Medieval Sword 3D Model</title>
             <body><main><h1>Medieval Sword 3D Model</h1>
