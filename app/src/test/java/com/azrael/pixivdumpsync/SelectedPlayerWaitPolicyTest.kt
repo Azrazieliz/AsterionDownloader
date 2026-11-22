@@ -26,7 +26,7 @@ class SelectedPlayerWaitPolicyTest {
         assertFalse(SelectedPlayerWaitPolicy.selectedNhPlayerReady(
             iframe,server,"<html><video src='https://ads.example/"+ 
             "chosen.mp4?verify=token'></video></html>"))
-        assertEquals(9,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com"))
+        assertEquals(18,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com"))
         assertEquals(21,SelectedPlayerWaitPolicy.maxPolls("javideo.net"))
         assertEquals(15,SelectedPlayerWaitPolicy.maxPolls("play.javideo.net"))
     }
