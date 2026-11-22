@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Complete-file PC certification on the actual owner-supplied dsysav.com/en site.
+The selected article is taken from the real publisher catalog; no guessed ID,
+other DSAV domains, previews, download shortcuts or ad players qualify.
+"""
+import hashlib,json,re,subprocess,sys,tempfile,time,urllib.parse
+from pathlib import Path
+from pc_full_selected_provider_acceptance_20261122 import driver,safe_url,host
+
+BASE="https://dsysav.com/en"
+UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
+SITE={"dsysav.com","www.dsysav.com"}
+result={"provider":"dsysav.com","catalog":BASE,"complete_selected_original":False}
+browser=driver()
+
+def approved_article(raw):
+    try:
+        url=urllib.parse.urljoin(BASE,raw)
+        u=urllib.parse.urlsplit(url)
+        return url if (u.scheme=="https" and u.hostname in SITE and
+          not u.username and not u.password and u.port in (None,443) and
+          re.fullmatch(r"/en/watch/?",u.path) and
+          bool(u.query) and not u.fragment) else None
+    except Exception:
+        return None
+
+def complete_file(url,referer,expected_runtime):
+    with tempfile.TemporaryDirectory(prefix="asterion-dsysav-pc-") as td:
+        out=Path(td)
+        args=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
+            "--no-mtime","--no-warnings","--retries","2",
+            "--fragment-retries","2","--abort-on-unavailable-fragments",
+            "--socket-timeout","20","--concurrent-fragments","4",
+            "--max-filesize","1200M","--format","best",
+            "--user-agent",UA,"--add-header","Referer:"+referer,
+            "--add-header","Origin:https://dsysav.com",
+            "-o",str(out/"selected-original.%(ext)s"),url]
+        try:
+            res=subprocess.run(args,capture_output=True,text=True,timeout=540)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("FULL_SELECTED_ORIGINAL_TIMED_OUT")
+        if res.returncode:
+            tail=re.sub(r"https?://\S+","[redacted]",(res.stdout+"\n"+res.stderr)[-650:])
+            raise RuntimeError("SELECTED_ORIGINAL_TRANSFER_FAILED:"+tail)
+        files=[p for p in out.iterdir() if p.is_file() and p.stat().st_size>30_000_000
+            and not p.name.endswith((".part",".ytdl"))]
+        if len(files)!=1:raise RuntimeError("NO_SINGLE_COMPLETED_FULL_FILE")
+        f=files[0]
+        cmd=["ffprobe","-v","error","-show_entries",
+            "format=duration,size:stream=codec_type","-of","json",str(f)]
+        meta=json.loads(subprocess.check_output(cmd,text=True,timeout=30))
+        seconds=float(meta.get("format",{}).get("duration") or 0)
+        streams=[x.get("codec_type") for x in meta.get("streams",[])]
+        if "audio" not in streams or "video" not in streams:
+            raise RuntimeError("FILE_MISSING_VIDEO_OR_AUDIO")
+        if seconds<600 or abs(seconds-expected_runtime)>max(15,expected_runtime*.10):
+            raise RuntimeError("FULL_DURATION_MISMATCH_OR_PREVIEW")
+        sha=hashlib.sha256()
+        with f.open("rb") as inp:
+            for block in iter(lambda:inp.read(1048576),b""):sha.update(block)
+        return {"complete_selected_original":True,"bytes":f.stat().st_size,
+            "duration_seconds":round(seconds,3),"tracks":streams,
+            "sha256":sha.hexdigest()}
+
+try:
+    browser.set_page_load_timeout(26)
+    try:browser.get(BASE)
+    except Exception:pass
+    selected=None
+    for attempt in range(34):
+        all_urls=browser.execute_script("""return [...document.querySelectorAll('a[href]')]
+          .filter(a=>!a.closest('aside,.related,.recommendations,.ads,.advertisement,[data-ad]'))
+          .map(a=>a.href);""") or []
+        candidates=list(dict.fromkeys(x for x in (approved_article(u) for u in all_urls) if x))
+        if candidates:
+            selected=candidates[0]
+            result["public_watch_count"]=len(candidates)
+            break
+        time.sleep(.75)
+    if not selected:raise RuntimeError("NO_PUBLISHER_SELECTED_WATCH_LINK_ON_DSYSAV_EN")
+    result["selected_article"]=selected
+    result["selected_host"]=host(selected)
+    # This is the actual first watch anchor in the owner-supplied English
+    # catalog, not a manufactured ID or a separate DSAV brand domain.
+    try:browser.get_log("performance")
+    except Exception:pass
+    try:browser.get(selected)
+    except Exception:pass
+    if host(browser.current_url) not in SITE:
+        raise RuntimeError("SELECTED_WATCH_REDIRECTED_TO_OTHER_BRAND")
+    durations=[]
+    manifests=set()
+    direct=set()
+    for tick in range(50):
+        state=browser.execute_script("""return (()=>{
+          const root=document.querySelector('main')||document.querySelector('#app')||document.body;
+          const v=[...root.querySelectorAll('video')].filter(v=>
+            !v.closest('aside,.related,.recommendations,.ads,.advertisement,[data-ad]'));
+          if(v.length===1&&v[0].paused)try{const p=v[0].play();p?.catch?.(()=>{});}catch(_){}
+          return v.map(el=>({source:el.currentSrc||el.src||'',
+            duration:Number.isFinite(el.duration)?el.duration:0})).slice(0,7);
+        })()""") or []
+        long=[x for x in state if float(x.get("duration") or 0)>=600]
+        if len(long)==1:
+            duration=float(long[0]["duration"])
+            durations.append(duration)
+            media=long[0].get("source") or ""
+            if safe_url(media) and re.search(r"(?i)\.(?:mp4|m3u8)$",urllib.parse.urlsplit(media).path):
+                direct.add(media)
+        try:
+            for evt in browser.get_log("performance"):
+                item=json.loads(evt["message"])["message"]
+                if item.get("method")!="Network.responseReceived":continue
+                response=item.get("params",{}).get("response",{})
+                url=response.get("url") or ""
+                if not safe_url(url) or int(response.get("status") or 0)!=200:continue
+                u=urllib.parse.urlsplit(url)
+                mime=(response.get("mimeType") or "").lower()
+                if (u.path.lower().endswith(".m3u8") or
+                    "application/vnd.apple.mpegurl" in mime or "application/x-mpegurl" in mime):
+                    if not re.search("preview|trailer|teaser|sample",u.path,re.I):
+                        manifests.add(url)
+        except Exception:pass
+        if durations and (len(manifests)==1 or len(direct)==1):break
+        time.sleep(.75)
+    result["selected_player_duration_seconds"]=round(max(durations),3) if durations else None
+    result["observed_hls_count"]=len(manifests)
+    result["observed_direct_count"]=len(direct)
+    if not durations:raise RuntimeError("SELECTED_PLAYER_HAS_NO_VERIFIED_LONG_DURATION")
+    source=None
+    if len(manifests)==1:source=next(iter(manifests))
+    elif not manifests and len(direct)==1:source=next(iter(direct))
+    if not source:raise RuntimeError("NO_SINGLE_ATTRIBUTABLE_SELECTED_MEDIA_SOURCE")
+    result["selected_source_host"]=host(source)
+    result["source_attribution"]="first watch link on dsysav.com/en and same selected long player"
+    result.update(complete_file(source,selected,max(durations)))
+except Exception as error:
+    result["reason"]=re.sub(r"https?://\S+","[redacted]",str(error))[:330]
+finally:
+    browser.quit()
+    Path("pc-dsysav-selected-full-receipt.json").write_text(json.dumps(result,indent=2,sort_keys=True))
+    print(json.dumps(result,sort_keys=True),flush=True)
+if not result["complete_selected_original"]:sys.exit(2)

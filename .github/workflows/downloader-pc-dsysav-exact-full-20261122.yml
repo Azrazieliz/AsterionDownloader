@@ -1,0 +1,32 @@
+name: Asterion Downloader — DSYSAV exact English selected full-file PC
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_dsysav_exact_selected_full_20261122.py'
+      - '.github/workflows/downloader-pc-dsysav-exact-full-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-selected-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install real browser and full-file FFprobe transfer requirements
+        run: |
+          python3 -m py_compile scripts/pc_dsysav_exact_selected_full_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Complete exact publicly selected DSYSAV original or fail
+        run: python3 scripts/pc_dsysav_exact_selected_full_20261122.py
+      - name: Preserve hash receipt, never downloaded media or signed URLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-dsysav-english-original-receipt
+          path: pc-dsysav-selected-full-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
