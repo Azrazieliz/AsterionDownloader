@@ -344,14 +344,51 @@ def full_file(selected,candidate):
  if not safe_url(url):raise ValueError("unsafe selected source")
  with tempfile.TemporaryDirectory(prefix="asterion-pc-selected-") as tmp:
   out=Path(tmp)
-  cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
-   "--no-mtime","--no-warnings","--retries","2","--fragment-retries","2",
-   "--abort-on-unavailable-fragments",
-   "--socket-timeout","14","--max-filesize","1200M","--format","bestvideo+bestaudio/best",
-   "--add-header","Referer:"+candidate["referer"],"-o",str(out/"original.%(ext)s"),url]
-  try:p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=280)
-  except subprocess.TimeoutExpired:raise RuntimeError("FULL_TRANSFER_TIMEOUT")
-  if p.returncode:raise RuntimeError("EXTRACTOR_FAILED:"+p.stdout[-350:].replace(url,"[selected-source]"))
+  if urllib.parse.urlsplit(url).path=="/get_video":
+   # The selected Streamtape player publishes a public direct HTTP download.
+   # The hoster HTML is not media, and 206 fragments never count as complete.
+   headers={"User-Agent":UA,"Referer":candidate["referer"],"Accept-Encoding":"identity"}
+   request=urllib.request.Request(url,headers=headers)
+   file=out/"original.mp4"
+   try:
+    with urllib.request.urlopen(request,timeout=24) as response:
+     uri=urllib.parse.urlsplit(response.url)
+     if uri.scheme!="https" or not uri.hostname or uri.username or uri.password:
+      raise RuntimeError("SELECTED_HOSTER_UNSAFE_REDIRECT")
+     mime=response.headers.get("Content-Type","").lower().split(";")[0].strip()
+     if mime not in ("video/mp4","application/octet-stream","binary/octet-stream"):
+      raise RuntimeError("SELECTED_HOSTER_RETURNED_NONMEDIA_"+mime[:50])
+     total=int(response.headers.get("Content-Length") or 0)
+     if total<=2_000_000 or total>1_200_000_000:
+      raise RuntimeError("SELECTED_HOSTER_SIZE_NOT_ORIGINAL")
+     if response.status==206:
+      ranges=re.fullmatch(r"bytes 0-([0-9]+)/([0-9]+)",
+        response.headers.get("Content-Range","").strip())
+      if not ranges or int(ranges[1])+1!=int(ranges[2]) or total!=int(ranges[2]):
+       raise RuntimeError("SELECTED_HOSTER_PARTIAL_RANGE")
+     elif response.status!=200:
+      raise RuntimeError("SELECTED_HOSTER_HTTP_"+str(response.status))
+     received=0
+     deadline=time.monotonic()+300
+     with file.open("wb") as output:
+      while True:
+       if time.monotonic()>deadline:raise RuntimeError("FULL_TRANSFER_TIMEOUT")
+       chunk=response.read(1024*1024)
+       if not chunk:break
+       output.write(chunk);received+=len(chunk)
+       if received>1_200_000_000:raise RuntimeError("HOSTER_FILE_TOO_LARGE")
+     if received!=total:raise RuntimeError("INCOMPLETE_HOSTER_BYTES_"+str(received))
+   except urllib.error.HTTPError as error:
+    raise RuntimeError("SELECTED_HOSTER_HTTP_"+str(error.code)) from error
+  else:
+   cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
+    "--no-mtime","--no-warnings","--retries","2","--fragment-retries","2",
+    "--abort-on-unavailable-fragments",
+    "--socket-timeout","14","--max-filesize","1200M","--format","bestvideo+bestaudio/best",
+    "--add-header","Referer:"+candidate["referer"],"-o",str(out/"original.%(ext)s"),url]
+   try:p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=280)
+   except subprocess.TimeoutExpired:raise RuntimeError("FULL_TRANSFER_TIMEOUT")
+   if p.returncode:raise RuntimeError("EXTRACTOR_FAILED:"+p.stdout[-350:].replace(url,"[selected-source]"))
   files=[x for x in out.iterdir() if x.is_file() and x.stat().st_size>2_000_000 and not x.name.endswith(".part")]
   if len(files)!=1:raise RuntimeError("NO_SINGLE_COMPLETED_FILE")
   f=files[0]
