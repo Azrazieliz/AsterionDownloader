@@ -33,28 +33,23 @@ internal object OpenWebModelSearch {
 
     internal fun parseWebIndex(html:String,base:String,engine:String):List<Candidate> {
         val doc=Jsoup.parse(html,base)
-        val anchors=if(engine=="DuckDuckGo")
-            doc.select("a.result__a[href]")
+        val anchors=if(engine=="Yahoo")
+            doc.select("div.algo-sr .compTitle h3 a[href],"+
+                "div.dd.algo .compTitle h3 a[href]")
         else doc.select("li.b_algo h2 a[href]")
         val discovered=LinkedHashMap<String,Candidate>()
         for(anchor in anchors.take(120)){
             val raw=anchor.absUrl("href").ifBlank{anchor.attr("href")}
             val initial=runCatching{URI(raw)}.getOrNull()?:continue
-            val url=if(initial.host.orEmpty().endsWith("duckduckgo.com") &&
-                initial.path=="/l/") {
-                initial.rawQuery.orEmpty().split('&').firstOrNull{
-                    it.startsWith("uddg=")
-                }?.substringAfter('=')?.let{
-                    runCatching{URLDecoder.decode(it,"UTF-8")}.getOrNull()
-                }.orEmpty()
-            }else raw
+            val url=raw
             val uri=runCatching{URI(url)}.getOrNull()?:continue
             val ext=extension(url)?:continue
             if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
                 uri.rawFragment!=null || !SearchRanking.validUrl(url) ||
                 ProviderRetirement.isRetired(url))continue
             val host=uri.host.orEmpty().lowercase(Locale.ROOT)
-            if(host.isBlank())continue
+            if(host.isBlank() || host=="search.yahoo.com" ||
+                host.endsWith(".search.yahoo.com"))continue
             val name=anchor.text().trim().take(180)
                 .ifBlank{uri.path.substringAfterLast('/').take(120)}
             if(name.isBlank() || IndexedMediaQuality.navigationTitle(name))continue
@@ -180,8 +175,8 @@ internal object OpenWebModelSearch {
             term.trim()+" 3d model filetype:glb OR filetype:fbx OR filetype:obj OR filetype:blend"
         else term.trim()+" free 3d model download original glb fbx obj"
         val q=URLEncoder.encode(phrase,"UTF-8")
-        val target=if(engine=="DuckDuckGo")
-            "https://html.duckduckgo.com/html/?q="+q
+        val target=if(engine=="Yahoo")
+            "https://search.yahoo.com/search?p="+q+"&b=1"
         else "https://www.bing.com/search?q="+q+"&count=50"
         val response=Jsoup.connect(target)
             .userAgent("Mozilla/5.0 (Linux; Android 17; Mobile)")
@@ -232,7 +227,7 @@ internal object OpenWebModelSearch {
         // Independent public search indexes, not the 27-provider federated
         // catalog. An outage or block in one engine must not eliminate
         // internet-wide 3D model discovery.
-        val names=listOf("Bing","DuckDuckGo")
+        val names=listOf("Bing","Yahoo")
         val errors=ArrayList<String>()
         val gathered=ArrayList<Candidate>()
         val pool=Executors.newFixedThreadPool(6)
