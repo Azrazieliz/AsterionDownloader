@@ -140,7 +140,8 @@ object BrowserPageFetch {
             "streamtape.site","sbtape.com",
             "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
             "bubblecum.lol","pornavhd.com","cosplaytele.com","pornbuz.com","notfans.com",
-            "video.playerrecord.cfd","vidara.to","player.watchstreamus.com")
+            "video.playerrecord.cfd","vidara.to",
+            "player.watchstreamus.com","cdn.watchstreamus.com")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
             attestedFrame ||
@@ -535,7 +536,8 @@ object BrowserPageFetch {
                                 (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net',
                                     'hentaihaven.xxx','play.javideo.net','streamtape.com','streamtape.to',
                                     'streamtape.net','streamtape.site','sbtape.com',
-                                    'video.playerrecord.cfd','vidara.to','player.watchstreamus.com']
+                                    'video.playerrecord.cfd','vidara.to',
+                                    'player.watchstreamus.com','cdn.watchstreamus.com']
                                     .includes(selectedPlayerHost) ||
                                     (selectedPlayerHost==='cosplaytele.com' &&
                                      /^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/
