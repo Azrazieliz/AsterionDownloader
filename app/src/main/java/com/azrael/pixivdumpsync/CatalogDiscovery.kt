@@ -210,20 +210,28 @@ object CatalogDiscovery {
         val work=ExecutorCompletionService<Pair<List<CatalogHit>,String?>>(pool)
         val all=ArrayList<CatalogHit>()
         val failures=ArrayList<String>()
+        var completed=0
+        // One deadline across every publisher, not 50 seconds multiplied
+        // by the number of results still outstanding. Preserve every fast
+        // completed provider result even when a different source hangs.
+        val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(32)
         try {
             for((name,fn) in providers) work.submit(Callable{
                 try{fn() to null}
                 catch(e:Exception){emptyList<CatalogHit>() to (name+": "+(e.message?:e.javaClass.simpleName))}
             })
-            repeat(providers.size){
-                val future=work.poll(50,TimeUnit.SECONDS)
-                if(future==null)failures+="Catalog source timed out"
-                else{
-                    val (hits,error)=future.get()
-                    all+=hits
-                    if(error!=null)failures+=error
-                }
+            while(completed<providers.size){
+                val remaining=deadline-System.nanoTime()
+                if(remaining<=0L)break
+                val future=work.poll(remaining,TimeUnit.NANOSECONDS)?:break
+                val (hits,error)=future.get()
+                completed++
+                all+=hits
+                if(error!=null)failures+=error
             }
+            if(completed<providers.size)
+                failures+=(providers.size-completed).toString()+
+                    " catalog sources exceeded the shared 32-second deadline"
         }finally{pool.shutdownNow()}
         val results=all.filter{if(games)it.kind==CatalogKind.TORRENT else
             it.kind==CatalogKind.EPUB}
@@ -232,6 +240,6 @@ object CatalogDiscovery {
             .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
                 .thenBy{it.source}).take(100)
-        return CatalogOutcome(results,failures,providers.size)
+        return CatalogOutcome(results,failures,completed)
     }
 }
