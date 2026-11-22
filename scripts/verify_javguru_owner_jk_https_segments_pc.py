@@ -8,7 +8,7 @@ against ONLY publisher-attested Maxstream segments. Never guess tokens or
 replace the selected original. Final duration, audio/video and SHA required.
 Temporary complete media is deleted on exit. Not an Android APK release.
 """
-import concurrent.futures,hashlib,json,re,shutil,subprocess,sys,tempfile,time
+import concurrent.futures,hashlib,json,os,re,shutil,subprocess,sys,tempfile,time
 import urllib.parse,urllib.request,urllib.error
 from pathlib import Path
 from verify_javguru_owner_jk_full_pc import selected_final
@@ -116,9 +116,14 @@ def main():
         "hls_cipher":"publisher-declared AES-128",
         "key_is_publisher_published":True,
         "full_original_verified":False}),flush=True)
-    stage=Path("D:/AsterionControlRelease/diagnostics")
+    # Preserve the owner's guarded D: scratch path by default, while
+    # allowing a separately provisioned ephemeral GitHub/desktop PC runner.
+    # This alters ONLY where the diagnostic temporarily stores the media;
+    # it never changes selected provenance, cryptography or acceptance rules.
+    stage=Path(os.environ.get("ASTERION_PC_STAGE_ROOT") or
+               "D:/AsterionControlRelease/diagnostics")
     if not stage.is_dir() or shutil.disk_usage(stage).free<MIN_FREE_BYTES:
-        raise RuntimeError("guarded PC D drive insufficient for full original")
+        raise RuntimeError("guarded PC scratch disk insufficient for full original")
     now=time.monotonic()
     with tempfile.TemporaryDirectory(prefix="asterion_javguru_jk_https_complete_",dir=stage) as directory:
         root=Path(directory)
