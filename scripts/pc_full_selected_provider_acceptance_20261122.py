@@ -297,7 +297,7 @@ def player_candidate(name,selected,frame):
           media=video.get("src","");runtime=video.get("duration",0)
           if not safe_url(media) or runtime<600:continue
           uri=urllib.parse.urlsplit(media)
-          if not re.search(r"(?i)\\.(?:mp4|m3u8)$",uri.path):continue
+          if not re.search(r"(?i)\.(?:mp4|m3u8)$",uri.path):continue
           if re.search(r"(?:^|[/._-])(?:preview|teaser|trailer|sample|ad|ads)(?:[/._-]|$)",uri.path,re.I):continue
           candidates[media]=int(runtime)
          if len(candidates)==1:
