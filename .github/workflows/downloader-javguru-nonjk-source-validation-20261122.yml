@@ -1,0 +1,35 @@
+name: JAV Guru non-JK selected publisher source validation (read-only)
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - '.github/workflows/downloader-javguru-nonjk-source-validation-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lu-selected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read actual first-party LU/LuluStream selected HLS (no download or signed URL logs)
+        run: python3 scripts/verify_javguru_exact_selected_hls.py
+  sb-selected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read owner-selected SB/JAVClan manifest identity (no media downloads)
+        env:
+          PYTHONPATH: scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 - <<'PY'
+          from verify_javguru_owner_sb_full_pc import selected_player, selected_hls
+          embed, page = selected_player()
+          selected = selected_hls(embed, page)
+          if not selected:
+              raise SystemExit("Publisher selected SB did not publish verified HLS")
+          print("JAV_GURU_SB_SELECTED_HLS_CONFIRMED=TRUE; NO_MEDIA_DOWNLOADED")
+          PY
