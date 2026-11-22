@@ -113,6 +113,17 @@ try:
     for tick in range(50):
         if not player_clicked:
             try:
+                # The exact selected DSYSAV watch overlay exposes one LOAD
+                # control before its HTML5 media receives any metadata.
+                load=[x for x in browser.find_elements(By.XPATH,
+                    "//button[normalize-space(.)='LOAD']")
+                    if x.is_displayed() and x.is_enabled()]
+                if len(load)==1:
+                    load[0].click()
+                    player_clicked=True
+            except Exception:pass
+        if not player_clicked:
+            try:
                 control=browser.find_elements(By.CSS_SELECTOR,
                   "main .vjs-big-play-button,main .jw-icon-display,"
                   "main button[aria-label='Play'],main button[title='Play'],"
