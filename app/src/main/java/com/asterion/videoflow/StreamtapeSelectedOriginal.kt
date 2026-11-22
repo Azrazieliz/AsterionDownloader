@@ -53,6 +53,21 @@ internal object StreamtapeSelectedOriginal {
         if(parameters["id"]!=expected)return false
         return parameters["token"]?.matches(Regex("""[A-Za-z0-9_-]{4,160}"""))==true
     }
+    fun isSignedDirect(link:String):Boolean {
+        val u=uri(link)?:return false
+        if(u.scheme!="https" || u.host?.lowercase() !in hosts ||
+            u.port!=-1 || u.userInfo!=null || u.rawFragment!=null ||
+            u.path!="/get_video")return false
+        val params=values(u.rawQuery.orEmpty())?:return false
+        return params["id"]?.matches(Regex("""[A-Za-z0-9_-]{5,100}"""))==true &&
+            params["token"]?.matches(Regex("""[A-Za-z0-9_-]{4,160}"""))==true
+    }
+    fun isSelectedArticleMedia(article:String,link:String):Boolean =
+        uri(article)?.let{it.scheme=="https" &&
+            it.host?.lowercase()=="javideo.net" &&
+            VideoSiteProfiles.isVideoPage(article)}==true &&
+        isSignedDirect(link)
+
     fun resolve(context:Context,article:String,frame:String):String? {
         if(selectedFrame(article,frame)==null)return null
         val html=BrowserPageFetch.html(context,frame,playerReferer=article)
