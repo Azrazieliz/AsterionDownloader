@@ -40,8 +40,9 @@ internal object OpenWebModelSearch {
         val discovered=LinkedHashMap<String,Candidate>()
         for(anchor in anchors.take(120)){
             val raw=anchor.absUrl("href").ifBlank{anchor.attr("href")}
-            val initial=runCatching{URI(raw)}.getOrNull()?:continue
-            val url=raw
+            val url=KeywordSources.organicPublisherDestination(
+                raw,if(engine=="Yahoo")"Yahoo Web" else "Bing Web")
+                ?:continue
             val uri=runCatching{URI(url)}.getOrNull()?:continue
             val ext=extension(url)?:continue
             if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1 ||
