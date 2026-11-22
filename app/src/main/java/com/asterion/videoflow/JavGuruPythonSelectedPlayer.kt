@@ -26,9 +26,12 @@ internal object JavGuruPythonSelectedPlayer {
         val u=URI(url)
         u.scheme=="https" && u.userInfo==null && u.port==-1 &&
             u.fragment==null &&
-            u.host.orEmpty().lowercase(Locale.ROOT)=="jav.guru" &&
+            u.host.orEmpty().lowercase(Locale.ROOT)
+                .removePrefix("www.")=="jav.guru" &&
             u.path=="/searcho/" &&
-            u.rawQuery.orEmpty().length in 10..480 &&
+            // Match the already validated first-party shortcode wrapper.
+            // Its optional encoded background can exceed 480 characters.
+            u.rawQuery.orEmpty().length in 16..800 &&
             !u.rawQuery.isNullOrBlank()
     }.getOrDefault(false)
 
