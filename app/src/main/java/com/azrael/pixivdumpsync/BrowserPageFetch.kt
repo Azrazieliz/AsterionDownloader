@@ -1274,7 +1274,7 @@ object BrowserPageFetch {
                             error.set("WebView script failed: "+t.javaClass.simpleName)
                             latch.countDown()
                         }
-                    },1800L)
+                    },if(selectedPlayerPage && selectedPlayerWaits>0)200L else 1800L)
                 }
             }
             browserStage.set("navigation_submitted")
