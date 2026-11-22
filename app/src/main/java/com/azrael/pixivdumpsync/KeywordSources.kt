@@ -374,7 +374,7 @@ object KeywordSources {
         // pages and must never enter the downloader queue.
         val entries=when(label){
             "Yahoo Web"->doc.select(
-                "div.algo-sr .compTitle h3 a[href],"+
+                "div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
                 "div.dd.algo .compTitle h3 a[href]")
             else->doc.select("li.b_algo h2 a[href]")
         }
