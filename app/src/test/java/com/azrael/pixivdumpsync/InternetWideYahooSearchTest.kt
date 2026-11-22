@@ -40,7 +40,7 @@ class InternetWideYahooSearchTest {
             "https://www.bing.com/ck/a?u=a1aHR0cHM6Ly93d3cuYmluZy5jb20vc2VhcmNoP3E9YWQ",
             "https://www.bing.com/redirect?u=a1aHR0cHM6Ly9hLmV4YW1wbGUvdmlkZW8",
             "https://r.search.yahoo.com/redirect?foo=bar",
-            "https://ads.example.com/track?url=https://independent.example/video"
+            "https://r.search.yahoo.com/_ylt=public/RU=http%3A%2F%2Fad.example%2Fbuy/RK=2"
         )
         for(link in bad)assertNull(link,
             KeywordSources.organicPublisherDestination(link,
