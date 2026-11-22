@@ -91,6 +91,17 @@ object WebDiscovery {
             text.contains("enable javascript and cookies to continue")
     }
 
+    /** Avple's public watch endpoint now returns HTTP 402 from some
+     * networks. This is an authorization response, not an absent original.
+     * Retry only the very same selected page in the already allowed public
+     * or user-authorized browser. Never convert a payment/verification page
+     * into a video source or follow a third-party redirect. */
+    internal fun selectedBrowserFallbackAllowed(url:String,status:Int):Boolean =
+        status in setOf(401,403) ||
+            (status==402 &&
+                NetworkRoute.siteKey(url)=="avple.tv" &&
+                VideoSiteProfiles.isVideoPage(url))
+
     private fun open(url:String,context:Context?=null):Document{
         require(isUrl(url)){"Invalid public provider URL"}
         var current=url
@@ -118,7 +129,7 @@ object WebDiscovery {
                 }
                 current=target
             }else{
-                if(response.statusCode() in setOf(401,403) &&
+                if(selectedBrowserFallbackAllowed(current,response.statusCode()) &&
                     context!=null &&
                     (SiteSession.bound(context,current) ||
                         com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current))){
@@ -127,7 +138,7 @@ object WebDiscovery {
                 }
                 require(response.statusCode() in 200..299){
                     "Provider HTTP "+response.statusCode()+
-                        if(response.statusCode() in setOf(401,403))
+                        if(response.statusCode() in setOf(401,402,403))
                             " · authorized login or browser verification needed"
                         else " · request unsuccessful"
                 }
