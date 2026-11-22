@@ -96,3 +96,31 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.26'
       - name: Inspect only publisher-selected LU player metadata with 2026.10.26 (no bytes downloaded)
         run: python3 scripts/probe_javguru_nonjk_ytdlp_metadata_20261122.py
+
+  selected-lu-network-proxy-compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare selected LU player Python HTTP with/without proxy environment (read-only)
+        env:
+          PYTHONPATH: scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,urllib.parse
+          from probe_javguru_nonjk_ytdlp_metadata_20261122 import selected_lu,UA
+          target,ref,final=selected_lu()
+          proxies=urllib.request.getproxies()
+          print(json.dumps({"stage":"PYTHON_PROXY_ENV","configured_types":sorted(proxies),"proxy_present":bool(proxies)}),flush=True)
+          req=urllib.request.Request(target,headers={"User-Agent":UA,"Referer":ref,"Accept-Encoding":"identity"})
+          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          try:
+              with opener.open(req,timeout=19) as response:
+                  code=response.status;owner=urllib.parse.urlsplit(response.url).hostname
+                  data=response.read(100000)
+              print(json.dumps({"stage":"SELECTED_LU_PYTHON_PROXY_DISABLED","http":code,"final_host":owner,"html_bytes":len(data)}),flush=True)
+          except urllib.error.HTTPError as ex:
+              print(json.dumps({"stage":"SELECTED_LU_PYTHON_PROXY_DISABLED","http":ex.code,"final_host":urllib.parse.urlsplit(ex.url).hostname}),flush=True)
+          PY
