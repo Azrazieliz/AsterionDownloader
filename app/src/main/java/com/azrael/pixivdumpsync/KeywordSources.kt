@@ -8,7 +8,6 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URI
 import java.net.URLEncoder
-import java.net.URLDecoder
 import java.util.Base64
 import java.util.Locale
 
@@ -361,14 +360,9 @@ object KeywordSources {
         }
         return found
     }
-    /**
-     * The live public Bing/Yahoo organic result href is frequently an index
-     * measurement redirect rather than the publisher URL. Keep the existing
-     * title-only organic selectors; decode ONLY the two observed, bounded
-     * first-party redirect formats, without making a network redirect
-     * request. No search/advert domain is itself a media candidate.
-     */
+    /** Recover selected Bing organic publisher URLs, never index tracking URLs. */
     internal fun organicPublisherDestination(raw:String,label:String):String? {
+        if(label!="Bing Web")return null
         val outer=runCatching{URI(raw)}.getOrNull()?:return null
         val outerHost=outer.host.orEmpty().lowercase(Locale.ROOT)
         val destination=when {
@@ -389,13 +383,6 @@ object KeywordSources {
                         Charsets.UTF_8)
                 }.getOrNull()?:return null
             }
-            label=="Yahoo Web" && outerHost=="r.search.yahoo.com" -> {
-                val encoded=Regex("""(?:^|/)RU=([^/]{12,3500})(?:/|$)""")
-                    .find(outer.rawPath.orEmpty())?.groupValues?.get(1)
-                    ?:return null
-                runCatching{URLDecoder.decode(encoded,"UTF-8")}
-                    .getOrNull()?:return null
-            }
             else -> raw
         }
         val uri=runCatching{URI(destination)}.getOrNull()?:return null
@@ -415,32 +402,20 @@ object KeywordSources {
     /**
      * Broad web discovery in addition to individual adapters. These results
      * are source-page candidates, never proof that a file is downloadable.
-     * Two independent indexes prevent one blocked publisher from reducing
-     * search to a single provider such as SpankBang.
+     * Bing discovery is enriched by existing publisher search adapters.
      */
     internal fun parseWebIndex(html:String,base:String,
                                label:String):List<RankedHit>{
         val doc=Jsoup.parse(html,base)
         val hits=ArrayList<RankedHit>()
-        // Search results are ordinary index results, not the 40 configured
-        // providers. Yahoo exposes current organic entries under algo-sr.
-        // Restrict to result-title links: ads and navigation are not video
-        // pages and must never enter the downloader queue.
-        val entries=when(label){
-            "Yahoo Web"->doc.select(
-                "div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
-                "div.dd.algo .compTitle h3 a[href]")
-            else->doc.select("li.b_algo h2 a[href]")
-        }
+        if(label!="Bing Web")return emptyList()
+        val entries=doc.select("li.b_algo h2 a[href]")
         for(a in entries.take(120)){
             val href=a.absUrl("href").ifBlank{a.attr("href")}
             val url=organicPublisherDestination(href,label)?:continue
-            val uri=runCatching{URI(url)}.getOrNull()?:continue
-            // A decoded publisher URL still has to pass the normal
-            // candidate and search-identity checks; never expose index tracking.
             val title=a.text().trim().take(220)
             if(title.length<3)continue
-            val parent=a.closest("div.algo-sr,div.dd.algo,li.b_algo")
+            val parent=a.closest("li.b_algo")
             val snippet=parent?.selectFirst(
                 ".compText,.compText p,.b_caption p")
                 ?.text().orEmpty().take(400)
@@ -448,12 +423,8 @@ object KeywordSources {
         }
         return hits.distinctBy{SearchRanking.canonicalKey(it.url)}
     }
-    /** Read another genuine internet-index page, not the same 40 publishers
-     * or a display-only second batch. Yahoo's public search uses 10 results
-     * per page; Bing uses 50. Both accept general website destinations.
-     */
-    internal fun webIndexUrl(keyword:String,area:VideoSearchArea,
-                             yahoo:Boolean,page:Int):String{
+    /** Bing organic web index, paged and never mistaken for original media. */
+    internal fun webIndexUrl(keyword:String,area:VideoSearchArea,page:Int):String{
         require(page>=0){"Negative search page"}
         val scope=when(area){
             VideoSearchArea.HENTAI->" hentai animation video"
@@ -461,24 +432,19 @@ object KeywordSources {
             VideoSearchArea.PIRACY_DARKWEB->" torrent download"
             VideoSearchArea.GENERAL->" video"
         }
-        val query=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
-        return if(yahoo)
-            "https://search.yahoo.com/search?p="+query+
-                "&b="+(page.toLong()*10L+1L)
-        else "https://www.bing.com/search?q="+query+
+        return "https://www.bing.com/search?q="+
+            URLEncoder.encode(keyword.trim()+scope,"UTF-8")+
             "&count=50&first="+(page.toLong()*50L+1L)
     }
     private fun broadWebIndex(context:Context,keyword:String,
-                              area:VideoSearchArea,yahoo:Boolean,
-                              page:Int=0):List<RankedHit>{
-        val url=webIndexUrl(keyword,area,yahoo,page)
+                              area:VideoSearchArea,page:Int=0):List<RankedHit>{
+        val url=webIndexUrl(keyword,area,page)
         val response=connection(context,url).ignoreHttpErrors(true)
             .maxBodySize(3_000_000).timeout(18_000).execute()
         require(response.statusCode() in 200..299){
             "Web index HTTP "+response.statusCode()
         }
-        return parseWebIndex(response.body(),response.url().toString(),
-            if(yahoo)"Yahoo Web" else "Bing Web")
+        return parseWebIndex(response.body(),response.url().toString(),"Bing Web")
     }
 
     /** Broad web indexes must start in the FIRST search batch. The old
@@ -489,7 +455,7 @@ object KeywordSources {
     internal fun <T> prioritizedTasks(
         tasks:List<Pair<String,T>>):List<Pair<String,T>> =
         tasks.sortedWith(compareBy<Pair<String,T>>{
-            if(it.first=="Bing Web" || it.first=="Yahoo Web")0 else 1
+            if(it.first=="Bing Web")0 else 1
         })
 
     fun searchDetailed(context:Context,keyword:String,
@@ -501,8 +467,7 @@ object KeywordSources {
         val tasks=ArrayList<Pair<String,()->List<RankedHit>>>()
         // Internet indexes are PRIMARY. Individual provider adapters are
         // optional enrichment, never an allowlist or a prerequisite for search.
-        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false,indexPage)}
-        tasks+="Yahoo Web" to {broadWebIndex(context,keyword,area,true,indexPage)}
+        tasks+="Bing Web" to {broadWebIndex(context,keyword,area,indexPage)}
         if(indexPage==0)for(provider in providers)tasks+=provider.label to {
             when(provider.kind){
                 SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
