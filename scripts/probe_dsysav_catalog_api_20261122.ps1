@@ -94,7 +94,11 @@ try{
   $one=@($detail)
   Write-Output ('DSYSAV_DETAIL_API_WORKS='+($one.Count -gt 0))
  }catch{Write-Output ('DSYSAV_DETAIL_API_ERROR='+($_.Exception.Message -replace 'https?://\S+','[URL]'))}
- $items=ApiRequest '/videos/search' @{search_type='latest_hot_video'} $config
+ # The site's actual getSearchVideoData() uses video_hot_search,
+ # offset and limit, NOT the getVideo() 'latest_hot_video' mode.
+ $items=ApiRequest '/videos/search' @{
+   search_type='video_hot_search';offset=0;limit=20
+ } $config
  $rows=@()
  if($items -is [array]){$rows=@($items)}
  elseif($items.PSObject.Properties.Name -contains 'list'){$rows=@($items.list)}
