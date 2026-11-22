@@ -972,10 +972,10 @@ object BrowserPageFetch {
                                 // HTML5 currentSrc. Emit a *candidate*, never
                                 // a completed file. Zero/multiple requests
                                 // still fail closed; the 3s preview stays held.
-                                "<html><body><main><div class=\\\"video-player\\\">"+
-                                    "<video src=\\\""+
+                                "<html><body><main><div class='video-player'>"+
+                                    "<video src='"+
                                     android.text.TextUtils.htmlEncode(observedMp4)+
-                                    "\\\" data-duration=\\\"0\\\"></video>"+
+                                    "' data-duration='0'></video>"+
                                     "</div></main></body></html>"
                             } else observedPage
                             if(page.isNullOrBlank()){
