@@ -95,7 +95,7 @@ object NameCrawler {
         val result=KeywordSources.searchDetailed(context,name,VideoSearchArea.PORN)
         return result.hits.asSequence()
             .filter{SearchExactness.matchesPhrase(name,it.title) &&
-                com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
+                SearchRanking.isDiscoverablePage(it.url) &&
                 !ProviderRetirement.isRetired(it.url)}
             .distinctBy{SearchRanking.canonicalKey(it.url)}
             .map{it.copy(source="Name match · "+it.source)}
@@ -176,20 +176,17 @@ object NameCrawler {
                         watch.name,watch.source,personDocument)){
                         "Performer identity could not be confirmed on the first-party profile"
                     }
-                    val ownedLinks=PerformerMediaAttribution.attributableUrls(
+                    // The verified FIRST-PARTY media grid is independently
+                    // sufficient evidence for its links. The generic page
+                    // discovery parser often misses profile-owned videos and
+                    // previously erased those real links from the search.
+                    val media=PerformerMediaAttribution.attributableMedia(
                         watch.name,watch.source,personDocument)
-                    val profile=com.asterion.videoflow.WebDiscovery.page(
-                        watch.source,watch.source,context)
-                    val hits=profile.hits.asSequence()
-                        .filter{com.asterion.videoflow.VideoSiteProfiles
-                            .isVideoPage(it.url)}
-                        // A title match is not creator attribution. Only the
-                        // verified profile's own media grid can auto-queue.
-                        .filter{SearchRanking.canonicalKey(it.url) in ownedLinks}
-                        .distinctBy{SearchRanking.canonicalKey(it.url)}
-                        .map{RankedHit(it.title,it.url,
+                    val hits=media.map{source->
+                        RankedHit(source.title,source.url,
                             "Verified profile: "+watch.source,score=350,
-                            thumbnail=it.preview)}.toList()
+                            thumbnail=source.thumbnail)
+                    }
                     // Do not limit a verified performer search to the
                     // visible first page of a profile. Search all supported
                     // live provider catalogs for additional candidates, but
