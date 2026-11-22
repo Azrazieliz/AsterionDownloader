@@ -8,26 +8,27 @@ class InternetWideDiscoveryRegressionTest {
     @Test fun generalVideoWebSearchIsNotRestrictedToAdultSiteCatalogs(){
         assertTrue(KeywordSources.siteDefinitions(VideoSearchArea.GENERAL).isEmpty())
         val url=KeywordSources.webIndexUrl(
-            "documentary 2026",VideoSearchArea.GENERAL,false,0)
+            "documentary 2026",VideoSearchArea.GENERAL,0)
         assertTrue(url.contains("q=documentary+2026+video"))
         assertFalse(url.contains("adult"))
         assertFalse(url.contains("hentai"))
         val adult=KeywordSources.webIndexUrl(
-            "documentary 2026",VideoSearchArea.PORN,false,0)
+            "documentary 2026",VideoSearchArea.PORN,0)
         assertTrue(adult.contains("adult+video"))
     }
 
-    @Test fun nextWebPageUsesRealSearchEngineOffsets(){
-        val bing=KeywordSources.webIndexUrl(
-            "rare show",VideoSearchArea.GENERAL,false,2)
-        val yahoo=KeywordSources.webIndexUrl(
-            "rare show",VideoSearchArea.GENERAL,true,2)
-        assertTrue(bing.contains("first=101"))
-        assertTrue(yahoo.contains("b=21"))
-        assertFalse(yahoo.contains("duckduckgo"))
+    @Test fun nextWebPageUsesRealSearchEngineOffsetsWithoutYahoo(){
+        val first=KeywordSources.webIndexUrl(
+            "rare show",VideoSearchArea.GENERAL,0)
+        val third=KeywordSources.webIndexUrl(
+            "rare show",VideoSearchArea.GENERAL,2)
+        assertTrue(first.startsWith("https://www.bing.com/search?"))
+        assertTrue(first.contains("first=1"))
+        assertTrue(third.contains("first=101"))
+        assertFalse(third.contains("yahoo",ignoreCase=true))
         assertThrows(IllegalArgumentException::class.java){
             KeywordSources.webIndexUrl(
-                "rare show",VideoSearchArea.GENERAL,false,-1)
+                "rare show",VideoSearchArea.GENERAL,-1)
         }
     }
 
