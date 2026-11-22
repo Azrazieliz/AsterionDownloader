@@ -604,7 +604,7 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
             .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
             .maxOrNull() ?: 0
 
-    private fun providerLinks(doc: Document): List<Pair<String, String>> {
+    internal fun providerLinks(doc: Document): List<Pair<String, String>> {
         val found = linkedMapOf<String, String>()
         fun add(raw: String) {
             val url = raw.replace("&amp;", "&").trim(' ', '\'', '"')
