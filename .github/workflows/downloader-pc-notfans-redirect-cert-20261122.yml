@@ -1,0 +1,35 @@
+name: Asterion Downloader — PC selected NotFans CDN full-file receipt
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_certify_notfans_redirect_pc_20261122.py'
+      - '.github/workflows/downloader-pc-notfans-redirect-cert-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-publisher-official-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install media validator
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          command -v ffprobe
+      - name: Download whole official selected file via validated redirect and certify it
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 scripts/pc_certify_notfans_redirect_pc_20261122.py | tee pc-notfans-cdn-full-receipt.log
+      - name: Preserve full-transfer digest and actual runtime, never the media
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-notfans-cdn-full-receipt
+          path: pc-notfans-cdn-full-receipt.log
+          retention-days: 14
+          if-no-files-found: ignore
