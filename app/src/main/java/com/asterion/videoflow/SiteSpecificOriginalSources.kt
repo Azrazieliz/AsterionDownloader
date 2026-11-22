@@ -752,10 +752,6 @@ internal object SiteSpecificOriginalSources {
                     .matches(path) && frame.rawQuery.isNullOrBlank()
             "pornbuz.com"->PornBuzOriginalSource.owns(selected) &&
                 PornBuzOriginalSource.isSelectedMainFrame(player)
-            "pornavhd.com"->host(player)=="video.playerrecord.cfd" &&
-                Regex("""^/e/[A-Za-z0-9_-]{8,100}/?$""")
-                    .matches(path) && frame.rawQuery.isNullOrBlank() &&
-                frame.rawFragment==null
             "livecamrips.to" -> (
                 (host(player)=="vidara.to" &&
                     Regex("""^/[A-Za-z0-9_-]{8,50}/?$""").matches(path) &&
@@ -779,7 +775,7 @@ internal object SiteSpecificOriginalSources {
     internal fun selectedRecordingFrameOriginals(
         context:Context,selected:String,frame:String
     ):List<Source> {
-        if(host(selected) !in setOf("pornavhd.com","livecamrips.to") ||
+        if(host(selected)!="livecamrips.to" ||
             !selectedExtractorFrame(selected,frame))return emptyList()
         // The already publisher-attested Mixdrop #iframe-video belongs to
         // the existing yt-dlp player extractor. Its HTML5 currentSrc is not
