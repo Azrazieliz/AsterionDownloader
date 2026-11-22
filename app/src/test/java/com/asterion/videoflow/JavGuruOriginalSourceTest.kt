@@ -154,4 +154,50 @@ class JavGuruOriginalSourceTest {
             selectedWrapper,body.replace("MODE","z")))
     }
 
+    @Test fun historicalNonJkTransferOrderExcludesJkEvenWhenAdvertisedFirst() {
+        fun player(server:String)=JavGuruOriginalSource.Player(
+            server,"https://jav.guru/searcho/?ed=2613a7577637338603566346f256")
+        val mixed=listOf(player("JK"),player("VO"),player("SB"),player("LU"),
+            player("DD"),player("VI"),player("SB"))
+        assertEquals(listOf("LU","SB","VO","VI","DD"),
+            JavGuruOriginalSource.nonJkTransferOrder(mixed).map{it.server})
+        assertTrue(JavGuruOriginalSource.nonJkTransferOrder(
+            listOf(player("JK"))).isEmpty())
+    }
+
+    @Test fun nonJkHydrationTargetsOnlySelectedPostWhenLuSbMissing() {
+        val current=org.jsoup.Jsoup.parse(post,selected)
+        val existing=JavGuruOriginalSource.published(selected,current.outerHtml())
+        assertEquals(listOf("LU"),existing.map{it.server})
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedNonJk(
+            current,selected,existing))
+        val jkOnly=listOf(JavGuruOriginalSource.Player(
+            "JK","https://jav.guru/searcho/?ed=2613a7577637338603566346f256"))
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedNonJk(
+            current,selected,jkOnly))
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedNonJk(
+            org.jsoup.Jsoup.parse("<html><main>Loading</main></html>",selected),
+            selected,jkOnly))
+        val mismatched=org.jsoup.Jsoup.parse(
+            "<article id='post-1000000'>other scene</article>",selected)
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedNonJk(
+            mismatched,selected,jkOnly))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedNonJk(
+            current,"https://jav.guru/category/videos/",jkOnly))
+    }
+
+    @Test fun onlyCanonicalSelectedJavGuruArticlesPrimePython() {
+        assertTrue(JavGuruOriginalSource.selectedArticle(selected))
+        for(url in listOf(
+            "https://jav.guru/",
+            "https://jav.guru/?s=search",
+            selected+"?related=1",
+            selected+"#player",
+            "https://jav.guru.evil.example/1077002/example-post/",
+            "http://jav.guru/1077002/example-post/"
+        )){
+            assertFalse(url,JavGuruOriginalSource.selectedArticle(url))
+        }
+    }
+
 }
