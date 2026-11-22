@@ -106,11 +106,37 @@ try:
         except Exception:pass
     if host(browser.current_url) not in SITE:
         raise RuntimeError("SELECTED_WATCH_REDIRECTED_TO_OTHER_BRAND")
+    result["browser_selected_route"]=urllib.parse.urlsplit(browser.current_url).path
+    result["browser_selected_query_keys"]=sorted(urllib.parse.parse_qs(urllib.parse.urlsplit(browser.current_url).query))
+    result["browser_selected_matches"]=browser.current_url==selected
     durations=[]
     manifests=set()
     direct=set()
     player_clicked=False
     for tick in range(50):
+        if not player_clicked:
+            # The selected watch may use a headless-unfocusable overlay
+            # control. Activate only its one ordinary first-party LOAD action.
+            # Do not click ads, payment/login controls or unrelated cards.
+            try:
+                outcome=browser.execute_script("""return (function(){
+                  const buttons=[...document.querySelectorAll('button,[role="button"],input[type="button"]')]
+                    .filter(e=>(e.innerText||e.textContent||e.value||'').trim()==='LOAD')
+                    .filter(e=>!e.closest('aside,.related,.recommended,.ads,.advertisement,[data-ad]'));
+                  if(buttons.length!==1)return {found:buttons.length,clicked:false};
+                  const b=buttons[0];
+                  const r=b.getBoundingClientRect();
+                  if(b.disabled||b.getAttribute('aria-disabled')==='true')
+                    return {found:1,disabled:true,clicked:false};
+                  b.scrollIntoView({block:'center'});
+                  b.click();
+                  return {found:1,clicked:true,tag:b.tagName,visible:r.width>0&&r.height>0};
+                })();""")
+                if outcome.get("clicked"):
+                    result["selected_load_activation"]=outcome
+                    player_clicked=True
+            except Exception as error:
+                result["selected_load_error"]=type(error).__name__
         if not player_clicked:
             try:
                 # The exact selected DSYSAV watch overlay exposes one LOAD
@@ -167,6 +193,16 @@ try:
     result["selected_player_duration_seconds"]=round(max(durations),3) if durations else None
     result["selected_player_play_clicked"]=player_clicked
     result["selected_dom"]=browser.execute_script("""return {
+      load_controls:[...document.querySelectorAll('button,[role="button"],input[type="button"]')]
+        .filter(b=>(b.innerText||b.textContent||b.value||'').trim()==='LOAD')
+        .slice(0,5).map(b=>({tag:b.tagName,disabled:!!b.disabled,
+          aria:b.getAttribute('aria-disabled'),
+          rendered:(r=>r.width>0&&r.height>0)(b.getBoundingClientRect()),
+          parent_class:(b.parentElement?.className||'').toString().slice(0,90)})),
+      video_state:[...document.querySelectorAll('video')].slice(0,3)
+        .map(v=>({ready:v.readyState,network:v.networkState,
+          error:v.error?.code||null,paused:v.paused,
+          has_src:!!(v.currentSrc||v.src),poster:!!v.poster})),
       video_count:document.querySelectorAll('video').length,
       iframe_hosts:[...document.querySelectorAll('iframe[src]')].slice(0,10)
         .map(x=>{try{return new URL(x.src).hostname}catch(_){return ''}}),
