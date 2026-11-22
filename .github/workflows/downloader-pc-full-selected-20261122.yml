@@ -1,0 +1,39 @@
+name: Asterion Downloader — PC completed selected media acceptance
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_full_selected_provider_acceptance_20261122.py'
+      - '.github/workflows/downloader-pc-full-selected-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-selected-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        provider: [javideo, pornbuz, livecamrips, uncensoredhentai, xchina, avple, pornavhd, dsav]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Real Chrome and exact PC download dependencies
+        shell: bash
+        run: |
+          python3 -m py_compile scripts/pc_full_selected_provider_acceptance_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 'yt-dlp==2026.10.26'
+          ffprobe -version | head -n 1
+      - name: Download complete selected playable original or fail closed
+        shell: bash
+        run: |
+          python3 scripts/pc_full_selected_provider_acceptance_20261122.py "${{ matrix.provider }}"
+      - name: Preserve only proof JSON — no selected media or signed URLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-full-${{ matrix.provider }}-receipt
+          path: pc-full-${{ matrix.provider }}.json
+          if-no-files-found: warn
+          retention-days: 14
