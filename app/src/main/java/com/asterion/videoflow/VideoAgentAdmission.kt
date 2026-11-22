@@ -54,7 +54,8 @@ internal object VideoAgentAdmission {
     internal fun repeatedRecentPrimaryMemoryKills(
         timestamps:List<Long>,nowMs:Long):Boolean =
         timestamps.count{stamp->
-            stamp in 1..nowMs && nowMs-stamp<=PRIMARY_KILL_COOLDOWN_MS
+            stamp>0L && stamp<=nowMs &&
+                nowMs-stamp<=PRIMARY_KILL_COOLDOWN_MS
         }>=2
 
     private fun recentPrimaryMemoryKills(context:Context):Boolean {
