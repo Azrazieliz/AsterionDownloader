@@ -72,7 +72,12 @@ function ApiRequest([string]$route,[hashtable]$params,$config){
  $response=Invoke-WebRequest @requestArgs
  if([int]$response.StatusCode -ne 200){throw ('API HTTP '+$response.StatusCode)}
  $envelope=$response.Content|ConvertFrom-Json
- if($envelope.code -ne 200 -or !$envelope.data){throw 'API refused catalog'}
+ if($envelope.code -ne 200 -or !$envelope.data){
+  $status=if($envelope.code){[string]$envelope.code}else{'missing_code'}
+  $label=if($envelope.msg){[string]$envelope.msg}else{'no_message'}
+  throw ('API response route='+$route+' code='+$status+
+    ' message='+$label.Substring(0,[Math]::Min(90,$label.Length)))
+ }
  $bytes=[Convert]::FromBase64String([string]$envelope.data)
  $plain=$utf8.GetString((AesCipher $bytes $false))
  return ($plain|ConvertFrom-Json)
@@ -80,6 +85,15 @@ function ApiRequest([string]$route,[hashtable]$params,$config){
 try{
  $config=ApiRequest '/config' @{} $null
  Write-Output ('DSYSAV_CONFIG_SIGNING='+[bool]$config.http_sign_flag)
+ # Compare a previously verified SAME-PUBLISHER detail request to the
+ # homepage mode. No media bytes or signed URLs are printed or downloaded.
+ try{
+  $detail=ApiRequest '/videos/search' @{
+    search_type='video_detail_filter_id';video_id='MxWT7NmlUoT'
+  } $config
+  $one=@($detail)
+  Write-Output ('DSYSAV_DETAIL_API_WORKS='+($one.Count -gt 0))
+ }catch{Write-Output ('DSYSAV_DETAIL_API_ERROR='+($_.Exception.Message -replace 'https?://\S+','[URL]'))}
  $items=ApiRequest '/videos/search' @{search_type='latest_hot_video'} $config
  $rows=@()
  if($items -is [array]){$rows=@($items)}
