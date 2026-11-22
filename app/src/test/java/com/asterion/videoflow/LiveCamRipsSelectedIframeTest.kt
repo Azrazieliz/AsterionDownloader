@@ -19,6 +19,23 @@ class LiveCamRipsSelectedIframeTest {
         assertEquals(1,result.size)
         assertEquals("https://vidara.to/Abc123Def456",result.single().url)
     }
+    @Test fun realBlockedRecordingPlayerIsNotMistakenForAnUnsupportedVideo(){
+        for(host in listOf("vidara.to","video.playerrecord.cfd")){
+            val blocked=SiteSpecificOriginalSources.selectedRecordingHostBlocker(
+                host,403,false)
+            assertNotNull(blocked)
+            assertEquals(VideoFailurePolicy.Kind.AUTH,
+                VideoFailurePolicy.classify(blocked!!))
+            assertNotNull(SiteSpecificOriginalSources.selectedRecordingHostBlocker(
+                host,429,false))
+            assertNotNull(SiteSpecificOriginalSources.selectedRecordingHostBlocker(
+                host,null,true))
+            assertNull(SiteSpecificOriginalSources.selectedRecordingHostBlocker(
+                host,200,false))
+        }
+        assertNull(SiteSpecificOriginalSources.selectedRecordingHostBlocker(
+            "ads.example",403,false))
+    }
     @Test fun unrelatedAdsAndLookalikeHostsMustNotBeSelected(){
         val html="""
           <main><div id="player">
