@@ -762,7 +762,7 @@ object BrowserPageFetch {
                                 if(publisher==='pornbuz.com')
                                     return /^\/video\/[a-z0-9][a-z0-9-]{7,190}-\d{3,10}\/?$/i
                                         .test(currentPath) &&
-                                        !!el.closest('article .video-player-area,'+
+                                        !!el.closest('.video-player-area .video-player .responsive-player,'+
                                             'main .video-player') &&
                                         !el.closest('aside,.related,.recommended,'+
                                             '.recommendations,.ads,.advertisement,'+
