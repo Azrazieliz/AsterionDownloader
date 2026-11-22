@@ -142,6 +142,17 @@ open class HttpClient(private val context:android.content.Context?=null) {
         }
     }
 
+    /** Static 4KHD HTML can omit the first-party full-resolution bridge
+     * until its article JavaScript renders. Reuse the existing authorised
+     * browser owner only for one exact selected 4KHD album; never harvest
+     * thumbnails or other articles as full-resolution originals.
+     */
+    internal open fun selected4KhdArticleHtml(selected:String):String? {
+        val app=context?:return null
+        if(!SelectedAlbumScope.is4khdAlbum(selected))return null
+        return com.azrael.pixivdumpsync.BrowserPageFetch.html(app,selected)
+    }
+
     /** Read a selected publisher iframe through the application's existing
      * authorised browser owner, not a new WebView or media extractor.
      * Only a first-party CosplayTele player linked by its selected article
