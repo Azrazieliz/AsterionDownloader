@@ -446,15 +446,26 @@ internal object SiteSpecificOriginalSources {
         // site's own WebView renders that exact chosen post using its normal
         // authorized session. Inspect it only when static parsing found zero
         // actual selected controls; never use the advertising iframe.
-        val streams=initial.ifEmpty {
-            if(nativeJkOnly)return@ifEmpty emptyList()
-            if(!BrowserPageFetch.publicEligible(selected) &&
-                !SiteSession.bound(context,selected))emptyList()
-            else runCatching {
-                JavGuruOriginalSource.published(selected,
-                    BrowserPageFetch.html(context,selected))
-            }.getOrDefault(emptyList())
-        }
+        // A partially hydrated article may expose LU/SB shortcodes in
+        // static HTML while the publisher's JK control appears only after
+        // WordPress JS completes. The old 'ifEmpty' path never inspected JK
+        // once ANY other server was parsed, regressing the proven native JK
+        // transfer back to repeatedly 403-ing Python transports. Recheck
+        // the SAME article only if its DOM visibly advertises an unresolved
+        // JK control. Keep the secondary native-only worker static/light.
+        val unresolvedJk=initial.none{it.server=="JK"} &&
+            doc.select("a.wp-btn-iframe__shortcode").any{
+                it.text().trim().equals("STREAM JK",ignoreCase=true)
+            }
+        val inspectRendered=!nativeJkOnly &&
+            (initial.isEmpty() || unresolvedJk) &&
+            (BrowserPageFetch.publicEligible(selected) ||
+                SiteSession.bound(context,selected))
+        val fromBrowser=if(inspectRendered)runCatching {
+            JavGuruOriginalSource.published(selected,
+                BrowserPageFetch.html(context,selected))
+        }.getOrDefault(emptyList()) else emptyList()
+        val streams=(fromBrowser+initial).distinctBy{it.server}
         val found=LinkedHashMap<String,Source>()
         // The owner's MXGS-1452 selected original completed on PC
         // through the JK/Maxstream first-party source (751/751 fragments),
