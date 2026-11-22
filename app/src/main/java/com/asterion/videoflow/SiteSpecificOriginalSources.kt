@@ -715,6 +715,17 @@ internal object SiteSpecificOriginalSources {
                     "sbtape.com") &&
                     Regex("""^/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?$""")
                         .matches(path)))
+            "cosplaytele.com" -> (
+                // The selected CosplayTele article can contain a full video
+                // in a FIRST-PARTY iframe alongside the photo gallery.
+                // Earlier gallery integration called this guard, but this
+                // case was missing: every genuine iframe was rejected and
+                // no GalleryFlow video receipt was ever queued.
+                host(player)=="cosplaytele.com" &&
+                Regex("""(?i)^/(?:embed|player|video|watch)/[A-Za-z0-9_-]{5,180}/?$""")
+                    .matches(path) &&
+                frame.rawQuery.isNullOrBlank() &&
+                frame.rawFragment==null)
             "helloporn.com"->host(player)=="voe.sx" &&
                 Regex("""^/e/[A-Za-z0-9_-]{6,80}/?$""")
                     .matches(path) && frame.rawQuery.isNullOrBlank()
