@@ -29,12 +29,18 @@ object SearchExactness {
         }
     }
 
-    /** Descriptive global-video searches need every significant word,
-     * not necessarily the same word order. This is ONLY discovery metadata;
-     * creator identity verification continues to require matchesPhrase.
+    /** In the unified video search, two or more name/title words are one
+     * ordered identity. The prior unordered OR fallback turned "Bella Alice"
+     * into "Barbara Bella and Alice Marshall", an unrelated recording.
+     * Broad unordered keyword matching remains available for other explicit
+     * metadata uses via matches(), but not to claim an exact video hit.
      */
-    fun mediaMatches(query:String,title:String):Boolean =
-        matchesPhrase(query,title) || matches(query,title)
+    fun mediaMatches(query:String,title:String):Boolean {
+        val requested=terms(query)
+        if(requested.isEmpty())return false
+        return if(requested.size>=2)matchesPhrase(query,title)
+            else matches(query,title)
+    }
 
     fun matches(query:String,title:String):Boolean {
         val required=terms(query)
