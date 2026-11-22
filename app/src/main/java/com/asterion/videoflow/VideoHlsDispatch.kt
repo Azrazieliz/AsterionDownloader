@@ -34,7 +34,13 @@ internal object VideoHlsDispatch {
         // native worker needs none, delays first bytes and competes for RAM.
         // For an actually selected non-JK HLS, the existing typed() call
         // still initializes its extractor; other publishers are unchanged.
-        return (host=="hentaihaven.xxx" &&
+        // xChina's selected /video/<hex> article publishes a first-party
+        // short-lived HLS URL in #video-player[data-src]. Unlike JAV Guru JK,
+        // it has no dedicated native HLS lane; prepare the embedded runtime
+        // BEFORE obtaining its selected signed manifest.
+        return (host=="xchina.co" && VideoSiteProfiles.isVideoPage(url)) ||
+            (host=="en.xchina.co" && VideoSiteProfiles.isVideoPage(url)) ||
+            (host=="hentaihaven.xxx" &&
                 HentaiHavenEpisodeSource.isEpisode(url)) ||
             // TaiAV's exact selected movie publishes a short-lived
             // first-party /api/getmovie HLS. Prepare Python BEFORE asking
