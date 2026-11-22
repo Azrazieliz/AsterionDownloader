@@ -42,5 +42,50 @@ if code==200:
     "media_hosts":[urllib.parse.urlsplit(urllib.parse.urljoin(url,x)).hostname for x in videos[:8]],
     "scripts":len(doc.select("script"))})
  out["selected_pages"]=pages
+# DSYSAV public homepage is a JS-only shell: server response returned
+# no first-party href at all. Inspect the same public site in real desktop
+# Chrome before concluding there are no selected posts; do not click gates.
+if code==200 and not out.get("internal_count"):
+ from selenium import webdriver
+ from selenium.webdriver.chrome.options import Options
+ from selenium.common.exceptions import TimeoutException
+ import time
+ options=Options()
+ for flag in ("--headless=new","--no-sandbox","--disable-dev-shm-usage",
+              "--disable-gpu","--window-size=1280,850"):
+  options.add_argument(flag)
+ browser=webdriver.Chrome(options=options)
+ try:
+  browser.set_page_load_timeout(17)
+  try:browser.get(BASE)
+  except TimeoutException:pass
+  for wait in range(8):
+   time.sleep(1)
+   result=browser.execute_script("""return {
+      title:document.title,
+      links:[...document.querySelectorAll('a[href]')].slice(0,700)
+        .map(a=>({href:a.getAttribute('href'),title:(a.textContent||'').trim().slice(0,50)})),
+      frames:[...document.querySelectorAll('iframe[src]')].slice(0,20).map(f=>f.src),
+      players:[...document.querySelectorAll('video,source[src]')].slice(0,10)
+        .map(v=>({host:(()=>{try{return new URL(v.currentSrc||v.src).hostname}catch(_){return ''}})(),
+           duration:Number.isFinite(v.duration)?v.duration:0})),
+      bodyHint:(document.body?.innerText||'').slice(0,260),
+      status:document.readyState};""")
+   links=[]
+   for row in result.get("links",[]):
+    u=internal(row.get("href") or "",BASE)
+    if u and u not in links:links.append(u)
+   out["chrome_title"]=result.get("title","")[:100]
+   out["chrome_link_count"]=len(links)
+   out["chrome_internal_route_prefixes"]=dict(Counter(
+       urllib.parse.urlsplit(u).path.strip("/").split("/")[0] for u in links).most_common(20))
+   out["chrome_route_examples"]=[urllib.parse.urlsplit(u).path[:105] for u in links[:25]]
+   out["chrome_player_hosts"]=[v.get("host") for v in result.get("players",[]) if v.get("host")]
+   out["chrome_frame_hosts"]=[urllib.parse.urlsplit(u).hostname for u in result.get("frames",[])]
+   out["chrome_body_hint"]=result.get("bodyHint","")[:100]
+   if links:break
+ except Exception as error:out["chrome_error"]=type(error).__name__
+ finally:browser.quit()
+
 print(json.dumps(out,sort_keys=True,ensure_ascii=False),flush=True)
 open("pc-dsysav-route-evidence.json","w").write(json.dumps(out,indent=2))

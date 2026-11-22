@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: dsysav-pc-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   dsav-selected-source:
     runs-on: ubuntu-latest
@@ -17,7 +20,7 @@ jobs:
       - name: Check Python and actual public site without media download
         run: |
           python3 -m py_compile scripts/pc_dsysav_selected_route_probe_20261122.py
-          python3 -m pip install --disable-pip-version-check beautifulsoup4
+          python3 -m pip install --disable-pip-version-check beautifulsoup4 selenium==4.36.0
           python3 scripts/pc_dsysav_selected_route_probe_20261122.py
       - name: Preserve exact route evidence only
         uses: actions/upload-artifact@v4
