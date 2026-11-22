@@ -60,8 +60,12 @@ object BrowserPageFetch {
     }
     fun html(context:Context,url:String,playerReferer:String?=null):String {
         com.asterion.videoflow.NetworkRoute.requireVpn(context,url)
+        val attestedFrame=playerReferer?.let{
+            com.asterion.videoflow.SiteSpecificOriginalSources
+                .selectedExtractorFrame(it,url)
+        }==true
         require(com.azrael.galleryflow.SiteSession.bound(context,url) ||
-            publicEligible(url)) {
+            publicEligible(url) || attestedFrame) {
             "Save an accessible website session before retrying."
         }
         check(Looper.myLooper()!=Looper.getMainLooper()) {
@@ -135,9 +139,11 @@ object BrowserPageFetch {
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com",
             "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-            "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com")
+            "bubblecum.lol","pornavhd.com","cosplaytele.com","notfans.com",
+            "video.playerrecord.cfd","vidara.to")
         val selectedPlayerPage=selectedPlayerHost && (
             com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url) ||
+            attestedFrame ||
             when(host) {
                 "fullporner.com" -> Regex("""^/player/[0-9]{1,12}/[0-9]{1,4}/?$""")
                     .matches(Uri.parse(url).path.orEmpty())
@@ -522,7 +528,8 @@ object BrowserPageFetch {
                                 '#player video,.video-js video,video source[src],'+
                                 (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net',
                                     'hentaihaven.xxx','play.javideo.net','streamtape.com','streamtape.to',
-                                    'streamtape.net','streamtape.site','sbtape.com']
+                                    'streamtape.net','streamtape.site','sbtape.com',
+                                    'video.playerrecord.cfd','vidara.to']
                                     .includes(selectedPlayerHost) ||
                                     (selectedPlayerHost==='cosplaytele.com' &&
                                      /^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/
