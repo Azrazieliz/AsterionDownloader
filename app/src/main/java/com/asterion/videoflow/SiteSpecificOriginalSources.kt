@@ -429,10 +429,20 @@ internal object SiteSpecificOriginalSources {
             }.orEmpty().distinctBy{it.url}
             if(verified.isNotEmpty())return verified
         }
-        // yt-dlp may have a dedicated extractor for the publisher-attested
-        // player host, so give it the EXACT iframe rather than a made-up MP4.
+        // NHPlayer has no generic embedded extractor for its /v/ chooser or
+        // /player.php document. If the selected first-party AJAX did not
+        // publish its signed MP4, returning the HTML player here starts
+        // Python Unsupported URL at zero bytes and hides the real barrier.
+        // Return no original so TransferService's existing strict-iframe
+        // failure path reports the selected player extraction problem.
+        if(!allowGenericIframeExtractorFallback(owner))return emptyList()
+        // Other historically supported iframe owners retain their real
+        // hoster-specific yt-dlp extractor fallback, unchanged.
         return listOf(Source(playerPage,if(playerPage==link)selected else link))
     }
+    internal fun allowGenericIframeExtractorFallback(owner:String):Boolean =
+        owner!="uncensoredhentai.xxx"
+
     /** Only a JK control on the selected WordPress article may trigger the
      * browser hydration fallback; a sidebar link is never a publisher source. */
     internal fun missingPublishedJkControl(
