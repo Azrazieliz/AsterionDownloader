@@ -230,4 +230,16 @@ class JavGuruOriginalSourceTest {
             wrapper,next,"LU"))
     }
 
+    @Test fun longEncodedPublisherBackgroundDoesNotDropSelectedLu() {
+        val longWrapper="https://www.jav.guru/searcho/?ed="+
+            "a".repeat(40)+"&bg=https%3A%2F%2Fcdn.example%2F"+
+            "a".repeat(355)
+        val longEncoded=Base64.getEncoder().encodeToString(
+            longWrapper.toByteArray(Charsets.UTF_8))
+        assertTrue(longEncoded.length>600)
+        val changed=post.replace(encoded,longEncoded)
+        assertEquals(longWrapper,
+            JavGuruOriginalSource.published(selected,changed).first().url)
+    }
+
 }
