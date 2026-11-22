@@ -33,6 +33,24 @@ class TorrentQueueActionsTest {
         assertTrue(actions.contains("Discard from queue"))
         assertFalse(actions.contains("Pause transfer"))
     }
+    @Test fun cancelledSecurityReviewReceiptIsNotMisreportedAsQuarantine(){
+        val receipt="Cancelled · selected torrent removed from queue; "+
+            "unverified private pieces retained for security review"
+        assertEquals("CANCELLED",
+            TorrentTransfers.classifyStatus(receipt,0L,0L,100L))
+        val actions=TorrentTransfers.queueActionLabels(receipt)
+        assertFalse(actions.contains("Discard from queue"))
+        assertFalse(actions.contains("Resume transfer"))
+    }
+    @Test fun activeAndQuarantinedTorrentStatusesRemainDistinct(){
+        assertEquals("QUARANTINED",
+            TorrentTransfers.classifyStatus(
+                "QUARANTINED · retained for security review",0L,0L,100L))
+        assertEquals("TRANSFERRING",
+            TorrentTransfers.classifyStatus("Downloading 42%",9_000L,2048L,10_000L))
+        assertEquals("WAITING_PEERS",
+            TorrentTransfers.classifyStatus("Waiting",9_000L,0L,10_000L))
+    }
     @Test fun cancelledJobsCannotBeResumedOrDiscardedAgain(){
         assertFalse(TorrentTransfers.queueActionLabels(
             "Cancelled · selected torrent removed from queue")
