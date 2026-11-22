@@ -1,0 +1,38 @@
+name: Asterion Downloader — JAVIDEO exact selected alternative PC complete originals
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_javideo_selected_alternate_hosts_20261122.py'
+      - '.github/workflows/downloader-pc-javideo-alternate-hosts-full-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-alternatives:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      matrix:
+        server: ['DSTR#01', 'LLS#01']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare full-file original browser and FFprobe
+        run: |
+          python3 -m py_compile scripts/pc_javideo_selected_alternate_hosts_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 yt-dlp==2026.10.26
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Transfer complete selected movie or fail
+        env:
+          SERVER: ${{ matrix.server }}
+        run: python3 scripts/pc_javideo_selected_alternate_hosts_20261122.py "$SERVER"
+      - name: Preserve no-media full-file receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: javideo-selected-alternate
+          path: pc-javideo-alternate-*.json
+          if-no-files-found: warn
+          retention-days: 14
