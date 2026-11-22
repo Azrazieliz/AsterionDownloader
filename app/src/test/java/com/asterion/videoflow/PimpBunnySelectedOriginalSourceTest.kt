@@ -24,6 +24,9 @@ class PimpBunnySelectedOriginalSourceTest {
         assertEquals(listOf(full),
             PublisherOriginalExtractors.fromHtml(selected,page()).map{it.url})
         assertTrue(PimpBunnySelectedOriginalSource.verifiedMedia(selected,full))
+        // The old dispatcher used the verified flag but failed to admit this
+        // very same first-party signed file, falling into yt-dlp/PHP.
+        assertTrue(NativeMediaDownloader.isNativeEligible(selected,full,true))
     }
     @Test fun neverPromotePreviewOrExternalMedia(){
         assertTrue(PimpBunnySelectedOriginalSource.published(selected,page(
