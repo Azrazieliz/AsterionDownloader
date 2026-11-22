@@ -18,6 +18,28 @@ import kotlin.math.max
  * requests are retained to avoid interfering with active writes. No other
  * application directory or resumable transfer is ever touched.
  */
+/** Refuse oversized preview payloads before they fill private storage.
+ * Downloads are separate and are never subject to this thumbnail limit.
+ */
+internal object ThumbnailPayloadLimit {
+    fun copy(input:java.io.InputStream,output:java.io.OutputStream,
+             maxBytes:Long):Long {
+        require(maxBytes>0)
+        val chunk=ByteArray(64*1024)
+        var total=0L
+        while(true){
+            val n=input.read(chunk,0,minOf(chunk.size,
+                (maxBytes-total+1).coerceAtMost(chunk.size.toLong()).toInt()))
+            if(n<0)return total
+            if(n==0)continue
+            total+=n
+            if(total>maxBytes)
+                throw java.io.IOException("Thumbnail exceeds private cache limit")
+            output.write(chunk,0,n)
+        }
+    }
+}
+
 internal object ThumbnailCacheRetention {
     private val hashedName=Regex("^[a-f0-9]{64}$")
     fun prune(dir:File,protected:File,maxBytes:Long=256L*1024*1024,
@@ -150,10 +172,25 @@ object RemoteImageLoader {
                             return@runCatching null
                         }
 
-                        file.outputStream().buffered().use { output ->
-                            conn.inputStream.use { input ->
-                                input.copyTo(output, 64 * 1024)
+                        // Cache only a bounded, fully received preview.
+                        // The old unbounded copyTo could cache a huge image or
+                        // leave a partial hashed file after a network failure.
+                        val maxPreviewBytes=if(preserveOriginal)
+                            64L*1024*1024 else 24L*1024*1024
+                        if(conn.contentLengthLong>maxPreviewBytes)
+                            return@runCatching null
+                        val temporary=File(dir,file.name+".part")
+                        try{
+                            temporary.outputStream().buffered().use { output ->
+                                conn.inputStream.use { input ->
+                                    ThumbnailPayloadLimit.copy(input,output,maxPreviewBytes)
+                                }
                             }
+                            if(!temporary.renameTo(file)){
+                                throw java.io.IOException("Cannot commit preview cache")
+                            }
+                        }finally{
+                            temporary.delete()
                         }
                     } finally {
                         runCatching { conn.disconnect() }
