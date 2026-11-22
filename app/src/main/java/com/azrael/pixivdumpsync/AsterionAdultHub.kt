@@ -601,10 +601,11 @@ object AsterionAdultHub {
             }
             parent.addView(card,ui.lp(a,7))
         }
-        // Index-backed sites first. Provider rows never display media from
-        // another website. Other sites remain accessible, not duplicated.
-        // Every approved website is present directly in its Pixiv-style card.
-        // No separate Manage Websites screen, secondary list, or hidden sites.
-        for(site in active+inactive)siteCard(site)
+        // All approved websites remain in the same alphabetical order,
+        // regardless of whether a publisher returned posters. The previous
+        // active+inactive split pushed DSYSAV (no indexed covers yet) below
+        // every populated provider and made an enrolled source appear missing.
+        // Do not fabricate a cover or replace the existing website cards.
+        for(site in sources)siteCard(site)
     }
 }
