@@ -45,6 +45,34 @@ internal object VideoAgentAdmission {
         return freeBytes<needs
     }
 
+    // Android recorded repeated LOW_MEMORY exits of :videoflow_primary on
+    // Nov 22 even though the coarse OS lowMemory flag later became false.
+    // Avoid initializing a second large Chaquopy heap while recent evidence
+    // shows the first is under pressure. The second native HTTP worker and
+    // resumable queue stay available; this is not a global download pause.
+    private const val PRIMARY_KILL_COOLDOWN_MS=24L*60L*60L*1000L
+    internal fun repeatedRecentPrimaryMemoryKills(
+        timestamps:List<Long>,nowMs:Long):Boolean =
+        timestamps.count{stamp->
+            stamp in 1..nowMs && nowMs-stamp<=PRIMARY_KILL_COOLDOWN_MS
+        }>=2
+
+    private fun recentPrimaryMemoryKills(context:Context):Boolean {
+        if(android.os.Build.VERSION.SDK_INT<30)return false
+        return runCatching {
+            val am=context.getSystemService(ActivityManager::class.java)
+                ?:return@runCatching false
+            val prefix=context.packageName+":videoflow_primary"
+            val exits=am.getHistoricalProcessExitReasons(null,0,16)
+            val timestamps=exits.filter{
+                it.processName==prefix &&
+                    it.reason==android.app.ApplicationExitInfo.REASON_LOW_MEMORY
+            }.map{it.timestamp}
+            repeatedRecentPrimaryMemoryKills(
+                timestamps,System.currentTimeMillis())
+        }.getOrDefault(false)
+    }
+
     fun nativeOnly(context:Context):Boolean {
         val secondary=android.app.Application.getProcessName().orEmpty()
             .endsWith(":videoflow_secondary")
@@ -52,6 +80,7 @@ internal object VideoAgentAdmission {
         val am=context.getSystemService(ActivityManager::class.java)
             ?:return true
         val info=ActivityManager.MemoryInfo()
+        if(recentPrimaryMemoryKills(context))return true
         return try {
             am.getMemoryInfo(info)
             secondaryNativeOnly(info.availMem,info.lowMemory,
