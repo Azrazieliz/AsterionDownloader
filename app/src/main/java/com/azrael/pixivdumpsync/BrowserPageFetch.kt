@@ -264,8 +264,18 @@ object BrowserPageFetch {
                     // the exact player already attested by the selected post.
                     // Keep main-frame navigation on the publisher, but admit
                     // only approved selected player subframes (not ad popups).
-                    return !SelectedVideoIframePolicy.allow(
+                    val allowed=SelectedVideoIframePolicy.allow(
                         url,request.url.toString(),request.isForMainFrame)
+                    if(!allowed && request.isForMainFrame && latch.count>0L){
+                        // A denied publisher redirect can otherwise leave no
+                        // onPageFinished callback and burn the full 45s budget.
+                        // Do not widen origin policy or follow the redirect.
+                        browserStage.set("main_frame_redirect_blocked")
+                        error.set("Browser blocked a navigation outside the "+
+                            "selected publisher: "+request.url.host.orEmpty())
+                        latch.countDown()
+                    }
+                    return !allowed
                 }
                 override fun onPageFinished(v:WebView,finished:String){
                     browserStage.set("page_finished_or_player_poll")
