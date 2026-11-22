@@ -9,7 +9,9 @@ class UnresolvablePublisherRetryPolicyTest {
             "Python extractor: Video extractor cannot resolve this publisher's current player",
             "No verified original found on this page",
             "No publisher original or supported player found",
-            "Selected video yielded no original bytes after 80s"
+            "Selected video yielded no original bytes after 80s",
+            "Selected provider page had no UNIQUE first-party original stream after authorized browser inspection.",
+            "DownloadError: ERROR: The extracted extension ('php') is unusual and will be skipped for safety reasons."
         )
         for(reason in errors){
             val kind=VideoFailurePolicy.classify(reason)
