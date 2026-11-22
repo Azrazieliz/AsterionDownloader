@@ -4,6 +4,7 @@ on:
     branches: [repair/downloader-global-search-20261121]
     paths:
       - '.github/workflows/downloader-javguru-nonjk-source-validation-20261122.yml'
+      - 'app/src/test/java/com/asterion/videoflow/LiveJavGuruOriginalSourceTest.kt'
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,7 +49,19 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Production Kotlin LU selected article through real publisher relay to HLS bytes
-        run: gradle :app:testAcceptanceUnitTest --tests 'com.asterion.videoflow.LiveJavGuruOriginalSourceTest' --stacktrace --console=plain
+        shell: bash
+        run: |
+          set +e
+          gradle :app:testAcceptanceUnitTest --tests 'com.asterion.videoflow.LiveJavGuruOriginalSourceTest' --console=plain
+          code=$?
+          python3 - <<'PY'
+          import glob,xml.etree.ElementTree as ET
+          for p in glob.glob('app/build/test-results/testAcceptanceUnitTest/*LiveJavGuruOriginalSourceTest*.xml'):
+            for case in ET.parse(p).getroot().iter('testcase'):
+              for failure in case.findall('failure'):
+                print('JAV_GURU_EXACT_JAVA_FAILURE='+failure.attrib.get('message','')[:900])
+          PY
+          exit "$code"
   java-selected-post-transport:
     runs-on: ubuntu-latest
     timeout-minutes: 4
