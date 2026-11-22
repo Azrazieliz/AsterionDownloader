@@ -155,10 +155,8 @@ internal object PerformerIdentity {
 
     private fun searchProfileCandidates(name:String):List<String>{
         val query=URLEncoder.encode("\""+name.trim()+"\" model creator performer gravure","UTF-8")
-        val engines=listOf(
-            "https://www.bing.com/search?q="+query,
-            "https://search.yahoo.com/search?p="+query)
-        val pool=Executors.newFixedThreadPool(2)
+        val engines=listOf("https://www.bing.com/search?q="+query)
+        val pool=Executors.newFixedThreadPool(1)
         try{
             val tasks=engines.map{address->pool.submit<List<String>>{
                 runCatching {
