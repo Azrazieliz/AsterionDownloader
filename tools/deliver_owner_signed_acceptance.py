@@ -33,6 +33,8 @@ def main() -> None:
     parser.add_argument("--input", default=None)
     parser.add_argument("--built-commit", required=True,
                         help="Exact git commit used when the APK was compiled")
+    parser.add_argument("--release-version",default="1.3.60",
+                        help="Version label of the signed APK; legacy default retained")
     args = parser.parse_args()
 
     root = Path(args.repo)
@@ -47,7 +49,10 @@ def main() -> None:
                    check=True,stdout=subprocess.DEVNULL)
     # Do not label an older signed APK as a newer source commit.
     # The caller must explicitly identify the build source on every transfer.
-    filename = f"Asterion-Downloader-v1.3.60-{commit[:8]}-Owner-Signed-Acceptance.apk"
+    import re
+    if not re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+",args.release_version):
+        raise RuntimeError("Invalid acceptance APK version label")
+    filename = f"Asterion-Downloader-v{args.release_version}-{commit[:8]}-Owner-Signed-Acceptance.apk"
     source_digest = sha256(original)
     token_path = (Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) /
                   "AsterionControl" / "control-token.txt")
