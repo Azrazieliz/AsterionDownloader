@@ -30,6 +30,29 @@ class LiveJavGuruOriginalSourceTest {
         return result.url().toString() to result.body()
     }
 
+    /** The selected LU /searcho/ relay redirected to streamhihi.com, but
+     * Jsoup reported HTTP 403 on that redirect while the identical Python
+     * request returned the signed original. Confirm the standard Java
+     * transport before a production fallback is allowed. */
+    private fun urlConnectionPlayer(url:String,referer:String):Pair<String,String>{
+        val connection=URL(url).openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects=true
+        connection.connectTimeout=20_000
+        connection.readTimeout=24_000
+        connection.setRequestProperty("User-Agent",NativeMediaDownloader.USER_AGENT)
+        connection.setRequestProperty("Referer",referer)
+        connection.setRequestProperty("Accept-Encoding","identity")
+        try {
+            val status=connection.responseCode
+            val host=connection.url.host
+            assertEquals("Selected Java URLConnection redirect "+host,200,status)
+            val body=connection.inputStream.use{
+                it.readNBytes(900_000).toString(Charsets.UTF_8)
+            }
+            return connection.url.toString() to body
+        }finally{connection.disconnect()}
+    }
+
     @Test fun productionKotlinFindsSelectedLuluManifestBytes(){
         assumeTrue("Run live only on explicit opt-in",
             System.getenv("ASTERION_LIVE_PROVIDERS")=="1")
@@ -41,7 +64,7 @@ class LiveJavGuruOriginalSourceTest {
         val (_,relay)=html(stream.url,selected)
         val follow=JavGuruOriginalSource.nextIframe(stream.url,relay)
         assertNotNull("Selected first-party relay did not decode",follow)
-        val (embed,playerHtml)=html(follow!!,stream.url)
+        val (embed,playerHtml)=urlConnectionPlayer(follow!!,stream.url)
         assertTrue("Not the selected external player",
             JavGuruOriginalSource.selectedEmbed("LU",embed))
         val manifest=JavGuruOriginalSource.selectedHls(embed,playerHtml)
