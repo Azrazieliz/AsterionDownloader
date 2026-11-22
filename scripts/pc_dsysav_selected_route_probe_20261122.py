@@ -76,6 +76,16 @@ if code==200 and not out.get("candidate_count"):
     u=internal(row.get("href") or "",BASE)
     if u and u not in links:links.append(u)
    out["chrome_title"]=result.get("title","")[:100]
+   external=[]
+   for row in result.get("links",[]):
+    raw=row.get("href") or ""
+    try:
+     href=urllib.parse.urlsplit(urllib.parse.urljoin(BASE,raw))
+     if href.scheme=="https" and href.hostname not in ("dsysav.com","www.dsysav.com") and href.hostname:
+      external.append({"host":href.hostname,"path":href.path[:85],
+                       "label":(row.get("title") or "")[:50]})
+    except Exception:pass
+   out["chrome_external_links"]=external[:20]
    out["chrome_link_count"]=len(links)
    out["chrome_internal_route_prefixes"]=dict(Counter(
        urllib.parse.urlsplit(u).path.strip("/").split("/")[0] for u in links).most_common(20))
