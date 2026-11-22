@@ -130,4 +130,19 @@ class SearchRankingTest {
         assertFalse(SearchRanking.isVideoUrl("https://www.xvideos.com/video.oteflpmace7/anime_perverted_milf"))
         assertFalse(SearchRanking.isVideoUrl("https://www.pornhub.com/video/search?search=rare"))
     }
+    @Test fun peerTubePublicSearchRetainsShortWatchLinksWithoutAdmittingListings() {
+        val valid="https://video.example.org/w/123e4567-e89b-12d3-a456-426614174000"
+        assertTrue(PeerTubeResultPolicy.isVideoWatch(valid))
+        assertTrue(PeerTubeResultPolicy.isVideoWatch(
+            "https://video.example.org/videos/watch/123e4567-e89b-12d3-a456-426614174000"))
+        for(bad in listOf(
+            "https://video.example.org/w/short",
+            "https://video.example.org/w/",
+            "https://video.example.org/videos",
+            "http://video.example.org/w/123e4567-e89b-12d3-a456-426614174000",
+            "https://127.0.0.1/w/123e4567-e89b-12d3-a456-426614174000",
+            "https://video.example.org/w/123e4567-e89b-12d3-a456-426614174000?redirect=1"
+        ))assertFalse(bad,PeerTubeResultPolicy.isVideoWatch(bad))
+    }
+
 }
