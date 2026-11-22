@@ -311,8 +311,23 @@ def player_candidate(name,selected,frame):
               and all(k in ('id','expires','ip','token','stream','dl') for k in params)):
            media_urls.append(raw)
          if len(set(media_urls))==1:
-          return {'source':media_urls[0],'referer':chosen,'duration':0,
-            'reason':'same selected JAVIDEO film - STAPE#01 player robotlink'}
+          # Current Streamtape player scripts publish a required signed
+          # &token= alongside #ideoooolink. The DOM's incomplete bait
+          # link often stalls. Only append the first-party script's token;
+          # never synthesize it, decode challenges or borrow other frames.
+          script_texts=d.execute_script("""return [...document.querySelectorAll('script:not([src])')]
+            .map(x=>x.textContent||'').filter(x=>x.includes('ideoooolink')&&x.includes('&token='))
+            .slice(0,10);""") or []
+          tokens=set()
+          for script_text in script_texts:
+           tokens.update(re.findall(r"&token=([A-Za-z0-9_-]{4,160})(?=['\\\"&\\s]|$)",script_text))
+          selected_media=media_urls[0]
+          query=urllib.parse.parse_qs(urllib.parse.urlsplit(selected_media).query)
+          if len(tokens)==1 and not query.get('token'):
+           selected_media=selected_media+('&' if urllib.parse.urlsplit(selected_media).query else '?')+'token='+next(iter(tokens))
+          return {'source':selected_media,'referer':chosen,'duration':0,
+            'reason':'same selected JAVIDEO film - STAPE#01 published token-bearing original',
+            'signed_token_attested':len(tokens)==1}
          current=d.execute_script("""return [...document.querySelectorAll('video')]
            .filter(v=>!v.closest('aside,.related,.recommendations,.ads,'+
              '.advertisement,.sidebar,[data-ad]'))
@@ -350,7 +365,7 @@ def full_file(selected,candidate):
    from concurrent.futures import ThreadPoolExecutor
    headers={"User-Agent":UA,"Referer":candidate["referer"],"Accept-Encoding":"identity"}
    media_types=("video/mp4","application/octet-stream","binary/octet-stream")
-   deadline=time.monotonic()+545
+   deadline=time.monotonic()+610
 
    def verify(response):
     u=urllib.parse.urlsplit(response.url)
@@ -377,10 +392,16 @@ def full_file(selected,candidate):
     if status not in (200,206) or (status==206 and not ranges):
      raise RuntimeError("HOSTER_INVALID_RANGE_PROBE")
 
+   print(json.dumps({"provider":"javideo","stage":"ATTESTED_SELECTED_GET_VIDEO","expected_total_bytes":total,
+      "range_supported":ranges,"signed_token_attested":candidate.get("signed_token_attested",False)}),flush=True)
    dest=out/"original.mp4"
    if ranges:
+    # Four independently validated non-overlapping ranges prevent one
+    # throttled multi-hundred-MiB response from monopolizing the transfer.
+    # Exact byte positions, total length and final SHA remain mandatory.
     pieces=out/"pieces";pieces.mkdir()
-    halfway=(total+1)//2
+    partitions=4
+    boundaries=[(total*i)//partitions for i in range(partitions+1)]
     def lane(index,start,end):
      expected=end-start+1
      request=urllib.request.Request(url,
@@ -397,17 +418,17 @@ def full_file(selected,candidate):
       received=0
       with part.open("wb") as output:
        while received<expected:
-        if time.monotonic()>deadline:raise RuntimeError("HOSTER_RANGE_TIMEOUT_"+str(index))
+        if time.monotonic()>deadline:raise RuntimeError("HOSTER_RANGE_TIMEOUT_"+str(index)+"_"+str(received)+"_of_"+str(expected))
         block=response.read(min(1048576,expected-received))
         if not block:break
         output.write(block);received+=len(block)
       if received!=expected or response.read(1):
        raise RuntimeError("HOSTER_RANGE_TRUNCATED_OR_OVERLONG_"+str(index)+"_"+str(received))
       return part
-    with ThreadPoolExecutor(max_workers=2) as workers:
-     first=workers.submit(lane,0,0,halfway-1)
-     second=workers.submit(lane,1,halfway,total-1)
-     parts=[first.result(),second.result()]
+    with ThreadPoolExecutor(max_workers=partitions) as workers:
+     futures=[workers.submit(lane,i,boundaries[i],boundaries[i+1]-1)
+       for i in range(partitions)]
+     parts=[future.result() for future in futures]
     with dest.open("wb") as output:
      for part in parts:
       with part.open("rb") as incoming:
