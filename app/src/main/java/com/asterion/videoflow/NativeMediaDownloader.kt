@@ -33,6 +33,8 @@ internal object NativeMediaDownloader {
         (if(verifiedMp4)
             FreePornVideosOriginalSource.firstPartyFormat(sourceUrl,mediaUrl) ||
                 BubblecumSelectedOriginalSource.verifiedMedia(sourceUrl,mediaUrl) ||
+                PimpBunnySelectedOriginalSource.verifiedMedia(sourceUrl,mediaUrl) ||
+                NotFansSelectedOriginalSource.verifiedDownload(sourceUrl,mediaUrl) ||
                 Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl) ||
                 ThreeDHentaiSignedOriginal.firstPartyFormat(sourceUrl,mediaUrl) ||
                 (FullPornerOriginalSource.selectedPage(sourceUrl) &&
@@ -81,6 +83,8 @@ internal object NativeMediaDownloader {
                 (uri.host.orEmpty().lowercase().removePrefix("www.")==
                     "freepornvideos.xxx" ||
                     BubblecumSelectedOriginalSource.isPublisherFormat(address) ||
+                    PimpBunnySelectedOriginalSource.isPublisherFormat(address) ||
+                    NotFansSelectedOriginalSource.isPublisherFormat(address) ||
                     Rule34VideoOriginalSource.isPublisherMediaUrl(address) ||
                     ThreeDHentaiSignedOriginal.isSignedMediaUrl(address) ||
                     FullPornerOriginalSource.verifiedMediaHost(address))
