@@ -381,22 +381,29 @@ object AsterionUnifiedFollowing {
                             .setNegativeButton("CLOSE",null)
                         if(PerformerFollowPolicy.canTrackUnverified(name)){
                             dialog.setPositiveButton("TRACK NAME MATCHES"){_,_->
+                                var id:Long?=null
                                 val saved=NameWatchDb(a).use{db->
-                                    db.add(name) || db.list().any{
+                                    val previous=db.list().firstOrNull{
                                         it.name.equals(name,ignoreCase=true) &&
                                             it.source.isBlank()
                                     }
-                                }
-                                if(saved){
-                                    CreatorNames.remember(a,name,"PERFORMERS",true)
-                                    val id=NameWatchDb(a).use{db->
-                                        db.list().firstOrNull{
+                                    if(previous!=null){
+                                        db.setEnabled(previous.id,true)
+                                        id=previous.id
+                                        true
+                                    }else if(db.add(name)){
+                                        id=db.list().firstOrNull{
                                             it.name.equals(name,ignoreCase=true) &&
                                                 it.source.isBlank()
                                         }?.id
+                                        id!=null
+                                    }else false
+                                }
+                                if(saved){
+                                    CreatorNames.remember(a,name,"PERFORMERS",true)
+                                    id?.let{
+                                        NameCrawler.scanCreator(a.applicationContext,it)
                                     }
-                                    if(id!=null)
-                                        NameCrawler.scanCreator(a.applicationContext,id)
                                     notice(a,"Tracking unverified title matches for review")
                                 }else notice(a,"Could not save the name-only watch")
                                 refresh()
