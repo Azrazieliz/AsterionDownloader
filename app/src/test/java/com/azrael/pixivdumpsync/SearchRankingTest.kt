@@ -145,4 +145,15 @@ class SearchRankingTest {
         ))assertFalse(bad,PeerTubeResultPolicy.isVideoWatch(bad))
     }
 
+    @Test fun videoHostPrefixesMustBeRealDomainsNotLookalikes() {
+        assertTrue(SearchRanking.isVideoUrl(
+            "https://www.pornhub.com/view_video.php?viewkey=abc12345"))
+        assertFalse(SearchRanking.isVideoUrl(
+            "https://notpornhub.com.evil/view_video.php?viewkey=abc12345"))
+        assertTrue(SearchRanking.isVideoUrl(
+            "https://www.vimeo.com/1234567"))
+        assertFalse(SearchRanking.isVideoUrl(
+            "https://notvimeo.com.evil/1234567"))
+    }
+
 }
