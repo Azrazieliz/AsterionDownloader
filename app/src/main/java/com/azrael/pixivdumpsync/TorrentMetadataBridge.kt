@@ -431,6 +431,17 @@ internal object TorrentMetadataBridge {
                 return
             }
             val indices=selected.indices.filter{selected[it]}.joinToString(",")
+            // A cancelled job has an authoritative AtomicFile tombstone
+            // shared across processes. Only this explicit DOWNLOAD SELECTED
+            // action may re-arm it; setting the preferences boolean to
+            // false alone cannot clear the marker and made reselect inert.
+            if(!TorrentTransfers.clearCancellationForExplicitSelection(a,hash)){
+                AlertDialog.Builder(a).setTitle("Torrent still cancelled")
+                    .setMessage("Android could not clear the previous cancellation marker. "+
+                        "No transfer was launched; original files are unchanged.")
+                    .setPositiveButton("Close",null).show()
+                return
+            }
             // Persist the EXACT selected file indices and folder BEFORE
             // sending an Android foreground-service intent. The isolated
             // :torrent process can be denied/killed before onStartCommand;
