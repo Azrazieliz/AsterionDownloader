@@ -1,0 +1,17 @@
+name: Asterion Downloader — JAVIDEO selected official free-host actions
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - '.github/workflows/downloader-pc-javideo-official-file-anchors-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-official-download-links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect only selected JAVIDEO article's publisher-listed legitimate download anchors
+        run: python3 scripts/inspect_provider_download_anchors.py javideo_selected
