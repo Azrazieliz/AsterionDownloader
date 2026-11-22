@@ -730,6 +730,25 @@ internal object SiteSpecificOriginalSources {
         return selectedIframeMedia(context,selected,Source(frame,selected))
     }
 
+    /** Real recording-player access failures are not unsupported video IDs.
+     * Preserve the actual HTTP barrier rather than retrying an HTML iframe
+     * as media or obscuring auth/route faults behind "no original found". */
+    internal fun selectedRecordingHostBlocker(
+        playerHost:String,status:Int?,networkFailure:Boolean
+    ):String? {
+        if(playerHost !in setOf("vidara.to","video.playerrecord.cfd"))
+            return null
+        return when(status){
+            401,402,403 -> "HTTP $status: selected recording player access denied; "+
+                "check its normal authorized browser session and network route"
+            429 -> "HTTP 429: selected recording player rate limited"
+            in 500..599 -> "HTTP $status: selected recording player temporarily unavailable"
+            null -> if(networkFailure)
+                "Selected recording player network connection failed" else null
+            else -> null
+        }
+    }
+
     private fun selectedIframeMedia(
         context:Context,selected:String,frame:Source
     ):List<Source> {
@@ -774,6 +793,11 @@ internal object SiteSpecificOriginalSources {
                     "main .video-player video source[src]"))
                     originals.putIfAbsent(media.url,media)
             }
+        }
+        if(originals.isEmpty()){
+            val blocker=selectedRecordingHostBlocker(
+                host(frame.url),raw?.statusCode(),hostFailure!=null)
+            if(blocker!=null)throw java.io.IOException(blocker,hostFailure)
         }
         // The owner confirmed the HelloPorn job previously spent its
         // entire resolve window "gaining" yet never opened the original.
