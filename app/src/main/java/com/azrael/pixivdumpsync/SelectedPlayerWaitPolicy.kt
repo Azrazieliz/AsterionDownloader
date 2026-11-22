@@ -30,6 +30,10 @@ internal object SelectedPlayerWaitPolicy {
         // Remain inside BrowserPageFetch's existing 45s hard timeout.
         "javideo.net" -> 21
         "play.javideo.net" -> 15
+        // WatchStreamUS selected JWPlayer may populate VK_PLAYBACK HLS
+        // asynchronously; the previous default six polls returned an
+        // empty shell before the selected source appeared.
+        "player.watchstreamus.com","cdn.watchstreamus.com" -> 12
         "video.playerrecord.cfd","vidara.to" -> 11 // Attested recording frame initializes HTML5 playback asynchronously
         "voe.sx","kamehaus.net","nhplayer.com" -> 9
         else -> 6
