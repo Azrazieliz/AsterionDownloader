@@ -78,8 +78,11 @@ def collect_selected_media():
   receipt("EXACT_CHROME_SELECTED_MEDIA",count=len(found),
       selected_player_host="video.playerrecord.cfd",
       cdn_hosts=list({v["host"] for v in found.values()}))
-  if len(found)!=1:raise RuntimeError("Selected player has no unique trustworthy CDN MP4")
-  return next(iter(found)),frame
+  if not found:raise RuntimeError("Selected player has no trustworthy CDN MP4")
+  # A selected HTML5 player may prefetch a short intro and a full file.
+  # Preserve all exact attested requests and distinguish only by VERIFIED
+  # original HTTP range size; do not guess which URL is full.
+  return list(found),frame
  finally:driver.quit()
 def request(media,referer,range_value=None):
  h={"User-Agent":UA,"Referer":referer,"Accept-Encoding":"identity",
@@ -88,22 +91,37 @@ def request(media,referer,range_value=None):
  return urllib.request.Request(media,headers=h)
 def verify():
  started=time.monotonic()
- link,referer=collect_selected_media()
- with urllib.request.urlopen(request(link,referer,"bytes=0-255"),timeout=28) as res:
-  if(res.status!=206 or not safe(res.url) or
-     res.headers.get("Content-Type","").split(";")[0].lower()
-          not in ("video/mp4","application/octet-stream")):
-   raise RuntimeError("Selected media did not serve exact publisher MP4 range")
-  header=res.headers.get("Content-Range","")
-  m=re.fullmatch(r"bytes 0-255/([0-9]{5,12})",header)
-  if not m:raise RuntimeError("Selected CDN did not declare complete media length")
-  expected=int(m.group(1))
-  first=res.read(256)
-  if first[4:8]!=b"ftyp":raise RuntimeError("Selected first bytes not an MP4")
- receipt("PC_SELECTED_PUBLISHER_DECLARED_SIZE",declared_bytes=expected,
-      cdn_host=urllib.parse.urlsplit(link).hostname,range_http=206)
+ candidates,referer=collect_selected_media()
+ observed=[]
+ for index,link in enumerate(candidates):
+  try:
+   with urllib.request.urlopen(request(link,referer,"bytes=0-255"),timeout=28) as res:
+    if(res.status!=206 or not safe(res.url) or
+       res.headers.get("Content-Type","").split(";")[0].lower()
+            not in ("video/mp4","application/octet-stream")):
+     continue
+    match=re.fullmatch(r"bytes 0-255/([0-9]{5,12})",
+                       res.headers.get("Content-Range",""))
+    if not match or res.read(256)[4:8]!=b"ftyp":continue
+    size=int(match.group(1))
+    receipt("SELECTED_PLAYER_CDN_CANDIDATE",index=index,
+        declared_bytes=size,host=urllib.parse.urlsplit(link).hostname,
+        verified_mp4_header=True)
+    observed.append((link,size))
+  except Exception as error:
+   receipt("SELECTED_PLAYER_CDN_CANDIDATE_ERROR",index=index,
+      error_type=type(error).__name__)
+ # A large official MP4 is only a *candidate*, never itself proof of full
+ # runtime. Reject two competing large files, and still FFprobe full bytes.
+ viable=[item for item in observed if item[1]>=10_000_000 and item[1]<=MAX_BYTES]
+ if len(viable)>1:raise RuntimeError("More than one plausible full original")
+ if len(viable)==1:link,expected=viable[0]
+ elif len(observed)==1:link,expected=observed[0]
+ else:raise RuntimeError("Selected iframe exposes no unique full MP4")
  if expected<200_000 or expected>MAX_BYTES:
   raise RuntimeError("Selected media outside bounded PC test size")
+ receipt("PC_SELECTED_PUBLISHER_DECLARED_SIZE",declared_bytes=expected,
+      cdn_host=urllib.parse.urlsplit(link).hostname,range_http=206)
  if not shutil.which("ffprobe"):raise RuntimeError("ffprobe not installed")
  if shutil.disk_usage(tempfile.gettempdir()).free<expected+500_000_000:
   raise RuntimeError("Insufficient PC scratch for complete selected original")
