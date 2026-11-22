@@ -137,9 +137,24 @@ internal object SelectedAlbumScope {
                     .lowercase(Locale.ROOT).removePrefix("www.")=="cosplaytele.com"){
                 val nodes=body.select(
                     ".video-player,.wp-video,video,iframe[data-video],"+
-                    "a[href$=.mp4],a[href*=.mp4?],"+
+                    "iframe[src],a[href$=.mp4],a[href*=.mp4?],"+
                     "a[href$=.webm],a[href*=.webm?]")
                 nodes.filter{element->
+                    val selectedFirstPartyFrame=if(element.tagName()=="iframe"){
+                        val candidate=runCatching {
+                            URI(doc.baseUri().ifBlank{selectedUrl})
+                                .resolve(element.attr("src"))
+                        }.getOrNull()
+                        candidate!=null && candidate.scheme=="https" &&
+                            candidate.userInfo==null && candidate.port==-1 &&
+                            candidate.rawQuery.isNullOrBlank() &&
+                            candidate.rawFragment==null &&
+                            candidate.host.orEmpty().lowercase(Locale.ROOT)
+                                .removePrefix("www.")=="cosplaytele.com" &&
+                            Regex("""(?i)^/(?:embed|player|video)/[a-z0-9_-]{5,100}/?$""")
+                                .matches(candidate.path.orEmpty())
+                    }else true
+                    selectedFirstPartyFrame &&
                     element.closest(excluded)==null &&
                     element.closest(".gallery[class*=galleryid-]")==null &&
                     nodes.none{parent->parent!==element && element.parents().any{it===parent}}
