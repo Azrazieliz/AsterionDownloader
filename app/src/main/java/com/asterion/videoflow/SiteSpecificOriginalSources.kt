@@ -482,6 +482,22 @@ internal object SiteSpecificOriginalSources {
         return posts.isEmpty() || posts.any{it.id()==expected}
     }
 
+    /** Android's static HTTP page may expose only JK/VO, while the selected
+     * article's real LU/SB controls hydrate in the publisher browser. Read
+     * only that SAME post, and only when the preferred non-JK controls are
+     * missing. Never use a neighbouring WordPress article or advert. */
+    internal fun shouldInspectSelectedNonJk(
+        doc:Document,selected:String,
+        initial:List<JavGuruOriginalSource.Player>
+    ):Boolean {
+        if(!JavGuruOriginalSource.selectedArticle(selected) ||
+            initial.any{it.server=="LU" || it.server=="SB"})return false
+        val post="post-"+URI(selected).path.orEmpty().trim('/')
+            .substringBefore('/')
+        val posts=doc.select("article[id^=post-]")
+        return posts.isEmpty() || posts.any{it.id()==post}
+    }
+
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
      * the publisher-attested shortcode and its first-party /searcho/ relay
@@ -490,42 +506,25 @@ internal object SiteSpecificOriginalSources {
     internal fun javGuru(context:Context,doc:Document,selected:String,
                          nativeJkOnly:Boolean=false):List<Source>{
         val initial=JavGuruOriginalSource.published(selected,doc.outerHtml())
-        // Some Android HTTP responses provide a 200 shell without the real
-        // selected WordPress STREAM shortcode/inline iframe_url config. The
-        // site's own WebView renders that exact chosen post using its normal
-        // authorized session. Inspect it only when static parsing found zero
-        // actual selected controls; never use the advertising iframe.
-        // A partially hydrated article may expose LU/SB shortcodes in
-        // static HTML while the publisher's JK control appears only after
-        // WordPress JS completes. The old 'ifEmpty' path never inspected JK
-        // once ANY other server was parsed, regressing the proven native JK
-        // transfer back to repeatedly 403-ing Python transports. Recheck
-        // the SAME article only if its DOM visibly advertises an unresolved
-        // JK control. Keep the secondary native-only worker static/light.
-        val inspectRendered=shouldInspectSelectedJk(
-                doc,selected,initial,nativeJkOnly) &&
+        // Restore the original non-JK publisher relay. The static HTML
+        // sometimes exposes only VO/JK or a thin HTTP 200 shell; inspect
+        // the same selected post once for its LU/SB controls if missing.
+        // Native-only secondary workers cannot hydrate browser pages.
+        val inspectRendered=!nativeJkOnly &&
+            shouldInspectSelectedNonJk(doc,selected,initial) &&
             (BrowserPageFetch.publicEligible(selected) ||
-                SiteSession.bound(context,selected))
+             SiteSession.bound(context,selected))
         val fromBrowser=if(inspectRendered)runCatching {
             JavGuruOriginalSource.published(selected,
                 BrowserPageFetch.html(context,selected))
         }.getOrDefault(emptyList()) else emptyList()
-        val streams=(fromBrowser+initial).distinctBy{it.server}
+        val streams=(initial+fromBrowser).distinctBy{it.server}
         val found=LinkedHashMap<String,Source>()
-        // The owner's MXGS-1452 selected original completed on PC
-        // through the JK/Maxstream first-party source (751/751 fragments),
-        // while LU/SB first attempts on Android consumed the signed-source
-        // window or failed with HTTP 403. Prefer that verified JK contract
-        // before other buttons published by the SAME selected article.
-        // Unavailable JK falls through to LU/SB/VO/DD without substitution.
-        val order=(if(nativeJkOnly)streams.filter{it.server=="JK"}
-            else streams).sortedBy { stream ->
-            when(stream.server) {
-                "JK" -> 0
-                "LU" -> 1
-                else -> 2
-            }
-        }
+        // A native-only secondary is reserved for independent native
+        // transfers, not the older LU/SB Python-backed signed HLS path.
+        // Defer this article to the primary rather than silently promote JK.
+        val order=if(nativeJkOnly)emptyList()
+            else JavGuruOriginalSource.nonJkTransferOrder(streams)
         for(stream in order.take(6)){
             val wrapper=runCatching{
                 Jsoup.connect(stream.url)
