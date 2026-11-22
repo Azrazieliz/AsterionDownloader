@@ -8,11 +8,12 @@ bypass, fabricated tokens, unrelated player, fallback ads, or public URL logs.
 Four bounded HTTPS Range lanes verify Content-Range, total byte ledger, media
 audio+video FFprobe, SHA256. Media lives only in a guarded D: temp folder.
 """
-import concurrent.futures,hashlib,json,re,shutil,subprocess,sys,tempfile,time,urllib.parse,urllib.request
+import concurrent.futures,hashlib,json,os,re,shutil,subprocess,sys,tempfile,time,urllib.parse,urllib.request
 from pathlib import Path
 from inspect_uncensored_nhplayer_selected_cdp_network import main as real_browser
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
-STAGE=Path(r"D:\AsterionControlRelease\diagnostics")
+STAGE=Path(os.environ.get("ASTERION_PC_STAGE_ROOT",
+                r"D:\AsterionControlRelease\diagnostics"))
 def request(media,player,interval,timeout=32):
  return urllib.request.Request(media,headers={
   "User-Agent":UA,"Referer":player,
