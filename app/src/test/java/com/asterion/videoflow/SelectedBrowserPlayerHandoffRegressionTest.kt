@@ -60,7 +60,7 @@ class SelectedBrowserPlayerHandoffRegressionTest {
         assertTrue(PublisherOriginalExtractors.fromHtml(selected,mismatch).isEmpty())
     }
 
-    @Test fun pornAvhdSelectedIframeIsPreservedWithoutAcceptingAdFrame(){
+    @Test fun removedPornAvhdPlayerNoLongerAdmitted(){
         val selected="https://pornavhd.com/2026/11/21/real-selected-scene/"
         val media="https://video.playerrecord.cfd/e/AbcDef123456789"
         val html="""
@@ -71,8 +71,9 @@ class SelectedBrowserPlayerHandoffRegressionTest {
           </aside></body></html>
         """
         val result=PublisherOriginalExtractors.fromHtml(selected,html)
-        assertEquals(1,result.size)
-        assertEquals(media,result.single().url)
+        assertTrue(result.isEmpty())
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,media))
         val forged=html.replace("video.playerrecord.cfd",
             "video.playerrecord.cfd.evil.example")
         assertTrue(PublisherOriginalExtractors.fromHtml(selected,forged).isEmpty())
