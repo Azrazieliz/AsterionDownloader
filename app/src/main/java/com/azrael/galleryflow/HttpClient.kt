@@ -142,6 +142,22 @@ open class HttpClient(private val context:android.content.Context?=null) {
         }
     }
 
+    /** Read a selected publisher iframe through the application's existing
+     * authorised browser owner, not a new WebView or media extractor.
+     * Only a first-party CosplayTele player linked by its selected article
+     * may be inspected; a failed/blocked browser never counts as media.
+     */
+    internal fun selectedCosplayTelePlayerHtml(
+        selectedArticle:String,frame:String
+    ):String? {
+        val app=context?:return null
+        if(!com.asterion.videoflow.SiteSpecificOriginalSources
+                .selectedExtractorFrame(selectedArticle,frame))
+            return null
+        return com.azrael.pixivdumpsync.BrowserPageFetch.html(
+            app,frame,selectedArticle)
+    }
+
     fun resolveDownloadUrl(url: String, referer: String? = null, provider: String? = null): String =
         resolveDownloadUrlInternal(url, referer, provider, 0)
 
