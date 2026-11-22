@@ -25,6 +25,12 @@ internal object VideoHlsDispatch {
             return keys.size==1 && keys.single().removePrefix("viewkey=")
                 .matches(Regex("[A-Za-z0-9_-]{5,50}"))
         }
+        // Restore the original non-JK JAV Guru LU/SB path. Its selected
+        // LuluStream/JAVClan manifest is short-lived, so initialize the
+        // existing Python HLS engine BEFORE resolving the publisher relay.
+        // JK-native optimization had removed this warmup for ALL JAV Guru
+        // articles, leaving non-JK transfers to expire during Python startup.
+        if(JavGuruOriginalSource.selectedArticle(url))return true
         // The selected HentaiHaven episode also resolves its publisher
         // HLS only after the page is read. Avoid expiring that manifest
         // while starting the embedded Python runtime on Android.
