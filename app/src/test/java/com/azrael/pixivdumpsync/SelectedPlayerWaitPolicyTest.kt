@@ -30,6 +30,12 @@ class SelectedPlayerWaitPolicyTest {
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("javideo.net"))
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("play.javideo.net"))
     }
+    @Test fun selectedRecordingIframesGetBoundedMediaRenderTime() {
+        assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("video.playerrecord.cfd"))
+        assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("vidara.to"))
+        assertTrue(SelectedPlayerWaitPolicy.maxPolls("vidara.to") <= 11)
+    }
+
     @Test fun workingRule34VideoKeepsItsExistingFastPath(){
         assertEquals(6,SelectedPlayerWaitPolicy.maxPolls("rule34video.com"))
         assertEquals(6,SelectedPlayerWaitPolicy.maxPolls("watchporn.to"))
