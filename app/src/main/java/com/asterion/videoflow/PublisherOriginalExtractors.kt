@@ -442,7 +442,15 @@ internal object PublisherOriginalExtractors {
             // separate Server 2/Streamtape link remains the old fallback.
             // Never return a sidebar 20-second trailer as the original.
             val frame=PornBuzOriginalSource.selectedMainPlayer(
-                selected,page.outerHtml())
+                selected,page.outerHtml()) ?: runCatching {
+                    // JS-selected primary iframe may not exist in Jsoup's
+                    // initial article HTML. Resolve the SAME article in the
+                    // authorized browser; never borrow a sidebar or Server 2.
+                    com.azrael.pixivdumpsync.BrowserPageFetch
+                        .html(context,selected)
+                }.getOrNull()?.let { rendered ->
+                    PornBuzOriginalSource.selectedMainPlayer(selected,rendered)
+                }
             val primary=frame?.let{exact->
                 val static=runCatching{
                     val response=org.jsoup.Jsoup.connect(exact)
