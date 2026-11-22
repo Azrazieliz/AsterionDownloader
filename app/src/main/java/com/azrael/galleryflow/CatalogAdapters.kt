@@ -534,16 +534,17 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
                 SelectedAlbumScope.selectedContent(pageDoc,pageUrl),pageUrl)
         }.distinctBy { normalizedUrl(it.url) }
 
-        val candidates = providerLinks(first)
+        val selectedArchiveArticle=SelectedAlbumScope.selectedArchiveArticle(
+            first,gallery.canonicalUrl)
+        val candidates = providerLinks(selectedArchiveArticle)
         val chosen = candidates.sortedBy { providerPriority(it.second) }.firstOrNull()
-        val password = extractPassword(first)
+        val password = extractPassword(selectedArchiveArticle)
         // An album's image thumbnails do NOT prove that its separately
         // advertised videos were downloaded. This formerly returned as soon
         // as any image was found and silently omitted archive-only videos.
         // Read only the selected article's declared video count, not related
         // recommendations elsewhere on the page.
-        val selectedText = first.selectFirst(
-            "article,.entry-content,.post-content,main")?.text().orEmpty()
+        val selectedText = selectedArchiveArticle.body().text()
         // The publisher can embed a player without spelling out "1 video".
         // Inspect ONLY the isolated selected article, not sidebar iframes.
         // This is an inventory requirement, never proof of an original file.
@@ -610,10 +611,10 @@ class CosplayTeleAdapter(private val http: HttpClient) : SourceAdapter {
             if (!url.startsWith("http://") && !url.startsWith("https://")) return
             val host = runCatching { URI(url).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
             val provider = when {
-                "mediafire.com" in host -> "MediaFire"
-                "sorafolder.com" in host -> "SoraFolder"
-                "gofile.io" in host -> "Gofile"
-                host == "t.me" || host.endsWith(".t.me") -> "Telegram"
+                host=="mediafire.com" || host.endsWith(".mediafire.com") -> "MediaFire"
+                host=="sorafolder.com" || host.endsWith(".sorafolder.com") -> "SoraFolder"
+                host=="gofile.io" || host.endsWith(".gofile.io") -> "Gofile"
+                host=="t.me" || host.endsWith(".t.me") -> "Telegram"
                 else -> return
             }
             found.putIfAbsent(url, provider)
