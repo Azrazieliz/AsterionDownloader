@@ -897,7 +897,15 @@ internal object SiteSpecificOriginalSources {
         val frames=if(initialFrames.isNotEmpty())initialFrames
             else rendered?.let{javideoSelected(it,selected)}.orEmpty()
         if(frames.size!=1)return emptyList()
-        val exact=selectedIframeMedia(context,selected,frames.single())
+        val frame=frames.single()
+        if(StreamtapeSelectedOriginal.selectedFrame(selected,frame.url)!=null){
+            // PC-certified STAPE#01: normal browser-published get_video?id
+            // with its real hoster token. Do not feed HTML to yt-dlp.
+            val published=StreamtapeSelectedOriginal.resolve(
+                context,selected,frame.url)
+            return published?.let{listOf(Source(it,frame.url))}.orEmpty()
+        }
+        val exact=selectedIframeMedia(context,selected,frame)
         return exact.ifEmpty {
             frames.filter{selectedExtractorFrame(selected,it.url)}
         }
