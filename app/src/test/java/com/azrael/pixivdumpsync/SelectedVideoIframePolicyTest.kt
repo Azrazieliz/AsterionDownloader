@@ -21,9 +21,7 @@ class SelectedVideoIframePolicyTest {
             "https://livecamrips.to/video/11248256" to
                 "https://vidara.to/KJq6mx17bB2/",
             "https://livecamrips.to/video/11248256" to
-                "https://mixdrop.ag/e/AbcDE12345",
-            "https://pornavhd.com/2026/11/21/verified-selected-title/" to
-                "https://video.playerrecord.cfd/e/selectedPlayer12345"
+                "https://mixdrop.ag/e/AbcDE12345"
         )
         for((source,frame) in cases){
             assertTrue("selected iframe blocked: "+frame,
@@ -52,10 +50,13 @@ class SelectedVideoIframePolicyTest {
         assertFalse(SelectedVideoIframePolicy.allow(source,
             "https://voe.sx/e/wx8walm5hqkj",false))
     }
-    @Test fun publisherSelectedRecordingPlayersCannotBeUsedAsGenericBrowserSources(){
+    @Test fun removedPornavhdCannotReenterThroughAnySelectedBrowserFrame(){
         val selected="https://pornavhd.com/2026/11/21/verified-selected-title/"
         val trusted="https://video.playerrecord.cfd/e/selectedPlayer12345"
-        assertTrue(com.asterion.videoflow.SiteSpecificOriginalSources
+        assertTrue(ProviderRetirement.isRetired(selected))
+        assertFalse(BrowserPageFetch.publicEligible(selected))
+        assertFalse(SelectedVideoIframePolicy.allow(selected,trusted,false))
+        assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
             .selectedExtractorFrame(selected,trusted))
         assertFalse(BrowserPageFetch.publicEligible(trusted))
         assertFalse(com.asterion.videoflow.SiteSpecificOriginalSources
