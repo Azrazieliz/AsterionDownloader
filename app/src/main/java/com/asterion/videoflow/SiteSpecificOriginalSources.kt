@@ -453,9 +453,16 @@ internal object SiteSpecificOriginalSources {
     internal fun shouldInspectSelectedJk(
         doc:Document,selected:String,initial:List<JavGuruOriginalSource.Player>,
         nativeJkOnly:Boolean=false
-    ):Boolean =
-        !nativeJkOnly && initial.none{it.server=="JK"} &&
-            JavGuruJkNativeHls.selectedArticleForNative(selected)
+    ):Boolean {
+        if(nativeJkOnly || initial.any{it.server=="JK"} ||
+            !JavGuruJkNativeHls.selectedArticleForNative(selected))return false
+        val expected="post-"+URI(selected).path.orEmpty()
+            .trim('/').substringBefore('/')
+        // Some publisher HTTP shells omit the article element entirely.
+        // But when a real post is present it must match the selected ID.
+        val posts=doc.select("article[id^=post-]")
+        return posts.isEmpty() || posts.any{it.id()==expected}
+    }
 
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
