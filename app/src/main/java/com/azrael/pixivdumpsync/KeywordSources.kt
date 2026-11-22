@@ -368,40 +368,43 @@ object KeywordSources {
                                label:String):List<RankedHit>{
         val doc=Jsoup.parse(html,base)
         val hits=ArrayList<RankedHit>()
-        val entries=if(label=="DuckDuckGo Web")
-            doc.select(".result__a")
-        else doc.select("li.b_algo h2 a")
+        // Search results are ordinary index results, not the 40 configured
+        // providers. Yahoo exposes current organic entries under algo-sr.
+        // Restrict to result-title links: ads and navigation are not video
+        // pages and must never enter the downloader queue.
+        val entries=when(label){
+            "Yahoo Web"->doc.select(
+                "div.algo-sr .compTitle h3 a[href],"+
+                "div.dd.algo .compTitle h3 a[href]")
+            else->doc.select("li.b_algo h2 a[href]")
+        }
         for(a in entries.take(120)){
-            val raw=a.absUrl("href").ifBlank{a.attr("href")}
-            val uri=runCatching{URI(raw)}.getOrNull()?:continue
-            val url=if(uri.host.orEmpty().endsWith("duckduckgo.com") &&
-                uri.path=="/l/"){
-                uri.rawQuery.orEmpty().split('&').firstOrNull{
-                    it.startsWith("uddg=")
-                }?.substringAfter('=')?.let{
-                    java.net.URLDecoder.decode(it,"UTF-8")
-                }.orEmpty()
-            }else raw
+            val url=a.absUrl("href").ifBlank{a.attr("href")}
             if(!url.startsWith("https://",true) ||
                 !eligibleDiscoveryUrl(url) ||
                 !SearchRanking.isDiscoverablePage(url))continue
+            val uri=runCatching{URI(url)}.getOrNull()?:continue
+            // Redirect/measurement links from the index are NOT the
+            // selected publisher's genuine page URL.
+            if(uri.host.orEmpty().endsWith(".search.yahoo.com") ||
+                uri.host.orEmpty()=="search.yahoo.com" ||
+                uri.host.orEmpty()=="r.search.yahoo.com")continue
             val title=a.text().trim().take(220)
             if(title.length<3)continue
-            val parent=a.closest(".result,li.b_algo")
-            val snippet=parent?.selectFirst(".result__snippet,.b_caption p")
+            val parent=a.closest("div.algo-sr,div.dd.algo,li.b_algo")
+            val snippet=parent?.selectFirst(
+                ".compText,.compText p,.b_caption p")
                 ?.text().orEmpty().take(400)
             hits+=RankedHit(title,url,label,snippet)
         }
         return hits.distinctBy{SearchRanking.canonicalKey(it.url)}
     }
-    /**
-     * Page N uses the index's actual offset, not a higher display-only
-     * limit over the same first 50 hits. This is independent of the 27
-     * configured extraction providers; there is no fixed web-result ceiling
-     * and each further page must be explicitly requested by the user.
+    /** Read another genuine internet-index page, not the same 40 publishers
+     * or a display-only second batch. Yahoo's public search uses 10 results
+     * per page; Bing uses 50. Both accept general website destinations.
      */
     internal fun webIndexUrl(keyword:String,area:VideoSearchArea,
-                             duck:Boolean,page:Int):String{
+                             yahoo:Boolean,page:Int):String{
         require(page>=0){"Negative search page"}
         val scope=when(area){
             VideoSearchArea.HENTAI->" hentai animation video"
@@ -410,24 +413,23 @@ object KeywordSources {
             VideoSearchArea.GENERAL->" video"
         }
         val query=URLEncoder.encode(keyword.trim()+scope,"UTF-8")
-        val offset=page.toLong()*50L
-        return if(duck)
-            "https://html.duckduckgo.com/html/?q="+query+
-                "&s="+offset+"&dc="+(offset+1L)
+        return if(yahoo)
+            "https://search.yahoo.com/search?p="+query+
+                "&b="+(page.toLong()*10L+1L)
         else "https://www.bing.com/search?q="+query+
-            "&count=50&first="+(offset+1L)
+            "&count=50&first="+(page.toLong()*50L+1L)
     }
     private fun broadWebIndex(context:Context,keyword:String,
-                              area:VideoSearchArea,duck:Boolean,
+                              area:VideoSearchArea,yahoo:Boolean,
                               page:Int=0):List<RankedHit>{
-        val url=webIndexUrl(keyword,area,duck,page)
+        val url=webIndexUrl(keyword,area,yahoo,page)
         val response=connection(context,url).ignoreHttpErrors(true)
             .maxBodySize(3_000_000).timeout(18_000).execute()
         require(response.statusCode() in 200..299){
             "Web index HTTP "+response.statusCode()
         }
         return parseWebIndex(response.body(),response.url().toString(),
-            if(duck)"DuckDuckGo Web" else "Bing Web")
+            if(yahoo)"Yahoo Web" else "Bing Web")
     }
 
     /** Broad web indexes must start in the FIRST search batch. The old
@@ -438,7 +440,7 @@ object KeywordSources {
     internal fun <T> prioritizedTasks(
         tasks:List<Pair<String,T>>):List<Pair<String,T>> =
         tasks.sortedWith(compareBy<Pair<String,T>>{
-            if(it.first=="Bing Web" || it.first=="DuckDuckGo Web")0 else 1
+            if(it.first=="Bing Web" || it.first=="Yahoo Web")0 else 1
         })
 
     fun searchDetailed(context:Context,keyword:String,
@@ -451,7 +453,7 @@ object KeywordSources {
         // Internet indexes are PRIMARY. Individual provider adapters are
         // optional enrichment, never an allowlist or a prerequisite for search.
         tasks+="Bing Web" to {broadWebIndex(context,keyword,area,false,indexPage)}
-        tasks+="DuckDuckGo Web" to {broadWebIndex(context,keyword,area,true,indexPage)}
+        tasks+="Yahoo Web" to {broadWebIndex(context,keyword,area,true,indexPage)}
         if(indexPage==0)for(provider in providers)tasks+=provider.label to {
             when(provider.kind){
                 SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
