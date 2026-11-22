@@ -15,9 +15,11 @@ TARGETS={
  "javideo":{"url":"https://javideo.net/en/fc2ppv-4994603","frame_hosts":["play.javideo.net","streamtape.com","streamtape.to"]},
  "uncensoredhentai":{"url":"https://uncensoredhentai.xxx/watch/so_low-futago-shimai-to-katei-kyoshi-episode-3/","frame_hosts":["nhplayer.com"]},
  "avple":{"url":"https://avple.tv/video/1000101415221","frame_hosts":[]},
- "pornbuz":{"url":"https://pornbuz.com/","frame_hosts":["player.watchstreamus.com","cdn.watchstreamus.com","streamtape.com"]},
- "xchina":{"url":"https://en.xchina.co/","frame_hosts":[]},
- "livecamrips":{"url":"https://livecamrips.to/","frame_hosts":["vidara.to","mixdrop.ag"]}
+ "pornbuz":{"url":"https://pornbuz.com/video/promotional-pussy-ryan-reid-brazzers-93753/","frame_hosts":["player.watchstreamus.com","cdn.watchstreamus.com","streamtape.com"]},
+ "xchina":{"url":"https://en.xchina.co/video/5ff0cb8a616f1","frame_hosts":[]},
+ "livecamrips":{"url":"https://livecamrips.to/","frame_hosts":["vidara.to","mixdrop.ag"]},
+ "dsav":{"url":"https://dsysav.com/","frame_hosts":[]},
+ "pornavhd":{"url":"https://pornavhd.com/","frame_hosts":["video.playerrecord.cfd"]}
 }
 class Markup(HTMLParser):
  def __init__(self):super().__init__();self.anchors=[];self.frames=[];self.videos=[];self.scope=[]
@@ -41,8 +43,8 @@ def get(url,ref=None):
  except urllib.error.HTTPError as e:
   return e.code,e.url,e.read(16000).decode("utf8","replace")
 def watch_path(name,path):
- if name=="pornbuz":return bool(re.fullmatch(r"/[a-z0-9][a-z0-9_-]{8,220}/?",path,re.I) and path.count("/")<=2)
- if name=="xchina":return bool(re.fullmatch(r"/video/[A-Za-z0-9_-]{6,160}/?",path))
+ if name=="pornbuz":return bool(re.fullmatch(r"/video/[a-z0-9][a-z0-9-]{7,190}-[0-9]{3,10}/?",path,re.I))
+ if name=="xchina":return bool(re.fullmatch(r"/video/(?:id-)?[a-f0-9]{10,32}(?:\\.html)?/?",path,re.I))
  if name=="livecamrips":return bool(re.fullmatch(r"/video/[0-9]{4,15}/?",path))
  return False
 def choose_watch(name,listing,body):
@@ -123,10 +125,10 @@ def chrome_probe(name,selected):
  finally:
   driver.quit()
 def run_case(name,config):
- selected=config["url"];kind="exact_test_selected" if name in ("javideo","uncensoredhentai","avple") else "public_discovered"
+ selected=config["url"];kind="exact_public_representative" if name in ("javideo","uncensoredhentai","avple","pornbuz","xchina") else "catalog_access_only"
  try:
   code,land,body=get(selected)
-  if code==200 and kind=="public_discovered":
+  if code==200 and kind=="catalog_access_only" and name not in ("dsav","pornavhd"):
    options=choose_watch(name,land,body)
    if options:
     selected=options[0]
@@ -142,7 +144,7 @@ def run_case(name,config):
    "selected_frames":[{"host":host,"path_kind":urllib.parse.urlsplit(url).path.split("/")[1]}
        for url,host in frames[:4]],"other_iframes":total,
    "inline_video_elements":media,"full_transfer_certified":False}
-  if name in ("javideo","uncensoredhentai","pornbuz","xchina") and kind!="catalog_only_no_selected_article":
+  if name in ("javideo","uncensoredhentai","pornbuz","xchina","dsav") and kind!="catalog_only_no_selected_article":
    try:result.update(chrome_probe(name,selected))
    except Exception as error:result["browser_error"]=type(error).__name__
   # Pure page/iframe discovery cannot be promoted to whole-file success.
