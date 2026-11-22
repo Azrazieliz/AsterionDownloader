@@ -83,13 +83,13 @@ object SearchRanking {
         if(host=="hentai.tv" &&
             (path.startsWith("/series/")||path.startsWith("/episode/")||path.startsWith("/watch/")||
              path.startsWith("/anime/")||path.startsWith("/hentai/")))return true
-        if(host.contains("xvideos.com") && Regex("^/video(?:[._0-9]|/)").containsMatchIn(path))return true
-        if(host.contains("pornhub.com") && path=="/view_video.php")
+        if((host=="xvideos.com" || host.endsWith(".xvideos.com")) && Regex("^/video(?:[._0-9]|/)").containsMatchIn(path))return true
+        if((host=="pornhub.com" || host.endsWith(".pornhub.com")) && path=="/view_video.php")
             return query.contains("viewkey=")
-        if(host.contains("youtube.com")&&path=="/watch")
+        if((host=="youtube.com" || host.endsWith(".youtube.com"))&&path=="/watch")
             return query.contains("v=")
         if(host=="youtu.be")return path.length>2
-        if(host.contains("vimeo.com")&&Regex("^/\\d+").containsMatchIn(path))return true
+        if((host=="vimeo.com" || host.endsWith(".vimeo.com"))&&Regex("^/\\d+").containsMatchIn(path))return true
         // Approved publisher-selected articles need not contain /video:
         // JAV Guru WordPress posts and JAVIDEO FC2 identifiers are valid examples.
         // Reuse the SAME exact publisher route profiles as VideoFlow; do
