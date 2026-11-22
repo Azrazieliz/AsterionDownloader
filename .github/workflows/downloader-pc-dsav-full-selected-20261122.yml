@@ -1,0 +1,32 @@
+name: Asterion Downloader — DSAV complete selected HLS PC acceptance
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_dsav_full_selected_original_20261122.py'
+      - '.github/workflows/downloader-pc-dsav-full-selected-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-dsav-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare PC Chrome yt-dlp and actual FFprobe tools
+        run: |
+          python3 -m py_compile scripts/pc_dsav_full_selected_original_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Complete exact selected DSAV original or fail closed
+        run: python3 scripts/pc_dsav_full_selected_original_20261122.py
+      - name: Retain receipt, not full private media or expiring HLS URLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-dsav-selected-full-media-receipt
+          path: pc-full-dsav-selected.json
+          if-no-files-found: warn
+          retention-days: 14
