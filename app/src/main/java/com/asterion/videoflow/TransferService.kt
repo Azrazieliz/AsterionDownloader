@@ -1173,7 +1173,8 @@ object VideoEngine {
             VideoSiteProfiles.isVideoPage(item.url)
         val strictNewProvider=NetworkRoute.siteKey(item.url) in
             setOf("avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-                "bubblecum.lol","pornavhd.com","camstreams.tv","notfans.com")
+                "bubblecum.lol","pornavhd.com","camstreams.tv","notfans.com",
+                "dsysav.com")
         val strictIframe=NetworkRoute.siteKey(item.url) in
             setOf("javideo.net","helloporn.com","uncensoredhentai.xxx",
                 "livecamrips.to","cosplaytele.com") || strictNewProvider
@@ -1365,6 +1366,40 @@ object VideoEngine {
                     try{
                         execute(source.url,source.referer,
                             verifiedFirstPartyMp4=true)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
+                }else if(DsysavSelectedOriginal.articleId(item.url)!=null &&
+                    DsysavSelectedOriginal.verifiedMpd(source.url) &&
+                    source.referer==item.url){
+                    // Owner's real dsysav.com/en (PC 5.57GB full-file PASS).
+                    // The published MPD references unsigned fMP4 chunks.
+                    // Serve its same-ID, correctly signed DASH video/audio
+                    // as local playlists to our EXISTING yt-dlp engine.
+                    // Never claim an original until the staged, muxed video
+                    // passes the normal payload and MediaStore validators.
+                    try{
+                        val original=inspectPublisher {
+                            DsysavSelectedOriginal.resolve(context,item.url)
+                                ?:throw java.io.IOException(
+                                    "No same-ID DSYSAV publisher original")
+                        }
+                        check(original.mpd==source.url){
+                            "Selected DSYSAV DASH source changed"
+                        }
+                        ensureExtractor(context)
+                        DsysavDashHlsBridge.open(context,item.url,original).use{
+                            bridge->
+                            VideoTransferJournal.record(context,item.id,
+                                "selected_dsysav_dash",
+                                "Signed video and audio originals")
+                            val exit=EmbeddedYtDlpTransfer.download(
+                                bridge.url,item.url,null,null,parent,template,
+                                "bv+ba/b")
+                            if(exit!=0)throw java.io.IOException(
+                                "Selected DASH original transfer failed: "+exit)
+                        }
+                        expectedDuration=original.durationSeconds.toLong()
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
