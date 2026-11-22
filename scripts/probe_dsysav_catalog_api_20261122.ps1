@@ -66,9 +66,10 @@ function ApiRequest([string]$route,[hashtable]$params,$config){
   $headers['Signature-Input']='v1='+$signatureParams
   $headers['Signature']='v1=:'+$signature+':'
  }
- $response=Invoke-WebRequest -Uri $api -Method Post -UseBasicParsing
-  -Headers $headers -Body $body -ContentType 'application/json'
-  -TimeoutSec 20 -MaximumRedirection 0
+ $requestArgs=@{Uri=$api;Method='Post';UseBasicParsing=$true
+  Headers=$headers;Body=$body;ContentType='application/json'
+  TimeoutSec=20;MaximumRedirection=0}
+ $response=Invoke-WebRequest @requestArgs
  if([int]$response.StatusCode -ne 200){throw ('API HTTP '+$response.StatusCode)}
  $envelope=$response.Content|ConvertFrom-Json
  if($envelope.code -ne 200 -or !$envelope.data){throw 'API refused catalog'}
