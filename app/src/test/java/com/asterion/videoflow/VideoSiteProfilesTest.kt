@@ -85,7 +85,8 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(30,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(29,VideoSiteProfiles.coveredHosts.size)
+        assertFalse(VideoSiteProfiles.coveredHosts.contains("pornavhd.com"))
         assertTrue(VideoSiteProfiles.isVideoPage(
             "https://dsysav.com/en/watch?v=MxWT7NmlUoT"))
         assertFalse(VideoSiteProfiles.isVideoPage("https://dsysav.com/en"))
