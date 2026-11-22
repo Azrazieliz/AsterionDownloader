@@ -299,6 +299,72 @@ internal object PublisherOriginalExtractors {
         return found.values.toList()
     }
 
+    /** The selected CosplayTele article can publish a first-party HTML
+     * iframe rather than a video URL. Sending the iframe page to yt-dlp
+     * caused the owner's Python UNSUPPORTED failure at zero bytes. Only the
+     * one attested SAME-SITE embedded player may supply its actual HTML5
+     * original; never promote iframe HTML, a sidebar, or a short teaser.
+     */
+    internal fun cosplayTeleEmbeddedOriginal(
+        selected:String,iframe:String,html:String
+    ):Candidate? {
+        if(domain(selected)!="cosplaytele.com" ||
+            !VideoSiteProfiles.isVideoPage(selected) ||
+            !iframeAllowed("cosplaytele.com",iframe))return null
+        val doc=Jsoup.parse(html,iframe)
+        val found=LinkedHashMap<String,Candidate>()
+        val nodes=doc.select(
+            "main .video-player video[src],main .video-player video source[src],"+
+            "main #player video[src],main #player video source[src],"+
+            "main video[src][data-duration],main video source[src][data-duration]"
+        )
+        for(node in nodes.take(30)){
+            if(node.closest("aside,.related,.recommended,.recommendations,"+
+                    ".ads,.advertisement,.sidebar,[data-ad]")!=null)continue
+            val owner=node.closest("video")
+            val raw=if(node.tagName()=="source")node.attr("src")
+                else node.attr("src").ifBlank {
+                    node.selectFirst("source[src]")?.attr("src").orEmpty()
+                }
+            val media=url(iframe,raw)?:continue
+            if(!direct(media) ||
+                FullLengthVideoPolicy.isExplicitPreview("",media))continue
+            val duration=(owner?:node).attr("data-duration").toLongOrNull()
+            if(duration!=null && duration in 1L..89L)continue
+            found.putIfAbsent(media,Candidate(media,iframe,"cosplaytele.com"))
+        }
+        return found.values.singleOrNull()
+    }
+
+    private fun cosplayTeleOriginal(
+        context:android.content.Context,selected:String,page:Document
+    ):List<Candidate> {
+        val static=fromHtml(selected,page.outerHtml())
+        val immediate=static.filter{direct(it.url)}
+        if(immediate.size==1)return immediate
+        // An actual embedded player may appear only after the selected
+        // article renders. Do not do a whole-site or recommendation scan.
+        val rendered=runCatching{
+            com.azrael.pixivdumpsync.BrowserPageFetch.html(context,selected)
+        }.getOrNull()
+        val visual=rendered?.let{fromHtml(selected,it)}.orEmpty()
+        val directMedia=(immediate+visual.filter{direct(it.url)})
+            .distinctBy{it.url}
+        if(directMedia.size==1)return directMedia
+        if(directMedia.isNotEmpty())return emptyList()
+        val frames=(static+visual).filter{
+            !direct(it.url) &&
+                iframeAllowed("cosplaytele.com",it.url)
+        }.distinctBy{it.url}
+        val frame=frames.singleOrNull()?:return emptyList()
+        val html=runCatching{
+            com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                context,frame.url,selected)
+        }.getOrNull()?:return emptyList()
+        val original=cosplayTeleEmbeddedOriginal(selected,frame.url,html)
+        return original?.let{listOf(it)}.orEmpty()
+    }
+
     /** Uses existing same-site source/session handling, without a new APK,
      * embedded browser, login, or parallel queue implementation.
      */
@@ -331,6 +397,8 @@ internal object PublisherOriginalExtractors {
             // behavior when the publisher embed is genuinely unavailable.
         }
         val page=WebDiscovery.selectedDocument(selected,context)
+        if(host=="cosplaytele.com")
+            return cosplayTeleOriginal(context,selected,page)
         if(host=="pornbuz.com"){
             // The owner-selected article publishes its REAL primary
             // watchstreamus JWPlayer (a signed full-duration HLS). A
