@@ -679,6 +679,18 @@ internal object SiteSpecificOriginalSources {
         }
     }
 
+    /** Resolve the actual first-party player for two publisher article
+     * routes that previously passed iframe HTML directly to yt-dlp. Never
+     * promote a browser page to an original when no media is exposed.
+     */
+    internal fun selectedRecordingFrameOriginals(
+        context:Context,selected:String,frame:String
+    ):List<Source> {
+        if(host(selected) !in setOf("pornavhd.com","livecamrips.to") ||
+            !selectedExtractorFrame(selected,frame))return emptyList()
+        return selectedIframeMedia(context,selected,Source(frame,selected))
+    }
+
     private fun selectedIframeMedia(
         context:Context,selected:String,frame:Source
     ):List<Source> {
