@@ -5,6 +5,18 @@ import org.junit.Test
 
 /** URL validation only; transport for non-public hosts is configured separately. */
 class WebDiscoveryTest {
+    @Test fun selectedAvple402GetsAuthorizedBrowserNotBlindVideoFallback(){
+        val selected="https://avple.tv/video/1000101415221"
+        assertTrue(WebDiscovery.selectedBrowserFallbackAllowed(selected,402))
+        assertFalse(WebDiscovery.selectedBrowserFallbackAllowed(
+            "https://avple.tv/",402))
+        assertFalse(WebDiscovery.selectedBrowserFallbackAllowed(
+            "https://notfans.com/videos/117950/voulezj46/",402))
+        assertFalse(WebDiscovery.selectedBrowserFallbackAllowed(
+            "https://avple.tv.evil.example/video/1000101415221",402))
+        assertFalse(WebDiscovery.selectedBrowserFallbackAllowed(selected,429))
+        assertTrue(WebDiscovery.selectedBrowserFallbackAllowed(selected,403))
+    }
     @Test fun laterPosterAnchorRecoversMissingFirstJavideoThumbnail(){
         val url="https://javideo.net/fc2ppv-5007485"
         val first=VideoHit("FC2PPV-5007485",url,null)
