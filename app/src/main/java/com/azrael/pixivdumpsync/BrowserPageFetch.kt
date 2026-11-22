@@ -710,7 +710,8 @@ object BrowserPageFetch {
                                     if(!wrapper || wrapper.classList.contains('d-none'))
                                         return false;
                                     const firstParty=host==='play.javideo.net' &&
-                                        /^\/embed\/[A-Za-z0-9_-]{5,100}\/?$/.test(u.pathname) &&
+                                        /^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                            .test(u.pathname) &&
                                         u.search.length===0;
                                     return firstParty ||
                                         (['streamtape.com','streamtape.to',
