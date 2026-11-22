@@ -8,11 +8,11 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-ROOT="https://dsysav.com/"
+ROOT="https://dsav123.wiki/"
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
 def valid(link):
     p=urllib.parse.urlsplit(link)
-    return p.scheme=="https" and p.hostname in {"dsysav.com","www.dsysav.com"} and not p.username and not p.password and p.port in (None,443)
+    return p.scheme=="https" and p.hostname in {"dsav123.wiki","www.dsav123.wiki"} and not p.username and not p.password and p.port in (None,443)
 def route(link):
     p=urllib.parse.urlsplit(link)
     return p.path[:170] or "/"
