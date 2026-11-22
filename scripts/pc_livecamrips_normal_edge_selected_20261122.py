@@ -76,6 +76,8 @@ def main():
           .map(u=>u.href);
         return {host,path,title:title.slice(0,85),challenge,frame_count:frames.length,
           frame_hosts:frames.map(x=>{try{return new URL(x.src).hostname}catch(e){return ''}}),
+          frame_paths:frames.map(x=>{try{return new URL(x.src).pathname}catch(e){return ''}}),
+          frame_query_keys:frames.map(x=>{try{return [...new URL(x.src).searchParams.keys()]}catch(e){return []}}),
           catalogue_links:[...new Set(catalogue)].slice(0,8),
           selected_article_markers:document.querySelectorAll('h1,main h2').length,
           body_length:document.body?.innerText?.length||0};
@@ -95,6 +97,11 @@ def main():
      result["publisher_challenge"]=bool(data.get("challenge"))
      result["selected_player_host"]=data.get("frame_hosts",[None])[0] if data.get("frame_count")==1 else None
      result["selected_player_count"]=data.get("frame_count")
+     if data.get("frame_count")==1 and data.get("frame_hosts")==["vidara.to"]:
+      paths=data.get("frame_paths") or []
+      if len(paths)==1 and __import__("re").fullmatch(r"/(?:e/|v/)?[A-Za-z0-9_-]{6,90}/?",paths[0]):
+       result["publisher_selected_vidara_path"]=paths[0]
+       result["publisher_selected_vidara_query_keys"]=(data.get("frame_query_keys") or [[]])[0]
      available=data.get("catalogue_links") or []
      result["published_catalogue_video_count"]=len(available)
      if (not catalog_navigated and data.get("path") in ("","/")
