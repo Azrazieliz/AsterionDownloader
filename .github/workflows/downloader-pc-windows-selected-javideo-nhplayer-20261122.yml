@@ -1,0 +1,68 @@
+name: Asterion Downloader — Windows Edge exact JAVIDEO NHPlayer originals
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - '.github/workflows/downloader-pc-windows-selected-javideo-nhplayer-20261122.yml'
+      - 'scripts/verify_uncensoredhentai_selected_full_pc.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-windows-uncensored:
+    runs-on: windows-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Edge, install real playable-file checker
+        shell: pwsh
+        run: |
+          Test-Path 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+          }
+          ffprobe -version | Select-Object -First 1
+      - name: Run exact selected NHPlayer episode through full native range / SHA / FFprobe
+        shell: pwsh
+        env:
+          ASTERION_PC_STAGE_ROOT: ${{ runner.temp }}
+        run: |
+          python scripts/verify_uncensoredhentai_selected_full_pc.py 2>&1 |
+            Tee-Object -FilePath pc-windows-uncensored-selected-original.log
+          exit $LASTEXITCODE
+      - name: Retain text evidence, never user sessions or media
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-windows-uncensored-original-evidence
+          path: pc-windows-uncensored-selected-original.log
+          if-no-files-found: warn
+          retention-days: 14
+  real-windows-javideo:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect real Edge exact JAVIDEO selected first-party player
+        shell: pwsh
+        run: |
+          python scripts/verify_javideo_selected_play_cdp.py 2>&1 |
+            Tee-Object -FilePath pc-windows-javideo-player-diagnostics.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # A recovered player iframe is never a completed original.
+          # The current diagnostic script has no completed-file transfer.
+          exit 2
+      - name: Retain source and player network evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-windows-javideo-exact-player-evidence
+          path: pc-windows-javideo-player-diagnostics.log
+          if-no-files-found: warn
+          retention-days: 14
