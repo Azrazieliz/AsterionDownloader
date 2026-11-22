@@ -38,7 +38,6 @@ Avple|https://avple.tv/|ADULT
 PimpBunny Videos|https://pimpbunny.com/|ADULT
 xChina|https://en.xchina.co/|ADULT
 Bubblecum|https://www.bubblecum.lol/|ADULT
-PornAVHD|https://pornavhd.com/|ADULT
 FreePornVideos|https://www.freepornvideos.xxx/|ADULT
 Porneec|https://porneec.com/|ADULT
 PornBuz|https://pornbuz.com/|ADULT
@@ -74,7 +73,7 @@ BepisDB Koikatsu|https://db.bepis.moe/koikatsu|ASSETS""".trimIndent()
             require(parts.size==3){"Broken Aloha catalog row"}
             AlohaSite(parts[0],parts[1],AlohaArea.valueOf(parts[2]))
         }.also{sites->
-            require(sites.size==44 && sites.distinctBy{it.url}.size==44){"Incorrect approved Aloha source set"}
+            require(sites.size==43 && sites.distinctBy{it.url}.size==43){"Incorrect approved Aloha source set"}
             require(sites.none{it.url.contains("slot-id=")}){"Do not publish personal calendar URL"}
         }
     }
