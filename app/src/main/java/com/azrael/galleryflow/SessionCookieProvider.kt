@@ -55,9 +55,20 @@ class SessionCookieProvider:ContentProvider() {
                         it.message.orEmpty().take(180))}
             }
         }
+        // The owner-process browser must also inspect the exact
+        // first-party player frame attested by one selected publisher page.
+        // This does NOT grant a generic cross-site HTML proxy: the selected
+        // parent, child host and child route must all match explicit policy.
+        val selectedReferer=extras?.getString("referer").orEmpty()
+        val authorizedFrame=method=="read_site_html" &&
+            com.azrael.pixivdumpsync.BrowserPageFetch
+                .publicEligible(selectedReferer) &&
+            com.asterion.videoflow.SiteSpecificOriginalSources
+                .selectedExtractorFrame(selectedReferer,url)
         if(!connected &&
             !(method=="read_site_html" &&
-                com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(url)))
+                (com.azrael.pixivdumpsync.BrowserPageFetch
+                    .publicEligible(url) || authorizedFrame)))
             return Bundle()
         if(method=="read_site_html") {
             // Exact public selected players also need the owner's main
