@@ -111,6 +111,26 @@ internal object SelectedAlbumScope {
             "Selected album lacks an identifiable publisher image body; "+
                 "refusing to mix it with related galleries")
 
+    /** Keep the exact selected post's archive links and password while
+     * excluding sidebars and related galleries. The photo/media projection
+     * intentionally removes ordinary file-host anchors; reusing that
+     * projection to find an album archive would erase the genuine link.
+     * Conversely, scanning the raw whole page can choose someone else's
+     * MediaFire/Gofile archive as this album's supposed original.
+     */
+    internal fun selectedArchiveArticle(doc:Document,selectedUrl:String):Document {
+        val host=runCatching{URI(selectedUrl).host.orEmpty().lowercase(Locale.ROOT)
+            .removePrefix("www.")}.getOrDefault("")
+        require(host=="cosplaytele.com") {
+            "CosplayTele archive discovery requires a selected article"
+        }
+        val body=articleBody(doc)
+        return Jsoup.parse(body.outerHtml(),
+            doc.baseUri().ifBlank{selectedUrl}).also{
+            it.select(excluded).remove()
+        }
+    }
+
     /** The existing post-body isolation, also reused by the native
      * CosplayTele adapter. Never mine entire-page URLs or recommendation cards.
      */
