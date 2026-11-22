@@ -446,11 +446,12 @@ internal object PublisherOriginalExtractors {
                     if(resolved.isNotEmpty())return resolved
                 }
             }
-            val rendered=runCatching{
-                com.azrael.pixivdumpsync.BrowserPageFetch
-                    .html(context,selected)
-            }.getOrNull()
-            val discovered=(initial+rendered?.let(::published).orEmpty())
+            // Do not erase the Android WebView failure for these already
+            // failing exact selections. The stage and HTTP status now identify
+            // which browser step differs from the PC-approved source path.
+            val rendered=com.azrael.pixivdumpsync.BrowserPageFetch
+                .html(context,selected)
+            val discovered=(initial+published(rendered))
                 .distinctBy{it.url}
             val directMedia=discovered.filter{direct(it.url)}
             if(directMedia.size==1)return directMedia
@@ -659,7 +660,14 @@ internal object PublisherOriginalExtractors {
                     com.azrael.pixivdumpsync.BrowserPageFetch
                         .html(context,selected)
                 else null
-            }.getOrNull()?:return emptyList()
+            }.getOrElse{cause->
+                // The existing working gallery/video providers keep their
+                // original best-effort fallback. Failing Android publishers
+                // surface the actual stage, not a generic zero-byte result.
+                if(host in setOf("avple.tv","pimpbunny.com","xchina.co"))
+                    throw cause
+                null
+            }?:return emptyList()
             val published=fromHtml(selected,rendered)
             return published.singleOrNull()?.let{listOf(it)}.orEmpty()
         }
