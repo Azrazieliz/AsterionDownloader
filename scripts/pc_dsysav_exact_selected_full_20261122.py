@@ -5,13 +5,20 @@ other DSAV domains, previews, download shortcuts or ad players qualify.
 """
 import hashlib,json,re,subprocess,sys,tempfile,time,urllib.parse
 from pathlib import Path
-from pc_full_selected_provider_acceptance_20261122 import driver,safe_url,host
+from pc_full_selected_provider_acceptance_20261122 import safe_url,host
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 BASE="https://dsysav.com/en"
 UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
 SITE={"dsysav.com","www.dsysav.com"}
 result={"provider":"dsysav.com","catalog":BASE,"complete_selected_original":False}
-browser=driver()
+options=Options()
+for flag in ("--headless=new","--no-sandbox","--disable-dev-shm-usage",
+             "--disable-gpu","--mute-audio","--window-size=1280,850"):
+    options.add_argument(flag)
+options.set_capability("goog:loggingPrefs",{"performance":"ALL"})
+browser=webdriver.Chrome(options=options)
 
 def approved_article(raw):
     try:
