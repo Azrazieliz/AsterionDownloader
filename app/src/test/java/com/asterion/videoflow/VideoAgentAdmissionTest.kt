@@ -41,6 +41,18 @@ class VideoAgentAdmissionTest {
             3_400_000_000L,false,8_000_000_000L,900_000_000L))
     }
 
+    @Test fun twoRecentPrimaryLowMemoryExitsKeepSecondaryNativeOnly(){
+        val now=1_795_360_000_000L
+        val minute=60_000L
+        assertTrue(VideoAgentAdmission.repeatedRecentPrimaryMemoryKills(
+            listOf(now-7L*60*minute,now-6L*60*minute),now))
+        assertFalse(VideoAgentAdmission.repeatedRecentPrimaryMemoryKills(
+            listOf(now-25L*60*minute,now-26L*60*minute),now))
+        assertFalse(VideoAgentAdmission.repeatedRecentPrimaryMemoryKills(
+            listOf(now-2L*60*minute),now))
+        assertFalse(VideoAgentAdmission.repeatedRecentPrimaryMemoryKills(
+            listOf(now+minute,now-2L*60*minute),now))
+    }
     @Test fun atMemoryThresholdSecondProcessIsEligible(){
         assertFalse(VideoAgentAdmission.secondaryNativeOnly(
             VideoAgentAdmission.MIN_FREE_FOR_TWO_EXTRACTORS,false))
