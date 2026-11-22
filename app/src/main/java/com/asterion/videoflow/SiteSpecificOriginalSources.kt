@@ -205,6 +205,27 @@ internal object SiteSpecificOriginalSources {
      * Never infer a second server, reuse unrelated iframe media, or invent a
      * signed URL. HTML verification/CAPTCHA remains user-authorized only.
      */
+    /** The selected NHPlayer publishes either the legacy i/s/vid triple or
+     * an opaque data token on its sole /player.php server. No freeform
+     * query, duplicate parameter or secondary advertisement is admissible.
+     */
+    internal fun selectedNhPlayerServerQuery(raw:String?):Boolean {
+        val query=raw?.takeIf{it.length in 6..1500}?:return false
+        val parts=query.split('&')
+        if(parts.size==1){
+            return Regex("""^data=[A-Za-z0-9._~%+=-]{8,1400}$""")
+                .matches(parts.single())
+        }
+        if(parts.size!=3 ||
+            parts.map{it.substringBefore('=')}.toSet()!=setOf("i","s","vid"))
+            return false
+        return parts.all{item->
+            item.contains('=') &&
+            item.substringAfter('=').length in 1..1300 &&
+            !item.substringAfter('=').contains('#')
+        }
+    }
+
     internal fun selectedNhPlayerServer(iframe:String,html:String):String? {
         val page=runCatching{URI(iframe)}.getOrNull()?:return null
         if(page.scheme!="https" || page.host!="nhplayer.com" ||
@@ -222,8 +243,7 @@ internal object SiteSpecificOriginalSources {
             if(dest.scheme!="https" || dest.host!="nhplayer.com" ||
                 dest.userInfo!=null || dest.port!=-1 ||
                 dest.path!="/player.php" || dest.rawFragment!=null ||
-                dest.rawQuery.isNullOrBlank() ||
-                dest.rawQuery.length>1500)continue
+                !selectedNhPlayerServerQuery(dest.rawQuery))continue
             published.add(dest.toString())
         }
         return published.singleOrNull()
@@ -248,12 +268,7 @@ internal object SiteSpecificOriginalSources {
             page.scheme!="https" || page.host!="nhplayer.com" ||
             page.port!=-1 || page.userInfo!=null ||
             page.path!="/player.php" || page.rawFragment!=null)return false
-        val params=page.rawQuery?.split('&').orEmpty()
-        if(params.size!=3 ||
-            params.map{it.substringBefore('=')}.toSet()!=
-                setOf("i","s","vid") ||
-            params.any{!it.contains('=') ||
-                it.substringAfter('=',"").isBlank()})return false
+        if(!selectedNhPlayerServerQuery(page.rawQuery))return false
         return file.scheme=="https" &&
             file.host=="r2.1hanime.com" &&
             file.port==-1 && file.userInfo==null &&
