@@ -276,10 +276,22 @@ internal object TorrentMetadataBridge {
             val manifest=File(root(a),"$hash.manifest.json")
             // A cached file chooser without its original descriptor can
             // never start an actual transfer; reconstruct both atomically.
-            if(manifest.isFile && File(root(a),"$hash.torrent").isFile){
+            val descriptor=File(root(a),"$hash.torrent")
+            // Never trust the presence of old files alone: a crash can leave
+            // a valid descriptor beside a stale/corrupt chooser manifest.
+            // In that case regenerate the index from the selected descriptor
+            // rather than giving the owner a permanently broken FILES action.
+            val reusable=manifest.isFile && descriptor.isFile && runCatching {
+                descriptor.readBytes().contentEquals(bytes) &&
+                    JSONObject(manifest.readText()).let{cached->
+                        cached.optString("id")==hash &&
+                            cached.optJSONArray("files")?.length()
+                                ?.let{it in 1..20_000}==true
+                    }
+            }.getOrDefault(false)
+            if(reusable && runCatching{
                 showPreparedFiles(a,hash,folder)
-                return
-            }
+            }.isSuccess)return
             val inspected=BencodedTorrentManifest.parse(bytes)
             val names=inspected.files.map{it.path}
             if(folder=="Games")require(GameTorrentPolicy.hasGamePayload(names)){
