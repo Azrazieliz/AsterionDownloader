@@ -21,6 +21,7 @@ class UnresolvablePublisherRetryPolicyTest {
     }
     @Test fun publisherRegionGateRequiresUserActionNotAutomaticRetry(){
         val reasons=listOf(
+            "Avple selected page HTTP 402 Payment Required",
             "Pornhub's selected route still exits in France (FR).",
             "Pornhub requires a real remote exit; connect an Android VPN",
             "Active Android VPN required for this site",
