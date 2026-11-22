@@ -37,6 +37,8 @@ internal object NativeMediaDownloader {
                 NotFansSelectedOriginalSource.verifiedDownload(sourceUrl,mediaUrl) ||
                 Rule34VideoOriginalSource.firstPartyDownload(sourceUrl,mediaUrl) ||
                 ThreeDHentaiSignedOriginal.firstPartyFormat(sourceUrl,mediaUrl) ||
+                StreamtapeSelectedOriginal.isSelectedArticleMedia(
+                    sourceUrl,mediaUrl) ||
                 (FullPornerOriginalSource.selectedPage(sourceUrl) &&
                     FullPornerOriginalSource.verifiedMediaHost(mediaUrl))
          else isDirectMediaUrl(mediaUrl)) && runCatching{
@@ -87,6 +89,7 @@ internal object NativeMediaDownloader {
                     NotFansSelectedOriginalSource.isPublisherFormat(address) ||
                     Rule34VideoOriginalSource.isPublisherMediaUrl(address) ||
                     ThreeDHentaiSignedOriginal.isSignedMediaUrl(address) ||
+                    StreamtapeSelectedOriginal.isSignedDirect(address) ||
                     FullPornerOriginalSource.verifiedMediaHost(address))
             }.getOrDefault(false)
             else isDirectMediaUrl(address) &&
@@ -199,8 +202,11 @@ internal object NativeMediaDownloader {
                     throw IOException("Native media HTTP $status")
                 val mime=conn.contentType.orEmpty().substringBefore(';')
                     .trim().lowercase(Locale.ROOT)
-                if(verifiedMp4 && mime!="video/mp4")
-                    throw IOException("Verified first-party URL did not serve video/mp4")
+                if(verifiedMp4 && mime!="video/mp4" &&
+                    !(StreamtapeSelectedOriginal.isSignedDirect(address) &&
+                      mime in setOf("application/octet-stream",
+                          "binary/octet-stream")))
+                    throw IOException("Verified original did not serve media bytes")
                 if(mime !in setOf("application/octet-stream",
                     "binary/octet-stream","application/x-matroska") &&
                     !mime.startsWith("video/")){
