@@ -478,6 +478,24 @@ object BrowserPageFetch {
                                     }
                                 }
                             }
+                            // PC-certified JAVIDEO original is the publisher
+                            // labelled STAPE#01 selection, NOT the default
+                            // play.javideo.net HTML player or its advert.
+                            // Click only its uniquely labelled in-article
+                            // button once, after normal publisher Play.
+                            if(selectedPlayerHost==='javideo.net' &&
+                                /^\/(?:en\/)?[a-z0-9]{1,20}-[0-9]{2,9}/i
+                                    .test(location.pathname)){
+                                const choices=[...document.querySelectorAll('button')]
+                                    .filter(btn=>btn.textContent.trim()==='STAPE#01' &&
+                                        !btn.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,[data-ad]'));
+                                if(choices.length===1 &&
+                                    !choices[0].dataset.asterionStapeSelected){
+                                    choices[0].dataset.asterionStapeSelected='true';
+                                    choices[0].click();
+                                }
+                            }
                             // Activate only the selected in-article player.
                             // 3DHentaiX and VOE may show an inert poster until
                             // the user-selected player's own Play control runs.
@@ -603,6 +621,64 @@ object BrowserPageFetch {
                                     return '<video src="'+esc(source.href)+
                                         '" data-duration="0"></video>';
                                 }catch(_){return '';}
+                            })();
+                            // Streamtape's EXACT selected player publishes a
+                            // first-party /get_video?id=<same iframe ID> URL.
+                            // Its inline setup also publishes a signed token.
+                            // Never infer a media file from another iframe,
+                            // advert, recommendation or hoster's generic page.
+                            const selectedStreamtapeDirect=(()=>{
+                                if(!['streamtape.com','streamtape.to',
+                                    'streamtape.net','streamtape.site','sbtape.com']
+                                    .includes(selectedPlayerHost))return '';
+                                const match=location.pathname.match(
+                                    /^\/(?:e|v|embed)\/([A-Za-z0-9_-]{5,100})\/?$/);
+                                if(!match || location.search || location.hash)return '';
+                                const published=new Set();
+                                for(const node of [...document.querySelectorAll(
+                                    '#robotlink,#norobotlink,#videolink,'+
+                                    '#ideoolink,#ideoooolink')]){
+                                    const raw=(node.textContent||'').trim();
+                                    if(!raw.includes('/get_video?'))continue;
+                                    try{
+                                        const link=new URL(raw,location.href);
+                                        const allowed=new Set([
+                                            'streamtape.com','streamtape.to',
+                                            'streamtape.net','streamtape.site',
+                                            'sbtape.com']);
+                                        if(link.protocol!=='https:' ||
+                                            !allowed.has(link.hostname) ||
+                                            link.port || link.username ||
+                                            link.password || link.hash ||
+                                            link.pathname!=='/get_video' ||
+                                            link.searchParams.get('id')!==match[1] ||
+                                            [...link.searchParams.keys()].some(k=>
+                                                !['id','expires','ip','token',
+                                                    'stream','dl'].includes(k)))
+                                            continue;
+                                        published.add(link.href);
+                                    }catch(_){}
+                                }
+                                if(published.size!==1)return '';
+                                const scripts=[...document.querySelectorAll(
+                                    'script:not([src])')].map(el=>el.textContent||'')
+                                    .filter(text=>text.includes('ideoooolink') &&
+                                        text.includes('&token=')).slice(0,10);
+                                const tokens=new Set();
+                                for(const text of scripts){
+                                    const pattern=/&token=([A-Za-z0-9_-]{4,160})(?=['"&\s]|$)/g;
+                                    let found;
+                                    while((found=pattern.exec(text))!==null)
+                                        tokens.add(found[1]);
+                                }
+                                if(tokens.size!==1)return '';
+                                const url=new URL([...published][0]);
+                                const signed=[...tokens][0];
+                                if(url.searchParams.has('token') &&
+                                    url.searchParams.get('token')!==signed)return '';
+                                url.searchParams.set('token',signed);
+                                return '<meta name="asterion-selected-streamtape-direct"'+
+                                    ' content="'+esc(url.href)+'">';
                             })();
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,video#flvv,'+
@@ -1009,7 +1085,8 @@ object BrowserPageFetch {
                             }
                             const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
-                                '</title>'+selectedPoster+(mirroredPending?
+                                '</title>'+selectedPoster+selectedStreamtapeDirect+
+                                (mirroredPending?
                                     '<meta name="asterion-host-list-pending" content="true">':
                                     '')+'</head><body><h1>'+esc(realH1)+
                                 '</h1><h4>'+esc(chapterTitle)+
@@ -1089,6 +1166,10 @@ object BrowserPageFetch {
                                     // r2.1hanime.com .mp4?verify=... source.
                                     !SelectedPlayerWaitPolicy.selectedNhPlayerReady(
                                         playerReferer.orEmpty(),url,page)
+                                } else if(host in setOf("streamtape.com",
+                                    "streamtape.to","streamtape.net",
+                                    "streamtape.site","sbtape.com")) {
+                                    !page.contains("asterion-selected-streamtape-direct")
                                 } else if(host=="javideo.net") {
                                     // Only the selected iframe appears after
                                     // JAVIDEO's Play button; its HTML5 video is
