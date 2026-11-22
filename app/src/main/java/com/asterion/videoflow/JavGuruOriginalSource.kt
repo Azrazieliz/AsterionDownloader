@@ -27,31 +27,6 @@ internal object JavGuruOriginalSource {
         RegexOption.IGNORE_CASE)
     private val shortcode=Regex("""(?s)\bvar\s+([a-z]{10})\s*=\s*(\{.*?\})\s*;""")
     private val keyPattern=Regex("""^[a-z]{10}$""")
-    /** JAV Guru's selected WordPress article; index pages and unrelated redirects
-     * must not initialize media extractors or contribute player candidates. */
-    fun selectedArticle(url:String):Boolean {
-        val uri=safe(url)?:return false
-        return uri.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="jav.guru" &&
-            uri.rawQuery.isNullOrEmpty() && uri.fragment==null &&
-            articlePath.matches(uri.path.orEmpty())
-    }
-
-    /** Restore the pre-JK non-native original sequence. An owner-selected
-     * LU or SB first-party relay is resolved before its signed HLS expires.
-     * Never infer JK from a different post or silently replace these paths
-     * with JK/Maxstream when the user requested the older route. */
-    fun nonJkTransferOrder(players:List<Player>):List<Player> =
-        players.filter{it.server in setOf("LU","SB","VO","VI","DD")}
-            .distinctBy{it.server}
-            .sortedBy{when(it.server){
-                "LU"->0
-                "SB"->1
-                "VO"->2
-                "VI"->3
-                else->4
-            }}
-
-
     private fun safe(raw:String):URI?=runCatching{URI(raw)}.getOrNull()?.takeIf{
         it.scheme=="https" && it.host!=null && it.userInfo==null && it.port==-1
     }
