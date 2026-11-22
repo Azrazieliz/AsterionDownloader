@@ -271,8 +271,43 @@ def player_candidate(name,selected,frame):
            and re.fullmatch(r"/(?:e|v|embed)/[A-Za-z0-9_-]{5,100}/?",p.path)
            and not p.query and not p.fragment):valid.append(u)
       if len(urls)==1 and len(valid)==1:
-       return {"source":valid[0],"referer":selected,"duration":0,
-        "reason":"same selected JAVIDEO film - publisher-labelled STAPE#01"}
+       # The installed yt-dlp has no StreamTape extractor. The /e/ HTML
+       # page is not media. Inspect the real selected hoster frame in the
+       # SAME ordinary browser and accept only its own long HTML5 media.
+       chosen=valid[0]
+       try:
+        d.switch_to.frame(frames[0])
+        clicked=False
+        for _ in range(24):
+         if not clicked:
+          play=d.find_elements(By.CSS_SELECTOR,
+            "#player .vjs-big-play-button,.video-player .vjs-big-play-button,"
+            "button[aria-label='Play'],button[title='Play']")
+          play=[v for v in play if v.is_displayed() and v.is_enabled()]
+          if len(play)==1:
+           try:play[0].click();clicked=True
+           except Exception:pass
+         current=d.execute_script("""return [...document.querySelectorAll('video')]
+           .filter(v=>!v.closest('aside,.related,.recommendations,.ads,'+
+             '.advertisement,.sidebar,[data-ad]'))
+           .map(v=>({src:v.currentSrc||v.src||'',
+             duration:Number.isFinite(v.duration)?v.duration:0}));""")
+         candidates={}
+         for video in current:
+          media=video.get("src","");runtime=video.get("duration",0)
+          if not safe_url(media) or runtime<600:continue
+          uri=urllib.parse.urlsplit(media)
+          if not re.search(r"(?i)\\.(?:mp4|m3u8)$",uri.path):continue
+          if re.search(r"preview|teaser|trailer|sample|ads?",uri.path,re.I):continue
+          candidates[media]=int(runtime)
+         if len(candidates)==1:
+          media,seconds=next(iter(candidates.items()))
+          return {"source":media,"referer":chosen,"duration":seconds,
+            "reason":"same selected JAVIDEO film - STAPE#01 active long HTML5 video"}
+         time.sleep(.6)
+       except Exception:pass
+       finally:d.switch_to.default_content()
+       return {"reason":"selected STAPE#01 iframe did not publish a unique long media file"}
       time.sleep(.6)
    except Exception:pass
   return {"reason":"actual publisher iframe produced no uniquely attributable full media"}
