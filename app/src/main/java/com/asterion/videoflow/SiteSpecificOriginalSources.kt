@@ -566,8 +566,23 @@ internal object SiteSpecificOriginalSources {
             if(wrapper.statusCode() !in 200..299)continue
             val next=JavGuruOriginalSource.nextIframe(
                 stream.url,wrapper.body())?:continue
-            val response=runCatching{
-                Jsoup.connect(next)
+            // LU/SB used to complete through the publisher's non-JK path.
+            // On the owner's actual selected LU player, both Jsoup and
+            // HttpURLConnection followed /searcho/ to streamhihi.com and
+            // received 403, while Python urllib (with NO environment proxy)
+            // received the full 200 packed-player HTML. The pinned yt-dlp
+            // generic player extractor itself reports Unsupported URL.
+            // Read only this exact first-party-attested LU/SB hoster through
+            // the already-running embedded Python transport. The frozen
+            // original decoder still admits one signed source and validates
+            // its selected player/host relationship. Non-LU/SB unchanged.
+            val pythonPlayer=if(stream.server in setOf("LU","SB"))
+                runCatching{
+                    JavGuruPythonSelectedPlayer.read(
+                        context,selected,stream.url,next,stream.server)
+                }.getOrNull() else null
+            val published=pythonPlayer ?: runCatching{
+                val response=Jsoup.connect(next)
                     .userAgent(NativeMediaDownloader.USER_AGENT)
                     .header("Referer",stream.url)
                     .ignoreHttpErrors(true).followRedirects(true)
@@ -577,15 +592,17 @@ internal object SiteSpecificOriginalSources {
                         SiteSession.cookie(context,next)
                             ?.takeIf{it.isNotBlank()}?.let{header("Cookie",it)}
                     }.execute()
-            }.getOrNull()?:continue
-            if(response.statusCode() !in 200..299)continue
-            val embed=response.url().toString()
+                if(response.statusCode() in 200..299)
+                    response.url().toString() to response.body()
+                else null
+            }.getOrNull() ?: continue
+            val (embed,playerHtml)=published
             if(!JavGuruOriginalSource.selectedEmbed(stream.server,embed))continue
             // The verified selected LuluStream hoster publishes its complete
             // HLS playlist in packed JWPlayer source configuration, not in
             // an HTML video tag. Parse that single source before considering
             // the hoster as an extractor fallback.
-            val hls=JavGuruOriginalSource.selectedHls(embed,response.body())
+            val hls=JavGuruOriginalSource.selectedHls(embed,playerHtml)
             if(hls!=null){
                 // This authenticated-by-the-selected-post manifest has a
                 // short-lived signature. Returning it immediately prevents
@@ -593,7 +610,7 @@ internal object SiteSpecificOriginalSources {
                 // BEFORE the first original fragment is requested.
                 return listOf(Source(hls,embed))
             }
-            val player=Jsoup.parse(response.body(),embed)
+            val player=Jsoup.parse(playerHtml,embed)
             // Do not promote generic embeds, ad players or script URL
             // strings as the selected original. Only an unambiguous video
             // inside the final hoster's real player is a direct-media source.
