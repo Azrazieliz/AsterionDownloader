@@ -21,6 +21,27 @@ class PornBuzSelectedFullHlsTest {
             html.replace("<div class=\"responsive-player\">","<div class=\"other\">")))
     }
 
+    @Test fun alternateAttestedCdnPlayerAndHlsRemainBoundToSelectedArticle(){
+        val cdnPlayer=player.replace("player.watchstreamus.com",
+            "cdn.watchstreamus.com")
+        val cdnPlaylist=master.replace("player.watchstreamus.com",
+            "cdn.watchstreamus.com")
+        val page="""<article><div class="video-player-area"><div class="video-player">
+            <div class="responsive-player"><iframe src="$cdnPlayer"></iframe>
+            </div></div></div></article>
+            <aside><iframe src="https://ads.example/embed/OTHER1234"></iframe></aside>"""
+        assertEquals(cdnPlayer,PornBuzOriginalSource.selectedMainPlayer(
+            selected,page))
+        assertEquals(cdnPlaylist,PornBuzOriginalSource.selectedHls(
+            cdnPlayer,"<script>window.VK_PLAYBACK = "+
+                """{"format":"hls","src":"$cdnPlaylist"};"""+"</script>"))
+        assertNull(PornBuzOriginalSource.selectedMainPlayer(selected,
+            page.replace("cdn.watchstreamus.com",
+                "cdn.watchstreamus.com.evil.example")))
+        assertNull(PornBuzOriginalSource.selectedHls(cdnPlayer,
+            "<script>window.VK_PLAYBACK = "+
+                """{"format":"hls","src":"https://ads.example/full.m3u8"};"""+"</script>"))
+    }
     @Test fun onlyVkPlaybackSourceCanSupplySignedMaster(){
         val html="""
             <script>window.VK_PLAYER_OPTS = {"autoplay":false};
