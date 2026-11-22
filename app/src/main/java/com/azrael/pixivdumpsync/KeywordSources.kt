@@ -8,6 +8,8 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.URI
 import java.net.URLEncoder
+import java.net.URLDecoder
+import java.util.Base64
 
 /**
  * Multi-source video discovery. Providers may index ordinary websites, adult sites,
@@ -359,6 +361,57 @@ object KeywordSources {
         return found
     }
     /**
+     * The live public Bing/Yahoo organic result href is frequently an index
+     * measurement redirect rather than the publisher URL. Keep the existing
+     * title-only organic selectors; decode ONLY the two observed, bounded
+     * first-party redirect formats, without making a network redirect
+     * request. No search/advert domain is itself a media candidate.
+     */
+    internal fun organicPublisherDestination(raw:String,label:String):String? {
+        val outer=runCatching{URI(raw)}.getOrNull()?:return null
+        val outerHost=outer.host.orEmpty().lowercase(Locale.ROOT)
+        val destination=when {
+            label=="Bing Web" &&
+                outerHost in setOf("bing.com","www.bing.com") -> {
+                if(outer.path!="/ck/a" || outer.rawFragment!=null)return null
+                val tokens=outer.rawQuery.orEmpty().split('&').filter{
+                    it.startsWith("u=")
+                }
+                if(tokens.size!=1)return null
+                val encoded=tokens.single().removePrefix("u=")
+                if(!encoded.startsWith("a1") ||
+                    encoded.length !in 14..4000 ||
+                    !encoded.drop(2).matches(Regex("""[A-Za-z0-9_-]+={0,2}""")))
+                    return null
+                runCatching {
+                    String(Base64.getUrlDecoder().decode(encoded.drop(2)),
+                        Charsets.UTF_8)
+                }.getOrNull()?:return null
+            }
+            label=="Yahoo Web" && outerHost=="r.search.yahoo.com" -> {
+                val encoded=Regex("""(?:^|/)RU=([^/]{12,3500})(?:/|$)""")
+                    .find(outer.rawPath.orEmpty())?.groupValues?.get(1)
+                    ?:return null
+                runCatching{URLDecoder.decode(encoded,"UTF-8")}
+                    .getOrNull()?:return null
+            }
+            else -> raw
+        }
+        val uri=runCatching{URI(destination)}.getOrNull()?:return null
+        if(uri.scheme!="https" || uri.host.isNullOrBlank() ||
+            uri.userInfo!=null || uri.port!=-1 || uri.rawFragment!=null)
+            return null
+        val host=uri.host.lowercase(Locale.ROOT).removePrefix("www.")
+        if(host=="bing.com" || host.endsWith(".bing.com") ||
+            host=="yahoo.com" || host.endsWith(".yahoo.com") ||
+            host in setOf("google.com","duckduckgo.com","brave.com"))
+            return null
+        return destination.takeIf{
+            eligibleDiscoveryUrl(it) && SearchRanking.isDiscoverablePage(it)
+        }
+    }
+
+    /**
      * Broad web discovery in addition to individual adapters. These results
      * are source-page candidates, never proof that a file is downloadable.
      * Two independent indexes prevent one blocked publisher from reducing
@@ -379,16 +432,11 @@ object KeywordSources {
             else->doc.select("li.b_algo h2 a[href]")
         }
         for(a in entries.take(120)){
-            val url=a.absUrl("href").ifBlank{a.attr("href")}
-            if(!url.startsWith("https://",true) ||
-                !eligibleDiscoveryUrl(url) ||
-                !SearchRanking.isDiscoverablePage(url))continue
+            val href=a.absUrl("href").ifBlank{a.attr("href")}
+            val url=organicPublisherDestination(href,label)?:continue
             val uri=runCatching{URI(url)}.getOrNull()?:continue
-            // Redirect/measurement links from the index are NOT the
-            // selected publisher's genuine page URL.
-            if(uri.host.orEmpty().endsWith(".search.yahoo.com") ||
-                uri.host.orEmpty()=="search.yahoo.com" ||
-                uri.host.orEmpty()=="r.search.yahoo.com")continue
+            // A decoded publisher URL still has to pass the normal
+            // candidate and search-identity checks; never expose index tracking.
             val title=a.text().trim().take(220)
             if(title.length<3)continue
             val parent=a.closest("div.algo-sr,div.dd.algo,li.b_algo")
