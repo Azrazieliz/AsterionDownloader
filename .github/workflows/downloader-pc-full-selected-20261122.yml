@@ -14,7 +14,7 @@ concurrency:
 jobs:
   actual-selected-original:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       max-parallel: 6

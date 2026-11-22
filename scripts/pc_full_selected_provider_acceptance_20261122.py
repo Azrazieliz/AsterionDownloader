@@ -345,41 +345,97 @@ def full_file(selected,candidate):
  with tempfile.TemporaryDirectory(prefix="asterion-pc-selected-") as tmp:
   out=Path(tmp)
   if urllib.parse.urlsplit(url).path=="/get_video":
-   # The selected Streamtape player publishes a public direct HTTP download.
-   # The hoster HTML is not media, and 206 fragments never count as complete.
+   # Exact publisher-selected STAPE source only. Complete contiguous HTTP
+   # ranges are proof; HTML, 200-on-Range and partial 206 are never originals.
+   from concurrent.futures import ThreadPoolExecutor
    headers={"User-Agent":UA,"Referer":candidate["referer"],"Accept-Encoding":"identity"}
-   request=urllib.request.Request(url,headers=headers)
-   file=out/"original.mp4"
-   try:
-    with urllib.request.urlopen(request,timeout=24) as response:
-     uri=urllib.parse.urlsplit(response.url)
-     if uri.scheme!="https" or not uri.hostname or uri.username or uri.password:
-      raise RuntimeError("SELECTED_HOSTER_UNSAFE_REDIRECT")
-     mime=response.headers.get("Content-Type","").lower().split(";")[0].strip()
-     if mime not in ("video/mp4","application/octet-stream","binary/octet-stream"):
-      raise RuntimeError("SELECTED_HOSTER_RETURNED_NONMEDIA_"+mime[:50])
-     total=int(response.headers.get("Content-Length") or 0)
-     if total<=2_000_000 or total>1_200_000_000:
-      raise RuntimeError("SELECTED_HOSTER_SIZE_NOT_ORIGINAL")
-     if response.status==206:
-      ranges=re.fullmatch(r"bytes 0-([0-9]+)/([0-9]+)",
-        response.headers.get("Content-Range","").strip())
-      if not ranges or int(ranges[1])+1!=int(ranges[2]) or total!=int(ranges[2]):
-       raise RuntimeError("SELECTED_HOSTER_PARTIAL_RANGE")
-     elif response.status!=200:
-      raise RuntimeError("SELECTED_HOSTER_HTTP_"+str(response.status))
+   media_types=("video/mp4","application/octet-stream","binary/octet-stream")
+   deadline=time.monotonic()+545
+
+   def verify(response):
+    u=urllib.parse.urlsplit(response.url)
+    if u.scheme!="https" or not u.hostname or u.username or u.password:
+     raise RuntimeError("HOSTER_UNSAFE_REDIRECT")
+    mime=response.headers.get("Content-Type","").lower().split(";")[0].strip()
+    if mime not in media_types:
+     raise RuntimeError("HOSTER_NONMEDIA_"+mime[:40])
+
+   def size_limit(n):
+    if n<=2_000_000 or n>1_200_000_000:
+     raise RuntimeError("HOSTER_NOT_FULL_FILE_LENGTH_"+str(n))
+    return n
+
+   with urllib.request.urlopen(urllib.request.Request(url,
+       headers=dict(headers,Range="bytes=0-0")),timeout=27) as probe:
+    verify(probe)
+    status=probe.status
+    cr=probe.headers.get("Content-Range","").strip()
+    m=re.fullmatch(r"bytes 0-0/([0-9]+)",cr)
+    ranges=status==206 and m is not None
+    total=size_limit(int(m[1]) if ranges else
+        int(probe.headers.get("Content-Length") or 0))
+    if status not in (200,206) or (status==206 and not ranges):
+     raise RuntimeError("HOSTER_INVALID_RANGE_PROBE")
+
+   dest=out/"original.mp4"
+   if ranges:
+    pieces=out/"pieces";pieces.mkdir()
+    halfway=(total+1)//2
+    def lane(index,start,end):
+     expected=end-start+1
+     request=urllib.request.Request(url,
+         headers=dict(headers,Range="bytes="+str(start)+"-"+str(end)))
+     with urllib.request.urlopen(request,timeout=30) as response:
+      verify(response)
+      expected_cr="bytes "+str(start)+"-"+str(end)+"/"+str(total)
+      if response.status!=206 or response.headers.get("Content-Range","").strip()!=expected_cr:
+       raise RuntimeError("HOSTER_RANGE_MISMATCH_"+str(index))
+      part_size=response.headers.get("Content-Length")
+      if part_size and int(part_size)!=expected:
+       raise RuntimeError("HOSTER_RANGE_LENGTH_MISMATCH_"+str(index))
+      part=pieces/(str(index)+".part")
+      received=0
+      with part.open("wb") as output:
+       while received<expected:
+        if time.monotonic()>deadline:raise RuntimeError("HOSTER_RANGE_TIMEOUT_"+str(index))
+        block=response.read(min(1048576,expected-received))
+        if not block:break
+        output.write(block);received+=len(block)
+      if received!=expected or response.read(1):
+       raise RuntimeError("HOSTER_RANGE_TRUNCATED_OR_OVERLONG_"+str(index)+"_"+str(received))
+      return part
+    with ThreadPoolExecutor(max_workers=2) as workers:
+     first=workers.submit(lane,0,0,halfway-1)
+     second=workers.submit(lane,1,halfway,total-1)
+     parts=[first.result(),second.result()]
+    with dest.open("wb") as output:
+     for part in parts:
+      with part.open("rb") as incoming:
+       for block in iter(lambda:incoming.read(1048576),b""):
+        output.write(block)
+      part.unlink()
+    pieces.rmdir()
+   else:
+    request=urllib.request.Request(url,headers=headers)
+    with urllib.request.urlopen(request,timeout=30) as response:
+     verify(response)
+     if response.status!=200:
+      raise RuntimeError("HOSTER_REJECTED_COMPLETE_STREAM")
+     expected=size_limit(int(response.headers.get("Content-Length") or 0))
+     if expected!=total:
+      raise RuntimeError("HOSTER_ORIGINAL_CHANGED_AFTER_PROBE")
      received=0
-     deadline=time.monotonic()+300
-     with file.open("wb") as output:
-      while True:
-       if time.monotonic()>deadline:raise RuntimeError("FULL_TRANSFER_TIMEOUT")
-       chunk=response.read(1024*1024)
-       if not chunk:break
-       output.write(chunk);received+=len(chunk)
-       if received>1_200_000_000:raise RuntimeError("HOSTER_FILE_TOO_LARGE")
-     if received!=total:raise RuntimeError("INCOMPLETE_HOSTER_BYTES_"+str(received))
-   except urllib.error.HTTPError as error:
-    raise RuntimeError("SELECTED_HOSTER_HTTP_"+str(error.code)) from error
+     with dest.open("wb") as output:
+      while received<total:
+       if time.monotonic()>deadline:
+        raise RuntimeError("FULL_TRANSFER_TIMEOUT_"+str(received)+"_of_"+str(total))
+       block=response.read(min(1048576,total-received))
+       if not block:break
+       output.write(block);received+=len(block)
+     if received!=total or response.read(1):
+      raise RuntimeError("INCOMPLETE_HOSTER_BYTES_"+str(received))
+   if dest.stat().st_size!=total:
+    raise RuntimeError("FINAL_HOSTER_BYTE_COUNT_MISMATCH")
   else:
    cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
     "--no-mtime","--no-warnings","--retries","2","--fragment-retries","2",
