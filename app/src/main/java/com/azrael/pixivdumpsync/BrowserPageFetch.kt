@@ -164,6 +164,12 @@ object BrowserPageFetch {
                 "play.javideo.net" ->
                     Regex("""^/(?:embed|player)/[A-Za-z0-9_-]{5,100}/?$""")
                         .matches(Uri.parse(url).path.orEmpty())
+                // The same publisher can host its selected CosplayTele
+                // article player at /embed/<id> or /player/<id>.
+                // Do not treat gallery/category listings as video players.
+                "cosplaytele.com" ->
+                    Regex("""^/(?:embed|player)/[A-Za-z0-9_-]{5,100}/?$""")
+                        .matches(Uri.parse(url).path.orEmpty())
                 else -> false
             })
         main.post {
@@ -517,7 +523,11 @@ object BrowserPageFetch {
                                 (['mydaddy.cc','nhplayer.com','voe.sx','kamehaus.net',
                                     'hentaihaven.xxx','play.javideo.net','streamtape.com','streamtape.to',
                                     'streamtape.net','streamtape.site','sbtape.com']
-                                    .includes(selectedPlayerHost)?'video[src]':'video#flvv'))]
+                                    .includes(selectedPlayerHost) ||
+                                    (selectedPlayerHost==='cosplaytele.com' &&
+                                     /^\/(?:embed|player)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                        .test(location.pathname))
+                                        ?'video[src]':'video#flvv'))]
                                 .filter(el=>selectedPlayerHost!=='javideo.net')
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
@@ -693,6 +703,19 @@ object BrowserPageFetch {
                                         'sbtape.com'].includes(host) &&
                                         /^\/(?:e|v|embed)\/[A-Za-z0-9_-]{5,100}\/?$/
                                             .test(u.pathname));
+                                }
+                                if(publisher==='cosplaytele.com'){
+                                    // Only the selected article's first-party
+                                    // player frame; no advertising iframe,
+                                    // related post, or unrelated gallery.
+                                    return /^\/[a-z0-9][a-z0-9_-]{2,180}\/?$/i
+                                        .test(currentPath) &&
+                                        !!el.closest('main,article,.entry-content,.post-content') &&
+                                        !el.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,.sidebar,[data-ad]') &&
+                                        host==='cosplaytele.com' &&
+                                        /^\/(?:embed|player|video)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                            .test(u.pathname) && !u.search && !u.hash;
                                 }
                                 if(publisher==='helloporn.com')
                                     return /^\/video-\d{1,10}-[a-z0-9-]+\/?$/i
