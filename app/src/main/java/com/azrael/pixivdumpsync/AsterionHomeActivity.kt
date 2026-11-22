@@ -202,6 +202,16 @@ class AsterionHomeActivity:Activity(){
                     importedFileName(data.data!!))
             return
         }
+        if(requestCode==5222){
+            if(resultCode==RESULT_OK && data?.data!=null){
+                val folder=getSharedPreferences("asterion_torrent_search",0)
+                    .getString("local_torrent_target_folder","Videos")
+                    .orEmpty().takeIf{it in setOf("Games","Books","Videos","Assets")}
+                    ?:"Videos"
+                ResourceDownloads.onTorrentPicked(this,data.data!!,folder)
+            }
+            return
+        }
         if(requestCode==5204) {
             if(resultCode==RESULT_OK)AssetsPanel.localFile(this,data?.data)
             return
