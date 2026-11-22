@@ -26,7 +26,7 @@ class LiveJavGuruOriginalSourceTest {
             .timeout(28_000)
             .maxBodySize(1_200_000)
             .execute()
-        assertEquals("Selected player HTTP status at "+java.net.URI(url).host+" (final "+result.url().host()+")",200,result.statusCode())
+        assertEquals("Selected player HTTP status at "+java.net.URI(url).host+" (final "+result.url().host+")",200,result.statusCode())
         return result.url().toString() to result.body()
     }
 
