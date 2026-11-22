@@ -399,6 +399,33 @@ internal object PublisherOriginalExtractors {
         val page=WebDiscovery.selectedDocument(selected,context)
         if(host=="cosplaytele.com")
             return cosplayTeleOriginal(context,selected,page)
+        if(host in setOf("pornavhd.com","livecamrips.to")){
+            // The selected article's iframe is a PLAYER PAGE, not a video.
+            // The generic Python path does not support the current player.
+            // Resolve only its unique first-party embedded media first.
+            fun published(html:String)=fromHtml(selected,html)
+            val initial=published(page.outerHtml())
+            val originals=initial.filter{direct(it.url)}
+            if(originals.size==1)return originals
+            if(originals.size>1)return emptyList()
+            val rendered=runCatching{
+                com.azrael.pixivdumpsync.BrowserPageFetch
+                    .html(context,selected)
+            }.getOrNull()
+            val discovered=(initial+rendered?.let(::published).orEmpty())
+                .distinctBy{it.url}
+            val directMedia=discovered.filter{direct(it.url)}
+            if(directMedia.size==1)return directMedia
+            if(directMedia.isNotEmpty())return emptyList()
+            val frames=discovered.filter{
+                SiteSpecificOriginalSources.selectedExtractorFrame(
+                    selected,it.url)
+            }
+            val only=frames.singleOrNull()?:return emptyList()
+            return SiteSpecificOriginalSources.selectedRecordingFrameOriginals(
+                context,selected,only.url)
+                .map{Candidate(it.url,it.referer,host)}
+        }
         if(host=="pornbuz.com"){
             // The owner-selected article publishes its REAL primary
             // watchstreamus JWPlayer (a signed full-duration HLS). A
