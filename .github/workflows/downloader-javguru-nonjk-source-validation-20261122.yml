@@ -49,3 +49,26 @@ jobs:
           gradle-version: '8.13'
       - name: Production Kotlin LU selected article through real publisher relay to HLS bytes
         run: gradle :app:testAcceptanceUnitTest --tests 'com.asterion.videoflow.LiveJavGuruOriginalSourceTest' --stacktrace --console=plain
+  java-selected-post-transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Distinguish Java networking denial from publisher LU source failure without fetching media
+        shell: bash
+        run: |
+          jshell -q <<'JAVA'
+          import java.net.*;
+          import java.io.*;
+          String site="https://jav.guru/1077002/doks-695-little-devil-jk-gives-thick-tongue-kisses-while-repeatedly-teasing-and-toying-with-you-in-a-mean-slow-handjob-until-you-cum/";
+          HttpURLConnection c=(HttpURLConnection)new URL(site).openConnection();
+          c.setConnectTimeout(13000); c.setReadTimeout(13000);
+          c.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36");
+          c.setRequestProperty("Referer",site); c.setRequestProperty("Accept-Encoding","identity");
+          c.setInstanceFollowRedirects(false);
+          try{System.out.println("JAV_GURU_JAVA_POST_HTTP="+c.getResponseCode()+" CONTENT_TYPE="+c.getContentType());}catch(Exception x){System.out.println("JAV_GURU_JAVA_ERROR="+x.getClass().getSimpleName());}finally{c.disconnect();}
+          /exit
+          JAVA
