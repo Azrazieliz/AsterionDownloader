@@ -27,7 +27,7 @@ class AlohaSourcesTest {
         assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="everia.club"})
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{
             it.host=="pimpbunny.com" && it.url=="https://pimpbunny.com/" })
-        assertEquals("pimpbunny.com:photos",
+        assertEquals("pimpbunny.com",
             SiteControls.controlKey("https://pimpbunny.com/models/"))
         assertEquals("pimpbunny.com",
             SiteControls.controlKey("https://pimpbunny.com/videos/actual-scene/"))
