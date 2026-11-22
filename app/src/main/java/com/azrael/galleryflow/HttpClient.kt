@@ -20,6 +20,25 @@ object NetworkRequestRegistry {
     }
 }
 
+/** The live 4KGirl publisher returned HTTP 200 containing the 138-byte
+ * nginx "403 Forbidden" document. An HTTP-code-only check mistakenly treated
+ * that denial as a successful empty gallery and never tried the existing
+ * authorized browser fallback. Do not classify ordinary content as a denial.
+ */
+internal object GalleryAccessGate {
+    private val forbiddenTitle=Regex(
+        """(?is)<(?:title|h1)\b[^>]*>\s*403\s+Forbidden\s*</(?:title|h1)>"""
+    )
+    fun isMaskedForbidden(url:String,status:Int,body:String):Boolean {
+        if(status!=200 || body.length !in 45..2048)return false
+        val host=runCatching{URI(url).host.orEmpty()
+            .lowercase(Locale.ROOT).removePrefix("www.")}
+            .getOrDefault("")
+        return host=="4kgirl.com" &&
+            forbiddenTitle.containsMatchIn(body)
+    }
+}
+
 open class HttpClient(private val context:android.content.Context?=null) {
     data class TextResponse(
         val body: String,
@@ -60,9 +79,15 @@ open class HttpClient(private val context:android.content.Context?=null) {
             throw HttpStatusException(response.statusCode(), "HTTP " + response.statusCode() + " for " + url)
         }
         val finalUrl = response.url().toString()
+        val body=response.body()
+        if(GalleryAccessGate.isMaskedForbidden(finalUrl,response.statusCode(),body)){
+            throw HttpStatusException(403,
+                "4KGirl returned a 403 Forbidden page despite HTTP 200; "+
+                "authorized browser session needed")
+        }
         persistResponseCookies(finalUrl, response.headers("Set-Cookie"))
         return TextResponse(
-            body = response.body(),
+            body = body,
             finalUrl = finalUrl,
             contentType = response.contentType()
         )
@@ -102,6 +127,10 @@ open class HttpClient(private val context:android.content.Context?=null) {
                      SiteSession.bound(context,url))){
                     val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
                         context,url,referer)
+                    if(GalleryAccessGate.isMaskedForbidden(url,200,html))
+                        throw HttpStatusException(403,
+                            "4KGirl browser still returned 403 Forbidden; "+
+                            "gallery previews require publisher access")
                     return Jsoup.parse(html,url)
                 }
                 throw e
