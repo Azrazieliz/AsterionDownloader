@@ -25,6 +25,12 @@ class VideoHlsDispatchTest {
             "https://hentaihaven.xxx/watch/selected-series/episode-2"))
         assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://taiav.com/cn/movie/654424d67b410d2615db16e5"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://en.xchina.co/video/abcdef1234567890"))
+        assertTrue(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://xchina.co/video/id-abcdef1234567890"))
+        assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
+            "https://en.xchina.co/"))
         assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
             "https://taiav.com/cn/"))
         assertFalse(VideoHlsDispatch.needsRuntimeBeforeSource(
