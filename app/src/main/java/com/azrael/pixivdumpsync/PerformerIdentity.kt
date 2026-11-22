@@ -157,7 +157,7 @@ internal object PerformerIdentity {
         val query=URLEncoder.encode("\""+name.trim()+"\" model creator performer gravure","UTF-8")
         val engines=listOf(
             "https://www.bing.com/search?q="+query,
-            "https://html.duckduckgo.com/html/?q="+query)
+            "https://search.yahoo.com/search?p="+query)
         val pool=Executors.newFixedThreadPool(2)
         try{
             val tasks=engines.map{address->pool.submit<List<String>>{
