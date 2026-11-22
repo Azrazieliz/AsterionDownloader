@@ -447,6 +447,28 @@ internal object SiteSpecificOriginalSources {
             .any{it.text().trim().equals("STREAM JK",ignoreCase=true)}
     }
 
+    /** A selected JAV Guru post can publish only LU/SB in its initial
+     * HTTP shell and hydrate the preferred JK shortcode through its own JS.
+     * Do not treat the first parsed non-JK server as evidence that the
+     * approved JK original is unavailable. Never inspect a listing or a
+     * recommendation; only the exact selected post may trigger this read.
+     */
+    internal fun shouldInspectSelectedJk(
+        doc:Document,selected:String,initial:List<JavGuruOriginalSource.Player>,
+        nativeJkOnly:Boolean=false
+    ):Boolean {
+        if(nativeJkOnly || initial.any{it.server=="JK"} ||
+            !JavGuruJkNativeHls.selectedArticleForNative(selected))return false
+        if(initial.isEmpty())return true
+        val post=runCatching{URI(selected).path.orEmpty().trim('/').substringBefore('/')}
+            .getOrDefault("")
+        val buttons=doc.select("article#post-$post a.wp-btn-iframe__shortcode")
+        return buttons.any{button->
+            button.text().trim().uppercase(Locale.ROOT)
+                .matches(Regex("""STREAM\\s+(SB|VO|LU|VI|DD|JK)"""))
+        }
+    }
+
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
      * the publisher-attested shortcode and its first-party /searcho/ relay
@@ -467,9 +489,8 @@ internal object SiteSpecificOriginalSources {
         // transfer back to repeatedly 403-ing Python transports. Recheck
         // the SAME article only if its DOM visibly advertises an unresolved
         // JK control. Keep the secondary native-only worker static/light.
-        val unresolvedJk=missingPublishedJkControl(doc,selected,initial)
-        val inspectRendered=!nativeJkOnly &&
-            (initial.isEmpty() || unresolvedJk) &&
+        val inspectRendered=shouldInspectSelectedJk(
+                doc,selected,initial,nativeJkOnly) &&
             (BrowserPageFetch.publicEligible(selected) ||
                 SiteSession.bound(context,selected))
         val fromBrowser=if(inspectRendered)runCatching {
