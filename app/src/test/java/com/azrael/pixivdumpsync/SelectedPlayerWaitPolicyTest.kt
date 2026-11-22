@@ -16,6 +16,22 @@ class SelectedPlayerWaitPolicyTest {
         assertEquals(200L,SelectedPlayerWaitPolicy.inspectionDelayMs(
             true,SelectedPlayerWaitPolicy.maxPolls("nhplayer.com")))
     }
+    @Test fun javideoDefaultPlayerNeverEndsWaitBeforeSelectedStape(){
+        val article="https://javideo.net/en/fc2ppv-4994603"
+        fun compact(frame:String)=
+            "<main><div class='video-player'><iframe src='$frame'>"+
+                "</iframe></div></main>"
+        assertFalse(SelectedPlayerWaitPolicy.selectedJavideoStapeReady(
+            article,compact("https://play.javideo.net/embed/DefaultPlayer123")))
+        assertTrue(SelectedPlayerWaitPolicy.selectedJavideoStapeReady(
+            article,compact("https://streamtape.com/e/OriginalSelected123")))
+        assertFalse(SelectedPlayerWaitPolicy.selectedJavideoStapeReady(
+            article,compact("https://ads.example.org/e/OriginalSelected123")))
+        assertFalse(SelectedPlayerWaitPolicy.selectedJavideoStapeReady(
+            "https://javideo.net/en/",compact(
+                "https://streamtape.com/e/OriginalSelected123")))
+    }
+
     @Test fun signedPlaybackJSHasAdditionalBoundedTime(){
         assertEquals(11,SelectedPlayerWaitPolicy.maxPolls("3dhentaix.com"))
         assertTrue(SelectedPlayerWaitPolicy.maxPolls("3dhentaix.com")>
