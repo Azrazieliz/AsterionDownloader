@@ -4,6 +4,49 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InternetWideYahooSearchTest {
+    @Test fun realBingOrganicRedirectRecoversOriginalPublisherNotBingTracking(){
+        val publisher="https://independent.example/episodes/rare-title-2026"
+        val encoded=java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(publisher.toByteArray(Charsets.UTF_8))
+        val tracking="https://www.bing.com/ck/a?!&amp;&amp;p=publisher"+
+            "&amp;u=a1"+encoded+"&amp;ntb=1"
+        val html="<li class='b_algo'><h2><a href='"+tracking+
+            "'>Rare Title 2026 original</a></h2></li>"
+        val hits=KeywordSources.parseWebIndex(
+            html,"https://www.bing.com/search?q=rare+title","Bing Web")
+        assertEquals(1,hits.size)
+        assertEquals(publisher,hits.single().url)
+        assertEquals("Bing Web",hits.single().source)
+    }
+
+    @Test fun realYahooOrganicRedirectRecoversOnlyEncodedRuDestination(){
+        val publisher="https://independent.example/episodes/rare-title-2026"
+        val encoded=java.net.URLEncoder.encode(publisher,"UTF-8")
+        val link="https://r.search.yahoo.com/_ylt=public/RU="+encoded+
+            "/RK=2/RS=publisher"
+        val html="<div class='algo-sr'><div class='compTitle'>"+
+            "<a href='"+link+"'>Rare Title 2026 original</a>"+
+            "</div></div>"
+        val hits=KeywordSources.parseWebIndex(
+            html,"https://search.yahoo.com/search?p=rare+title","Yahoo Web")
+        assertEquals(1,hits.size)
+        assertEquals(publisher,hits.single().url)
+    }
+
+    @Test fun searchIndexWrappersNeverPromoteUnknownRedirectsOrAdHosts(){
+        val bad=listOf(
+            "https://www.bing.com/ck/a?u=a1abc",
+            "https://www.bing.com/ck/a?u=a1aHR0cDovL2Fkcy5leGFtcGxlL2J1eQ",
+            "https://www.bing.com/ck/a?u=a1aHR0cHM6Ly93d3cuYmluZy5jb20vc2VhcmNoP3E9YWQ",
+            "https://www.bing.com/redirect?u=a1aHR0cHM6Ly9hLmV4YW1wbGUvdmlkZW8",
+            "https://r.search.yahoo.com/redirect?foo=bar",
+            "https://ads.example.com/track?url=https://independent.example/video"
+        )
+        for(link in bad)assertNull(link,
+            KeywordSources.organicPublisherDestination(link,
+                if(link.contains("bing.com"))"Bing Web" else "Yahoo Web"))
+    }
+
     @Test fun publicWebHitsAreNotRestrictedToConfiguredProviders(){
         val html="""<div class="algo-sr"><div class="compTitle"><h3>
             <a href="https://unknown-publisher.example/episodes/rare-title-2026">
