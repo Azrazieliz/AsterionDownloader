@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpenWebModelSearchTest {
+    @Test fun bingMeasuredOriginalFileIsDecodedBeforeCheckingGlbExtension(){
+        val original="https://models.example.org/models/selected-sword.glb"
+        val payload="a1"+java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(original.toByteArray(Charsets.UTF_8))
+        val html="<li class='b_algo'><h2><a href='"+
+            "https://www.bing.com/ck/a?u="+payload+
+            "'>Sword original GLB</a></h2></li>"
+        val models=OpenWebModelSearch.parseWebIndex(
+            html,"https://www.bing.com/search?q=sword","Bing")
+        assertEquals(1,models.size)
+        assertEquals(original,models.single().url)
+        assertEquals("GLB",models.single().format)
+    }
+
     @Test fun webOriginalsCanComeFromAnyPublicHostWithoutRegisteringProviders(){
         val html="""<div class="algo-sr"><div class="compTitle"><h3><a
           href="https://artist.example.org/models/character.glb">Character model GLB</a></h3></div></div>
