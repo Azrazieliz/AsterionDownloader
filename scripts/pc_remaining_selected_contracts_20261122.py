@@ -50,10 +50,10 @@ def choose_watch(name,listing,body):
  links=[]
  for raw,scope in markup.anchors:
   u=urllib.parse.urlsplit(urllib.parse.urljoin(listing,html.unescape(raw)))
-  if u.scheme!="https" or u.hostname not in {
+  if (u.scheme!="https" or u.hostname not in {
     urllib.parse.urlsplit(listing).hostname,
-    "www."+urllib.parse.urlsplit(listing).hostname.removeprefix("www.")}
-    :continue
+    "www."+urllib.parse.urlsplit(listing).hostname.removeprefix("www.")}):
+   continue
   if watch_path(name,u.path) and "aside#" not in scope:
    links.append(urllib.parse.urlunsplit((u.scheme,u.netloc,u.path,"","")))
  return list(dict.fromkeys(links))
