@@ -15,6 +15,7 @@ class PublisherOriginalExtractorsTest {
         "watchporn.to" to "https://watchporn.to/video/1782/title",
         "archivebate.com" to "https://archivebate.com/watch/16458050",
         "livecamrips.to" to "https://livecamrips.to/video/11248256",
+        "dsysav.com" to "https://dsysav.com/en/watch?v=MxWT7NmlUoT",
         "xxxi.porn" to "https://xxxi.porn/video/example",
         "notfans.com" to "https://notfans.com/video/example",
         "fullporner.com" to "https://fullporner.com/watch/6af6fbcd2f7835591446cb0f",
