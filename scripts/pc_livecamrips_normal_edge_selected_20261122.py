@@ -44,7 +44,9 @@ def main():
    raise RuntimeError("INVALID_LOOPBACK_PORT")
   attempts=0
   latest=None
-  while attempts<35:
+  selected_link=SELECTED
+  catalog_navigated=False
+  while attempts<22:
    attempts+=1
    try:
     req=urllib.request.Request(f"http://127.0.0.1:{port}/json/list",
@@ -68,9 +70,13 @@ def main():
            .filter(f=>!f.closest('aside,.ads,.related,.recommended,[data-ad]'));
         const title = document.title || '';
         const text = (document.body?.innerText||'').slice(0,900);
-        const challenge = /just a moment|checking your browser|verify you are human|access denied|403 forbidden|captcha/i.test(title+' '+text);
-        return {host,path,title_length:title.length,challenge,frame_count:frames.length,
+        const challenge = /just a moment|checking your browser|verify you are human|access denied|403 forbidden|captcha|sorry.{0,30}blocked|attention required|cloudflare ray id|error code 1020/i.test(title+' '+text);
+        const catalogue=[...document.querySelectorAll('a[href]')].map(a=>{try{return new URL(a.href)}catch(e){return null}})
+          .filter(u=>u&&u.hostname===host&&/^\/video\/[0-9]+\/?$/.test(u.pathname))
+          .map(u=>u.href);
+        return {host,path,title:title.slice(0,85),challenge,frame_count:frames.length,
           frame_hosts:frames.map(x=>{try{return new URL(x.src).hostname}catch(e){return ''}}),
+          catalogue_links:[...new Set(catalogue)].slice(0,8),
           selected_article_markers:document.querySelectorAll('h1,main h2').length,
           body_length:document.body?.innerText?.length||0};
        })()"""}}))
@@ -89,8 +95,21 @@ def main():
      result["publisher_challenge"]=bool(data.get("challenge"))
      result["selected_player_host"]=data.get("frame_hosts",[None])[0] if data.get("frame_count")==1 else None
      result["selected_player_count"]=data.get("frame_count")
+     available=data.get("catalogue_links") or []
+     result["published_catalogue_video_count"]=len(available)
+     if (not catalog_navigated and data.get("path") in ("","/")
+         and not data.get("challenge") and len(available)>=1):
+      candidate=available[0]
+      parsed=urllib.parse.urlsplit(candidate)
+      if (parsed.scheme=="https" and parsed.hostname=="livecamrips.to"
+          and parsed.query=="" and parsed.fragment=="" and parsed.path.startswith("/video/")):
+       connection.send(json.dumps({"id":2,"method":"Page.navigate","params":{"url":candidate}}))
+       catalog_navigated=True
+       selected_link=candidate
+       result["selected_article"]=candidate
+       result["selected_from_current_catalogue"]=True
      if (data.get("host") in ("livecamrips.to","www.livecamrips.to")
-         and data.get("path")=="/video/14759344"
+         and data.get("path")==urllib.parse.urlsplit(selected_link).path
          and not data.get("challenge") and data.get("frame_count")==1):
       result["normal_browser_exact_player"]=True
       break
