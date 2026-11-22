@@ -85,7 +85,14 @@ class VideoSiteProfilesTest {
             "https://hentaibros.net/watch/example")){
             assertTrue(url,VideoSiteProfiles.isVideoPage(url))
         }
-        assertEquals(29,VideoSiteProfiles.coveredHosts.size)
+        assertEquals(30,VideoSiteProfiles.coveredHosts.size)
+        assertTrue(VideoSiteProfiles.isVideoPage(
+            "https://dsysav.com/en/watch?v=MxWT7NmlUoT"))
+        assertFalse(VideoSiteProfiles.isVideoPage("https://dsysav.com/en"))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://dsysav.com/en/watch?v="))
+        assertFalse(VideoSiteProfiles.isVideoPage(
+            "https://dsysav.com.attacker.example/en/watch?v=MxWT7NmlUoT"))
         assertFalse(VideoSiteProfiles.isVideoPage(
             "https://xxxclub.to/torrents/details/480815"))
         assertFalse(VideoSiteProfiles.isVideoPage(
