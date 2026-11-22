@@ -40,7 +40,7 @@ object BrowserPageFetch {
         // Reading the existing authorized WebView DOM never authorizes an
         // ad iframe, bypasses a site gate or invents a media URL.
         "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-        "bubblecum.lol","pornavhd.com","cosplaytele.com","pornbuz.com",
+        "bubblecum.lol","cosplaytele.com","pornbuz.com",
         "notfans.com",
         // Public gallery rendering fallback only. No challenge solving.
         "4kgirl.com","4khd.com","m.4khd.com")
@@ -157,7 +157,7 @@ object BrowserPageFetch {
             "streamtape.com","streamtape.to","streamtape.net",
             "streamtape.site","sbtape.com",
             "avple.tv","pimpbunny.com","xchina.co","en.xchina.co",
-            "bubblecum.lol","pornavhd.com","cosplaytele.com","pornbuz.com","notfans.com",
+            "bubblecum.lol","cosplaytele.com","pornbuz.com","notfans.com",
             "video.playerrecord.cfd","vidara.to",
             "player.watchstreamus.com","cdn.watchstreamus.com")
         val selectedPlayerPage=selectedPlayerHost && (
@@ -940,15 +940,6 @@ object BrowserPageFetch {
                                         (['mdzsmutpcvykb.net','mixdrop.ag',
                                             'mixdrop.co','mixdrop.to'].includes(host) &&
                                             /^\/e\/[A-Za-z0-9_-]{5,64}\/?$/.test(u.pathname)));
-                                if(publisher==='pornavhd.com')
-                                    return /^\/20\d{2}\/(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/[a-z0-9][a-z0-9_-]{2,220}\/?$/i
-                                        .test(currentPath) &&
-                                        !!el.closest('main,article') &&
-                                        !el.closest('aside,.related,.recommended,'+
-                                            '.recommendations,.ads,.advertisement,.sidebar,[data-ad]') &&
-                                        host==='video.playerrecord.cfd' &&
-                                        /^\/e\/[A-Za-z0-9_-]{8,100}\/?$/.test(u.pathname) &&
-                                        !u.search && !u.hash;
                                 if(publisher==='javideo.net'){
                                     const wrapper=el.closest('.embed-responsive.player');
                                     if(!wrapper || wrapper.classList.contains('d-none'))
@@ -1330,10 +1321,6 @@ object BrowserPageFetch {
                                         .containsMatchIn(page)
                                 } else if(host=="pimpbunny.com") {
                                     !page.contains("id=\"kt_player\"") &&
-                                    !Regex("""<video\s+src="https://[^"]+""")
-                                        .containsMatchIn(page)
-                                } else if(host=="pornavhd.com") {
-                                    !page.contains("video.playerrecord.cfd/e/") &&
                                     !Regex("""<video\s+src="https://[^"]+""")
                                         .containsMatchIn(page)
                                 } else if(host=="rule34video.com") {
