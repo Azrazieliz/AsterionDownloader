@@ -206,24 +206,24 @@ def player_candidate(name,selected,frame):
       continue
     if active_name in ("uncensoredhentai","nhplayer_server"):
      u=got.get("media","") or ""
-     if u and safe_url(u) and host(u)=="r2.1hanime.com" and
-       urllib.parse.urlsplit(u).path.lower().endswith(".mp4") and
-       set(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query))=={"verify"}:
+     if (u and safe_url(u) and host(u)=="r2.1hanime.com" and
+         urllib.parse.urlsplit(u).path.lower().endswith(".mp4") and
+         set(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query))=={"verify"}):
       return {"source":u,"referer":active_referer,"duration":0,
               "reason":"NHPlayer exact /v/ active server signed media"}
     if active_name=="pornbuz":
      u=got.get("media","") or ""
      if u:
       u=urllib.parse.urljoin(frame,u)
-      if safe_url(u) and host(u) in ("player.watchstreamus.com","cdn.watchstreamus.com") and
-        urllib.parse.urlsplit(u).path.lower().endswith(".m3u8") and not
-        re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
+      if (safe_url(u) and host(u) in ("player.watchstreamus.com","cdn.watchstreamus.com") and
+          urllib.parse.urlsplit(u).path.lower().endswith(".m3u8") and not
+          re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I)):
        return {"source":u,"referer":frame,"duration":0,
                "reason":"selected article's embedded JWPlayer VK_PLAYBACK"}
     for v in got.get("vids",[]):
      u=v.get("url","");duration=v.get("duration",0)
-     if u and safe_url(u) and duration>=90 and not
-       re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
+     if (u and safe_url(u) and duration>=90 and not
+         re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I)):
       results.append({"source":u,"referer":active_referer,"duration":int(duration),
                       "reason":"selected iframe HTML5 runtime"})
     unique={x["source"]:x for x in results}
