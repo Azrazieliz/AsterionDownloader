@@ -1,0 +1,35 @@
+name: Asterion Downloader — remaining selected video PC evidence
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_remaining_selected_contracts_20261122.py'
+      - '.github/workflows/downloader-pc-outstanding-selected-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-publishers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare real Chrome selected player evidence
+        run: python3 -m pip install --disable-pip-version-check selenium==4.36.0
+      - name: Inspect exact selected pages, embedded original player and network responses
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 -m py_compile scripts/pc_remaining_selected_contracts_20261122.py
+          python3 scripts/pc_remaining_selected_contracts_20261122.py | tee pc-selected-publisher-matrix.log
+          test -s pc-selected-provider-matrix-20261122.json
+      - name: Save HTTP/player evidence, never private tokens or media
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-selected-remaining-provider-evidence
+          path: |
+            pc-selected-publisher-matrix.log
+            pc-selected-provider-matrix-20261122.json
+          if-no-files-found: warn
+          retention-days: 30
