@@ -9,12 +9,12 @@ import org.junit.Test
 class AllSiteGalleryCoverageTest {
     @Test fun approvedPornCatalogExcludesRetiredProvider() {
         val sites=AlohaSources.by(AlohaArea.ADULT)
-        assertEquals(21,sites.size)
+        assertEquals(22,sites.size)
         assertFalse(AlohaSources.all.any{it.host in setOf("pornpics.com","celeb.st")})
         assertFalse(sites.any{it.host in setOf("pornhits.com","omg.porn","omg.xxx",
             "porntrex.com","xnxx.com","pornone.com","sunporno.com",
             "xvideos.com","peekvids.com","tnaflix.com","helloporn.com")})
-        assertEquals(21,sites.map{SiteControls.key(it.url)}.distinct().size)
+        assertEquals(22,sites.map{SiteControls.key(it.url)}.distinct().size)
     }
 
     @Test fun publicListingRecognizesRealNestedMediaCovers() {
