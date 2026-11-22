@@ -326,7 +326,25 @@ internal object SiteSpecificOriginalSources {
             }
         }
         if(owner=="uncensoredhentai.xxx"){
-            val exactServer=selectedNhPlayerServer(playerPage,player.outerHtml())
+            val staticServer=selectedNhPlayerServer(
+                playerPage,player.outerHtml())
+            // The selected NHPlayer /v/ chooser can answer HTTP 200 with
+            // an unhydrated shell. The static success used to skip WebView
+            // entirely, losing its single publisher-issued /player.php
+            // server and therefore the PC-proven videoReady MP4.
+            // Recover ONLY the same /v/ chooser in the authorized browser;
+            // server identity and query shape are still verified below.
+            val hydratedServer=if(staticServer==null &&
+                (BrowserPageFetch.publicEligible(playerPage) ||
+                    SiteSession.bound(context,playerPage)))
+                runCatching{
+                    BrowserPageFetch.html(context,playerPage,
+                        playerReferer=selected)
+                }.getOrNull()?.let{
+                    selectedNhPlayerServer(playerPage,it)
+                }
+            else null
+            val exactServer=staticServer?:hydratedServer
             if(exactServer!=null){
                 // /player.php is populated by the selected first-party AJAX.
                 // Reading its static HTTP shell first often produces no video
