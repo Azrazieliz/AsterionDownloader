@@ -1,0 +1,31 @@
+name: Asterion Downloader — PornBuz selected Server 2 complete-file PC certification
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_pornbuz_selected_server2_full_20261122.py'
+      - '.github/workflows/downloader-pc-pornbuz-server2-full-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-server2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install complete-file and ffprobe verification tools
+        run: |
+          python3 -m py_compile scripts/pc_pornbuz_selected_server2_full_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 beautifulsoup4 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Download only the unique publisher-selected full original and validate
+        run: python3 scripts/pc_pornbuz_selected_server2_full_20261122.py
+      - name: Preserve nonmedia receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-pornbuz-selected-server2-full-receipt
+          path: pc-pornbuz-selected-server2-receipt.json
+          retention-days: 14
