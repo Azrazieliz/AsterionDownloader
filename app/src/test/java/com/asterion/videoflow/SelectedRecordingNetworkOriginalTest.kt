@@ -38,9 +38,12 @@ class SelectedRecordingNetworkOriginalTest {
                 selected,player,link,false,player))
         assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
             selected,player,media,true,player))
+        // The caller already resolved the sole selected iframe from this
+        // publisher's DOM. The request Referer must not silently switch to
+        // a *different* iframe; URL shapes alone cannot prove article identity.
         assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
             selected,"https://video.playerrecord.cfd/e/Other654321",
-            media,false,player.replace("Abc123Def456","Other654321")))
+            media,false,player))
         assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
             selected,player,media,false,"https://ads.example/"))
         assertFalse(SelectedRecordingNetworkOriginal.approvedObservedRequest(
