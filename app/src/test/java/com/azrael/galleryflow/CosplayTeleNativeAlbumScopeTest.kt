@@ -5,6 +5,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CosplayTeleNativeAlbumScopeTest {
+    @Test fun officialSameSiteVideoIframeBesidePhotoGalleryIsPreserved(){
+        val selectedFrame="https://cosplaytele.com/embed/video12345"
+        val doc=Jsoup.parse("""
+          <main><article id="post-999" class="post-999"><div class="entry-content">
+            <div class="gallery galleryid-999">
+              <a href="https://cdn.cosplaytele.com/selected/photo01.jpg">
+                <img src="https://cdn.cosplaytele.com/selected/thumb01.jpg"/></a>
+            </div>
+            <iframe src="$selectedFrame"></iframe>
+            <div class="related"><iframe
+              src="https://cosplaytele.com/embed/foreign123"></iframe></div>
+            <iframe src="https://ads.example/embed/malicious123"></iframe>
+          </div></article></main>
+        """,selected)
+        val scoped=SelectedAlbumScope.selectedContent(doc,selected)
+        assertEquals(1,scoped.select("iframe[src]").size)
+        assertEquals(selectedFrame,scoped.selectFirst("iframe[src]")!!.absUrl("src"))
+        val photos=directPageAssets(scoped,selected)
+        assertEquals(1,photos.size)
+        assertTrue(photos.single().url.contains("photo01.jpg"))
+    }
+
     private val selected="https://cosplaytele.com/selected-cosplay-set/"
 
     @Test fun nativeDirectPageExtractorNeverIncludesRecommendedGalleryOrPageAssets(){
