@@ -40,11 +40,19 @@ object AsterionSearchHub {
     private data class Reply(val results:List<Found>,val errors:List<String>,val searched:Int)
     private fun preferences(a:Activity)=a.getSharedPreferences("asterion_unified_search",0)
     private fun stored(a:Activity,mode:Int):List<Found> = runCatching{
-        val array=JSONArray(preferences(a).getString("results_"+mode,"[]"))
+        val prefs=preferences(a)
+        val array=JSONArray(prefs.getString("results_"+mode,"[]"))
+        val persistedTerm=prefs.getString("query_"+mode,"").orEmpty().trim()
         (0 until minOf(1200,array.length())).mapNotNull{i->
             val x=array.optJSONObject(i)?:return@mapNotNull null
             val url=x.optString("url")
             if(!SearchRanking.validUrl(url) && !url.startsWith("magnet:?"))return@mapNotNull null
+            // Older versions saved unordered word-bag matches. Do not
+            // resurrect those same unrelated videos after an app restart,
+            // tab change or a SEARCH NEXT WEB PAGE accumulation.
+            if(mode<=2 && persistedTerm.isNotBlank() &&
+                !SearchExactness.mediaMatches(persistedTerm,x.optString("title")))
+                return@mapNotNull null
             Found(x.optString("title"),url,x.optString("source"),x.optString("thumbnail"),
                 x.optString("filename"),x.optString("detail"))
         }
