@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/downloader-javguru-nonjk-source-validation-20261122.yml'
       - 'app/src/test/java/com/asterion/videoflow/LiveJavGuruOriginalSourceTest.kt'
+      - 'scripts/probe_javguru_nonjk_ytdlp_metadata_20261122.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -85,3 +86,13 @@ jobs:
           try{System.out.println("JAV_GURU_JAVA_POST_HTTP="+c.getResponseCode()+" CONTENT_TYPE="+c.getContentType());}catch(Exception x){System.out.println("JAV_GURU_JAVA_ERROR="+x.getClass().getSimpleName());}finally{c.disconnect();}
           /exit
           JAVA
+
+  selected-python-extractor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install matching pinned Python extractor, metadata-only
+        run: python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.26'
+      - name: Inspect only publisher-selected LU player metadata with 2026.10.26 (no bytes downloaded)
+        run: python3 scripts/probe_javguru_nonjk_ytdlp_metadata_20261122.py
