@@ -200,4 +200,23 @@ class JavGuruOriginalSourceTest {
         }
     }
 
+    @Test fun pythonSelectedPlayerIsRestrictedToExactNonJkPublisherRelays(){
+        val next="https://jav.guru/searcho/?er=652f6436653068337367757a3162"
+        assertTrue(JavGuruPythonSelectedPlayer.eligible(
+            selected,wrapper,next,"LU"))
+        assertTrue(JavGuruPythonSelectedPlayer.eligible(
+            selected,wrapper,next,"SB"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected,wrapper,next,"JK"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected,"https://go.mayzaent.com/ads",next,"LU"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected,wrapper,"https://streamhihi.com/e/fake","LU"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected,wrapper,"https://jav.guru/searcho/?er=bad","LU"))
+        assertFalse(JavGuruPythonSelectedPlayer.eligible(
+            selected.replace("1077002","9999999")+"?related=1",
+            wrapper,next,"LU"))
+    }
+
 }
