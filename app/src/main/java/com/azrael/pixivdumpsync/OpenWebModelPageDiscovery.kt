@@ -31,8 +31,11 @@ internal object OpenWebModelPageDiscovery {
         for(anchor in anchors.take(75)){
             val label=anchor.text().trim()
             if(!SearchExactness.matches(term,label))continue
-            val address=anchor.absUrl("href").ifBlank{
+            val measured=anchor.absUrl("href").ifBlank{
                 anchor.attr("href")}
+            val address=KeywordSources.organicPublisherDestination(
+                measured,if(engine=="Yahoo")"Yahoo Web" else "Bing Web")
+                ?:continue
             if(!approved(address))continue
             val parsed=uri(address)?:continue
             val host=parsed.host.orEmpty().lowercase(Locale.ROOT)
