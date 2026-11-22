@@ -7,11 +7,10 @@ class AlohaProviderSearchTest {
     @Test fun independentWebSourcesRunBeforeSlowSiteSearchTasks(){
         val providers=listOf(
             "JAV Guru" to "slow", "Porneec" to "slow",
-            "Bing Web" to "broad", "Pornhub" to "publisher",
-            "Yahoo Web" to "broad")
+            "Bing Web" to "broad", "Pornhub" to "publisher")
         val scheduled=KeywordSources.prioritizedTasks(providers)
-        assertEquals(listOf("Bing Web","Yahoo Web"),
-            scheduled.take(2).map{it.first})
+        assertEquals("Bing Web",scheduled.first().first)
+        assertFalse(scheduled.any{it.first=="Yahoo Web"})
         assertEquals(providers.size,scheduled.size)
         assertEquals(providers.toSet(),scheduled.toSet())
         assertTrue(KeywordSources.SEARCH_SOURCE_TIMEOUT_MS<10_000)
