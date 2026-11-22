@@ -746,6 +746,13 @@ internal object SiteSpecificOriginalSources {
             host(frame) in setOf("mixdrop.ag","mixdrop.co","mixdrop.to",
                 "mdzsmutpcvykb.net"))
             return listOf(Source(frame,selected))
+        if(host(selected)=="livecamrips.to" &&
+            VidaraSelectedOriginal.selectedIframe(selected,frame)!=null){
+            // PC receives bytes using the selected player's official
+            // POST /api/stream; do not send the Vidara HTML to yt-dlp.
+            val published=VidaraSelectedOriginal.resolve(context,selected,frame)
+            return published?.let{listOf(Source(it,frame))}.orEmpty()
+        }
         return selectedIframeMedia(context,selected,Source(frame,selected))
     }
 
