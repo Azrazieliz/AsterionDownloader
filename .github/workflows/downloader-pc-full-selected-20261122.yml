@@ -22,7 +22,9 @@ jobs:
         # xChina already has a complete 185,242,550-byte PC receipt.
         # Access-blocked Avple and LiveCamRips were verified 403;
         # PornAVHD exposed only a short preview. Don't waste runner time.
-        provider: [javideo, pornbuz, uncensoredhentai, dsav]
+        # Focus the publisher whose genuine frame was wrongly filtered.
+        # Other failures retain their previous receipts; xChina already passed.
+        provider: [pornbuz]
     steps:
       - uses: actions/checkout@v4
       - name: Real Chrome and exact PC download dependencies
