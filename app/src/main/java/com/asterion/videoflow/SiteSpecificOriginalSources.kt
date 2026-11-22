@@ -443,41 +443,19 @@ internal object SiteSpecificOriginalSources {
     internal fun allowGenericIframeExtractorFallback(owner:String):Boolean =
         owner!="uncensoredhentai.xxx"
 
-    /** Only a JK control on the selected WordPress article may trigger the
-     * browser hydration fallback; a sidebar link is never a publisher source. */
-    internal fun missingPublishedJkControl(
-        doc:Document,selected:String,initial:List<JavGuruOriginalSource.Player>
-    ):Boolean {
-        if(initial.any{it.server=="JK"})return false
-        val page=runCatching{URI(selected)}.getOrNull()?:return false
-        if(host(selected)!="jav.guru")return false
-        val post=page.path.orEmpty().trim('/').substringBefore('/')
-        if(!post.matches(Regex("[0-9]{4,10}")))return false
-        return doc.select("article#post-$post a.wp-btn-iframe__shortcode")
-            .any{it.text().trim().equals("STREAM JK",ignoreCase=true)}
-    }
-
-    /** A selected JAV Guru post can publish only LU/SB in its initial
-     * HTTP shell and hydrate the preferred JK shortcode through its own JS.
-     * Do not treat the first parsed non-JK server as evidence that the
-     * approved JK original is unavailable. Never inspect a listing or a
-     * recommendation; only the exact selected post may trigger this read.
+    /** The proven native JK contract is tied to the selected post, not
+     * to whether a partially loaded HTTP response already contains another
+     * stream button. When JK is absent, inspect the SAME selected article
+     * once using the existing authorised browser owner. Never inspect an
+     * unrelated listing, post or advertising panel. Native-only secondary
+     * processing stays light and delegates browser work to the primary.
      */
     internal fun shouldInspectSelectedJk(
         doc:Document,selected:String,initial:List<JavGuruOriginalSource.Player>,
         nativeJkOnly:Boolean=false
-    ):Boolean {
-        if(nativeJkOnly || initial.any{it.server=="JK"} ||
-            !JavGuruJkNativeHls.selectedArticleForNative(selected))return false
-        if(initial.isEmpty())return true
-        val post=runCatching{URI(selected).path.orEmpty().trim('/').substringBefore('/')}
-            .getOrDefault("")
-        val buttons=doc.select("article#post-$post a.wp-btn-iframe__shortcode")
-        return buttons.any{button->
-            button.text().trim().uppercase(Locale.ROOT)
-                .matches(Regex("""STREAM\s+(SB|VO|LU|VI|DD|JK)"""))
-        }
-    }
+    ):Boolean =
+        !nativeJkOnly && initial.none{it.server=="JK"} &&
+            JavGuruJkNativeHls.selectedArticleForNative(selected)
 
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
