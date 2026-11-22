@@ -101,6 +101,13 @@ object BrowserPageFetch {
         val result=AtomicReference<String?>()
         val error=AtomicReference<String?>()
         val latch=CountDownLatch(1)
+        // Cross-process timeouts are otherwise indistinguishable from a
+        // stalled main thread, failed navigation or unfinished player DOM.
+        // Retain only lifecycle stage, main-frame status and elapsed time;
+        // never log cookies, credentials, HTML or signed media tokens.
+        val startedAt=android.os.SystemClock.elapsedRealtime()
+        val browserStage=AtomicReference("main_thread_queued")
+        val mainFrameHttp=java.util.concurrent.atomic.AtomicInteger(0)
         val main=Handler(Looper.getMainLooper())
         val instance=AtomicReference<WebView?>()
         // PC-selected PornAVHD recording: its playerrecord iframe uses
@@ -187,9 +194,11 @@ object BrowserPageFetch {
                 else -> false
             })
         main.post {
+            browserStage.set("main_thread_started")
             if(latch.count==0L)return@post
             try{
             val web=WebView(context)
+            browserStage.set("webview_created")
             instance.set(web)
             web.settings.javaScriptEnabled=true
             web.settings.domStorageEnabled=true
@@ -198,6 +207,37 @@ object BrowserPageFetch {
             web.settings.allowContentAccess=false
             CookieManager.getInstance().setAcceptCookie(true)
             web.webViewClient=object:WebViewClient(){
+                override fun onPageStarted(v:WebView,address:String?,
+                    favicon:android.graphics.Bitmap?){
+                    browserStage.set("main_frame_navigating")
+                }
+                override fun onReceivedHttpError(v:WebView,
+                    request:WebResourceRequest,
+                    response:android.webkit.WebResourceResponse){
+                    if(request.isForMainFrame)
+                        mainFrameHttp.set(response.statusCode)
+                    // A 401/403 can be a website login/challenge flow: do
+                    // not automatically bypass or falsely accept the page.
+                }
+                override fun onReceivedError(v:WebView,
+                    request:WebResourceRequest,
+                    failure:android.webkit.WebResourceError){
+                    if(request.isForMainFrame && latch.count>0L){
+                        browserStage.set("main_frame_network_error")
+                        error.set("Browser main-frame network error "+
+                            failure.errorCode)
+                        latch.countDown()
+                    }
+                }
+                override fun onRenderProcessGone(v:WebView,
+                    detail:android.webkit.WebViewRenderProcessGoneDetail):Boolean{
+                    browserStage.set("renderer_exited")
+                    error.set("Browser renderer exited before page inspection")
+                    latch.countDown()
+                    instance.compareAndSet(v,null)
+                    v.destroy()
+                    return true
+                }
                 override fun shouldInterceptRequest(
                     v:WebView,request:WebResourceRequest
                 ):android.webkit.WebResourceResponse? {
@@ -228,6 +268,7 @@ object BrowserPageFetch {
                         url,request.url.toString(),request.isForMainFrame)
                 }
                 override fun onPageFinished(v:WebView,finished:String){
+                    browserStage.set("page_finished_or_player_poll")
                     if(approvedMp4Mirror && mirrorSelectedClickAttempts<7){
                         mirrorSelectedClickAttempts++
                         main.postDelayed({
@@ -295,6 +336,7 @@ object BrowserPageFetch {
                     main.postDelayed({
                         if(latch.count==0L)return@postDelayed
                         try{
+                        browserStage.set("evaluating_selected_page_dom")
                         v.evaluateJavascript("""(function(){
                             const title=document.title||'';
                             const body=(document.body?.innerText||'').slice(0,800);
@@ -1096,6 +1138,7 @@ object BrowserPageFetch {
                                 nhPlayerServer+nhAjaxVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
+                            browserStage.set("dom_callback_received")
                             val observedPage=runCatching{
                                 JSONTokener(raw).nextValue() as? String
                             }.getOrNull()
@@ -1207,10 +1250,12 @@ object BrowserPageFetch {
                                 // initially empty or 0-second JS player.
                                 // Wait for the actual original's duration,
                                 // never save a short card preview as a full file.
+                                browserStage.set("waiting_for_selected_player")
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_400L)
                             }else{
+                                browserStage.set("page_snapshot_ready")
                                 result.set(page)
                                 latch.countDown()
                             }
@@ -1222,6 +1267,7 @@ object BrowserPageFetch {
                     },1800L)
                 }
             }
+            browserStage.set("navigation_submitted")
             if(playerReferer==null)web.loadUrl(url)
             else web.loadUrl(url,mapOf("Referer" to playerReferer))
             }catch(t:Throwable){
@@ -1237,7 +1283,11 @@ object BrowserPageFetch {
                 instance.getAndSet(null)?.apply{stopLoading();destroy()}
             }}
         }
-        if(!completed)throw IllegalStateException("Browser page retrieval timed out: "+url)
+        if(!completed)throw IllegalStateException(
+            "Browser page retrieval timed out: "+url+
+            " [stage="+browserStage.get()+
+            ",main_http="+mainFrameHttp.get()+
+            ",elapsed_ms="+(android.os.SystemClock.elapsedRealtime()-startedAt)+"]")
         return result.get()?:throw IllegalStateException(
             error.get()?:"Browser could not load this chapter.")
     }
