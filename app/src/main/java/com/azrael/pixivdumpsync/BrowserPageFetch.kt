@@ -230,7 +230,7 @@ object BrowserPageFetch {
                     }
                 }
                 override fun onRenderProcessGone(v:WebView,
-                    detail:android.webkit.WebViewRenderProcessGoneDetail):Boolean{
+                    detail:android.webkit.RenderProcessGoneDetail):Boolean{
                     browserStage.set("renderer_exited")
                     error.set("Browser renderer exited before page inspection")
                     latch.countDown()
