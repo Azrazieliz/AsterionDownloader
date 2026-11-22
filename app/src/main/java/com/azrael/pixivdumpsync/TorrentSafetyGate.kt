@@ -26,6 +26,10 @@ internal object TorrentSafetyGate {
     private fun bootEpoch()=System.currentTimeMillis()-SystemClock.elapsedRealtime()
     data class Admission(val allowed:Boolean,val reason:String="")
 
+    internal fun batterySafeForNative(level:Int?,scale:Int):Boolean =
+        level!=null && level>=0 && scale>0 &&
+            level.toLong()*100L >= scale.toLong()*30L
+
     fun assess(c:Context):Admission {
         val p=prefs(c)
         val boot=bootEpoch()
@@ -49,10 +53,10 @@ internal object TorrentSafetyGate {
         // Charging alone does not establish thermal or power stability.
         // Keep the metadata and partials intact; defer any native attempt
         // until the owner's battery is at least 30 percent.
-        if(percent!=null && percent*100/scale<30)
+        if(!batterySafeForNative(percent,scale))
             return Admission(false,
-                "Native torrent deferred below 30% battery after a reported "+
-                "device reboot; charge the phone before retrying.")
+                "Native torrent requires a verified battery level of at least "+
+                    "30% after a reported device reboot; charge and retry.")
         if(Build.VERSION.SDK_INT>=29){
             val power=c.getSystemService(PowerManager::class.java)
             if(power!=null &&
