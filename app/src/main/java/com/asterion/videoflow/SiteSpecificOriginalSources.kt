@@ -465,7 +465,7 @@ internal object SiteSpecificOriginalSources {
         val buttons=doc.select("article#post-$post a.wp-btn-iframe__shortcode")
         return buttons.any{button->
             button.text().trim().uppercase(Locale.ROOT)
-                .matches(Regex("""STREAM\\s+(SB|VO|LU|VI|DD|JK)"""))
+                .matches(Regex("""STREAM\s+(SB|VO|LU|VI|DD|JK)"""))
         }
     }
 
