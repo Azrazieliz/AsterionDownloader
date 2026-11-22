@@ -26,9 +26,35 @@ internal abstract class DirectGalleryAdapter(
         SourceEntity(source, "site:all", entityName, rootUrl, "site")
     )
 
-    override fun resolveEntity(inputUrl: String): SourceEntity = defaultEntities().first()
+    override fun resolveEntity(inputUrl: String): SourceEntity {
+        val uri = runCatching { URI(normalizeInput(inputUrl)) }
+            .getOrElse { throw AdapterException("Invalid $entityName URL", it) }
+        if (!isOwnHost(uri.host.orEmpty()))
+            throw AdapterException("Not a $entityName URL")
+        // A selected article must remain the selected article. Previously
+        // this returned site:all for EVERY URL, so opening a 4KGirl post
+        // silently started whole-site indexing and never downloaded its set.
+        if (uri.scheme == "https" && uri.userInfo == null &&
+            uri.port == -1 && uri.rawQuery.isNullOrBlank() &&
+            uri.rawFragment == null && isPostPath(uri.path.orEmpty())) {
+            val canonical = canonicalPostUrl(uri)
+            val id = stablePostId(canonical)
+            return SourceEntity(source, "gallery:$id",
+                id.replace(':', ' '), canonical, "gallery_only")
+        }
+        return defaultEntities().first()
+    }
 
     override fun enumerateGalleries(entity: SourceEntity): Sequence<GalleryRef> = sequence {
+        if(entity.kind == "gallery_only") {
+            val doc = http.document(entity.canonicalUrl)
+            val id = stablePostId(entity.canonicalUrl)
+            val title = doc.selectFirst("h1,meta[property=og:title]")
+                ?.let { if(it.tagName()=="meta") it.attr("content") else it.text() }
+                ?.trim()?.takeIf{it.isNotBlank()} ?:entity.displayName
+            yield(GalleryRef(source,id,entity.stableId,entity.canonicalUrl,title))
+            return@sequence
+        }
         val seenPages = linkedSetOf<String>()
         val seenPosts = linkedSetOf<String>()
         var next: String? = entity.canonicalUrl
@@ -240,7 +266,8 @@ internal class FourKGirlAdapter(http: HttpClient) : DirectGalleryAdapter(
 ) {
     private val reserved = setOf(
         "page", "category", "tag", "author", "search", "sitemaps",
-        "wp-admin", "wp-content", "feed", "comments"
+        "wp-admin", "wp-content", "feed", "comments",
+        "about", "contact", "privacy-policy", "terms", "login", "register"
     )
 
     override fun listingAnchors(doc: Document): List<Element> =
