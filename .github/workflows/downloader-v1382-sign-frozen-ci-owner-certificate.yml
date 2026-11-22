@@ -1,0 +1,105 @@
+name: Asterion Downloader v1.3.82 — original certificate signed update from verified CI
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths: ['.github/workflows/downloader-v1382-sign-frozen-ci-owner-certificate.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  retained-signature-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ASTERION_PREVIEW_KEYSTORE_BASE64 }}
+      STORE_PASSWORD: ${{ secrets.ASTERION_PREVIEW_STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ASTERION_PREVIEW_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ASTERION_PREVIEW_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Require actual retained installed signing key, never substitute
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" ||
+                -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo '::error::Owner acceptance signing keystore not connected to GitHub CI; NO installable APK will be published.'
+            exit 1
+          fi
+          umask 077
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/owner-acceptance.p12"
+          keytool -exportcert -keystore "$RUNNER_TEMP/owner-acceptance.p12" \
+            -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > "$RUNNER_TEMP/owner-cert.der"
+          EXPECTED="8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19"
+          ACTUAL="$(sha256sum "$RUNNER_TEMP/owner-cert.der" | cut -d' ' -f1)"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo '::error::GitHub signing key is NOT the installed owner acceptance certificate.'
+            exit 1
+          fi
+          echo 'Installed owner signing certificate verified.'
+      - name: Retrieve exact tested v1.3.82 original unsigned APK
+        uses: actions/download-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.82-Acceptance-Build
+          run-id: 45013643087
+          github-token: ${{ github.token }}
+          path: frozen-ci
+      - name: Validate exact original input and sign update with owner key
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT="frozen-ci/Asterion-Downloader-v1.3.82-UNSIGNED-Owner-PC-Input.apk"
+          test -s "$INPUT"
+          test "$(tr -d '\r\n' < frozen-ci/source-commit.txt)" = '20a5524bf55f04242a76f8ff845c2f72164b57d2'
+          test "$(tr -d '\r\n' < frozen-ci/owner-signature-verified.txt)" = 'false'
+          echo '309930bc5b283ee360cd83d5c512f2c020a44327289472c08ee06f55d61ac0ec  frozen-ci/Asterion-Downloader-v1.3.82-UNSIGNED-Owner-PC-Input.apk' | sha256sum -c -
+          TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$TOOLS/aapt" dump badging "$INPUT" | grep -F "package: name='com.azrael.pixivdumpsync.acceptance' versionCode='111' versionName='1.3.82-acceptance'"
+          if "$TOOLS/apksigner" verify "$INPUT"; then
+            echo '::error::Unexpected signature on original unsigned input.'
+            exit 1
+          fi
+          "$TOOLS/zipalign" -f -p 4 "$INPUT" aligned-acceptance.apk
+          OUT="Asterion-Downloader-v1.3.82-OriginalCertificate-Update.apk"
+          "$TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/owner-acceptance.p12" --ks-type PKCS12 \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --out "$OUT" aligned-acceptance.apk
+          "$TOOLS/apksigner" verify --verbose "$OUT"
+          ACTUAL="$("$TOOLS/apksigner" verify --print-certs "$OUT" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          test "${ACTUAL,,}" = '8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19'
+          "$TOOLS/aapt" dump badging "$OUT" | grep -F "package: name='com.azrael.pixivdumpsync.acceptance' versionCode='111' versionName='1.3.82-acceptance'"
+          unzip -t "$OUT" >/dev/null
+          sha256sum "$OUT" > Asterion-Downloader-v1.3.82-OriginalCertificate-Update.sha256
+          echo 'FULL_INSTALLABLE_ORIGINAL_CERTIFICATE_UPDATE_VERIFIED=true'
+      - name: Upload exact signed installable with checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.82-OriginalCertificate-Update
+          path: |
+            Asterion-Downloader-v1.3.82-OriginalCertificate-Update.apk
+            Asterion-Downloader-v1.3.82-OriginalCertificate-Update.sha256
+          if-no-files-found: error
+      - name: Publish signed owner in-place update for download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create asterion-downloader-v1.3.82-original-cert \
+            Asterion-Downloader-v1.3.82-OriginalCertificate-Update.apk \
+            Asterion-Downloader-v1.3.82-OriginalCertificate-Update.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target 20a5524bf55f04242a76f8ff845c2f72164b57d2 \
+            --title "Asterion Downloader v1.3.82 — original-signed owner update" \
+            --notes "Original installed signing certificate verified; same acceptance app identity and incremented version code. Source/unit/provider-freeze CI passed. Live Android provider transfer acceptance remains separately unverified. Preserves app data by updating same package/signing identity, do not uninstall old app." \
+            --prerelease
+      - name: Remove owner key material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/owner-acceptance.p12" "$RUNNER_TEMP/owner-cert.der"
