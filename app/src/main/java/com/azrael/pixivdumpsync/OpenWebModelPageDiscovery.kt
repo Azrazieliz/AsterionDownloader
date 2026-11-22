@@ -23,10 +23,8 @@ internal object OpenWebModelPageDiscovery {
     }
     fun landingLinks(html:String,base:String,engine:String,term:String):List<String>{
         val document=Jsoup.parse(html,base)
-        val anchors=if(engine=="Yahoo")
-            document.select("div.algo-sr .compTitle > a[href],div.algo-sr .compTitle h3 a[href],"+
-                "div.dd.algo .compTitle h3 a[href]")
-        else document.select("li.b_algo h2 a[href]")
+        if(engine!="Bing")return emptyList()
+        val anchors=document.select("li.b_algo h2 a[href]")
         val found=LinkedHashSet<String>()
         for(anchor in anchors.take(75)){
             val label=anchor.text().trim()
@@ -34,14 +32,12 @@ internal object OpenWebModelPageDiscovery {
             val measured=anchor.absUrl("href").ifBlank{
                 anchor.attr("href")}
             val address=KeywordSources.organicPublisherDestination(
-                measured,if(engine=="Yahoo")"Yahoo Web" else "Bing Web")
+                measured,"Bing Web")
                 ?:continue
             if(!approved(address))continue
             val parsed=uri(address)?:continue
             val host=parsed.host.orEmpty().lowercase(Locale.ROOT)
-            if(host in setOf("www.bing.com","bing.com",
-                    "search.yahoo.com") ||
-                host.endsWith(".search.yahoo.com"))continue
+            if(host in setOf("www.bing.com","bing.com"))continue
             // A direct original is handled by the existing parser. Only
             // actual model detail pages are inspected for file links.
             if(fileExtension(address)!=null)continue
