@@ -143,6 +143,49 @@ object ResourceDownloads {
 
     }
 
+    /** Imports only a user-selected .torrent descriptor from Android's
+     * document provider. This is a real file-list preview route with zero
+     * libtorrent JNI, zero network peers, and no native-service launch.
+     * The selected files still go through the existing protected transfer.
+     */
+    fun onTorrentPicked(a:Activity,uri:Uri,folder:String){
+        thread(name="asterion-local-torrent-metadata"){
+            val parsed=runCatching{
+                require(folder in setOf("Games","Books","Videos","Assets")){
+                    "Invalid torrent destination"
+                }
+                val bytes=a.contentResolver.openInputStream(uri)?.use{input->
+                    val output=java.io.ByteArrayOutputStream()
+                    val block=ByteArray(16_384)
+                    while(true){
+                        val n=input.read(block)
+                        if(n<0)break
+                        require(output.size().toLong()+n<=8_388_608L){
+                            "Torrent descriptor exceeds 8 MiB"
+                        }
+                        output.write(block,0,n)
+                    }
+                    output.toByteArray()
+                }?:error("Android could not read the selected torrent file")
+                // Validate the full bounded file tree before touching any
+                // native worker, metadata store or device-wide torrent session.
+                BencodedTorrentManifest.parse(bytes)
+                bytes
+            }
+            a.runOnUiThread{
+                if(a.isFinishing||a.isDestroyed)return@runOnUiThread
+                parsed.onSuccess{
+                    TorrentTransfers.prepareDescriptor(a,it,folder)
+                }.onFailure{
+                    AlertDialog.Builder(a)
+                        .setTitle("Torrent preview unavailable")
+                        .setMessage((it.message?:it.javaClass.simpleName).take(300))
+                        .setPositiveButton("Close",null).show()
+                }
+            }
+        }
+    }
+
     fun onFilePicked(a:Activity,request:Int,uri:Uri?){
         if(uri==null)return
         val name=runCatching{a.contentResolver.query(uri,
