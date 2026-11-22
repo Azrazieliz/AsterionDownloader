@@ -28,8 +28,13 @@ internal object VideoHlsDispatch {
         // The selected HentaiHaven episode also resolves its publisher
         // HLS only after the page is read. Avoid expiring that manifest
         // while starting the embedded Python runtime on Android.
-        return (host=="jav.guru" && VideoSiteProfiles.isVideoPage(url)) ||
-            (host=="hentaihaven.xxx" &&
+        // JAV Guru has a proven selected JK -> Maxstream native AES-HLS
+        // transfer lane. Priming Chaquopy before the selected STREAM JK
+        // shortcode is resolved starts a heavy interpreter even though the
+        // native worker needs none, delays first bytes and competes for RAM.
+        // For an actually selected non-JK HLS, the existing typed() call
+        // still initializes its extractor; other publishers are unchanged.
+        return (host=="hentaihaven.xxx" &&
                 HentaiHavenEpisodeSource.isEpisode(url)) ||
             // TaiAV's exact selected movie publishes a short-lived
             // first-party /api/getmovie HLS. Prepare Python BEFORE asking
