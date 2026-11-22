@@ -62,11 +62,7 @@ internal object JavGuruOriginalSource {
                 val encoded=runCatching{
                     JSONObject(match.groupValues[2]).optString("iframe_url")
                 }.getOrDefault("")
-                // The publisher's optional percent-encoded background can
-                // make a legitimate Base64 wrapper exceed 600 characters.
-                // Its decoded first-party host, route and query are still
-                // strictly checked below; this is not an open iframe route.
-                if(encoded.length !in 36..1150)continue
+                if(encoded.length !in 36..600)continue
                 val decoded=runCatching{
                     String(Base64.getDecoder().decode(encoded),
                         StandardCharsets.UTF_8)
