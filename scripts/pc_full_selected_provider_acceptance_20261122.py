@@ -116,49 +116,123 @@ def chrome_watch(name,url):
 def player_candidate(name,selected,frame):
  d=driver()
  try:
-  d.execute_cdp_cmd("Network.enable",{})
-  d.execute_cdp_cmd("Network.setExtraHTTPHeaders",{"headers":{"Referer":selected}})
-  try:d.get(frame)
+  # Navigate the publisher article first: embed cookies, parent referrer and
+  # real iframe context cannot be reproduced by loading its player as top-level.
+  try:d.get(selected)
   except Exception:pass
-  results=[]
-  for tick in range(19):
+  if name=="javideo":
+   try:d.execute_script("""const b=document.querySelector('#clickfakeplayer');
+     if(b&&!b.closest('aside,.ads,.related,.recommended,[data-ad]'))b.click();""")
+   except Exception:pass
+  entered=False
+  for attempt in range(20):
    try:
-    got=d.execute_script("""return (function(){
-     let h=location.hostname.toLowerCase(),p=location.pathname;
-     if(h==='nhplayer.com' && /^\/v\/[A-Za-z0-9]{8,40}\/?$/.test(p)){
-      return {server:[...document.querySelectorAll('.servers li[data-id],ul.servers li[data-id],#servers li[data-id]')].map(x=>x.getAttribute('data-id'))}
-     }
-     if(h==='nhplayer.com' && p==='/player.php' && typeof window.videoReady==='string')
-      return {media:window.videoReady};
-     if(['player.watchstreamus.com','cdn.watchstreamus.com'].includes(h) && /^\/embed\/[A-Za-z0-9_-]{5,150}\/?$/.test(p))
-      return {media:window.VK_PLAYBACK?.format==='hls'?window.VK_PLAYBACK?.src:null};
-     const vids=[...document.querySelectorAll('video')].map(v=>({url:v.currentSrc||v.src||'',duration:Number.isFinite(v.duration)?v.duration:0}));
-     return {vids}
-    })()""")
-    if name=="uncensoredhentai" and got.get("server"):
-     urls=[urllib.parse.urljoin(frame,x) for x in got["server"] if x]
-     urls=[u for u in urls if safe_url(u) and host(u)=="nhplayer.com" and urllib.parse.urlsplit(u).path=="/player.php"]
-     if len(set(urls))==1:
-      return player_candidate("nhplayer_server",frame,urls[0])
-    if name=="uncensoredhentai" or name=="nhplayer_server":
-     u=got.get("media","")
-     if u and safe_url(u) and host(u)=="r2.1hanime.com" and urllib.parse.urlsplit(u).path.lower().endswith(".mp4") and urllib.parse.urlsplit(u).query.startswith("verify="):
-      return {"source":u,"referer":frame,"duration":0,"reason":"NHPlayer exact /v/ server signed media"}
-    if name=="pornbuz":
-     u=got.get("media","")
-     if u:
-      u=urllib.parse.urljoin(frame,u)
-      if safe_url(u) and host(u) in ("player.watchstreamus.com","cdn.watchstreamus.com") and urllib.parse.urlsplit(u).path.lower().endswith(".m3u8") and not re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
-       return {"source":u,"referer":frame,"duration":0,"reason":"JWPlayer exact VK_PLAYBACK"}
-    for v in got.get("vids",[]):
-     u=v.get("url","");duration=v.get("duration",0)
-     if u and safe_url(u) and duration>=90 and not re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
-      results.append({"source":u,"referer":frame,"duration":int(duration),"reason":"selected iframe HTML5 runtime"})
-    if len(results)==1:return results[0]
+    for element in d.find_elements(By.CSS_SELECTOR,"iframe[src]"):
+     u=element.get_attribute("src") or ""
+     if u.rstrip("/")==frame.rstrip("/"):
+      d.switch_to.frame(element)
+      entered=True
+      break
+    if entered:break
    except Exception:pass
    time.sleep(.8)
-  return {"reason":"selected frame published no unambiguous attributable media"}
+  if not entered:
+   return {"reason":"exact publisher player frame never loaded in article browser"}
+  results=[]
+  active_name=name
+  active_referer=frame
+  for tick in range(36):
+   try:
+    if active_name=="javideo":
+     d.execute_script("""(function(){
+      const all=[...document.querySelectorAll(
+       '#player,.video-player,.player-container,.vjs-player')].filter(x=>
+       !x.closest('aside,.related,.recommended,.ads,[data-ad]'));
+      const roots=all.filter(x=>!all.some(y=>y!==x&&x.contains(y)));
+      if(roots.length!==1)return;
+      const root=roots[0];
+      const button=root.querySelector(
+       '.vjs-big-play-button,button[aria-label="Play"],button[title="Play"],'+
+       'button.play-button,.plyr__control[data-plyr="play"]');
+      if(button&&!button.dataset.pcSelectedClicked){
+       button.dataset.pcSelectedClicked='yes';button.click();
+      }
+      const video=root.tagName==='VIDEO'?root:root.querySelector('video');
+      if(video&&video.paused)try{const p=video.play();if(p?.catch)p.catch(()=>{})}catch(_){}
+     })()""")
+    got=d.execute_script("""return (function(){
+     const h=location.hostname.toLowerCase(),p=location.pathname;
+     if(h==='nhplayer.com' && /^\/v\/[A-Za-z0-9]{8,40}\/?$/.test(p)){
+      const nodes=[...document.querySelectorAll(
+       '.servers li[data-id],ul.servers li[data-id],#servers li[data-id]')];
+      return {server:nodes.map(x=>x.getAttribute('data-id')),
+       active:nodes.filter(x=>x.classList.contains('active') ||
+        x.classList.contains('selected') || x.getAttribute('aria-selected')==='true')
+        .map(x=>x.getAttribute('data-id'))};
+     }
+     if(h==='nhplayer.com' && p==='/player.php'){
+      const media=typeof window.videoReady==='string'?window.videoReady:'';
+      const vids=[...document.querySelectorAll('video')].map(v=>({
+       url:v.currentSrc||v.src||'',duration:Number.isFinite(v.duration)?v.duration:0}));
+      return {media,vids};
+     }
+     if(['player.watchstreamus.com','cdn.watchstreamus.com'].includes(h) &&
+       /^\/embed\/[A-Za-z0-9_-]{5,150}\/?$/.test(p)){
+      const source=window.VK_PLAYBACK?.format==='hls'?window.VK_PLAYBACK?.src:null;
+      const vids=[...document.querySelectorAll('video')].map(v=>({
+       url:v.currentSrc||v.src||'',duration:Number.isFinite(v.duration)?v.duration:0}));
+      return {media:source,vids};
+     }
+     const vids=[...document.querySelectorAll('video')].map(v=>({
+       url:v.currentSrc||v.src||'',duration:Number.isFinite(v.duration)?v.duration:0}));
+     return {vids};
+    })()""")
+    if active_name=="uncensoredhentai" and got.get("server"):
+     # Use only a single publisher-declared default/active /player.php.
+     values=got["active"] or got["server"]
+     urls=[urllib.parse.urljoin(frame,x) for x in values if x]
+     urls=[u for u in urls if safe_url(u) and host(u)=="nhplayer.com" and
+           urllib.parse.urlsplit(u).path=="/player.php" and
+           set(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)) in
+             ({"data"},{"i","s","vid"})]
+     if len(set(urls))==1:
+      server=urls[0]
+      # Navigate the selected /v/ iframe to its own real published player.
+      # Same browser/session, original first-party referrer and cookies retained.
+      d.execute_script("location.assign(arguments[0])",server)
+      active_name="nhplayer_server"
+      active_referer=server
+      time.sleep(1)
+      continue
+    if active_name in ("uncensoredhentai","nhplayer_server"):
+     u=got.get("media","") or ""
+     if u and safe_url(u) and host(u)=="r2.1hanime.com" and
+       urllib.parse.urlsplit(u).path.lower().endswith(".mp4") and
+       set(urllib.parse.parse_qs(urllib.parse.urlsplit(u).query))=={"verify"}:
+      return {"source":u,"referer":active_referer,"duration":0,
+              "reason":"NHPlayer exact /v/ active server signed media"}
+    if active_name=="pornbuz":
+     u=got.get("media","") or ""
+     if u:
+      u=urllib.parse.urljoin(frame,u)
+      if safe_url(u) and host(u) in ("player.watchstreamus.com","cdn.watchstreamus.com") and
+        urllib.parse.urlsplit(u).path.lower().endswith(".m3u8") and not
+        re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
+       return {"source":u,"referer":frame,"duration":0,
+               "reason":"selected article's embedded JWPlayer VK_PLAYBACK"}
+    for v in got.get("vids",[]):
+     u=v.get("url","");duration=v.get("duration",0)
+     if u and safe_url(u) and duration>=90 and not
+       re.search("preview|teaser|trailer|sample",urllib.parse.urlsplit(u).path,re.I):
+      results.append({"source":u,"referer":active_referer,"duration":int(duration),
+                      "reason":"selected iframe HTML5 runtime"})
+    unique={x["source"]:x for x in results}
+    if len(unique)==1:return next(iter(unique.values()))
+   except Exception:pass
+   time.sleep(.8)
+  return {"reason":"actual publisher iframe produced no uniquely attributable full media"}
  finally:d.quit()
+
 def full_file(selected,candidate):
  url=candidate["source"]
  if not safe_url(url):raise ValueError("unsafe selected source")
