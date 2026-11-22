@@ -41,6 +41,34 @@ class InternetWideBingSearchTest {
             assertNull(KeywordSources.organicPublisherDestination(link,"Bing Web"))
     }
 
+    @Test fun firstPartyBingRssRecoversOrganicPublishersNotTracking(){
+        val xml="""<?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0"><channel><title>Bing Results</title>
+              <item>
+                <title>Rare lecture 2026 source</title>
+                <link>https://independent.example/episodes/rare-lecture-2026</link>
+                <description>Actual publisher content</description>
+              </item>
+              <item><title>Bing search navigation</title>
+                <link>https://www.bing.com/search?q=ads</link>
+              </item>
+              <item><title>Insecure redirect</title>
+                <link>http://insecure.example/watch</link>
+              </item>
+            </channel></rss>"""
+        val hits=KeywordSources.parseBingRss(xml)
+        assertEquals(1,hits.size)
+        assertEquals("https://independent.example/episodes/rare-lecture-2026",
+            hits.single().url)
+        assertEquals("Bing Web",hits.single().source)
+    }
+    @Test fun rssParserRejectsSearchEngineHtmlShellAndInvalidFeed(){
+        assertTrue(KeywordSources.parseBingRss(
+            "<html><head><title>Bing Web</title></head>"+
+                "<body>JavaScript results coming soon</body></html>").isEmpty())
+        assertTrue(KeywordSources.parseBingRss("<rss></rss>").isEmpty())
+    }
+
     @Test fun bingSearchUsesActualSecondResultPage(){
         val pageOne=KeywordSources.webIndexUrl(
             "rare title",VideoSearchArea.GENERAL,0)
