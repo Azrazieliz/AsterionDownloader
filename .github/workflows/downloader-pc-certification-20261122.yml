@@ -1,0 +1,76 @@
+name: Asterion Downloader — real PC selected-original certification (no APK)
+
+on:
+  push:
+    branches:
+      - repair/downloader-global-search-20261121
+    paths:
+      - '.github/workflows/downloader-pc-certification-20261122.yml'
+      - 'scripts/pc_certify_selected_notfans_20261122.py'
+      - 'scripts/pc_blocked_provider_access_20261122.py'
+      - 'scripts/verify_javguru_owner_jk_https_segments_pc.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pc-notfans-exact-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify available media metadata inspector
+        run: ffprobe -version | head -n 1
+      - name: Download all bytes from one publisher-linked selected MP4 and verify SHA and ffprobe duration
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 scripts/pc_certify_selected_notfans_20261122.py | tee pc-notfans-selected-original-receipt.log
+      - name: Preserve signed-free results, not adult media
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-notfans-selected-transfer-receipt
+          path: pc-notfans-selected-original-receipt.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  pc-javguru-jk-exact-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AES decoder (published ordinary HLS AES-128)
+        run: python3 -m pip install --disable-pip-version-check cryptography
+      - name: Verify available media metadata inspector
+        run: ffprobe -version | head -n 1
+      - name: Verify complete exact owner-selected JK HLS fragment stream, SHA and actual duration
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 scripts/verify_javguru_owner_jk_https_segments_pc.py | tee pc-javguru-jk-selected-original-receipt.log
+      - name: Preserve signed-free results, not media or keys
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-javguru-jk-full-transfer-receipt
+          path: pc-javguru-jk-selected-original-receipt.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  pc-three-blocked-provider-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Independently inspect published Avple, LiveCamRips, PornAVHD access (no bypass)
+        run: python3 scripts/pc_blocked_provider_access_20261122.py
+      - name: Preserve exact HTTP evidence and zero-success state
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-provider-authorization-evidence
+          path: pc-provider-access-results-20261122.json
+          if-no-files-found: error
+          retention-days: 14
