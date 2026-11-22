@@ -160,8 +160,8 @@ class JavGuruOriginalSourceTest {
         val mixed=listOf(player("JK"),player("VO"),player("SB"),player("LU"),
             player("DD"),player("VI"),player("SB"))
         assertEquals(listOf("LU","SB","VO","VI","DD"),
-            JavGuruOriginalSource.nonJkTransferOrder(mixed).map{it.server})
-        assertTrue(JavGuruOriginalSource.nonJkTransferOrder(
+            JavGuruNonJkRouting.order(mixed).map{it.server})
+        assertTrue(JavGuruNonJkRouting.order(
             listOf(player("JK"))).isEmpty())
     }
 
@@ -187,7 +187,7 @@ class JavGuruOriginalSourceTest {
     }
 
     @Test fun onlyCanonicalSelectedJavGuruArticlesPrimePython() {
-        assertTrue(JavGuruOriginalSource.selectedArticle(selected))
+        assertTrue(JavGuruNonJkRouting.selectedArticle(selected))
         for(url in listOf(
             "https://jav.guru/",
             "https://jav.guru/?s=search",
@@ -196,7 +196,7 @@ class JavGuruOriginalSourceTest {
             "https://jav.guru.evil.example/1077002/example-post/",
             "http://jav.guru/1077002/example-post/"
         )){
-            assertFalse(url,JavGuruOriginalSource.selectedArticle(url))
+            assertFalse(url,JavGuruNonJkRouting.selectedArticle(url))
         }
     }
 
