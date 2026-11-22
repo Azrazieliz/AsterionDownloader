@@ -21,4 +21,21 @@ class SearchExactnessTest {
         assertTrue(SearchExactness.matches("あおい・空","あおい 空: PC edition"))
         assertTrue(SearchExactness.matches("BLUE ARCHIVE","Blue Archive (2026)"))
     }
+    @Test fun unifiedVideoNameRequiresAdjacentOrderedWords() {
+        assertTrue(SearchExactness.mediaMatches("bella Alice",
+            "Bella Alice - original selected recording"))
+        assertTrue(SearchExactness.mediaMatches("eva Elfie",
+            "Eva Elfie official scene"))
+        assertFalse(SearchExactness.mediaMatches("bella Alice",
+            "Barbara Bella and Alice Marshall - party"))
+        assertFalse(SearchExactness.mediaMatches("bella Alice",
+            "Charlyse Bella And Alice In Obey Your Owner"))
+        assertFalse(SearchExactness.mediaMatches("bella Alice",
+            "Alice Bella recorded at home"))
+        assertFalse(SearchExactness.mediaMatches("Bella Alice",
+            "Bella Alicez unrelated"))
+        // Single-token discovery remains usable; only names were overly broad.
+        assertTrue(SearchExactness.mediaMatches("Alice","Alice original scene"))
+    }
+
 }
