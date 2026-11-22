@@ -50,7 +50,6 @@ internal object VideoSiteProfiles {
         Route("pimpbunny.com",Regex("""(?i)^/videos/[a-z0-9][a-z0-9-]{2,200}/?$""")),
         Route("xchina.co",Regex("""(?i)^/video/(?:id-)?[a-f0-9]{10,32}(?:\.html)?/?$""")),
         Route("bubblecum.lol",Regex("""(?i)^/video/[a-z0-9][a-z0-9-]{5,220}/?$""")),
-        Route("pornavhd.com",Regex("""(?i)^/20[0-9]{2}/(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])/[a-z0-9][a-z0-9_-]{2,220}/?$""")),
         // Avple is presently HTTP 403 to an unconnected public client.
         // Admit only a plausible user-selected watch page; do not infer
         // search, channel, premium or model pages as public originals.
