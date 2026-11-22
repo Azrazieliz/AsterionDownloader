@@ -12,8 +12,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from pc_pornavhd_chrome_player_20261122 import UA,public_page,EMBED
-MAX_BYTES=1_000_000_000
-DEADLINE=360
+MAX_BYTES=4_000_000_000
+DEADLINE=640
 def receipt(stage,**kwargs):
  print(json.dumps({"provider":"pornavhd","stage":stage,
     "full_original_certified":stage=="COMPLETE_SELECTED_PC_FILE",**kwargs},
@@ -100,6 +100,8 @@ def verify():
   expected=int(m.group(1))
   first=res.read(256)
   if first[4:8]!=b"ftyp":raise RuntimeError("Selected first bytes not an MP4")
+ receipt("PC_SELECTED_PUBLISHER_DECLARED_SIZE",declared_bytes=expected,
+      cdn_host=urllib.parse.urlsplit(link).hostname,range_http=206)
  if expected<1_000_000 or expected>MAX_BYTES:
   raise RuntimeError("Selected original exceeds bounded full PC test size")
  if not shutil.which("ffprobe"):raise RuntimeError("ffprobe not installed")
