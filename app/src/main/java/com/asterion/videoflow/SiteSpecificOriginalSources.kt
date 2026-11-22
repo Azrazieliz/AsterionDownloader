@@ -902,6 +902,17 @@ internal object SiteSpecificOriginalSources {
      * only that selected iframe and its own video.currentSrc, never the
      * parent's other HTML5 video or a generic yt-dlp hoster-page download.
      */
+    /** The default JAVIDEO first-party player is not the verified
+     * STAPE#01 original. Presence of a static iframe must not prevent
+     * the same-article browser from activating the selected player.
+     */
+    internal fun javideoNeedsRenderedStape(
+        selected:String,frames:List<Source>
+    ):Boolean=VideoSiteProfiles.isVideoPage(selected) &&
+        frames.none{
+            StreamtapeSelectedOriginal.selectedFrame(selected,it.url)!=null
+        }
+
     internal fun javideoOriginals(
         context:Context,doc:Document,selected:String
     ):List<Source>{
@@ -914,15 +925,31 @@ internal object SiteSpecificOriginalSources {
         val initial=selectedDirect(doc)
         if(initial.isNotEmpty())return initial
         val initialFrames=javideoSelected(doc,selected)
-        val rendered=if(initialFrames.isEmpty())runCatching {
-            BrowserPageFetch.html(context,selected)
-        }.getOrNull()?.let{Jsoup.parse(it,selected)} else null
+        // The plain HTML may already contain the DEFAULT
+        // play.javideo.net frame, which has no owner-selected media.
+        // Treating that as "player found" suppressed the existing
+        // browser's STAPE#01 action and returned only unsupported HTML.
+        // This is the exact PC-certified alternate selected by the
+        // publisher; inspect the SAME article once before giving up.
+        val rendered=if(javideoNeedsRenderedStape(selected,initialFrames))
+            runCatching{BrowserPageFetch.html(context,selected)}
+                .getOrNull()?.let{Jsoup.parse(it,selected)}
+        else null
         if(rendered!=null){
             val direct=selectedDirect(rendered)
             if(direct.isNotEmpty())return direct
         }
-        val frames=if(initialFrames.isNotEmpty())initialFrames
-            else rendered?.let{javideoSelected(it,selected)}.orEmpty()
+        val renderedFrames=rendered?.let{javideoSelected(it,selected)}
+            .orEmpty()
+        val signedSelection=renderedFrames.filter{
+            StreamtapeSelectedOriginal.selectedFrame(selected,it.url)!=null
+        }
+        val frames=when{
+            signedSelection.size==1->signedSelection
+            signedSelection.size>1->emptyList()
+            initialFrames.isNotEmpty()->initialFrames
+            else->renderedFrames
+        }
         if(frames.size!=1)return emptyList()
         val frame=frames.single()
         if(StreamtapeSelectedOriginal.selectedFrame(selected,frame.url)!=null){
