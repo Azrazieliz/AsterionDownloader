@@ -19,10 +19,19 @@ object VideoSearchPreviews {
         override fun sizeOf(key:String,value:Bitmap):Int=value.byteCount
     }
     private val lock=Any()
+    // Missing/blocked poster pages were fetched again on every card repaint,
+    // saturating all three thumbnail lanes and delaying newer visible cards.
+    // Expire negatives quickly so a signed poster or restored DNS can recover.
+    private val unavailableUntil=LinkedHashMap<String,Long>()
+    private const val POSTER_FAILURE_RECHECK_MS=90_000L
     fun display(a:Activity,image:ImageView,url:String?,referer:String?=null) {
         image.setImageResource(R.drawable.ic_source_video)
         image.scaleType=ImageView.ScaleType.CENTER_INSIDE
         image.contentDescription="Video preview unavailable"
+        // A recycled view can previously retain the preceding video's tag
+        // when this result has no poster. That let a stale async callback
+        // overwrite the honest placeholder with ANOTHER video's image.
+        image.tag=null
         val validUrl=url?.takeIf{SearchRanking.validUrl(it)}
         // A genuine Rule34Video download can exist without a catalog poster.
         // Obtain only the exact selected page's publisher-attested OG/poster
@@ -53,6 +62,15 @@ object VideoSearchPreviews {
             image.contentDescription="Video thumbnail"
             return
         }
+        val skip=synchronized(lock){
+            val expiry=unavailableUntil[key]
+            if(expiry!=null && expiry>System.currentTimeMillis())true
+            else{
+                unavailableUntil.remove(key)
+                false
+            }
+        }
+        if(skip)return
         val app=a.applicationContext
         val view=java.lang.ref.WeakReference(image)
         // Do not retain Activity/ImageView references in the unbounded
@@ -97,8 +115,13 @@ object VideoSearchPreviews {
             }
             for(candidateUrl in candidates){
                 bitmap=runCatching{
-                val proxy=com.asterion.videoflow.NetworkRoute.javaProxy(
-                    app,referer?:key)
+                // Respect an explicitly configured poster/CDN route; otherwise
+                // inherit the selected publisher's existing route.
+                val proxy=if(!referer.isNullOrBlank())
+                    com.asterion.videoflow.NetworkRoute.javaProxyForSelected(
+                        app,referer,candidateUrl)
+                    else com.asterion.videoflow.NetworkRoute.javaProxy(
+                        app,candidateUrl)
                 val connection=(if(proxy!=null)URL(candidateUrl).openConnection(proxy)
                     else URL(candidateUrl).openConnection()).apply{
                     connectTimeout=6000
@@ -175,8 +198,19 @@ object VideoSearchPreviews {
             if(ready==null && selectedPage!=null)
                 ThumbnailFailureJournal.record(app,selectedPage,
                     failure?:"selected_page_did_not_publish_poster")
+            if(ready==null) synchronized(lock){
+                unavailableUntil[key]=System.currentTimeMillis()+
+                    POSTER_FAILURE_RECHECK_MS
+                while(unavailableUntil.size>400){
+                    val old=unavailableUntil.keys.iterator()
+                    if(old.hasNext()){old.next();old.remove()}else break
+                }
+            }
             if(ready!=null){
-                synchronized(lock){memory.put(key,ready)}
+                synchronized(lock){
+                    unavailableUntil.remove(key)
+                    memory.put(key,ready)
+                }
                 view.get()?.post{
                     val target=view.get()
                     if(target!=null && target.tag==key &&
