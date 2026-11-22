@@ -45,16 +45,14 @@ internal object TorrentSafetyGate {
             BatteryManager.EXTRA_LEVEL,-1)?.takeIf{it>=0}
         val scale=battery?.getIntExtra(
             BatteryManager.EXTRA_SCALE,100)?.coerceAtLeast(1)?:100
-        val plugged=(battery?.getIntExtra(
-            BatteryManager.EXTRA_PLUGGED,0)?:0)!=0
-        if(percent!=null && percent*100/scale<15)
+        // Native torrent JNI previously coincided with a whole-device reboot.
+        // Charging alone does not establish thermal or power stability.
+        // Keep the metadata and partials intact; defer any native attempt
+        // until the owner's battery is at least 30 percent.
+        if(percent!=null && percent*100/scale<30)
             return Admission(false,
-                "Native torrent processing is suspended below 15% battery "+
-                    "even while charging after a reported full-device crash.")
-        if(!plugged && percent!=null && percent*100/scale<25)
-            return Admission(false,
-                "Native torrent processing is deferred below 25% battery "+
-                "when unplugged; the last test caused a device-level crash.")
+                "Native torrent deferred below 30% battery after a reported "+
+                "device reboot; charge the phone before retrying.")
         if(Build.VERSION.SDK_INT>=29){
             val power=c.getSystemService(PowerManager::class.java)
             if(power!=null &&
