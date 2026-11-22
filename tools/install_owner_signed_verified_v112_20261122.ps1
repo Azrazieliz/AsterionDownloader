@@ -46,7 +46,7 @@ $oldSign=(& $signer verify --print-certs $oldFile) -join [Environment]::NewLine
 if($LASTEXITCODE -ne 0){Abort 'Installed APK signature invalid'}
 $newSign=(& $signer verify --print-certs $apk) -join [Environment]::NewLine
 if($LASTEXITCODE -ne 0){Abort 'Update APK signature invalid'}
-$regex='(?i)Signer #1 certificate SHA-256 digest:\s*([0-9a-f]{64})'
+$regex='(?i)(?:V2 Signer|Signer #1):? certificate SHA-256 digest:\s*([0-9a-f]{64})'
 $oldCert=[regex]::Match($oldSign,$regex).Groups[1].Value.ToUpperInvariant()
 $newCert=[regex]::Match($newSign,$regex).Groups[1].Value.ToUpperInvariant()
 Write-Output ('INSTALLED_CERT_SHA256='+$oldCert)
