@@ -91,6 +91,7 @@ try:
     # catalog, not a manufactured ID or a separate DSAV brand domain.
     try:browser.get_log("performance")
     except Exception:pass
+    browser.execute_cdp_cmd("Network.enable",{})
     # Follow the site's actual selected watch control in the already
     # initialized browser; a cold URL navigation can leave SPA video empty.
     from selenium.webdriver.common.by import By
@@ -114,6 +115,7 @@ try:
     direct=set()
     player_clicked=False
     response_shapes={}
+    selected_api_requests=[]
     for tick in range(50):
         if not player_clicked:
             # The real LOAD text is a catalog pagination button, NOT media.
@@ -164,6 +166,8 @@ try:
                 u=urllib.parse.urlsplit(url)
                 mime=(response.get("mimeType") or "").lower()
                 parsed_url=urllib.parse.urlsplit(url)
+                if parsed_url.hostname=="api.dsav.app" and mime.startswith("application/json"):
+                    selected_api_requests.append(item.get("params",{}).get("requestId"))
                 if len(response_shapes)<45 and parsed_url.hostname:
                     identifier=(parsed_url.hostname,parsed_url.path[:80],int(response.get("status") or 0),mime[:48])
                     response_shapes[str(identifier)]=response_shapes.get(str(identifier),0)+1
@@ -176,6 +180,40 @@ try:
         time.sleep(.75)
     result["selected_player_duration_seconds"]=round(max(durations),3) if durations else None
     result["selected_player_play_clicked"]=player_clicked
+    # Inspect the first-party JSON returned during the exact selected watch
+    # session, without logging URLs/tokens or treating recommendation data as
+    # selected media. This distinguishes a failed player API from CSS issues.
+    api_signals=[]
+    for request_id in list(dict.fromkeys(selected_api_requests))[:4]:
+        if not request_id:continue
+        try:
+            payload=browser.execute_cdp_cmd("Network.getResponseBody",{"requestId":request_id})
+            raw=payload.get("body","")
+            if payload.get("base64Encoded"):
+                import base64
+                raw=base64.b64decode(raw).decode("utf-8","replace")
+            parsed=json.loads(raw)
+            paths=[]
+            def describe(value,path="",depth=0):
+                if depth>6 or len(paths)>=45:return
+                if isinstance(value,dict):
+                    for key,sub in list(value.items())[:45]:describe(sub,path+"."+str(key),depth+1)
+                elif isinstance(value,list):
+                    for sub in value[:2]:describe(sub,path+"[]",depth+1)
+                elif isinstance(value,str):
+                    if re.search(r"(?i)(?:src|media|stream|play|video|url|error|message|status|duration)",path):
+                        host_name=urllib.parse.urlsplit(value).hostname if value.startswith(("https://","http://")) else None
+                        paths.append({"field":path[:90],"type":"url" if host_name else "string",
+                                      "host":host_name,"length":len(value)})
+                elif isinstance(value,(int,float)):
+                    if re.search(r"(?i)(?:duration|seconds|status|code|error)",path):
+                        paths.append({"field":path[:90],"value":value})
+            describe(parsed)
+            api_signals.append({"top_level_keys":list(parsed)[:35] if isinstance(parsed,dict) else [],
+                                "response_bytes":len(raw),"signals":paths[:45]})
+        except Exception as error:
+            api_signals.append({"reader_error":type(error).__name__})
+    result["selected_watch_api_shapes"]=api_signals
     result["media_network_shapes"]={k:v for k,v in response_shapes.items() if
       "m3u8" in k or "mp4" in k or "json" in k or "video" in k or "api" in k or "stream" in k}
     result["selected_player_structure"]=browser.execute_script("""return {
