@@ -39,7 +39,9 @@ class JavGuruJkSelectedOriginalTest {
             doc,"https://jav.guru/1234568/other-selected-item/",sb))
         assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
             doc,"https://jav.guru/category/video/",sb))
-        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+        // A thin first-party JS shell may contain no article markup.
+        // The authorised selected browser read must still be attempted.
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedJk(
             Jsoup.parse("<aside><a class='wp-btn-iframe__shortcode'>STREAM JK</a></aside>",
                 selected),selected,sb))
     }
