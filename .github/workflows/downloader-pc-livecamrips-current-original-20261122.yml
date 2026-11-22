@@ -1,0 +1,32 @@
+name: Asterion Downloader — LiveCamRips genuine current selected complete PC original
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_livecamrips_current_published_original_20261122.py'
+      - '.github/workflows/downloader-pc-livecamrips-current-original-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verified-selected-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact original transfer and playable-file tools
+        run: |
+          python3 -m py_compile scripts/pc_livecamrips_current_published_original_20261122.py
+          python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Download entire publisher-attested original, validate audio/video duration and SHA
+        run: python3 scripts/pc_livecamrips_current_published_original_20261122.py
+      - name: Publish ONLY original receipt, no media, tokens or signed links
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-livecamrips-current-selected-complete-receipt
+          path: pc-livecamrips-current-original-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
