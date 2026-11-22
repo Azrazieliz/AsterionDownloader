@@ -103,6 +103,17 @@ object BrowserPageFetch {
         val latch=CountDownLatch(1)
         val main=Handler(Looper.getMainLooper())
         val instance=AtomicReference<WebView?>()
+        // PC-selected PornAVHD recording: its playerrecord iframe uses
+        // Fetch/Media to load the real MP4 without setting video.currentSrc.
+        // Observe *only* attributable requests while reading that exact
+        // publisher-attested iframe. The request is still unverified media;
+        // the transfer engine must prove full bytes and duration later.
+        val selectedRecordingFrame=playerReferer?.let{outer ->
+            com.asterion.videoflow.SelectedRecordingNetworkOriginal
+                .isAttestedPlayer(outer,url)
+        }==true
+        val selectedRecordingCandidates=LinkedHashSet<String>()
+        val selectedRecordingLock=Any()
         // The user has explicitly connected this site. Archivebate's normal
         // public Continue step populates watch entries asynchronously without
         // navigating to a new URL. Do not repeat the click or auto-accept a
@@ -187,6 +198,27 @@ object BrowserPageFetch {
             web.settings.allowContentAccess=false
             CookieManager.getInstance().setAcceptCookie(true)
             web.webViewClient=object:WebViewClient(){
+                override fun shouldInterceptRequest(
+                    v:WebView,request:WebResourceRequest
+                ):android.webkit.WebResourceResponse? {
+                    if(selectedRecordingFrame){
+                        val media=request.url.toString()
+                        val referer=request.requestHeaders.entries.firstOrNull{
+                            it.key.equals("Referer",ignoreCase=true)
+                        }?.value
+                        if(com.asterion.videoflow.SelectedRecordingNetworkOriginal
+                            .approvedObservedRequest(playerReferer.orEmpty(),url,
+                                media,request.isForMainFrame,referer)){
+                            synchronized(selectedRecordingLock){
+                                if(selectedRecordingCandidates.size<9)
+                                    selectedRecordingCandidates.add(media)
+                            }
+                        }
+                    }
+                    // Never intercept, replace, redirect or consume the
+                    // media response: normal publisher browser playback runs.
+                    return null
+                }
                 override fun shouldOverrideUrlLoading(v:WebView,request:WebResourceRequest):Boolean {
                     // Cross-site iframe navigation was being blocked even for
                     // the exact player already attested by the selected post.
@@ -926,8 +958,26 @@ object BrowserPageFetch {
                                 nhPlayerServer+nhAjaxVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
-                            val page=runCatching{JSONTokener(raw).nextValue() as? String}
-                                .getOrNull()
+                            val observedPage=runCatching{
+                                JSONTokener(raw).nextValue() as? String
+                            }.getOrNull()
+                            val observedMp4=if(selectedRecordingFrame)
+                                synchronized(selectedRecordingLock){
+                                    selectedRecordingCandidates.singleOrNull()
+                                } else null
+                            val page=if(!observedPage.isNullOrBlank() &&
+                                observedMp4!=null){
+                                // The selected frame's actual media request
+                                // is stronger provenance than an empty/Blob
+                                // HTML5 currentSrc. Emit a *candidate*, never
+                                // a completed file. Zero/multiple requests
+                                // still fail closed; the 3s preview stays held.
+                                "<html><body><main><div class=\\\"video-player\\\">"+
+                                    "<video src=\\\""+
+                                    android.text.TextUtils.htmlEncode(observedMp4)+
+                                    "\\\" data-duration=\\\"0\\\"></video>"+
+                                    "</div></main></body></html>"
+                            } else observedPage
                             if(page.isNullOrBlank()){
                                 error.set("The browser still shows a website verification page.")
                                 latch.countDown()
