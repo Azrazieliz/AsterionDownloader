@@ -1,0 +1,31 @@
+name: Asterion Downloader — LiveCamRips attested public selected hoster full PC
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_livecamrips_public_fixture_hoster_original_20261122.py'
+      - '.github/workflows/downloader-pc-livecamrips-official-fixture-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-fixture-pc-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install complete media verifier
+        run: |
+          python3 -m py_compile scripts/pc_livecamrips_public_fixture_hoster_original_20261122.py
+          python3 -m pip install --disable-pip-version-check beautifulsoup4 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Require exact attested hoster original complete video plus audio and hash
+        run: python3 scripts/pc_livecamrips_public_fixture_hoster_original_20261122.py
+      - name: Preserve explicit non-live provenance and full-file receipt only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livecamrips-attested-public-fixture-full-file
+          path: pc-livecamrips-fixture-receipt.json
+          retention-days: 14
