@@ -66,7 +66,7 @@ if(!$signer -or !$aapt){Abort 'signing' 'Android signing verification tools miss
 Phase 'signing' 'VERIFYING'
 $certInfo=(& $signer verify --print-certs $apk) -join [Environment]::NewLine
 if($LASTEXITCODE -ne 0){Abort 'signing' 'APK signature invalid'}
-$cert=[regex]::Match($certInfo,'(?i)Signer #1 certificate SHA-256 digest:\s*([0-9a-f]{64})')
+$cert=[regex]::Match($certInfo,'(?i)(?:V2 Signer|Signer #1):? certificate SHA-256 digest:\s*([0-9a-f]{64})')
 if(!$cert.Success -or $cert.Groups[1].Value.ToUpperInvariant() -ne $expectedCert){Abort 'signing' 'Signer does not match installed owner'}
 $badging=@(& $aapt dump badging $apk)
 $identity=@($badging | Where-Object{$_ -match '^package:'} | Select-Object -First 1)
