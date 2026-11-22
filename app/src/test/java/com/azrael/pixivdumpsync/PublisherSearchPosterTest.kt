@@ -51,16 +51,17 @@ class PublisherSearchPosterTest {
             "https://example.org/video/123"))
     }
     @Test fun webSearchParsesActualPublisherResultsNotSearchPages(){
-        val html="""<div class="algo-sr"><div class="compTitle"><h3>
+        val html="""<li class="b_algo"><h2>
               <a href="https://example.org/video/123">Example Performer Scene</a>
-              </h3></div><div class="compText">Actual video page</div></div>
-              <div class="algo-sr"><div class="compTitle"><h3>
-              <a href="https://example.org/search?q=example">Search</a>
-              </h3></div></div>"""
+              </h2><div class="b_caption"><p>Actual video page</p></div></li>
+              <li class="b_algo"><h2>
+              <a href="https://www.bing.com/search?q=example">Search</a>
+              </h2></li>"""
         val found=KeywordSources.parseWebIndex(html,
-            "https://search.yahoo.com/search?p=example","Yahoo Web")
+            "https://www.bing.com/search?q=example","Bing Web")
         assertEquals(1,found.size)
         assertEquals("https://example.org/video/123",found.first().url)
         assertTrue(found.first().description.contains("Actual"))
+
     }
 }
