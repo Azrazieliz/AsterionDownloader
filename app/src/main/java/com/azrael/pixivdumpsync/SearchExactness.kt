@@ -29,6 +29,13 @@ object SearchExactness {
         }
     }
 
+    /** Descriptive global-video searches need every significant word,
+     * not necessarily the same word order. This is ONLY discovery metadata;
+     * creator identity verification continues to require matchesPhrase.
+     */
+    fun mediaMatches(query:String,title:String):Boolean =
+        matchesPhrase(query,title) || matches(query,title)
+
     fun matches(query:String,title:String):Boolean {
         val required=terms(query)
         val actual=terms(title)
