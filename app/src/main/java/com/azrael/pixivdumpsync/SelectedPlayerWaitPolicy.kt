@@ -23,6 +23,14 @@ internal object SelectedPlayerWaitPolicy {
             }.distinct()
         return media.size==1
     }
+    /** Initial DOM load gets time to render, but subsequent selected-player
+     * polls must fit within BrowserPageFetch's actual 45-second deadline.
+     * The prior 1.8s inspection + 1.4s retry consumed 67s over 21
+     * JAVIDEO polls, exceeding the entire retrieval window.
+     */
+    fun inspectionDelayMs(selectedPage:Boolean,attempt:Int):Long =
+        if(selectedPage && attempt>0)200L else 1_800L
+
     fun maxPolls(host:String):Int = when(host){
         "3dhentaix.com" -> 11  // ~35 s of browser/player startup at most
         // The publisher's genuine Play action has been observed taking ~27s
