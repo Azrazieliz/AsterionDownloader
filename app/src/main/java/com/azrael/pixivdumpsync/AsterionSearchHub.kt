@@ -39,7 +39,7 @@ object AsterionSearchHub {
         preferences(a).edit().putString("results_"+mode,data.toString())
             .putString("query_"+mode,term).apply()
     }
-    private fun peertube(term:String):List<Found> = runCatching{
+    private fun peertube(term:String):List<Found> {
         val url="https://sepiasearch.org/api/v1/search/videos?search="+
             URLEncoder.encode(term,"UTF-8")+"&count=30"
         val json=JSONObject(Jsoup.connect(url).ignoreContentType(true).timeout(18000)
@@ -50,7 +50,7 @@ object AsterionSearchHub {
             if(!SearchRanking.isVideoUrl(link))return@mapNotNull null
             Found(hit.optString("name"),link,"PeerTube",hit.optString("thumbnailUrl"))
         }
-    }.getOrDefault(emptyList())
+    }
     private fun search(a:Activity,term:String,mode:Int,indexPage:Int=0):Reply {
         val ctx=a.applicationContext
         if(mode>=3){
@@ -80,6 +80,7 @@ object AsterionSearchHub {
             areas.size+if(mode==0 && indexPage==0)1 else 0)
         var peerFuture:java.util.concurrent.Future<List<Found>>?=null
         var peerResults:List<Found> = emptyList()
+        var peerCompleted=0
         try{
             if(mode==0 && indexPage==0)
                 peerFuture=workers.submit(java.util.concurrent.Callable{
@@ -117,11 +118,20 @@ object AsterionSearchHub {
             peerFuture?.let{future->
                 val remaining=(sharedDeadline-System.nanoTime())
                     .coerceAtLeast(0L)
-                peerResults=runCatching{
-                    future.get(remaining,
+                try{
+                    peerResults=future.get(remaining,
                         java.util.concurrent.TimeUnit.NANOSECONDS)
-                }.getOrDefault(emptyList())
-                if(!future.isDone)errors+="PeerTube exceeded the shared web deadline"
+                    peerCompleted=1
+                }catch(ex:java.util.concurrent.TimeoutException){
+                    errors+="PeerTube exceeded the shared web deadline"
+                }catch(ex:Exception){
+                    // An inaccessible peer index is an unavailable source,
+                    // not a successful empty search or completed route.
+                    val cause=(ex as? java.util.concurrent.ExecutionException)
+                        ?.cause?:ex
+                    errors+="PeerTube: "+(cause.message?:cause.javaClass.simpleName)
+                        .take(130)
+                }
             }
         }finally{
             workers.shutdownNow()
@@ -144,7 +154,7 @@ object AsterionSearchHub {
         if(indexPage==0)SearchResultsDb(ctx).use{db->
             db.save("SEARCH:"+mode+":"+term,items)
         }
-        return Reply(unique,errors,checked+if(mode==0)1 else 0)
+        return Reply(unique,errors,checked+peerCompleted)
     }
     fun render(a:Activity,p:LinearLayout,refresh:()->Unit,
                addSource:()->Unit={}){
