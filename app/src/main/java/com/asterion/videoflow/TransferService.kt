@@ -1354,6 +1354,20 @@ object VideoEngine {
                         downloaded=true
                         break
                     }catch(t:Exception){last=t}
+                }else if(StreamtapeSelectedOriginal.isSelectedDirect(
+                    source.referer,source.url) &&
+                    StreamtapeSelectedOriginal.isSelectedArticleMedia(
+                        item.url,source.url)){
+                    // PC-complete selected JAVIDEO STAPE#01 original. The
+                    // provider's get_video endpoint has no .mp4 suffix; use
+                    // the already resumable native direct-file lane with its
+                    // strict MIME/byte receipt rather than yt-dlp on an iframe.
+                    try{
+                        execute(source.url,source.referer,
+                            verifiedFirstPartyMp4=true)
+                        downloaded=true
+                        break
+                    }catch(t:Exception){last=t}
                 }else if(NativeMediaDownloader.isDirectMediaUrl(source.url)){
                     try {
                         execute(source.url,source.referer)
