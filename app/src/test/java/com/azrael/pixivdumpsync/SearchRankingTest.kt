@@ -27,12 +27,12 @@ class SearchRankingTest {
         }
         assertTrue(KeywordSources.eligibleDiscoveryUrl(
             "https://porneec.com/video/example-video"))
-        val web="""<div class="result"><a class="result__a"
-            href="https://spankbang.com/abc/video/creator">Creator video</a></div>
-            <div class="result"><a class="result__a"
-            href="https://porneec.com/video/creator">Creator video</a></div>"""
+        val web="""<div class="algo-sr"><div class="compTitle"><h3><a
+            href="https://spankbang.com/abc/video/creator">Creator video</a></h3></div></div>
+            <div class="algo-sr"><div class="compTitle"><h3><a
+            href="https://porneec.com/video/creator">Creator video</a></h3></div></div>"""
         val hits=KeywordSources.parseWebIndex(web,
-            "https://html.duckduckgo.com/html/","DuckDuckGo Web")
+            "https://search.yahoo.com/search?p=creator","Yahoo Web")
         assertTrue(hits.any{it.url.contains("porneec.com")})
         assertFalse(hits.any{it.url.contains("spankbang.com")})
     }
