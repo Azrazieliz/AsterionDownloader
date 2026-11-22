@@ -21,6 +21,21 @@ class PornBuzSelectedFullHlsTest {
             html.replace("<div class=\"responsive-player\">","<div class=\"other\">")))
     }
 
+    @Test fun selectedPrimaryPlayerDoesNotRequireAnArticleTag(){
+        // Real public layouts place the video-player-area beside their
+        // sidebar rather than inside an <article> or <main> element.
+        val html="""<div class="video-player-area with-sidebar-ads">
+            <div class="video-player"><div class="responsive-player">
+              <iframe src="$player"></iframe>
+            </div></div>
+          </div><aside class="related">
+            <iframe src="https://player.watchstreamus.com/embed/Other987"></iframe>
+          </aside>"""
+        assertEquals(player,PornBuzOriginalSource.selectedMainPlayer(selected,html))
+        assertNull(PornBuzOriginalSource.selectedMainPlayer(selected,
+            html.replace("video-player-area with-sidebar-ads","related")))
+    }
+
     @Test fun compactBrowserSnapshotPreservesOnlyTrustedPrimaryFrame(){
         val selectedHtml="""<main><div class="video-player">
             <iframe src="$player" allowfullscreen></iframe>
