@@ -1,0 +1,31 @@
+name: Asterion Downloader — DSAV exact provider PC discovery
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_dsav_discovery_20261122.py'
+      - '.github/workflows/downloader-pc-dsav-discovery-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-dsav:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ordinary PC browser parser
+        run: python3 -m pip install --disable-pip-version-check beautifulsoup4 selenium==4.36.0
+      - name: Inspect live public DSAV selected article, not homepage media
+        shell: bash
+        run: |
+          python3 -m py_compile scripts/pc_dsav_discovery_20261122.py
+          python3 scripts/pc_dsav_discovery_20261122.py | tee pc-dsav-public-player-evidence.log
+      - name: Save safe route/player evidence without private media
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pc-dsav-public-selected-evidence
+          path: pc-dsav-public-player-evidence.log
+          if-no-files-found: warn
+          retention-days: 14
