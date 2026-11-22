@@ -34,6 +34,23 @@ class PornBuzSelectedFullHlsTest {
         assertNull(PornBuzOriginalSource.selectedHls(player,
             html.replace(master,"https://other.invalid/path/master.m3u8")))
     }
+    @Test fun selectedBrowserPlayerCurrentSrcRecoversPublisherHlsWithoutAd(){
+        val html="""<main><div class="video-player">
+            <video src="$master" controls></video></div>
+            <aside class="recommended"><video
+                src="https://player.watchstreamus.com/hls/ads/preview.m3u8"
+                muted></video></aside></main>"""
+        assertEquals(master,PornBuzOriginalSource.selectedRenderedHls(player,html))
+        assertNull(PornBuzOriginalSource.selectedRenderedHls(
+            "https://player.watchstreamus.com/embed/OTHERplayer",html))
+        assertNull(PornBuzOriginalSource.selectedRenderedHls(
+            player,html.replace(master,
+                "https://player.watchstreamus.com/hls/preview-20sec.m3u8")))
+        assertNull(PornBuzOriginalSource.selectedRenderedHls(
+            player,html.replace(master,
+                "https://ads.example.org/full/master.m3u8")))
+    }
+
     @Test fun fullPublisherMultivariantMasterChoosesHighestPublishedQuality(){
         val playlist="#EXTM3U\n"+
             "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480\n"+
