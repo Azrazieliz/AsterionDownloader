@@ -1,0 +1,102 @@
+name: Asterion Downloader 1.3.84 — verified owner-signed phone update
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths: ['.github/workflows/downloader-v1384-retained-owner-update.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: downloader-owner-signed-1384-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ASTERION_PREVIEW_KEYSTORE_BASE64 }}
+      STORE_PASSWORD: ${{ secrets.ASTERION_PREVIEW_STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ASTERION_PREVIEW_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ASTERION_PREVIEW_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Require original installed acceptance certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!variable}" ]]; then
+              echo '::error::Retained owner signing identity unavailable in CI. Refusing an incompatible update.'
+              exit 1
+            fi
+          done
+          umask 077
+          KEY="$RUNNER_TEMP/asterion-retained-acceptance.p12"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEY"
+          keytool -exportcert -keystore "$KEY" -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" > "$RUNNER_TEMP/owner-cert.der"
+          EXPECTED=8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19
+          ACTUAL="$(sha256sum "$RUNNER_TEMP/owner-cert.der" | cut -d' ' -f1)"
+          if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+            echo '::error::Retained signing certificate mismatch. Refusing incompatible APK.'
+            exit 1
+          fi
+          echo "ASTERION_PREVIEW_KEYSTORE=$KEY" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ASTERION_PREVIEW_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Compile all modules, run regression and frozen-provider tests, and assemble
+        run: gradle --no-daemon :app:verifyFrozenVideoProviders :app:testPilotUnitTest :app:testAcceptanceUnitTest :app:assembleAcceptance --console=plain
+      - name: Verify signed APK, version, pinned extractor, and publish bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT=app/build/outputs/apk/acceptance/app-acceptance.apk
+          test -s "$INPUT"
+          TOOL="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+          "$TOOL/apksigner" verify --verbose "$INPUT"
+          ACTUAL="$("$TOOL/apksigner" verify --print-certs "$INPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          test "${ACTUAL,,}" = '8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19'
+          "$TOOL/aapt" dump badging "$INPUT" | grep -F "package: name='com.azrael.pixivdumpsync.acceptance' versionCode='113' versionName='1.3.84-acceptance'"
+          test "$(unzip -Z1 "$INPUT" | grep -Ec '^lib/arm64-v8a/.*[.]so$')" -gt 0
+          unzip -p "$INPUT" assets/yt_dlp-2026.10.26-py3-none-any.whl | sha256sum | grep -F 'a05c5b5d8562f7e8a62f5334348b406af4930d56d3a65f8021d14af0e22339ae'
+          unzip -t "$INPUT" >/dev/null
+          OUT=Asterion-Downloader-v1.3.84-OwnerSigned-Update.apk
+          cp "$INPUT" "$OUT"
+          sha256sum "$OUT" > Asterion-Downloader-v1.3.84-OwnerSigned-Update.sha256
+          printf '%s\n' "$GITHUB_SHA" > source-commit.txt
+      - name: Retain validated signed phone installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Asterion-Downloader-v1.3.84-OwnerSigned-Update
+          path: |
+            Asterion-Downloader-v1.3.84-OwnerSigned-Update.apk
+            Asterion-Downloader-v1.3.84-OwnerSigned-Update.sha256
+            source-commit.txt
+          if-no-files-found: error
+      - name: Publish installable update for phone
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT="${GITHUB_SHA:0:12}"
+          gh release create "asterion-downloader-1.3.84-owner-update-$SHORT" \
+            Asterion-Downloader-v1.3.84-OwnerSigned-Update.apk \
+            Asterion-Downloader-v1.3.84-OwnerSigned-Update.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Asterion Downloader 1.3.84 — retained owner-signed Android update" \
+            --notes "In-place installable acceptance update, same package ID and original SHA-256 certificate. Tests and APK integrity verified. Existing app data preserved on in-place update; do not uninstall. Live provider and phone acceptance are not claimed." \
+            --prerelease
+      - name: Remove private key files
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/asterion-retained-acceptance.p12" "$RUNNER_TEMP/owner-cert.der"
