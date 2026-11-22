@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: full-provider-acceptance-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   actual-selected-original:
     runs-on: ubuntu-latest
@@ -16,7 +19,10 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        provider: [javideo, pornbuz, livecamrips, uncensoredhentai, xchina, avple, pornavhd, dsav]
+        # xChina already has a complete 185,242,550-byte PC receipt.
+        # Access-blocked Avple and LiveCamRips were verified 403;
+        # PornAVHD exposed only a short preview. Don't waste runner time.
+        provider: [javideo, pornbuz, uncensoredhentai, dsav]
     steps:
       - uses: actions/checkout@v4
       - name: Real Chrome and exact PC download dependencies
