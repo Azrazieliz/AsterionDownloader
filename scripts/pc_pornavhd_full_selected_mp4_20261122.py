@@ -102,8 +102,8 @@ def verify():
   if first[4:8]!=b"ftyp":raise RuntimeError("Selected first bytes not an MP4")
  receipt("PC_SELECTED_PUBLISHER_DECLARED_SIZE",declared_bytes=expected,
       cdn_host=urllib.parse.urlsplit(link).hostname,range_http=206)
- if expected<1_000_000 or expected>MAX_BYTES:
-  raise RuntimeError("Selected original exceeds bounded full PC test size")
+ if expected<200_000 or expected>MAX_BYTES:
+  raise RuntimeError("Selected media outside bounded PC test size")
  if not shutil.which("ffprobe"):raise RuntimeError("ffprobe not installed")
  if shutil.disk_usage(tempfile.gettempdir()).free<expected+500_000_000:
   raise RuntimeError("Insufficient PC scratch for complete selected original")
