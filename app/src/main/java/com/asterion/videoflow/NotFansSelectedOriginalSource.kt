@@ -59,6 +59,6 @@ internal object NotFansSelectedOriginalSource {
         }.distinct().toList()
         val best=options.maxOfOrNull{it.second}?:return emptyList()
         val winners=options.filter{it.second==best}.map{it.first}.distinct()
-        return winners.singleOrNull()?.let(::listOf).orEmpty()
+        return winners.singleOrNull()?.let{listOf(it)}.orEmpty()
     }
 }
