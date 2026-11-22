@@ -78,8 +78,18 @@ class SessionCookieProvider:ContentProvider() {
                 com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(it) ||
                     SiteSession.bound(ctx,it)
             }
-            val html=com.azrael.pixivdumpsync.BrowserPageFetch.html(
-                ctx,url,playerReferer=referer)
+            // Binder must return the actual browser-stage failure to the
+            // VideoFlow worker; otherwise the worker sees an opaque provider
+            // exception and retries the same 45-second operation blindly.
+            val browser=runCatching{
+                com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                    ctx,url,playerReferer=referer)
+            }
+            if(browser.isFailure)return Bundle().apply{
+                putString("error",browser.exceptionOrNull()?.message
+                    ?.take(450) ?: "Owner-process browser retrieval failed")
+            }
+            val html=browser.getOrThrow()
             return Bundle().apply {
                 if(html.toByteArray(Charsets.UTF_8).size<=SessionHtmlEnvelope.RAW_LIMIT)
                     putString("html",html)
