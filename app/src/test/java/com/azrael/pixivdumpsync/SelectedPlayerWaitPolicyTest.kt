@@ -36,6 +36,15 @@ class SelectedPlayerWaitPolicyTest {
         assertTrue(SelectedPlayerWaitPolicy.maxPolls("vidara.to") <= 11)
     }
 
+    @Test fun selectedPornBuzPlayerGetsBoundedHlsInitializationBudget(){
+        assertEquals(12,SelectedPlayerWaitPolicy.maxPolls(
+            "player.watchstreamus.com"))
+        assertEquals(12,SelectedPlayerWaitPolicy.maxPolls(
+            "cdn.watchstreamus.com"))
+        assertTrue(SelectedPlayerWaitPolicy.maxPolls(
+            "player.watchstreamus.com") >
+                SelectedPlayerWaitPolicy.maxPolls("rule34video.com"))
+    }
     @Test fun workingRule34VideoKeepsItsExistingFastPath(){
         assertEquals(6,SelectedPlayerWaitPolicy.maxPolls("rule34video.com"))
         assertEquals(6,SelectedPlayerWaitPolicy.maxPolls("watchporn.to"))
