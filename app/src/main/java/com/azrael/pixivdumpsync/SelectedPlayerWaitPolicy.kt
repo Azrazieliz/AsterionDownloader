@@ -35,7 +35,8 @@ internal object SelectedPlayerWaitPolicy {
         // empty shell before the selected source appeared.
         "player.watchstreamus.com","cdn.watchstreamus.com" -> 12
         "video.playerrecord.cfd","vidara.to" -> 11 // Attested recording frame initializes HTML5 playback asynchronously
-        "voe.sx","kamehaus.net","nhplayer.com" -> 9
+        "nhplayer.com" -> 18  // Exact selected AJAX may initialize after 15s; within 45s WebView cap
+        "voe.sx","kamehaus.net" -> 9
         else -> 6
     }
 }
