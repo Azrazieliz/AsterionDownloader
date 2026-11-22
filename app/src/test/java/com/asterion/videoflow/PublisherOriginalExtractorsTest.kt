@@ -34,7 +34,6 @@ class PublisherOriginalExtractorsTest {
         "pimpbunny.com" to "https://pimpbunny.com/videos/selected-scene-123",
         "xchina.co" to "https://en.xchina.co/video/6b00b2b6032b1",
         "bubblecum.lol" to "https://www.bubblecum.lol/video/selected-scene-title/",
-        "pornavhd.com" to "https://pornavhd.com/2026/11/14/selected_20261114/",
         "cosplaytele.com" to "https://cosplaytele.com/selected-cosplay-set/"
     )
 
@@ -182,24 +181,15 @@ class PublisherOriginalExtractorsTest {
                 "data-src=\"https://unrelated.invalid/hls/6b0186908cd75/master.m3u8\"")).isEmpty())
     }
 
-    @Test fun pornavhdUsesOnlyObservedSelectedPlayerrecordIframe(){
-        val selected=cases.getValue("pornavhd.com")
-        val html="""<main><article>
-            <iframe src="https://video.playerrecord.cfd/e/tj9qby7osr0y"></iframe>
-            <div class="related"><iframe
-              src="https://video.playerrecord.cfd/e/another123456"></iframe></div>
-            <aside class="ads"><iframe
-              src="https://creative.whitetrafsa.com/widgets/v4/Universal"></iframe></aside>
-            </article></main>"""
-        val frames=PublisherOriginalExtractors.fromHtml(selected,html)
-        assertEquals(listOf("https://video.playerrecord.cfd/e/tj9qby7osr0y"),
-            frames.map{it.url})
-        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
-            selected,frames.single().url))
+    @Test fun retiredPornavhdNeverAdmitsIframeOrSelectedMedia(){
+        val selected="https://pornavhd.com/2026/11/14/selected_20261114/"
+        val frame="https://video.playerrecord.cfd/e/tj9qby7osr0y"
+        val html="<main><article><iframe src='$frame'></iframe></article></main>"
+        assertFalse(VideoSiteProfiles.isVideoPage(selected))
+        assertFalse(PublisherOriginalExtractors.owns(selected))
+        assertTrue(PublisherOriginalExtractors.fromHtml(selected,html).isEmpty())
         assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
-            selected,"https://creative.whitetrafsa.com/e/tj9qby7osr0y"))
-        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
-            selected,"https://video.playerrecord.cfd/e/tj9qby7osr0y?ad=1"))
+            selected,frame))
     }
 
     @Test fun listingHomepagesAndUnknownPublishersNeverCreateOriginals(){
