@@ -371,13 +371,13 @@ object AsterionUnifiedFollowing {
                         // source videos; the owner must review each match.
                         // Keep verification as the only path to genuine
                         // profile-attributed performer subscriptions.
-                        val notice="No accessible supported performer profile "+
+                        val explanation="No accessible supported performer profile "+
                             "was confirmed for \""+name.take(80)+"\". "+
                             "This does not mean the person does not exist. "+
                             "Title matches are NOT verified identity evidence."
                         val dialog=android.app.AlertDialog.Builder(a)
                             .setTitle("Profile not verified")
-                            .setMessage(notice)
+                            .setMessage(explanation)
                             .setNegativeButton("CLOSE",null)
                         if(PerformerFollowPolicy.canTrackUnverified(name)){
                             dialog.setPositiveButton("TRACK NAME MATCHES"){_,_->
