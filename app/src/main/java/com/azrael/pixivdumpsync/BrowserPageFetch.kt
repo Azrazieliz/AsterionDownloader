@@ -1164,6 +1164,58 @@ object BrowserPageFetch {
                                             '</script></body></html>';
                                 }
                             }
+                            // 4KHD's selected album page may inject its
+                            // one legitimate m.4khd.com full-resolution
+                            // bridge only after JavaScript initialization.
+                            // Generic compact DOM strips the article structure
+                            // and puts all anchors OUTSIDE <main>, so the
+                            // existing SelectedAlbumScope parser never sees
+                            // that original. Restore ONLY its publisher-
+                            // labelled first-party link, not preview JPEGs.
+                            if(publisher==='4khd.com' &&
+                                /^\/content\/[0-9]{1,8}\/[a-z0-9][a-z0-9_-]{2,180}\.html\/?$/i
+                                    .test(currentPath)){
+                                const bridgeLinks=new Set();
+                                for(const el of [...document.querySelectorAll(
+                                    'main a[href],article a[href],'+
+                                    '.entry-content a[href],.post-content a[href]'
+                                )].slice(0,400)){
+                                    if(el.closest('nav,header,footer,aside,'+
+                                        '.related,.recommended,.advertisement,'+
+                                        '.ads,.sidebar,.pagination,[data-ad]'))
+                                        continue;
+                                    try{
+                                        const link=new URL(el.getAttribute('href')||'',
+                                            location.href);
+                                        const meaning=((el.innerText||el.textContent||'')+
+                                            ' '+(el.parentElement?.innerText||''))
+                                            .toLowerCase();
+                                        if(link.protocol==='https:' &&
+                                            link.hostname==='m.4khd.com' &&
+                                            !link.username && !link.password &&
+                                            !link.port && !link.hash &&
+                                            /^\/[A-Za-z0-9_-]{4,60}\/?$/.test(link.pathname) &&
+                                            (meaning.includes('terabox') ||
+                                            meaning.includes('full hd') ||
+                                            meaning.includes('without watermark')))
+                                            bridgeLinks.add(link.href);
+                                    }catch(_){}
+                                }
+                                if(bridgeLinks.size===1){
+                                    return '<html><head>'+selectedPoster+
+                                        '</head><body><main><article>'+
+                                        '<a href="'+esc([...bridgeLinks][0])+'">'+
+                                        'Full HD TeraBox original</a>'+
+                                        '</article></main></body></html>';
+                                }
+                                if(bridgeLinks.size===0)
+                                    return '<html><head><meta name="'+
+                                        'asterion-4khd-article-pending" content="true">'+
+                                        '</head></html>';
+                                return '<html><head><meta name="'+
+                                    'asterion-4khd-article-ambiguous" content="true">'+
+                                    '</head></html>';
+                            }
                             const realH1=document.querySelector('h1')?.innerText||'';
                             return '<html><head><title>'+esc(title)+
                                 '</title>'+selectedPoster+selectedStreamtapeDirect+
@@ -1213,6 +1265,15 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
+                            }else if(host=="4khd.com" &&
+                                page.contains("asterion-4khd-article-pending") &&
+                                fourKhdBridgeWaits++<7){
+                                // One exact selected album only. Wait for the
+                                // publisher's legitimate original archive link,
+                                // never infer one from preview/related cards.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_000L)
                             }else if(host=="m.4khd.com" &&
                                 page.contains("asterion-4khd-link-pending") &&
                                 fourKhdBridgeWaits++<7){
