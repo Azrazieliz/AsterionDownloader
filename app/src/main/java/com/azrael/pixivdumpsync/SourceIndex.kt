@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Environment
 import com.azrael.galleryflow.SiteSession
 import com.azrael.galleryflow.HttpClient
+import com.azrael.galleryflow.GalleryAccessGate
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 import org.jsoup.Jsoup
@@ -1246,7 +1247,17 @@ object SourceIndex {
                         "Provider HTTP "+response.statusCode()+
                             "; account or source unavailable"
                     }
-                    return response.parse()
+                    val body=response.body()
+                    // 4KGirl currently returns HTTP 200 with a 403 Forbidden
+                    // HTML shell. Treating it as a valid listing indexed zero
+                    // covers and suppressed the already-authorized WebView
+                    // fallback. The source index and Kyora must agree.
+                    if(GalleryAccessGate.isMaskedForbidden(
+                            current,response.statusCode(),body))
+                        throw com.azrael.galleryflow.HttpStatusException(403,
+                            "4KGirl returned masked HTTP 403; "+
+                            "publisher browser access required")
+                    return Jsoup.parse(body,response.url().toString())
                 }
             }
             error("Provider exceeded safe redirect limit")
@@ -1257,6 +1268,9 @@ object SourceIndex {
             if(!SiteSession.bound(context,address) &&
                 !BrowserPageFetch.publicEligible(address))throw error
             val browser=BrowserPageFetch.html(context,address)
+            if(GalleryAccessGate.isMaskedForbidden(address,200,browser))
+                throw com.azrael.galleryflow.HttpStatusException(403,
+                    "4KGirl publisher still forbids this browser session")
             return Jsoup.parse(browser,address)
         }
     }
