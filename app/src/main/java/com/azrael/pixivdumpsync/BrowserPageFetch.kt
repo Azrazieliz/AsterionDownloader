@@ -533,8 +533,12 @@ object BrowserPageFetch {
                             // PC-certified JAVIDEO original is the publisher
                             // labelled STAPE#01 selection, NOT the default
                             // play.javideo.net HTML player or its advert.
-                            // Click only its uniquely labelled in-article
-                            // button once, after normal publisher Play.
+                            // The selected STAPE#01 button may be present
+                            // before JAVIDEO attaches its click listener. The
+                            // original one-shot flag then permanently skipped
+                            // the publisher's signed Streamtape player on Android.
+                            // Retry only the same unique in-article button and
+                            // stop immediately when its exact active iframe exists.
                             if(selectedPlayerHost==='javideo.net' &&
                                 /^\/(?:en\/)?[a-z0-9]{1,20}-[0-9]{2,9}/i
                                     .test(location.pathname)){
@@ -542,10 +546,35 @@ object BrowserPageFetch {
                                     .filter(btn=>btn.textContent.trim()==='STAPE#01' &&
                                         !btn.closest('aside,.related,.recommended,'+
                                             '.recommendations,.ads,.advertisement,[data-ad]'));
-                                if(choices.length===1 &&
-                                    !choices[0].dataset.asterionStapeSelected){
-                                    choices[0].dataset.asterionStapeSelected='true';
-                                    choices[0].click();
+                                const activeStape=[...document.querySelectorAll(
+                                    '.embed-responsive.player:not(.d-none) iframe[src]')]
+                                    .filter(frame=>{
+                                        try{
+                                            const u=new URL(frame.getAttribute('src'),
+                                                location.href);
+                                            return u.protocol==='https:' &&
+                                                !u.search && !u.hash &&
+                                                ['streamtape.com','streamtape.to',
+                                                 'streamtape.net','streamtape.site',
+                                                 'sbtape.com'].includes(
+                                                    u.hostname.replace(/^www\./,'')) &&
+                                                /^\/(?:e|v|embed)\/[A-Za-z0-9_-]{5,100}\/?$/
+                                                    .test(u.pathname);
+                                        }catch(_){return false;}
+                                    });
+                                if(choices.length===1 && activeStape.length===0){
+                                    const btn=choices[0];
+                                    const attempts=Number(
+                                        btn.dataset.asterionStapeAttempts||0);
+                                    const last=Number(
+                                        btn.dataset.asterionStapeLastClick||0);
+                                    if(attempts<3 && Date.now()-last>=3500){
+                                        btn.dataset.asterionStapeAttempts=
+                                            String(attempts+1);
+                                        btn.dataset.asterionStapeLastClick=
+                                            String(Date.now());
+                                        btn.click();
+                                    }
                                 }
                             }
                             // Activate only the selected in-article player.
