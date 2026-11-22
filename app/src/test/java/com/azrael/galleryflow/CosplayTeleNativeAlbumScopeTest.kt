@@ -49,6 +49,50 @@ class CosplayTeleNativeAlbumScopeTest {
         assertTrue(CosplayTeleAdapter(HttpClient()).providerLinks(scoped).isEmpty())
     }
 
+    @Test fun firstPartyEmbeddedVideoAndPhotosShareOneGalleryMediaInventory(){
+        val selected="https://cosplaytele.com/selected-cosplay-set/"
+        val frame="https://cosplaytele.com/embed/selected12345"
+        val article=Jsoup.parse("""
+          <main><article id="post-123" class="post-123">
+            <h1>One video and one photo</h1>
+            <div class="entry-content">
+              <div class="gallery galleryid-123">
+                <a href="https://cdn.cosplaytele.com/set/original01.jpg">
+                  <img src="https://cdn.cosplaytele.com/set/preview01.jpg"/></a>
+              </div>
+              <div class="video-player"><iframe src="$frame"></iframe></div>
+            </div>
+          </article></main>
+        """,selected)
+        val embedded=Jsoup.parse("""
+          <main><div class="video-player">
+            <video src="https://cdn.cosplaytele.com/set/full-video.mp4"
+              data-duration="1800" controls></video>
+          </div><aside><video
+            src="https://cdn.cosplaytele.com/unrelated-ad.mp4"></video></aside></main>
+        """,frame)
+        val client=object:HttpClient(){
+            override fun document(url:String,referer:String?):org.jsoup.nodes.Document =
+                when(url){
+                    selected->article
+                    frame->embedded
+                    else->throw IllegalStateException("Unexpected URL "+url)
+                }
+        }
+        val adapter=CosplayTeleAdapter(client)
+        val entity=adapter.resolveEntity(selected)
+        val gallery=adapter.enumerateGalleries(entity).single()
+        val result=adapter.fetchGallery(gallery)
+        val media=result.second
+        assertEquals(2,media.size)
+        assertEquals(1,media.count{it.kind==MediaKind.IMAGE})
+        assertEquals(1,media.count{it.kind==MediaKind.VIDEO})
+        assertTrue(media.any{it.url.endsWith("/set/full-video.mp4") &&
+            it.referer==frame})
+        assertFalse(media.any{it.url.contains("unrelated-ad")})
+        assertEquals(1,result.first.expectedVideoCount)
+    }
+
     @Test fun officialSameSiteVideoIframeBesidePhotoGalleryIsPreserved(){
         val selectedFrame="https://cosplaytele.com/embed/video12345"
         val doc=Jsoup.parse("""
