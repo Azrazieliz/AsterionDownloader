@@ -72,6 +72,29 @@ internal object PornBuzOriginalSource {
         return candidates.singleOrNull()
     }
 
+    /** Browser runtime may expose the selected HLS in HTML5 currentSrc
+     * even when the public JWPlayer JS config is not returned to Jsoup.
+     * Accept only one same-player .m3u8 from the publisher-attested frame;
+     * the caller still verifies the COMPLETE finalized rendition duration.
+     */
+    fun selectedRenderedHls(frame:String,html:String):String? {
+        if(!isSelectedMainFrame(frame))return null
+        val doc=Jsoup.parse(html,frame)
+        val found=LinkedHashSet<String>()
+        for(node in doc.select(
+            "main video[src],main video source[src],"+
+            ".video-player video[src],.video-player video source[src],"+
+            "#player video[src],#player video source[src]").take(25)){
+            if(node.closest("aside,.related,.recommended,.recommendations,"+
+                ".ads,.advertisement,.sidebar,[data-ad]")!=null)continue
+            val raw=node.attr("src")
+            val uri=runCatching{URI(frame).resolve(raw)}.getOrNull()
+                ?:continue
+            if(isSelectedManifest(uri))found+=uri.toString()
+        }
+        return found.singleOrNull()
+    }
+
     private fun isSelectedManifest(url:URI):Boolean =
         url.scheme=="https" && url.userInfo==null && url.port==-1 &&
             url.host.orEmpty().lowercase(Locale.ROOT)=="player.watchstreamus.com" &&
