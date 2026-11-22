@@ -27,6 +27,9 @@ internal object VideoSiteProfiles {
         Route("archivebate.com",Regex("""(?i)^/(?:(?:u/)?watch|videos?|recordings?|v)/[^/?#]+""")),
         // Model directories and categories are not recordings.
         Route("livecamrips.to",Regex("""(?i)^/video/[0-9]{5,12}/?$""")),
+        // Owner-supplied real DSYSAV.com, never conflated with dsav123.wiki.
+        // A selected English watch requires one exact opaque v= ID.
+        Route("dsysav.com",Regex("""^/en/watch?v=[A-Za-z0-9_-]{8,45}$""")),
         Route("xxxi.porn",Regex("""(?i)^/(?:videos?|watch|v)/[^/?#]+""")),
         // Real HelloPorn selected videos are /video-<id>-<slug>, NOT
         // /video/<slug>. The former route dropped every live catalog card.
