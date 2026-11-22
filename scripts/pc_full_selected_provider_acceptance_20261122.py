@@ -60,7 +60,11 @@ def frame_from_markup(name,article,html):
  soup=BeautifulSoup(html,"html.parser")
  matches=[]
  for iframe in soup.select("iframe[src]"):
-  if iframe.find_parent(["aside"]) or iframe.find_parent(class_=re.compile("related|recommend|ads|advertisement",re.I)):continue
+  # Exact class tokens only: the actual selected player is nested under
+  # class="video-player-area with-sidebar-ads". Matching the substring
+  # "ads" wrongly threw away that genuine publisher-attested iframe.
+  if iframe.find_parent(["aside"]):continue
+  if any(any(c.lower() in {"ads","advertisement","ad","related","recommended","recommendations","sidebar"} or c.lower().startswith(("ad-","ads-")) for c in ancestor.get("class",[])) for ancestor in iframe.parents if hasattr(ancestor,"get")):continue
   u=urllib.parse.urljoin(article,iframe.get("src",""))
   if not safe_url(u):continue
   h=host(u);p=urllib.parse.urlsplit(u).path
