@@ -43,7 +43,11 @@ object BrowserPageFetch {
         "bubblecum.lol","cosplaytele.com","pornbuz.com",
         "notfans.com",
         // Public gallery rendering fallback only. No challenge solving.
-        "4kgirl.com","4khd.com","m.4khd.com")
+        "4kgirl.com","4khd.com","m.4khd.com",
+        // DSYSAV is a Next.js site: HTTP returns 200/10 KB but zero watch
+        // anchors. Its first-party catalog appears only after authorized
+        // browser JS requests; never index the empty SSR shell as success.
+        "dsysav.com")
     fun publicEligible(url:String):Boolean {
         val uri=runCatching{java.net.URI(url)}.getOrNull()?:return false
         val host=uri.host.orEmpty().lowercase().removePrefix("www.")
@@ -129,6 +133,7 @@ object BrowserPageFetch {
         var archivebateWaits=0
         var mirroredHostWaits=0
         var fourKhdBridgeWaits=0
+        var dsysavCatalogWaits=0
         var mirrorSelectedClickAttempts=0
         // Mirrored.to exposes official file-host choices only AFTER its
         // selected /files/<id>/ 'View download links' control is clicked.
@@ -387,7 +392,7 @@ object BrowserPageFetch {
                                     const poster=el.querySelector('video[poster]');
                                     const keys=['src','data-src','data-original','data-lazy-src',
                                         'data-cfsrc','data-lazy','data-full','data-full-src',
-                                        'data-highres','srcset'];
+                                        'data-highres','srcset','alt'];
                                     const cover=img?'<img '+keys.map(k=>k+'="'+
                                         esc(img.getAttribute(k)||'')+'"').join(' ')+'/>':
                                         poster?'<img src="'+esc(poster.getAttribute('poster'))+'"/>':'';
@@ -1155,6 +1160,37 @@ object BrowserPageFetch {
                                             '</script></body></html>';
                                 }
                             }
+                            // DSYSAV public home is a JS-only Next.js shell:
+                            // the real first-party /en/watch?v=ID cards arrive
+                            // after the page's own /videos/search request. A
+                            // 200/blank shell is NOT a successful catalog.
+                            // Count only actual selected WATCH anchors in the
+                            // visible document, never links guessed from JS or
+                            // from other publishers and no access challenge.
+                            if(publisher==='dsysav.com' &&
+                                /^\/en\/?$/.test(currentPath)){
+                                const seenWatch=new Set();
+                                for(const a of [...document.querySelectorAll(
+                                    'a[href]')].slice(0,4000)){
+                                    try{
+                                        const link=new URL(
+                                            a.getAttribute('href'),location.href);
+                                        const params=[...link.searchParams.keys()];
+                                        const id=link.searchParams.get('v')||'';
+                                        if(link.protocol==='https:' &&
+                                            link.hostname.replace(/^www\./,'')===
+                                                'dsysav.com' &&
+                                            link.pathname==='/en/watch' &&
+                                            params.length===1 && params[0]==='v' &&
+                                            /^[A-Za-z0-9_-]{8,45}$/.test(id))
+                                            seenWatch.add(link.href);
+                                    }catch(_){}
+                                }
+                                if(seenWatch.size===0)
+                                    return '<html><head><meta name="'+
+                                        'asterion-dsysav-catalog-pending" content="true">'+
+                                        '</head></html>';
+                            }
                             // 4KHD's selected album page may inject its
                             // one legitimate m.4khd.com full-resolution
                             // bridge only after JavaScript initialization.
@@ -1256,6 +1292,16 @@ object BrowserPageFetch {
                                 main.postDelayed({
                                     if(latch.count>0L)onPageFinished(v,finished)
                                 },1_500L)
+                            }else if(host=="dsysav.com" &&
+                                Uri.parse(url).path.orEmpty().trimEnd('/')=="/en" &&
+                                page.contains("asterion-dsysav-catalog-pending") &&
+                                dsysavCatalogWaits++<9){
+                                // Wait for the real publisher's own API-to-DOM
+                                // rendering; do not claim an empty response as
+                                // success or fabricate preview URLs.
+                                main.postDelayed({
+                                    if(latch.count>0L)onPageFinished(v,finished)
+                                },1_000L)
                             }else if(host=="4khd.com" &&
                                 page.contains("asterion-4khd-article-pending") &&
                                 fourKhdBridgeWaits++<7){
