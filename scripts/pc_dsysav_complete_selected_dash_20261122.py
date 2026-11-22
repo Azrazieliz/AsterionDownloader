@@ -51,6 +51,7 @@ def browser_selected():
  config={}
  selected=None
  seen=set()
+ pending=set()
  def poll():
   nonlocal config,selected
   request_ids=[]
@@ -64,8 +65,8 @@ def browser_selected():
     continue
    if res.get("mimeType","").split(";")[0]!="application/json":continue
    rid=p.get("requestId")
-   if rid and rid not in seen:request_ids.append(rid)
-  for rid in request_ids:
+   if rid and rid not in seen:pending.add(rid)
+  for rid in list(pending):
    try:
     body=d.execute_cdp_cmd("Network.getResponseBody",{"requestId":rid})
     raw=body["body"]
@@ -79,6 +80,7 @@ def browser_selected():
         urllib.parse.urlsplit(x["video_url"]).path.endswith(".mpd")]
     if len(good)==1:selected=good[0]
     seen.add(rid)
+    pending.discard(rid)
    except Exception:pass
  try:
   d.set_page_load_timeout(22)
