@@ -47,4 +47,23 @@ class ThumbnailCacheRetentionTest {
             assertFalse(other.exists())
         } finally { root.deleteRecursively() }
     }
+    @Test fun rejectsOversizedThumbnailWithoutWritingTheOverflowChunk() {
+        val input=java.io.ByteArrayInputStream(ByteArray(35){7})
+        val output=java.io.ByteArrayOutputStream()
+        try {
+            ThumbnailPayloadLimit.copy(input,output,24L)
+            fail("Oversized preview should not be cached")
+        } catch(expected:java.io.IOException) {
+            assertTrue(expected.message.orEmpty().contains("limit"))
+        }
+        assertTrue(output.size()<=24)
+    }
+
+    @Test fun acceptsPreviewExactlyAtLimit() {
+        val input=java.io.ByteArrayInputStream(ByteArray(24){9})
+        val output=java.io.ByteArrayOutputStream()
+        assertEquals(24L,ThumbnailPayloadLimit.copy(input,output,24L))
+        assertArrayEquals(ByteArray(24){9},output.toByteArray())
+    }
+
 }
