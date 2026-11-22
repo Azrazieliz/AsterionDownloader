@@ -1,12 +1,7 @@
 name: Asterion Downloader v1.3.82 — retained identity acceptance update
+# Owner acceptance APK is explicitly held until provider acceptance succeeds.
+# Source edits must run the separate source-only gate, not rebuild an APK.
 on:
-  push:
-    branches: [repair/downloader-global-search-20261121]
-    paths:
-      - '.github/workflows/downloader-v1382-acceptance-update.yml'
-      - 'app/build.gradle.kts'
-      - 'app/src/main/**'
-      - 'app/src/test/**'
   workflow_dispatch:
 permissions:
   contents: write
