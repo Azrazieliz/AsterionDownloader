@@ -572,6 +572,38 @@ object BrowserPageFetch {
                                     }catch(_){}
                                 }
                             }
+                            // The selected PornBuz WatchStreamUS JWPlayer can
+                            // keep its genuine master HLS in VK_PLAYBACK.src
+                            // without exposing HTML5 currentSrc. Serialize
+                            // ONLY that publisher-owned selected master; the
+                            // transfer resolver still verifies its finalized
+                            // full-duration media playlist before download.
+                            const pornBuzSelectedHls=(()=>{
+                                if(!['player.watchstreamus.com',
+                                    'cdn.watchstreamus.com'].includes(selectedPlayerHost) ||
+                                    !/^\/embed\/[A-Za-z0-9_-]{5,150}\/?$/
+                                        .test(location.pathname) ||
+                                    location.search || location.hash)return '';
+                                const configuration=window.VK_PLAYBACK;
+                                if(!configuration ||
+                                    configuration.format!=='hls' ||
+                                    typeof configuration.src!=='string')
+                                    return '';
+                                try{
+                                    const source=new URL(configuration.src,location.href);
+                                    if(source.protocol!=='https:' ||
+                                        !['player.watchstreamus.com',
+                                            'cdn.watchstreamus.com'].includes(
+                                                source.hostname.toLowerCase()) ||
+                                        source.username || source.password ||
+                                        source.port || source.hash ||
+                                        !/\.m3u8$/i.test(source.pathname) ||
+                                        /preview|teaser|sample|trailer/i
+                                            .test(source.pathname))return '';
+                                    return '<video src="'+esc(source.href)+
+                                        '" data-duration="0"></video>';
+                                }catch(_){return '';}
+                            })();
                             const players=[...document.querySelectorAll(
                                 'main video,article video,.video-player video,video#flvv,'+
                                 '#player video,.video-js video,video source[src],'+
@@ -977,7 +1009,7 @@ object BrowserPageFetch {
                                 '</h1><h4>'+esc(chapterTitle)+
                                 '</h4>'+anchors+'<main><div id="article">'+
                                 paragraphs+'</div><div class="video-player">'+
-                                hentaibrosPlayerConfig+players+
+                                hentaibrosPlayerConfig+pornBuzSelectedHls+players+
                                 nhPlayerServer+nhAjaxVideo+embeds+'</div><div id="reader">'+images+
                                 '</div></main></body></html>';
                         })()"""){raw->
