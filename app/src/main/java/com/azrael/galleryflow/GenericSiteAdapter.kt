@@ -147,6 +147,21 @@ class GenericSiteAdapter(private val http: HttpClient) : SourceAdapter {
                 // article preview images.
                 officialArchives.addAll(
                     SelectedAlbumScope.officialOriginalArchives(doc,url))
+                if(officialArchives.isEmpty()){
+                    // A selected publisher article may inject the official
+                    // m.4khd.com bridge only after JS. HTML 200 with preview
+                    // JPEGs is not evidence that the archive was absent.
+                    // The browser can only add first-party validated archive
+                    // references from this exact selected album.
+                    val rendered=runCatching {
+                        http.selected4KhdArticleHtml(url)
+                    }.getOrNull()
+                    if(!rendered.isNullOrBlank()) {
+                        officialArchives.addAll(
+                            SelectedAlbumScope.officialOriginalArchives(
+                                org.jsoup.Jsoup.parse(rendered,url),url))
+                    }
+                }
                 next=null
                 continue
             }
