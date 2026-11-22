@@ -12,6 +12,23 @@ import kotlin.concurrent.thread
 import com.asterion.videoflow.VideoDb
 import com.asterion.videoflow.VideoEngine
 
+/** SepiaSearch returns genuine PeerTube watch pages, whose short /w/<id>
+ * routes are not covered by generic video-host URL heuristics. Only apply
+ * this exception to the independent PeerTube search API results.
+ */
+internal object PeerTubeResultPolicy {
+    fun isVideoWatch(raw:String):Boolean {
+        if(!SearchRanking.validUrl(raw) ||
+            ProviderRetirement.isRetired(raw))return false
+        val uri=runCatching{java.net.URI(raw)}.getOrNull()?:return false
+        if(uri.scheme!="https" || uri.port!=-1 ||
+            uri.fragment!=null || !uri.rawQuery.isNullOrEmpty())return false
+        return SearchRanking.isVideoUrl(raw) ||
+            Regex("""^/w/[A-Za-z0-9_-]{10,100}/?$""")
+                .matches(uri.path.orEmpty())
+    }
+}
+
 /** Exact content-type searches with downloadable-result previews, not site-launch buttons. */
 object AsterionSearchHub {
     private val ui=NocturneDesign
@@ -47,7 +64,7 @@ object AsterionSearchHub {
         return (0 until minOf(json?.length()?:0,30)).mapNotNull{i->
             val hit=json?.optJSONObject(i)?:return@mapNotNull null
             val link=hit.optString("url")
-            if(!SearchRanking.isVideoUrl(link))return@mapNotNull null
+            if(!PeerTubeResultPolicy.isVideoWatch(link))return@mapNotNull null
             Found(hit.optString("name"),link,"PeerTube",hit.optString("thumbnailUrl"))
         }
     }
