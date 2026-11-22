@@ -196,6 +196,16 @@ internal object PublisherOriginalExtractors {
         if(!VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val doc=Jsoup.parse(html,selected)
         val found=LinkedHashMap<String,Candidate>()
+        if(host=="notfans.com"){
+            // Live publisher evidence: the selected /videos/<id>/ article
+            // advertises an exact /get_file/....mp4 Download action. Its
+            // player may not expose HTML5 currentSrc; do not lose this
+            // publisher-owned original to generic unsupported extraction.
+            val files=NotFansSelectedOriginalSource.published(selected,html)
+            if(files.isNotEmpty())return files.map{
+                Candidate(it,selected,host)
+            }
+        }
         if(host=="pimpbunny.com"){
             // The live selected #kt_player publishes signed first-party
             // KVS video_url and video_alt_url. Page preview_*.mp4 files
