@@ -711,9 +711,18 @@ internal object SiteSpecificOriginalSources {
                 Regex("""^/e/[A-Za-z0-9_-]{8,100}/?$""")
                     .matches(path) && frame.rawQuery.isNullOrBlank() &&
                 frame.rawFragment==null
-            "livecamrips.to" -> host(player)=="vidara.to" &&
-                Regex("""^/[A-Za-z0-9_-]{8,50}/?$""").matches(path) &&
-                frame.rawQuery.isNullOrBlank() && frame.rawFragment==null
+            "livecamrips.to" -> (
+                (host(player)=="vidara.to" &&
+                    Regex("""^/[A-Za-z0-9_-]{8,50}/?$""").matches(path) &&
+                    frame.rawQuery.isNullOrBlank()) ||
+                // The publisher has also used Mixdrop as the unique
+                // #iframe-video provider. The article parser must have
+                // selected that exact iframe; do not accept arbitrary ads.
+                (host(player) in setOf("mixdrop.ag","mixdrop.co","mixdrop.to",
+                    "mdzsmutpcvykb.net") &&
+                    Regex("""^/e/[A-Za-z0-9_-]{5,64}/?$""").matches(path) &&
+                    frame.rawQuery.isNullOrBlank())
+            ) && frame.rawFragment==null
             else->false
         }
     }
