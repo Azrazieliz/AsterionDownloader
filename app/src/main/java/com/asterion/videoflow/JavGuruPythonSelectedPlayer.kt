@@ -78,7 +78,11 @@ internal object JavGuruPythonSelectedPlayer {
         // unrelated process environment proxy when mode is direct/VPN.
         val opener=urllib.callAttr("build_opener",
             urllib.callAttr("ProxyHandler",settings))
-        val response=opener.callAttr("open",request,22)
+        // urllib OpenerDirector.open(fullurl, data=None, timeout=...):
+        // Passing 22 as argument #2 treats it as POST data and raises
+        // TypeError before any LU/SB player HTML can be received.
+        // Explicit None preserves a GET and makes 22 the timeout.
+        val response=opener.callAttr("open",request,null,22)
         try{
             if(response.callAttr("getcode").toInt()!=200)
                 throw IOException("Selected JAV Guru player did not return HTTP 200")
