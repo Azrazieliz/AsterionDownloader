@@ -1,0 +1,31 @@
+name: Asterion Downloader — LiveCamRips actual selected full-file PC
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_livecamrips_full_selected_20261122.py'
+      - '.github/workflows/downloader-pc-livecamrips-full-selected-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-selected-original:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install full video testing dependencies
+        run: |
+          python3 -m py_compile scripts/pc_livecamrips_full_selected_20261122.py
+          python3 -m pip install --disable-pip-version-check beautifulsoup4 selenium==4.36.0 'yt-dlp==2026.10.26'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Transfer genuine LiveCamRips selected file and verify or fail
+        run: python3 scripts/pc_livecamrips_full_selected_20261122.py
+      - name: Keep only sanitized validation receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livecamrips-one-selected-complete-original
+          path: pc-livecamrips-selected-full-receipt.json
+          retention-days: 14
