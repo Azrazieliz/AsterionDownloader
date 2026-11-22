@@ -29,6 +29,7 @@ internal object PublisherOriginalExtractors {
         // LiveCamRips' exact /video/<id> publisher page embeds the recording
         // in one iframe#iframe-video. Other iframes/ads are not originals.
         Site("livecamrips.to","iframe#iframe-video[src]",allowPlayerIframe=true),
+        Site("dsysav.com","main .video-container video[src]",allowPlayerIframe=false),
         Site("xxxi.porn","#player video[src],.video-player source[src],meta[itemprop=contentUrl]"),
         Site("notfans.com","main #player video[src],main #player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
@@ -381,6 +382,15 @@ internal object PublisherOriginalExtractors {
     fun resolve(context:android.content.Context,selected:String):List<Candidate> {
         if(!owns(selected) || !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val host=domain(selected)
+        if(host=="dsysav.com"){
+            // Resolve the exact owner's English watch ID through DSYSAV's
+            // public first-party API, not the site's unrelated trending
+            // cards or the independent dsav123.wiki publisher.
+            val source=DsysavSelectedOriginal.resolve(context,selected)
+            return source?.let {
+                listOf(Candidate(it.mpd,selected,"dsysav.com"))
+            }.orEmpty()
+        }
         if(host=="eporner.com"){
             // Existing official /embed/<same-id>/ is an independently
             // publisher-owned, publicly served selected player. The owner
