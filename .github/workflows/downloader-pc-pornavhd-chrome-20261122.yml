@@ -1,0 +1,31 @@
+name: Asterion Downloader — PC PornAVHD selected WebView mirror
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_pornavhd_chrome_player_20261122.py'
+      - '.github/workflows/downloader-pc-pornavhd-chrome-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selected-chrome-player:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated Selenium for actual site browser state
+        run: python3 -m pip install --disable-pip-version-check selenium==4.36.0
+      - name: Inspect exact selected recording WebView-style playback and media HTTP
+        shell: bash
+        run: |
+          set -eo pipefail
+          python3 scripts/pc_pornavhd_chrome_player_20261122.py | tee pc-pornavhd-chrome-browser.log
+      - name: Preserve only host-level source and HTTP evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-pornavhd-chrome-selected-source-trace
+          path: pc-pornavhd-chrome-browser.log
+          retention-days: 14
+          if-no-files-found: ignore
