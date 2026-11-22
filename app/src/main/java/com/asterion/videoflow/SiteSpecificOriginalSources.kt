@@ -433,6 +433,20 @@ internal object SiteSpecificOriginalSources {
         // player host, so give it the EXACT iframe rather than a made-up MP4.
         return listOf(Source(playerPage,if(playerPage==link)selected else link))
     }
+    /** Only a JK control on the selected WordPress article may trigger the
+     * browser hydration fallback; a sidebar link is never a publisher source. */
+    internal fun missingPublishedJkControl(
+        doc:Document,selected:String,initial:List<JavGuruOriginalSource.Player>
+    ):Boolean {
+        if(initial.any{it.server=="JK"})return false
+        val page=runCatching{URI(selected)}.getOrNull()?:return false
+        if(host(selected)!="jav.guru")return false
+        val post=page.path.orEmpty().trim('/').substringBefore('/')
+        if(!post.matches(Regex("[0-9]{4,10}")))return false
+        return doc.select("article#post-$post a.wp-btn-iframe__shortcode")
+            .any{it.text().trim().equals("STREAM JK",ignoreCase=true)}
+    }
+
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
      * the publisher-attested shortcode and its first-party /searcho/ relay
@@ -453,10 +467,7 @@ internal object SiteSpecificOriginalSources {
         // transfer back to repeatedly 403-ing Python transports. Recheck
         // the SAME article only if its DOM visibly advertises an unresolved
         // JK control. Keep the secondary native-only worker static/light.
-        val unresolvedJk=initial.none{it.server=="JK"} &&
-            doc.select("a.wp-btn-iframe__shortcode").any{
-                it.text().trim().equals("STREAM JK",ignoreCase=true)
-            }
+        val unresolvedJk=missingPublishedJkControl(doc,selected,initial)
         val inspectRendered=!nativeJkOnly &&
             (initial.isEmpty() || unresolvedJk) &&
             (BrowserPageFetch.publicEligible(selected) ||
