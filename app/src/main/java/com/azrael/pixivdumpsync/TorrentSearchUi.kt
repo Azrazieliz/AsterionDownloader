@@ -6,6 +6,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.Switch
+import android.content.Intent
 import kotlin.concurrent.thread
 
 /** One visible, category-specific native torrent workflow across the main app. */
@@ -64,6 +65,24 @@ object TorrentSearchUi {
                 status.text="Retrieving metadata; choose files before downloading"
             },ui.lp(a,6))
         }
+        // Metadata-only direct import is useful when a public magnet cache
+        // has no descriptor and peer metadata would enter the native torrent
+        // engine's device-safety hold. This opens Android's own file picker;
+        // it does not transfer any pieces until files are selected.
+        card.addView(ui.action(a,"PREVIEW LOCAL .TORRENT FILE",false){
+            a.getSharedPreferences("asterion_torrent_search",0).edit()
+                .putString("local_torrent_target_folder",when(area){
+                    TorrentArea.GAMES->"Games"
+                    TorrentArea.BOOKS->"Books"
+                    TorrentArea.ADULT->"Videos"
+                }).apply()
+            a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply{
+                type="*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(
+                    "application/x-bittorrent","application/octet-stream"))
+            },5222)
+        },ui.lp(a,7))
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         val records=ArrayList<CatalogHit>()
         val searchGeneration=java.util.concurrent.atomic.AtomicLong()
