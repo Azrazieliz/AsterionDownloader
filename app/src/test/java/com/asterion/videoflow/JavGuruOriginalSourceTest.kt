@@ -30,15 +30,18 @@ class JavGuruOriginalSourceTest {
                 "data-localize='jjjjjjjjjj'>STREAM JK</a></li></ul>"),selected)
         val initial=JavGuruOriginalSource.published(selected,html.outerHtml())
         assertEquals(listOf("LU"),initial.map{it.server})
-        assertTrue(SiteSpecificOriginalSources.missingPublishedJkControl(
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedJk(
             html,selected,initial))
         val recovered=listOf(JavGuruOriginalSource.Player("JK",wrapper))+initial
-        assertFalse(SiteSpecificOriginalSources.missingPublishedJkControl(
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
             html,selected,recovered))
         val unrelated=org.jsoup.Jsoup.parse(post.replace(
             "</html>","<aside><a class='wp-btn-iframe__shortcode'>"+
                 "STREAM JK</a></aside></html>"),selected)
-        assertFalse(SiteSpecificOriginalSources.missingPublishedJkControl(
+        // A selected post whose JK control is absent from static HTML
+        // still qualifies for one same-article hydration. Sidebar controls
+        // are not themselves used as source media.
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedJk(
             unrelated,selected,initial))
     }
     @Test fun onlyExactSelectedWordpressStreamNotAdvertisementOrRelatedPost(){
