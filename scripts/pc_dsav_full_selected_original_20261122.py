@@ -29,23 +29,35 @@ def manifest_probe(source):
          "playlist_duration_seconds":round(sum(float(x) for x in
              re.findall(r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",text)),2)}
     if not out["hls_is_master"]:
-        segment=next((x for x in lines if x and not x.startswith("#")),None)
-        if segment:
-            link=urllib.parse.urljoin(source,segment)
-            if safe_url(link) and host(link)==OBSERVED_CDN:
-                try:
-                    h=dict(HEADERS,Range="bytes=0-751")
-                    with urllib.request.urlopen(urllib.request.Request(link,headers=h),timeout=22) as r:
-                        sample=r.read(752)
-                        out.update(first_segment_http=r.status,
-                            first_segment_mime=r.headers.get("Content-Type","").split(";")[0],
-                            first_segment_bytes_read=len(sample),
-                            first_segment_sync=(len(sample)>=752 and
-                                all(sample[i*188]==0x47 for i in range(4))))
-                except urllib.error.HTTPError as e:
-                    out["first_segment_http"]=e.code
-                except Exception as e:
-                    out["first_segment_problem"]=type(e).__name__
+        # Fast evidence gate: no full 203-segment transfer when the actual
+        # publisher-listed first, middle or final .ts is already HTTP403.
+        # Signed URLs are consumed only as published by this exact HLS,
+        # never synthesized, token-guessed or logged.
+        segments=[x for x in lines if x and not x.startswith("#")]
+        examined={}
+        for label,index in (("first",0),("middle",len(segments)//2),
+                            ("last",len(segments)-1)):
+            if not segments:break
+            link=urllib.parse.urljoin(source,segments[index])
+            if not safe_url(link):
+                examined[label]={"http":None,"problem":"unsafe published segment"}
+                continue
+            item={"host":host(link)}
+            try:
+                h=dict(HEADERS,Range="bytes=0-751")
+                with urllib.request.urlopen(urllib.request.Request(link,headers=h),timeout=15) as r:
+                    sample=r.read(752)
+                    item.update(http=r.status,
+                        mime=r.headers.get("Content-Type","").split(";")[0],
+                        bytes_read=len(sample),
+                        ts_sync=(len(sample)>=752 and
+                            all(sample[i*188]==0x47 for i in range(4))))
+            except urllib.error.HTTPError as e:
+                item.update(http=e.code)
+            except Exception as e:
+                item.update(problem=type(e).__name__)
+            examined[label]=item
+        out["published_segment_checks"]=examined
     return out
 
 def complete_dsav(source,expected_runtime):
@@ -163,6 +175,10 @@ try:
                "duration":max(durations),
                "reason":"one first-party selected article, live main-player duration and exactly one observed HLS"}
     result.update(manifest_probe(source))
+    checks=result.get("published_segment_checks",{})
+    if len(checks)!=3 or any(
+        x.get("http") not in (200,206) for x in checks.values()):
+        raise RuntimeError("PUBLISHER_HLS_SEGMENTS_UNAVAILABLE_FIRST_MIDDLE_LAST")
     result.update(complete_dsav(source,max(durations)))
 except Exception as exc:
     result["error_type"]=type(exc).__name__
