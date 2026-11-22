@@ -11,7 +11,7 @@ permissions:
 jobs:
   verified-selected-original:
     runs-on: ubuntu-latest
-    timeout-minutes: 17
+    timeout-minutes: 31
     steps:
       - uses: actions/checkout@v4
       - name: Install exact original transfer and playable-file tools

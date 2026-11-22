@@ -67,14 +67,14 @@ def full_file(link):
   out=Path(temp)
   cmd=[sys.executable,"-m","yt_dlp",
     "--no-playlist","--no-part","--no-mtime","--no-warnings",
-    "--retries","3","--fragment-retries","4","--abort-on-unavailable-fragments",
-    "--socket-timeout","25","--concurrent-fragments","4",
-    "--max-filesize","2000M","--format","bestvideo+bestaudio/best",
+    "--retries","3","--fragment-retries","6","--abort-on-unavailable-fragments",
+    "--socket-timeout","30","--concurrent-fragments","12",
+    "--max-filesize","6000M","--format","bestvideo+bestaudio/best",
     "--add-header","Referer:"+EMBED,"--add-header","Origin:https://vidara.to",
     "-o",str(out/"original.%(ext)s"),link]
   try:
    p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-                     text=True,timeout=775)
+                     text=True,timeout=1600)
   except subprocess.TimeoutExpired:
    raise RuntimeError("SELECTED_FULL_TRANSFER_TIMED_OUT")
   if p.returncode:
