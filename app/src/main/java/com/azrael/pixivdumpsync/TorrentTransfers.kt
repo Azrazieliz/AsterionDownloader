@@ -57,6 +57,49 @@ object TorrentTransfers {
     private fun statusDir(context:Context)=
         File(context.filesDir,"torrent-jobs").apply{mkdirs()}
     private fun validJob(id:String)=id.matches(Regex("[a-f0-9]{24}"))
+    private fun cancellationFile(c:Context,id:String):File {
+        require(validJob(id)){"Invalid torrent job id"}
+        return File(statusDir(c),"$id.cancelled")
+    }
+    /** A durable, cross-process cancellation marker. SharedPreferences is
+     * cached separately in the UI and :torrent process and cannot by itself
+     * stop a worker when Android refuses to deliver a service command.
+     * This marker is never a request to start native/JNI torrent work.
+     */
+    internal fun isMarkedCancelled(c:Context,id:String):Boolean =
+        validJob(id) && (cancellationFile(c,id).isFile ||
+            c.getSharedPreferences("torrent_transfers",Context.MODE_PRIVATE)
+                .getBoolean("job_cancelled_$id",false))
+
+    internal fun markCancelled(c:Context,id:String):Boolean {
+        if(!validJob(id))return false
+        val marker=android.util.AtomicFile(cancellationFile(c,id))
+        val output=marker.startWrite()
+        try {
+            output.write("cancelled".toByteArray(Charsets.UTF_8))
+            marker.finishWrite(output)
+        }catch(t:Throwable){
+            marker.failWrite(output)
+            return false
+        }
+        val persisted=c.getSharedPreferences("torrent_transfers",
+            Context.MODE_PRIVATE).edit()
+            .putBoolean("job_cancelled_$id",true)
+            .putBoolean("job_paused_$id",true)
+            .remove("job_deferred_$id")
+            .commit()
+        record(c,"job_$id",
+            "Cancelled · selected torrent removed from queue; "+
+            "unverified private pieces retained for security review")
+        return persisted
+    }
+    internal fun clearCancellationForExplicitSelection(c:Context,id:String):Boolean {
+        if(!validJob(id))return false
+        val marker=cancellationFile(c,id)
+        if(marker.exists() && !marker.delete())return false
+        return c.getSharedPreferences("torrent_transfers",Context.MODE_PRIVATE)
+            .edit().remove("job_cancelled_$id").commit()
+    }
     private fun statusFile(context:Context,id:String):File {
         require(validJob(id)){"Invalid torrent job id"}
         return File(statusDir(context),"$id.status")
@@ -68,6 +111,26 @@ object TorrentTransfers {
     data class Snapshot(val id:String,val text:String,val stage:String,
         val verifiedBytes:Long=0L,val wantedBytes:Long=0L,
         val speedBytesPerSec:Long=0L,val peers:Int=0,val updated:Long=0L)
+    /** An explicit cancellation always wins over incidental text such as
+     * "security review" in the cancellation receipt.
+     */
+    internal fun classifyStatus(text:String,updated:Long,
+                                speedBytesPerSec:Long,now:Long):String {
+        val raw=text.lowercase(java.util.Locale.ROOT)
+        val age=now-updated
+        return when {
+            "cancelled" in raw->"CANCELLED"
+            "exported" in raw->"EXPORTED"
+            "exporting" in raw->"EXPORTING"
+            "quarantin" in raw || "security review" in raw->"QUARANTINED"
+            "failed:" in raw || "stalled:" in raw->"FAILED"
+            "pause" in raw->"PAUSED"
+            "verify" in raw || "review" in raw->"VERIFYING"
+            updated>0L && age in 0..15_000L && speedBytesPerSec>0L->"TRANSFERRING"
+            updated>0L && age in 0..15_000L->"WAITING_PEERS"
+            else->"QUEUED"
+        }
+    }
     /** Cross-process authoritative original bytes from the native torrent
      * engine. Never treat torrent metadata or unchecked partial pieces as
      * verified saved media; this file is an observation only.
@@ -107,21 +170,8 @@ object TorrentTransfers {
                     Charsets.UTF_8).split('|').mapNotNull{it.toLongOrNull()}
             }.getOrDefault(emptyList())
             val updated=values.getOrNull(0)?:0L
-            val age=System.currentTimeMillis()-updated
-            val raw=value.lowercase(java.util.Locale.ROOT)
-            val stage=when{
-                "exported" in raw->"EXPORTED"
-                "exporting" in raw->"EXPORTING"
-                "quarantin" in raw || "security review" in raw->"QUARANTINED"
-                "cancelled" in raw->"CANCELLED"
-                "failed:" in raw || "stalled:" in raw->"FAILED"
-                "pause" in raw->"PAUSED"
-                "verify" in raw || "review" in raw->"VERIFYING"
-                updated>0L && age in 0..15_000L &&
-                    (values.getOrNull(3)?:0L)>0L->"TRANSFERRING"
-                updated>0L && age in 0..15_000L->"WAITING_PEERS"
-                else->"QUEUED"
-            }
+            val stage=classifyStatus(value,updated,values.getOrNull(3)?:0L,
+                System.currentTimeMillis())
             Snapshot(id,value,stage,values.getOrNull(1)?:0L,
                 values.getOrNull(2)?:0L,values.getOrNull(3)?:0L,
                 values.getOrNull(4)?.toInt()?:0,updated)
@@ -132,9 +182,12 @@ object TorrentTransfers {
      * across the main UI and isolated libtorrent engine processes.
      */
     internal fun record(c: Context, id: String, value: String) {
+        val hash=id.removePrefix("job_")
+        if(id.startsWith("job_") && validJob(hash) &&
+            isMarkedCancelled(c,hash) && !value.contains("Cancelled",true))
+            return // A stale isolated worker must not revive a discarded job.
         c.getSharedPreferences("torrent_transfers", Context.MODE_PRIVATE)
             .edit().putString(id, value).apply()
-        val hash=id.removePrefix("job_")
         if(!id.startsWith("job_") || !validJob(hash))return
         runCatching{
             val file=statusFile(c,hash)
@@ -234,19 +287,26 @@ object TorrentTransfers {
                                         "Unverified private pieces are retained for security review.")
                                     .setNegativeButton("Keep job",null)
                                     .setPositiveButton("Discard"){_,_->
-                                        runCatching{
-                                            a.startForegroundService(
-                                                Intent(a,TorrentTransferService::class.java).apply{
-                                                    action=TorrentTransferService.CANCEL
-                                                    putExtra("job",id)
-                                                })
-                                        }.onSuccess{
+                                        if(!markCancelled(a,id)){
                                             Toast.makeText(a,
-                                                "Discard requested; saved originals preserved",
+                                                "Could not save torrent cancellation",
                                                 Toast.LENGTH_LONG).show()
-                                        }.onFailure{
-                                            Toast.makeText(a,"Could not discard torrent: "+
-                                                it.message.orEmpty().take(100),
+                                        }else{
+                                            // Persist the cancellation even if Android
+                                            // rejects a new foreground service. Active
+                                            // workers inspect the marker directly.
+                                            runCatching{
+                                                a.startForegroundService(
+                                                    Intent(a,TorrentTransferService::class.java).apply{
+                                                        action=TorrentTransferService.CANCEL
+                                                        putExtra("job",id)
+                                                    })
+                                            }.onFailure{
+                                                android.util.Log.w("AsterionTorrent",
+                                                    "Cancellation marker saved; service signal unavailable",it)
+                                            }
+                                            Toast.makeText(a,
+                                                "Torrent discarded; originals and private pieces preserved",
                                                 Toast.LENGTH_LONG).show()
                                         }
                                     }.show()
@@ -369,8 +429,7 @@ class TorrentTransferService : Service() {
             .setProgress(100, percent.coerceIn(0, 100), false).build()
     }
     @Synchronized private fun startJob(id:String,folder:String,indices:String):Boolean {
-        if(getSharedPreferences("torrent_transfers",MODE_PRIVATE)
-                .getBoolean("job_cancelled_$id",false)){
+        if(TorrentTransfers.isMarkedCancelled(this,id)){
             update(id,"Cancelled · user removed torrent from queue")
             return false
         }
@@ -406,8 +465,7 @@ class TorrentTransferService : Service() {
                     .remove("job_paused_$id").apply()
             }catch(e:Throwable){
                 if(e is VirtualMachineError || e is ThreadDeath)throw e
-                if(getSharedPreferences("torrent_transfers",MODE_PRIVATE)
-                        .getBoolean("job_cancelled_$id",false)){
+                if(TorrentTransfers.isMarkedCancelled(this,id)){
                     update(id,"Cancelled · selected torrent removed from queue; "+
                         "private pieces retained for explicit security review")
                 }else if(e is InterruptedException || stopRequests.contains(id))
@@ -467,7 +525,7 @@ class TorrentTransferService : Service() {
         restoreDeferredSelections()
         while(true){
             val id=deferredJobs.poll()?:return false
-            if(prefs.getBoolean("job_cancelled_$id",false) ||
+            if(TorrentTransfers.isMarkedCancelled(this,id) ||
                prefs.getBoolean("job_paused_$id",false)){
                 prefs.edit().remove("job_deferred_$id").commit()
                 continue
@@ -645,8 +703,7 @@ class TorrentTransferService : Service() {
                 // Do not unload the native engine on the UI process or erase
                 // resumable quarantine pieces while its writer is active.
                 // This durable tombstone blocks later automatic RESUME/ADD.
-                prefs.edit().putBoolean("job_cancelled_$id",true)
-                    .putBoolean("job_paused_$id",true).commit()
+                TorrentTransfers.markCancelled(this,id)
                 stopRequests.add(id)
                 paused.add(id)
                 workers[id]?.interrupt()
@@ -665,7 +722,7 @@ class TorrentTransferService : Service() {
                 return START_NOT_STICKY
             }
             RESUME->{
-                if(prefs.getBoolean("job_cancelled_$id",false)){
+                if(TorrentTransfers.isMarkedCancelled(this,id)){
                     update(id,"Cancelled · select torrent again to restart")
                     return START_NOT_STICKY
                 }
@@ -680,7 +737,11 @@ class TorrentTransferService : Service() {
             ADD->{
                 // Explicit user selection is the sole way to re-arm a
                 // previously cancelled infohash, never background polling.
-                prefs.edit().remove("job_cancelled_$id").commit()
+                if(!TorrentTransfers.clearCancellationForExplicitSelection(this,id)){
+                    update(id,"FAILED: Could not clear prior cancellation")
+                    stopIfIdle(startId)
+                    return START_NOT_STICKY
+                }
                 stopRequests.remove(id)
                 val folder=intent.getStringExtra("folder")
                     ?.takeIf{it in setOf("Games","Books","Videos","Assets")}
@@ -732,6 +793,8 @@ class TorrentTransferService : Service() {
             .notify(NOTIFICATION, notification(state, progress))
     }
     private fun transfer(id: String, folder: String, encoded: String) {
+        if(TorrentTransfers.isMarkedCancelled(this,id))
+            throw InterruptedException("Torrent was discarded before native transfer")
         val descriptor = File(File(filesDir, "torrent-jobs"), "$id.torrent")
         require(descriptor.isFile) { "Torrent metadata missing" }
         val info = TorrentInfo(descriptor)
@@ -777,14 +840,16 @@ class TorrentTransferService : Service() {
         var lastAdvance=android.os.SystemClock.elapsedRealtime()
         var reannouncedSinceAdvance=false
         while (true) {
-            if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
+            if(stopRequests.contains(id) || Thread.currentThread().isInterrupted ||
+                TorrentTransfers.isMarkedCancelled(this,id))
                 throw InterruptedException("Torrent transfer stopped; pieces retained")
             if (paused.contains(id)) {
                 handle.pause()
                 update(id, "Paused")
                 while (paused.contains(id)) {
-                    if(stopRequests.contains(id) || Thread.currentThread().isInterrupted)
-                        throw InterruptedException("Torrent paused by service timeout")
+                    if(stopRequests.contains(id) || Thread.currentThread().isInterrupted ||
+                        TorrentTransfers.isMarkedCancelled(this,id))
+                        throw InterruptedException("Torrent paused or discarded")
                     Thread.sleep(500)
                 }
                 handle.resume()
@@ -844,7 +909,8 @@ class TorrentTransferService : Service() {
         var checked=0
         val findings=ArrayList<String>()
         for(index in selected.sorted()){
-            if(stopRequests.contains(id)||Thread.currentThread().isInterrupted)
+            if(stopRequests.contains(id)||Thread.currentThread().isInterrupted ||
+                TorrentTransfers.isMarkedCancelled(this,id))
                 throw InterruptedException("Torrent review interrupted; pieces quarantined")
             val path=files.filePath(index)
             val source=File(destination,path).canonicalFile
