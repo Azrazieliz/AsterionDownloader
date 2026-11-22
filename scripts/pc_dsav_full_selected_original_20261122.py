@@ -7,12 +7,91 @@ HTTP 200. Never guess signatures, bypass access controls, infer media from
 a poster, or report a partial download as success. Media is deleted after
 full byte/hash/FFprobe validation.
 """
-import hashlib,json,re,sys,time,urllib.parse
+import hashlib,json,re,subprocess,sys,tempfile,time,urllib.parse,urllib.request
 from pathlib import Path
-from pc_full_selected_provider_acceptance_20261122 import driver,full_file,safe_url,host
+from pc_full_selected_provider_acceptance_20261122 import driver,safe_url,host
 
 SELECTED="https://dsav123.wiki/video/2019329099956133888/"
 OBSERVED_CDN="er45yer.sxtmo.com"
+UA="Mozilla/5.0 (Linux; Android 17; Mobile) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"
+HEADERS={"User-Agent":UA,"Referer":SELECTED,
+         "Origin":"https://dsav123.wiki","Accept-Encoding":"identity"}
+
+def manifest_probe(source):
+    with urllib.request.urlopen(urllib.request.Request(source,headers=HEADERS),timeout=25) as res:
+        text=res.read(300_000).decode("utf-8","replace")
+        assert res.status==200 and text.startswith("#EXTM3U"),"SELECTED_HLS_NOT_PLAYLIST"
+    lines=[line.strip() for line in text.splitlines()]
+    out={"manifest_http":200,"selected_manifest_host":host(source),
+         "hls_is_master":any(x.startswith("#EXT-X-STREAM-INF") for x in lines),
+         "published_segment_count":sum(bool(x) and not x.startswith("#") for x in lines),
+         "has_endlist":"#EXT-X-ENDLIST" in text,
+         "playlist_duration_seconds":round(sum(float(x) for x in
+             re.findall(r"#EXTINF:([0-9]+(?:\.[0-9]+)?)",text)),2)}
+    if not out["hls_is_master"]:
+        segment=next((x for x in lines if x and not x.startswith("#")),None)
+        if segment:
+            link=urllib.parse.urljoin(source,segment)
+            if safe_url(link) and host(link)==OBSERVED_CDN:
+                try:
+                    h=dict(HEADERS,Range="bytes=0-751")
+                    with urllib.request.urlopen(urllib.request.Request(link,headers=h),timeout=22) as r:
+                        sample=r.read(752)
+                        out.update(first_segment_http=r.status,
+                            first_segment_mime=r.headers.get("Content-Type","").split(";")[0],
+                            first_segment_bytes_read=len(sample),
+                            first_segment_sync=(len(sample)>=752 and
+                                all(sample[i*188]==0x47 for i in range(4))))
+                except urllib.error.HTTPError as e:
+                    out["first_segment_http"]=e.code
+                except Exception as e:
+                    out["first_segment_problem"]=type(e).__name__
+    return out
+
+def complete_dsav(source,expected_runtime):
+    with tempfile.TemporaryDirectory(prefix="asterion-dsav-pc-full-") as folder:
+        output=Path(folder)
+        cmd=[sys.executable,"-m","yt_dlp","--no-playlist","--no-part",
+            "--no-mtime","--no-warnings","--retries","3","--fragment-retries","3",
+            "--concurrent-fragments","4","--socket-timeout","22",
+            "--max-filesize","1200M","--format","best",
+            "--user-agent",UA,
+            "--add-header","Referer:"+SELECTED,
+            "--add-header","Origin:https://dsav123.wiki",
+            "-o",str(output/"selected-original.%(ext)s"),source]
+        try:
+            process=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                                   text=True,timeout=400)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("FULL_SELECTED_DOWNLOAD_TIME_LIMIT_EXCEEDED")
+        if process.returncode:
+            tail=process.stdout[-750:]
+            tail=re.sub(r"https?://\S+","[REDACTED]",tail)
+            raise RuntimeError("ORIGINAL_TRANSFER_FAILED:"+tail)
+        candidates=[f for f in output.iterdir() if f.is_file() and
+                    f.stat().st_size>2_000_000 and not f.name.endswith(".part")]
+        if len(candidates)!=1:raise RuntimeError("FULL_SELECTED_FILE_NOT_FINALIZED")
+        path=candidates[0]
+        probe=subprocess.run(["ffprobe","-v","error","-show_entries",
+              "format=duration,size:stream=codec_type","-of","json",str(path)],
+              capture_output=True,text=True,timeout=35)
+        if probe.returncode:raise RuntimeError("FFPROBE_UNPLAYABLE_SELECTED_FILE")
+        parsed=json.loads(probe.stdout)
+        seconds=float(parsed.get("format",{}).get("duration") or 0)
+        tracks=[v.get("codec_type") for v in parsed.get("streams",[])]
+        if seconds<max(90,expected_runtime*.90) or seconds>expected_runtime*1.10:
+            raise RuntimeError("WRONG_OR_PREVIEW_DURATION")
+        if "audio" not in tracks or "video" not in tracks:
+            raise RuntimeError("SELECTED_ORIGINAL_LACKS_AUDIO_OR_VIDEO")
+        digest=hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda:stream.read(1048576),b""):
+                digest.update(chunk)
+        return {"complete_selected_original":True,"bytes":path.stat().st_size,
+                "duration_seconds":round(seconds,3),"tracks":tracks,
+                "sha256":digest.hexdigest(),
+                "verified_runtime_seconds":expected_runtime}
+
 result={"provider":"dsav","selected_article":SELECTED,"selected_article_host":host(SELECTED),
         "complete_selected_original":False}
 d=driver()
@@ -83,7 +162,8 @@ try:
     candidate={"source":source,"referer":SELECTED,
                "duration":max(durations),
                "reason":"one first-party selected article, live main-player duration and exactly one observed HLS"}
-    result.update(full_file(SELECTED,candidate))
+    result.update(manifest_probe(source))
+    result.update(complete_dsav(source,max(durations)))
 except Exception as exc:
     result["error_type"]=type(exc).__name__
     result["reason"]=re.sub(r"https?://\S+","[URL_REDACTED]",str(exc))[:250]
