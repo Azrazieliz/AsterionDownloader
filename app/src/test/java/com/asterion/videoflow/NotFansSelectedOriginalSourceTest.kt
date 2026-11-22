@@ -22,6 +22,8 @@ class NotFansSelectedOriginalSourceTest {
         assertEquals(listOf(original),integrated.map{it.url})
         assertEquals(selected,integrated.single().referer)
         assertTrue(NativeMediaDownloader.isNativeEligible(selected,original))
+        assertTrue(NativeMediaDownloader.isNativeEligible(selected,original,true))
+        assertTrue(NotFansSelectedOriginalSource.isPublisherFormat(original))
         assertTrue(NotFansSelectedOriginalSource.verifiedDownload(selected,original))
     }
 
