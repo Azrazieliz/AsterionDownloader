@@ -7,6 +7,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DirectGalleryParserTest {
+    private class FakeGalleryHttp(private val pages:Map<String,String>):HttpClient() {
+        override fun document(url:String,referer:String?):org.jsoup.nodes.Document =
+            Jsoup.parse(pages[url] ?: error("Unexpected gallery fetch: "+url),url)
+    }
+
+    @Test fun selectedFourKGirlPostKeepsExactAlbumIdentity(){
+        val url="https://www.4kgirl.com/selected-cosplay-set/"
+        val adapter=FourKGirlAdapter(FakeGalleryHttp(mapOf(
+            url to "<html><h1>Selected Cosplay Set</h1>"+
+                "<article><a href='/another-set/'>Other post</a></article></html>")))
+        val entity=adapter.resolveEntity(url)
+        assertEquals("gallery_only",entity.kind)
+        assertEquals("gallery:selected-cosplay-set",entity.stableId)
+        val actual=adapter.enumerateGalleries(entity).toList()
+        assertEquals(1,actual.size)
+        assertEquals(url,actual.single().canonicalUrl)
+        assertEquals("selected-cosplay-set",actual.single().stableId)
+        assertEquals("Selected Cosplay Set",actual.single().title)
+        assertEquals("site",adapter.resolveEntity("https://www.4kgirl.com/").kind)
+        assertEquals("site",adapter.resolveEntity(
+            "https://www.4kgirl.com/category/cosplay/").kind)
+    }
+
     @Test
     fun cosplayTeleMixedAlbumRetainsImagesAndArchiveOnlyVideos() {
         val article="https://cosplaytele.com/approved-album/"
