@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      ASTERION_PC_STAGE_ROOT: ${{ runner.temp }}
+      ASTERION_PC_STAGE_ROOT: /tmp
     steps:
       - uses: actions/checkout@v4
       - name: Install AES decoder (published ordinary HLS AES-128)
