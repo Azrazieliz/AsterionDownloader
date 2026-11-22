@@ -7,6 +7,21 @@ class CosplayTeleExactIframeTransferTest {
     private val selected="https://cosplaytele.com/selected-cosplay-gallery/"
     private val iframe="https://cosplaytele.com/embed/selected-video-12345"
 
+    @Test fun galleryVideoEmbeddedSelectorAcceptsOnlySelectedPublisherPlayer(){
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,iframe))
+        assertTrue(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://www.cosplaytele.com/player/selected-video-12345"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://cosplaytele.com/embed/selected-video-12345?ad=1"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://cosplaytele.com/embed/selected-video-12345#related"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            selected,"https://ads.example.org/embed/selected-video-12345"))
+        assertFalse(SiteSpecificOriginalSources.selectedExtractorFrame(
+            "https://cosplaytele.com/category/gallery/",iframe))
+    }
+
     @Test fun selectedFirstPartyEmbedReturnsMediaNotUnsupportedIframe(){
         val html="""<html><main><div class="video-player">
             <video src="https://cdn.example.org/originals/selected-full.mp4"
