@@ -5,6 +5,50 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CosplayTeleNativeAlbumScopeTest {
+    @Test fun selectedArchiveLinkCannotBeReplacedByRelatedPostOrLookalikeHost(){
+        val selected="https://cosplaytele.com/selected-cosplay-set/"
+        val doc=Jsoup.parse("""
+          <main><article id="post-43" class="post-43">
+            <div class="entry-content">
+              <div class="gallery galleryid-43">
+                <a href="https://cdn.cosplaytele.com/set/full01.jpg">
+                  <img src="https://cdn.cosplaytele.com/set/thumb01.jpg"/></a>
+              </div>
+              <a href="https://www.mediafire.com/file/selected-original.zip">
+                Selected full archive</a>
+              <a href="https://mediafire.com.attacker.example/file/spoof.zip">
+                Spoof host</a>
+              <div class="related"><a href="https://www.mediafire.com/file/other.zip">
+                Another album</a></div>
+            </div></article>
+            <aside><a href="https://gofile.io/d/unrelated">Trending gallery</a></aside>
+          </main>
+        """.trimIndent(),selected)
+        val scoped=SelectedAlbumScope.selectedArchiveArticle(doc,selected)
+        val links=CosplayTeleAdapter(HttpClient()).providerLinks(scoped)
+        assertEquals(1,links.size)
+        assertEquals("https://www.mediafire.com/file/selected-original.zip",
+            links.single().first)
+        assertEquals("MediaFire",links.single().second)
+        assertFalse(scoped.html().contains("other.zip"))
+        assertFalse(scoped.html().contains("unrelated"))
+    }
+
+    @Test fun relatedOnlyArchiveDoesNotBecomeSelectedGalleryOriginal(){
+        val selected="https://cosplaytele.com/selected-cosplay-set/"
+        val doc=Jsoup.parse("""
+          <main><article><div class="entry-content">
+            <img src="https://cdn.cosplaytele.com/set/selected.jpg"/>
+            <div class="related">
+              <a href="https://www.mediafire.com/file/unrelated-archive.zip">
+                Related gallery archive</a>
+            </div>
+          </div></article></main>
+        """.trimIndent(),selected)
+        val scoped=SelectedAlbumScope.selectedArchiveArticle(doc,selected)
+        assertTrue(CosplayTeleAdapter(HttpClient()).providerLinks(scoped).isEmpty())
+    }
+
     @Test fun officialSameSiteVideoIframeBesidePhotoGalleryIsPreserved(){
         val selectedFrame="https://cosplaytele.com/embed/video12345"
         val doc=Jsoup.parse("""
