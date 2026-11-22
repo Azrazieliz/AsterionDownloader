@@ -2,6 +2,7 @@ package com.asterion.videoflow
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.jsoup.Jsoup
 
 /** Offline selected publisher fixture only, never a completed PC or Android original. */
 class JavGuruJkSelectedOriginalTest {
@@ -18,6 +19,30 @@ class JavGuruJkSelectedOriginalTest {
     private fun doc(vararg fragments:String):String =
         "<html><div id='player'></div>"+
         fragments.joinToString(""){"<script>$it</script>"}+"</html>"
+
+    @Test fun incompleteSelectedNonJkShellTriggersOneAuthorisedJkHydration(){
+        val selected="https://jav.guru/1234567/owner-selected-original/"
+        val html="<article id='post-1234567'>"+
+            "<a class='wp-btn-iframe__shortcode' data-localize='sb'>STREAM SB</a>"+
+            "</article><aside><a class='wp-btn-iframe__shortcode'>STREAM JK</a></aside>"
+        val doc=Jsoup.parse(html,selected)
+        val sb=listOf(JavGuruOriginalSource.Player(
+            "SB","https://jav.guru/searcho/selected-publication"))
+        assertTrue(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            doc,selected,sb))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            doc,selected,sb,nativeJkOnly=true))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            doc,selected,sb+JavGuruOriginalSource.Player(
+                "JK","https://jav.guru/searcho/selected-jk")))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            doc,"https://jav.guru/1234568/other-selected-item/",sb))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            doc,"https://jav.guru/category/video/",sb))
+        assertFalse(SiteSpecificOriginalSources.shouldInspectSelectedJk(
+            Jsoup.parse("<aside><a class='wp-btn-iframe__shortcode'>STREAM JK</a></aside>",
+                selected),selected,sb))
+    }
 
     @Test fun publisherSelectedJkPackedHlsIsAcceptedOnlyFromExactPlayer(){
         assertEquals(original,JavGuruOriginalSource.selectedHls(
