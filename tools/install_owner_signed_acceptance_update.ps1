@@ -68,8 +68,16 @@ $base=@($paths | Where-Object{$_ -match '^package:.*base\.apk'} | Select-Object 
 if($base.Count -ne 1){Abort 'Cannot identify installed base APK'}
 $tmp=Join-Path $env:TEMP ("asterion-cert-"+[guid]::NewGuid().ToString('N')+'.apk')
 try{
- & $adb -s $serial pull $base[0].Substring(8).Trim() $tmp | Out-Null
- if($LASTEXITCODE -ne 0 -or !(Test-Path $tmp)){Abort 'Installed APK not readable'}
+ # ADB prints successful "1 file pulled" progress on stderr. Under
+ # ErrorActionPreference=Stop PowerShell mistakenly raises NativeCommandError.
+ # Judge the actual process exit code and copied APK bytes instead.
+ $oldPreference=$ErrorActionPreference
+ try{
+  $ErrorActionPreference='Continue'
+  & $adb -s $serial pull $base[0].Substring(8).Trim() $tmp *> $null
+  $pullCode=$LASTEXITCODE
+ }finally{$ErrorActionPreference=$oldPreference}
+ if($pullCode -ne 0 -or !(Test-Path $tmp)){Abort 'Installed APK not readable'}
  $oldVerify=@(& $signer verify --print-certs $tmp)
  if($LASTEXITCODE -ne 0){Abort 'Installed APK signature invalid'}
  $oldCert=[regex]::Match(($oldVerify -join [Environment]::NewLine),$pattern).Groups[1].Value.ToUpperInvariant()
@@ -78,8 +86,14 @@ try{
 $hash=(Get-FileHash $apk -Algorithm SHA256).Hash
 Write-Output ('OWNER_CERTIFICATE_MATCH=TRUE OLD_VERSION='+$old.Groups[1].Value+
  ' NEW_VERSION='+$ExpectedCode+' APK_SHA256='+$hash)
-$install=@(& $adb -s $serial install -r $apk 2>&1)
-$exitCode=$LASTEXITCODE
+# Installed-app updates use an exit-code checked ADB operation; progress
+# text on stderr is not an installation failure.
+$oldPreference=$ErrorActionPreference
+try{
+ $ErrorActionPreference='Continue'
+ $install=@(& $adb -s $serial install -r $apk 2>&1)
+ $exitCode=$LASTEXITCODE
+}finally{$ErrorActionPreference=$oldPreference}
 $install | ForEach-Object{Write-Output ('ANDROID_INSTALL='+$_)}
 if($exitCode -ne 0 -or !(($install -join [Environment]::NewLine) -match '(?m)^Success')){
  Abort ('Installer failed exit '+$exitCode)}
