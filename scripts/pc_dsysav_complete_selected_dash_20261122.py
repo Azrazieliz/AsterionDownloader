@@ -220,10 +220,35 @@ def get_segment(url,target,deadline):
  if time.monotonic()>deadline:raise RuntimeError("TIME_LIMIT_REACHED_BEFORE_SEGMENT")
  for n in range(2):
   try:
-   data=http_get(url,maximum=8_000_000)
-   if len(data)<100:raise RuntimeError("EMPTY_OR_PREVIEW_MEDIA_FRAGMENT")
-   target.write_bytes(data)
-   return len(data)
+   # Real selected 1080p fMP4 fragments exceed 8 MiB. Stream each
+   # exact HTTP response to disk instead of truncating at a memory cap.
+   # A response must remain the original publisher media, never HTML or
+   # an error page; bytes are checked against declared Content-Length.
+   request=urllib.request.Request(url,headers={"User-Agent":UA,
+       "Referer":SELECTED,"Accept-Encoding":"identity"})
+   with urllib.request.urlopen(request,timeout=30) as response:
+    if response.status!=200:
+     raise RuntimeError("PUBLISHER_SEGMENT_HTTP_"+str(response.status))
+    mime=response.headers.get("Content-Type","").lower().split(";")[0]
+    if mime in ("text/html","text/plain","application/json"):
+     raise RuntimeError("PUBLISHER_SEGMENT_NONMEDIA_"+mime)
+    expected=int(response.headers.get("Content-Length") or 0)
+    if expected>72_000_000:
+     raise RuntimeError("PUBLISHER_FRAGMENT_UNEXPECTED_SIZE")
+    received=0
+    with target.open("wb") as output:
+     while True:
+      if time.monotonic()>deadline:
+       raise RuntimeError("PUBLISHER_FRAGMENT_DEADLINE")
+      data=response.read(1_048_576)
+      if not data:break
+      received+=len(data)
+      if received>72_000_000:
+       raise RuntimeError("PUBLISHER_FRAGMENT_EXCEEDS_CAP")
+      output.write(data)
+    if received<100 or (expected and expected!=received):
+     raise RuntimeError("PUBLISHER_FRAGMENT_INCOMPLETE_"+str(received))
+    return received
   except urllib.error.HTTPError as error:
    if error.code in (401,402,403):raise RuntimeError("PUBLISHER_SIGNED_SEGMENT_HTTP_"+str(error.code)) from error
    if n:raise
