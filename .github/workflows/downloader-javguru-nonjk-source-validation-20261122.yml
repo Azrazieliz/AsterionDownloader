@@ -33,3 +33,19 @@ jobs:
               raise SystemExit("Publisher selected SB did not publish verified HLS")
           print("JAV_GURU_SB_SELECTED_HLS_CONFIRMED=TRUE; NO_MEDIA_DOWNLOADED")
           PY
+  lu-selected-production-kotlin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ASTERION_LIVE_PROVIDERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Production Kotlin LU selected article through real publisher relay to HLS bytes
+        run: gradle :app:testAcceptanceUnitTest --tests 'com.asterion.videoflow.LiveJavGuruOriginalSourceTest' --stacktrace --console=plain
