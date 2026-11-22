@@ -11,6 +11,31 @@ import org.jsoup.nodes.Element
 import java.net.URI
 import java.util.Locale
 
+/** JAV Guru's historical non-JK transport order, deliberately outside the
+ * frozen publisher decoder: the actual signed-HLS parser remains unchanged. */
+internal object JavGuruNonJkRouting {
+    private val article=Regex(
+        """(?i)^/[0-9]{4,10}/[a-z0-9][a-z0-9_-]{3,240}/?$""")
+    fun selectedArticle(address:String):Boolean {
+        val uri=runCatching{URI(address)}.getOrNull()?:return false
+        return uri.scheme=="https" && uri.userInfo==null &&
+            uri.port==-1 && uri.rawQuery.isNullOrEmpty() &&
+            uri.fragment==null &&
+            uri.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")=="jav.guru" &&
+            article.matches(uri.path.orEmpty())
+    }
+    fun order(players:List<JavGuruOriginalSource.Player>):List<JavGuruOriginalSource.Player> =
+        players.filter{it.server in setOf("LU","SB","VO","VI","DD")}
+            .distinctBy{it.server}
+            .sortedBy{when(it.server){
+                "LU"->0
+                "SB"->1
+                "VO"->2
+                "VI"->3
+                else->4
+            }}
+}
+
 /** Exact selected-publisher resolvers. Never treat cards, ads or thumbnails as originals. */
 internal object SiteSpecificOriginalSources {
     data class Source(val url:String,val referer:String)
@@ -490,7 +515,7 @@ internal object SiteSpecificOriginalSources {
         doc:Document,selected:String,
         initial:List<JavGuruOriginalSource.Player>
     ):Boolean {
-        if(!JavGuruOriginalSource.selectedArticle(selected) ||
+        if(!JavGuruNonJkRouting.selectedArticle(selected) ||
             initial.any{it.server=="LU" || it.server=="SB"})return false
         val post="post-"+URI(selected).path.orEmpty().trim('/')
             .substringBefore('/')
@@ -524,7 +549,7 @@ internal object SiteSpecificOriginalSources {
         // transfers, not the older LU/SB Python-backed signed HLS path.
         // Defer this article to the primary rather than silently promote JK.
         val order=if(nativeJkOnly)emptyList()
-            else JavGuruOriginalSource.nonJkTransferOrder(streams)
+            else JavGuruNonJkRouting.order(streams)
         for(stream in order.take(6)){
             val wrapper=runCatching{
                 Jsoup.connect(stream.url)
