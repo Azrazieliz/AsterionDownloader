@@ -23,6 +23,19 @@ internal object SelectedPlayerWaitPolicy {
             }.distinct()
         return media.size==1
     }
+    /** A default play.javideo.net HTML iframe was being treated as
+     * a successful resolution, stopping the Android browser before the
+     * publisher's PC-proven STAPE#01 server could initialize. Its exact
+     * selected Streamtape iframe, not any iframe, ends the browser wait.
+     */
+    fun selectedJavideoStapeReady(article:String,html:String):Boolean {
+        val selected=com.asterion.videoflow.SiteSpecificOriginalSources
+            .javideoSelected(org.jsoup.Jsoup.parse(html,article),article)
+        return selected.size==1 &&
+            com.asterion.videoflow.StreamtapeSelectedOriginal
+                .selectedFrame(article,selected.single().url)!=null
+    }
+
     /** Initial DOM load gets time to render, but subsequent selected-player
      * polls must fit within BrowserPageFetch's actual 45-second deadline.
      * The prior 1.8s inspection + 1.4s retry consumed 67s over 21
