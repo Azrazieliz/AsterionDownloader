@@ -1,0 +1,31 @@
+name: Asterion Downloader — DSYSAV exact publisher DASH complete PC original
+on:
+  push:
+    branches: [repair/downloader-global-search-20261121]
+    paths:
+      - 'scripts/pc_dsysav_complete_selected_dash_20261122.py'
+      - '.github/workflows/downloader-pc-dsysav-selected-dash-full-20261122.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-dash-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact selected DASH source and normal playable MP4
+        run: |
+          python3 -m py_compile scripts/pc_dsysav_complete_selected_dash_20261122.py
+          python3 -m pip install --disable-pip-version-check selenium==4.36.0 pycryptodome
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+          python3 scripts/pc_dsysav_complete_selected_dash_20261122.py
+      - name: Retain complete-file SHA receipt only, never media or private URLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsysav-publisher-selected-dash-full-file-receipt
+          path: pc-dsysav-full-dash-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
