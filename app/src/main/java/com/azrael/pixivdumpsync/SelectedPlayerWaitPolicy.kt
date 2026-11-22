@@ -26,6 +26,7 @@ internal object SelectedPlayerWaitPolicy {
     fun maxPolls(host:String):Int = when(host){
         "3dhentaix.com" -> 11  // ~35 s of browser/player startup at most
         "javideo.net","play.javideo.net" -> 11 // Selected parent AND child JS player may attach late
+        "video.playerrecord.cfd","vidara.to" -> 11 // Attested recording frame initializes HTML5 playback asynchronously
         "voe.sx","kamehaus.net","nhplayer.com" -> 9
         else -> 6
     }
