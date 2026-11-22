@@ -509,9 +509,19 @@ object BrowserPageFetch {
                                             [...document.querySelectorAll(
                                                 'video#mainvideo,video#player,video.video-js')];
                                     })();
-                                const selected=roots.filter(el=>
+                                const wrappers=roots.filter(el=>
                                     !el.closest('aside,.related,.recommendations,'+
                                         '.ads,.advertisement,.sidebar'));
+                                // JAVIDEO's selected first-party player nests
+                                // #player, .player-container and .vjs-player.
+                                // Counting every ancestor as a competing
+                                // player made the guarded Play action a no-op.
+                                // Activate ONLY its unique innermost wrapper,
+                                // never another frame or advertisement.
+                                const selected=exactJavideo?
+                                    wrappers.filter(el=>!wrappers.some(child=>
+                                        child!==el && el.contains(child))):
+                                    wrappers;
                                 if(selected.length===1){
                                     const root=selected[0];
                                     const play=root.querySelector(
