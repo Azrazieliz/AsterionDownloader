@@ -15,6 +15,17 @@ class IdentityAndGallerySearchRegressionTest {
             "Tina Kitsune","Tina with someone named Kitsune"))
     }
 
+    @Test fun broadVideoDiscoveryAcceptsDescriptiveReorderedWordsWithoutChangingIdentityRules(){
+        assertTrue(SearchExactness.mediaMatches(
+            "space documentary 2026","2026 documentary about deep space"))
+        assertFalse(SearchExactness.matchesPhrase(
+            "space documentary 2026","2026 documentary about deep space"))
+        assertFalse(SearchExactness.matchesPhrase(
+            "Tina Kitsune","Tina and an unrelated Kitsune"))
+        assertFalse(SearchExactness.mediaMatches(
+            "space documentary 2026","documentary about ocean 2026"))
+    }
+
     @Test fun photoGalleryTorrentsRemainDistinctFromVideos() {
         assertTrue(TorrentGalleryClassifier.likelyGallery(
             "Cosplay model image gallery 2026"))
