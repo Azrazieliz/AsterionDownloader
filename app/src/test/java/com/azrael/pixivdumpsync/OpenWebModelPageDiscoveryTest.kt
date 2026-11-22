@@ -5,11 +5,11 @@ import org.junit.Test
 
 class OpenWebModelPageDiscoveryTest {
     @Test fun indexedSwordModelPageRevealsActualFilesNotAnotherPaidPage(){
-        val results="""<div class="result"><a class="result__a"
+        val results="""<div class="algo-sr"><div class="compTitle"><h3><a
             href="https://creator.example.org/free-medieval-sword-3d-model">
-            Free medieval sword 3D model</a></div>"""
+            Free medieval sword 3D model</a></h3></div></div>"""
         val urls=OpenWebModelPageDiscovery.landingLinks(results,
-            "https://html.duckduckgo.com/html/","DuckDuckGo","sword")
+            "https://search.yahoo.com/search?p=sword","Yahoo","sword")
         assertEquals(listOf("https://creator.example.org/free-medieval-sword-3d-model"),urls)
         val page="""<html><title>Free Medieval Sword 3D Model</title>
             <body><main><h1>Medieval Sword 3D Model</h1>
