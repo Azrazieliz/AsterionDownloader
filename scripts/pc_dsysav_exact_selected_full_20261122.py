@@ -91,14 +91,37 @@ try:
     # catalog, not a manufactured ID or a separate DSAV brand domain.
     try:browser.get_log("performance")
     except Exception:pass
-    try:browser.get(selected)
-    except Exception:pass
+    # Follow the site's actual selected watch control in the already
+    # initialized browser; a cold URL navigation can leave SPA video empty.
+    from selenium.webdriver.common.by import By
+    controls=[x for x in browser.find_elements(By.CSS_SELECTOR,"a[href]")
+      if approved_article(x.get_attribute("href") or "")==selected]
+    try:
+        if controls:
+            browser.execute_script("arguments[0].scrollIntoView({block:'center'});",controls[0])
+            controls[0].click()
+        else:browser.get(selected)
+    except Exception:
+        try:browser.get(selected)
+        except Exception:pass
     if host(browser.current_url) not in SITE:
         raise RuntimeError("SELECTED_WATCH_REDIRECTED_TO_OTHER_BRAND")
     durations=[]
     manifests=set()
     direct=set()
+    player_clicked=False
     for tick in range(50):
+        if not player_clicked:
+            try:
+                control=browser.find_elements(By.CSS_SELECTOR,
+                  "main .vjs-big-play-button,main .jw-icon-display,"
+                  "main button[aria-label='Play'],main button[title='Play'],"
+                  "#player .vjs-big-play-button,.video-player .vjs-big-play-button")
+                visible=[x for x in control if x.is_displayed() and x.is_enabled()]
+                if len(visible)==1:
+                    visible[0].click()
+                    player_clicked=True
+            except Exception:pass
         state=browser.execute_script("""return (()=>{
           const root=document.querySelector('main')||document.querySelector('#app')||document.body;
           const v=[...root.querySelectorAll('video')].filter(v=>
@@ -131,6 +154,15 @@ try:
         if durations and (len(manifests)==1 or len(direct)==1):break
         time.sleep(.75)
     result["selected_player_duration_seconds"]=round(max(durations),3) if durations else None
+    result["selected_player_play_clicked"]=player_clicked
+    result["selected_dom"]=browser.execute_script("""return {
+      video_count:document.querySelectorAll('video').length,
+      iframe_hosts:[...document.querySelectorAll('iframe[src]')].slice(0,10)
+        .map(x=>{try{return new URL(x.src).hostname}catch(_){return ''}}),
+      player_buttons:[...document.querySelectorAll('#player button,main button')]
+        .slice(0,16).map(b=>(b.getAttribute('aria-label')||b.title||b.textContent||'').trim().slice(0,30)),
+      body_hint:(document.body?.innerText||'').slice(0,150)
+    };""")
     result["observed_hls_count"]=len(manifests)
     result["observed_direct_count"]=len(direct)
     if not durations:raise RuntimeError("SELECTED_PLAYER_HAS_NO_VERIFIED_LONG_DURATION")
