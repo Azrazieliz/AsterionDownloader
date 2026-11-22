@@ -2,7 +2,6 @@ package com.azrael.pixivdumpsync
 
 import org.jsoup.Jsoup
 import java.net.URI
-import java.net.URLDecoder
 import java.util.Locale
 
 /**
@@ -22,32 +21,24 @@ internal object OpenWebModelPageDiscovery {
             link.rawFragment==null && SearchRanking.validUrl(address) &&
             !ProviderRetirement.isRetired(address)
     }
-    private fun unwrapped(raw:String):String {
-        val link=uri(raw)?:return raw
-        if(link.host.orEmpty().endsWith("duckduckgo.com") &&
-            link.path=="/l/")return link.rawQuery.orEmpty().split('&')
-                .firstOrNull{it.startsWith("uddg=")}
-                ?.substringAfter('=')?.let{
-                    runCatching{URLDecoder.decode(it,"UTF-8")}.getOrNull()
-                }?:raw
-        return raw
-    }
     fun landingLinks(html:String,base:String,engine:String,term:String):List<String>{
         val document=Jsoup.parse(html,base)
-        val anchors=if(engine=="DuckDuckGo")
-            document.select("a.result__a[href]")
+        val anchors=if(engine=="Yahoo")
+            document.select("div.algo-sr .compTitle h3 a[href],"+
+                "div.dd.algo .compTitle h3 a[href]")
         else document.select("li.b_algo h2 a[href]")
         val found=LinkedHashSet<String>()
         for(anchor in anchors.take(75)){
             val label=anchor.text().trim()
             if(!SearchExactness.matches(term,label))continue
-            val address=unwrapped(anchor.absUrl("href").ifBlank{
-                anchor.attr("href")})
+            val address=anchor.absUrl("href").ifBlank{
+                anchor.attr("href")}
             if(!approved(address))continue
             val parsed=uri(address)?:continue
             val host=parsed.host.orEmpty().lowercase(Locale.ROOT)
             if(host in setOf("www.bing.com","bing.com",
-                    "html.duckduckgo.com","duckduckgo.com"))continue
+                    "search.yahoo.com") ||
+                host.endsWith(".search.yahoo.com"))continue
             // A direct original is handled by the existing parser. Only
             // actual model detail pages are inspected for file links.
             if(fileExtension(address)!=null)continue
