@@ -113,41 +113,21 @@ try:
     manifests=set()
     direct=set()
     player_clicked=False
+    response_shapes={}
     for tick in range(50):
         if not player_clicked:
-            # The selected watch may use a headless-unfocusable overlay
-            # control. Activate only its one ordinary first-party LOAD action.
-            # Do not click ads, payment/login controls or unrelated cards.
+            # The real LOAD text is a catalog pagination button, NOT media.
+            # Click only the one actual selected watch video's visible poster.
             try:
-                outcome=browser.execute_script("""return (function(){
-                  const buttons=[...document.querySelectorAll('button,[role="button"],input[type="button"]')]
-                    .filter(e=>(e.innerText||e.textContent||e.value||'').trim()==='LOAD')
-                    .filter(e=>!e.closest('aside,.related,.recommended,.ads,.advertisement,[data-ad]'));
-                  if(buttons.length!==1)return {found:buttons.length,clicked:false};
-                  const b=buttons[0];
-                  const r=b.getBoundingClientRect();
-                  if(b.disabled||b.getAttribute('aria-disabled')==='true')
-                    return {found:1,disabled:true,clicked:false};
-                  b.scrollIntoView({block:'center'});
-                  b.click();
-                  return {found:1,clicked:true,tag:b.tagName,visible:r.width>0&&r.height>0};
-                })();""")
-                if outcome.get("clicked"):
-                    result["selected_load_activation"]=outcome
+                videos=[x for x in browser.find_elements(By.CSS_SELECTOR,"main video,#player video,video")
+                  if x.is_displayed() and x.is_enabled()]
+                if len(videos)==1:
+                    browser.execute_script("arguments[0].scrollIntoView({block:'center'});",videos[0])
+                    videos[0].click()
                     player_clicked=True
+                    result["selected_video_click"]=True
             except Exception as error:
-                result["selected_load_error"]=type(error).__name__
-        if not player_clicked:
-            try:
-                # The exact selected DSYSAV watch overlay exposes one LOAD
-                # control before its HTML5 media receives any metadata.
-                load=[x for x in browser.find_elements(By.XPATH,
-                    "//button[normalize-space(.)='LOAD']")
-                    if x.is_displayed() and x.is_enabled()]
-                if len(load)==1:
-                    load[0].click()
-                    player_clicked=True
-            except Exception:pass
+                result["selected_video_click_error"]=type(error).__name__
         if not player_clicked:
             try:
                 control=browser.find_elements(By.CSS_SELECTOR,
@@ -183,6 +163,10 @@ try:
                 if not safe_url(url) or int(response.get("status") or 0)!=200:continue
                 u=urllib.parse.urlsplit(url)
                 mime=(response.get("mimeType") or "").lower()
+                parsed_url=urllib.parse.urlsplit(url)
+                if len(response_shapes)<45 and parsed_url.hostname:
+                    identifier=(parsed_url.hostname,parsed_url.path[:80],int(response.get("status") or 0),mime[:48])
+                    response_shapes[str(identifier)]=response_shapes.get(str(identifier),0)+1
                 if (u.path.lower().endswith(".m3u8") or
                     "application/vnd.apple.mpegurl" in mime or "application/x-mpegurl" in mime):
                     if not re.search("preview|trailer|teaser|sample",u.path,re.I):
@@ -192,6 +176,20 @@ try:
         time.sleep(.75)
     result["selected_player_duration_seconds"]=round(max(durations),3) if durations else None
     result["selected_player_play_clicked"]=player_clicked
+    result["media_network_shapes"]={k:v for k,v in response_shapes.items() if
+      "m3u8" in k or "mp4" in k or "json" in k or "video" in k or "api" in k or "stream" in k}
+    result["selected_player_structure"]=browser.execute_script("""return {
+      videos:[...document.querySelectorAll('video')].slice(0,3).map(v=>({
+        attrs:[...v.attributes].map(a=>a.name).slice(0,18),
+        parent_class:(v.parentElement?.className||'').toString().slice(0,90),
+        grandparent_class:(v.parentElement?.parentElement?.className||'').toString().slice(0,90),
+        poster:!!v.poster,source_count:v.querySelectorAll('source').length
+      })),
+      player_actions:[...document.querySelectorAll('main button,main [role=button],#player button')]
+        .filter(x=>!x.closest('.pagination-container,aside,.related,.ads,[data-ad]'))
+        .slice(0,18).map(x=>({tag:x.tagName,kind:(x.className||'').toString().slice(0,60),
+          label:(x.getAttribute('aria-label')||x.textContent||'').trim().slice(0,45)}))
+    };""")
     result["selected_dom"]=browser.execute_script("""return {
       load_controls:[...document.querySelectorAll('button,[role="button"],input[type="button"]')]
         .filter(b=>(b.innerText||b.textContent||b.value||'').trim()==='LOAD')
