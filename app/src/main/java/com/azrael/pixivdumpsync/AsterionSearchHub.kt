@@ -44,7 +44,7 @@ object AsterionSearchHub {
             URLEncoder.encode(term,"UTF-8")+"&count=30"
         val json=JSONObject(Jsoup.connect(url).ignoreContentType(true).timeout(18000)
             .maxBodySize(2500000).execute().body()).optJSONArray("data")
-        (0 until minOf(json?.length()?:0,30)).mapNotNull{i->
+        return (0 until minOf(json?.length()?:0,30)).mapNotNull{i->
             val hit=json?.optJSONObject(i)?:return@mapNotNull null
             val link=hit.optString("url")
             if(!SearchRanking.isVideoUrl(link))return@mapNotNull null
