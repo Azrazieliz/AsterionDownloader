@@ -424,7 +424,7 @@ internal object PublisherOriginalExtractors {
             val only=frames.singleOrNull()?:return emptyList()
             return SiteSpecificOriginalSources.selectedRecordingFrameOriginals(
                 context,selected,only.url)
-                .map{Candidate(it.url,it.referer,host)}
+                .map{Candidate(it.url,it.referer,host.orEmpty())}
         }
         if(host=="pornbuz.com"){
             // The owner-selected article publishes its REAL primary
