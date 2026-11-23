@@ -555,7 +555,44 @@ internal object SourceIndexParser {
             ?:return null
         return SitePreviewImage.best(image)
     }
+    /** DSYSAV is a Next.js catalog; its watch links include a query v ID.
+     * Do not treat a 200/empty SSR shell as indexed or mistake arbitrary
+     * links/navigation as video originals. */
+    internal fun dsysavEntries(doc:Document,base:String,area:String,
+                               clock:Long):List<IndexedItem>? {
+        val uri=runCatching{URI(base)}.getOrNull()?:return null
+        if(uri.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")!="dsysav.com" ||
+            area !in setOf("ADULT","HENTAI","VIDEOS"))return null
+        val out=LinkedHashMap<String,IndexedItem>()
+        for(link in doc.select("a[href]").take(2000)){
+            val url=link.absUrl("href").substringBefore('#')
+            if(!safe(url)||!sameSite(base,url)||
+                !com.asterion.videoflow.VideoSiteProfiles.isVideoPage(url))
+                continue
+            val target=runCatching{URI(url)}.getOrNull()?:continue
+            if(target.host.orEmpty().lowercase(Locale.ROOT).removePrefix("www.")!="dsysav.com" ||
+                !Regex("""^/en/watch$""").matches(target.path.orEmpty()) ||
+                !Regex("""^v=[A-Za-z0-9_-]{8,45}$""").matches(target.rawQuery.orEmpty()))
+                continue
+            val title=listOf(link.attr("title"),link.text(),
+                link.selectFirst("img[alt]")?.attr("alt").orEmpty(),
+                link.closest("article,.video-card,.card")
+                    ?.selectFirst("h2,h3,.title")?.text().orEmpty())
+                .map{it.trim().take(180)}
+                .firstOrNull{it.length>=3 && !IndexedMediaQuality.navigationTitle(it)}
+                ?: "DSYSAV watch "+target.rawQuery.substringAfter('=')
+            val poster=link.selectFirst("img")?.let{SitePreviewImage.best(it)}
+                ?.takeIf{SearchRanking.validUrl(it)}
+            out.putIfAbsent(url,IndexedItem(url,title,poster,base,area,
+                "video",clock,false))
+        }
+        return out.values.toList()
+    }
+
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
+        // The generic path filters video cards by a path-depth heuristic.
+        // DSYSAV's /en/watch?v=ID must instead be exact and same-publisher.
+        dsysavEntries(doc,base,area,clock)?.let{return it}
         // Providers with known, constrained watch URLs must not fall through
         // to generic menus when an access gate returns an empty listing.
         if(AdultProviderListings.owns(base,area))
@@ -1257,7 +1294,25 @@ object SourceIndex {
                         throw com.azrael.galleryflow.HttpStatusException(403,
                             "4KGirl returned masked HTTP 403; "+
                             "publisher browser access required")
-                    return Jsoup.parse(body,response.url().toString())
+                    val doc=Jsoup.parse(body,response.url().toString())
+                    if(com.asterion.videoflow.WebDiscovery
+                            .dsysavCatalogNeedsBrowser(current,doc)){
+                        // SourceIndex is the ACTUAL Home/Backfill scanner.
+                        // WebDiscovery's equivalent JS-shell fix did not
+                        // affect this path, so it still indexed zero.
+                        if(!SiteSession.bound(context,current) &&
+                            !BrowserPageFetch.publicEligible(current))
+                            error("DSYSAV catalog requires normal browser access")
+                        val rendered=Jsoup.parse(
+                            BrowserPageFetch.html(context,current),current)
+                        check(!com.asterion.videoflow.WebDiscovery
+                            .dsysavCatalogNeedsBrowser(current,rendered)){
+                            "DSYSAV catalog still exposed no publisher watch "+
+                                "links after JavaScript rendering"
+                        }
+                        return rendered
+                    }
+                    return doc
                 }
             }
             error("Provider exceeded safe redirect limit")
