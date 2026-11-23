@@ -335,16 +335,38 @@ object XPhotoEngine {
     }
 }
 class XPhotoService:Service(){
+    @Volatile private var active:java.util.concurrent.Future<*>?=null
     override fun onBind(intent:Intent?):IBinder?=null
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
-        startForeground(25823,XPhotoEngine.notice(this,"Checking images"))
+        try{
+            startForeground(25823,XPhotoEngine.notice(this,"Checking images"))
+        }catch(denied:android.app.ForegroundServiceStartNotAllowedException){
+            // Android 15/17 exhausts a daily dataSync service budget.
+            // A forced redelivery used to crash ActivityThread repeatedly
+            // after that quota expired. Keep the durable X queue intact.
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         val automatic=intent?.getBooleanExtra("asterion_auto_sync",false)==true
         val target=intent?.getStringExtra("asterion_target_source")
         val future=XPhotoEngine.submit(applicationContext,automatic,target){message->
             getSystemService(NotificationManager::class.java)
                 .notify(25823,XPhotoEngine.notice(this,message))
         }
-        Thread{runCatching{future.get()};stopSelfResult(startId)}.start()
-        return START_REDELIVER_INTENT
+        active=future
+        Thread{
+            runCatching{future.get()}
+            if(active===future)active=null
+            stopSelfResult(startId)
+        }.start()
+        // The persisted X queue is recovered at the next permitted user or
+        // scheduler launch. Never repeatedly auto-redeliver while quota is
+        // exhausted, particularly following process death.
+        return START_NOT_STICKY
+    }
+    override fun onTimeout(startId:Int,fgsType:Int){
+        active?.cancel(true)
+        active=null
+        stopSelf()
     }
 }
