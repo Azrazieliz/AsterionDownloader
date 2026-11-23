@@ -282,15 +282,33 @@ object KyoraCreatorPreviews {
         }
         return result.values.toList()
     }
+    /** A transient DNS failure or empty JS catalog is not a twelve-hour
+     * cached negative result. Only this gallery's previous error may retry;
+     * unrelated providers and completed original files remain unchanged. */
+    internal fun retryDelayMs(source:String,error:String?):Long {
+        if(error.isNullOrBlank())return 12L*60*60*1000
+        val message=error.lowercase(java.util.Locale.ROOT)
+        if(message.contains("unknownhost") ||
+            message.contains("dns") ||
+            message.contains("unable to resolve host"))
+            return 30_000L
+        if(SiteControls.key(source)=="4kgirl.com" &&
+            message.contains("no gallery thumbnails"))
+            return 90_000L
+        if(message.contains("http 403") || message.contains("http 401") ||
+            message.contains("forbidden") || message.contains("login required"))
+            return 30L*60*1000
+        return if(SiteControls.key(source)=="kiutaku.com")5L*60*1000
+            else 2L*60*60*1000
+    }
+
     fun load(a:Activity,url:String,force:Boolean=false,
              onReady:(Snapshot)->Unit){
         if(!force)cached(a,url)?.let{onReady(it)}
         if(!SourceIndexParser.safe(url) ||
             ProviderRetirement.isRetired(url))return
         val stored=cached(a,url)
-        val wait=if(stored?.error==null)12L*60*60*1000 else
-            if(SiteControls.key(url)=="kiutaku.com")5L*60*1000
-            else 2L*60*60*1000
+        val wait=retryDelayMs(url,stored?.error)
         if(!force && stored!=null && System.currentTimeMillis()-stored.updated<wait)return
         if(!inflight.add(url))return
         pool.execute{
