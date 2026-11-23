@@ -18,6 +18,28 @@ class FourKhdBridgeUrlPolicyTest {
             "https://cdn.4khd.com/archives/selected-album.zip"))
     }
 
+    @Test fun onlyPublisherAttestedSharesAndFirstPartyArchivesQualify(){
+        // A real 4KHD bridge currently publishes /s/<share-id>. General
+        // TeraBox home/help links in its scripts must never win the scan.
+        assertTrue(client.isReal4khdBridge(
+            "https://www.terabox.com/s/1me4uCqbx20DyhHcItQaShQ"))
+        assertTrue(client.isReal4khdBridge(
+            "https://www.terabox.com/sharing/link?surl=shareCodeABC123"))
+        assertTrue(client.isReal4khdBridge(
+            "https://cdn.4khd.com/archives/selected-original.rar"))
+        for(unrelated in listOf(
+            "https://www.terabox.com/",
+            "https://www.terabox.com/help",
+            "https://www.terabox.com/login",
+            "https://www.terabox.com/sharing/link",
+            "https://www.terabox.com/wap/share/filelist?foo=bar",
+            "https://thirdparty.example/files/unrelated.zip",
+            "https://cdn.4khd.com/preview.jpg",
+            "https://www.4khd.com/content/14/preview.mp4"
+        )) assertFalse("Not an official 4KHD original: "+unrelated,
+            client.isReal4khdBridge(unrelated))
+    }
+
     @Test fun placeholdersAndDeceptiveSitesCannotBlockSelectedBrowserBridge(){
         for(candidate in listOf(
             "", "#", "javascript:void(0)",
