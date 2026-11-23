@@ -17,4 +17,15 @@ class PerformerFollowPolicyTest {
         assertFalse(PerformerFollowPolicy.permittedName("girls"))
         assertFalse(PerformerFollowPolicy.permittedName("https://example.com/model"))
     }
+    @Test fun verifiedProfileDoesNotRequireNameRepeatedInEverySceneTitle() {
+        assertTrue(PerformerFollowPolicy.visibleVideoTitle(
+            "eva Elfie","Selected episode without an actor name",true))
+        assertTrue(PerformerFollowPolicy.visibleVideoTitle(
+            "eva Elfie","Eva Elfie selected scene",false))
+        assertFalse(PerformerFollowPolicy.visibleVideoTitle(
+            "eva Elfie","Eva and Elfie different people",false))
+        assertFalse(PerformerFollowPolicy.visibleVideoTitle(
+            "bella Alice","Barbara Bella and Alice Marshall",false))
+    }
+
 }
