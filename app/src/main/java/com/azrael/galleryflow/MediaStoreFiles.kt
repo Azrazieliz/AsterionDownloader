@@ -16,6 +16,32 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import kotlin.math.max
 
+/** Preserve the original publisher reference except when 4KHD's selected
+ * first-party bridge deliberately transitions to its official TeraBox share.
+ * The previous 4KHD archive transfer sent the 4khd.com article Referer to
+ * the TeraBox file endpoint, while the same engine correctly used TeraBox's
+ * own Referer for media marked as provider=TeraBox. This is scoped only to
+ * 4KHD archive bridges; unrelated publishers, photos and direct 4KHD CDN
+ * files retain their existing request policy and account cookies.
+ */
+internal object GalleryArchiveRefererPolicy {
+    fun preferred(media:MediaRef):String? {
+        val name=media.provider?.lowercase(java.util.Locale.ROOT)
+        if(name=="4khd" && media.kind==MediaKind.ARCHIVE) {
+            val bridge=runCatching{URI(media.url)}.getOrNull()
+            if(bridge?.scheme=="https" &&
+                bridge.host.orEmpty().lowercase(java.util.Locale.ROOT)=="m.4khd.com" &&
+                bridge.userInfo==null && bridge.port==-1)
+                return "https://www.terabox.com/"
+        }
+        return when(name){
+            "terabox"->"https://www.terabox.com/"
+            "mediafire","sorafolder","gofile"->media.url
+            else->media.referer
+        }
+    }
+}
+
 class MediaStoreFiles(private val context: Context, private val http: HttpClient) {
     fun exists(contentUri: String?): Boolean {
         if (contentUri.isNullOrBlank()) return false
@@ -39,11 +65,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
         } else {
             http.resolveDownloadUrl(media.url, media.referer, media.provider)
         }
-        val resolvedReferer = when (media.provider?.lowercase()) {
-            "terabox" -> "https://www.terabox.com/"
-            "mediafire", "sorafolder", "gofile" -> media.url
-            else -> media.referer
-        }
+        val resolvedReferer = GalleryArchiveRefererPolicy.preferred(media)
         openWithFallback(media, resolved, resolvedReferer).use { response ->
             val responseMime = response.contentType?.lowercase()
             if (media.kind == MediaKind.ARCHIVE && responseMime?.startsWith("text/html") == true) {
