@@ -60,8 +60,15 @@ internal object PublisherOriginalExtractors {
             "main #player video[src],main #player source[src],"+
             "article video[src],meta[itemprop=contentUrl]"),
         Site("avple.tv",
+            // Selected publisher players can lazy-load the actual media in
+            // data-src before promoting it to src. The parser already knows
+            // how to read data-src, but the old CSS never selected those nodes.
             "main .video-player video[src],main .video-player source[src],"+
+            "main .video-player video[data-src],main .video-player source[data-src],"+
             "main #player video[src],main #player source[src],"+
+            "main #player video[data-src],main #player source[data-src],"+
+            "article .video-player video[data-src],"+
+            "article .video-player source[data-src],"+
             "article video[src],meta[itemprop=contentUrl]"),
         Site("taiav.com","main .video-player video[src],main .video-player source[src],"+
             "article .video-player video[src],article .video-player source[src],"+
