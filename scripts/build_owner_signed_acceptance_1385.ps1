@@ -1,4 +1,4 @@
-# Asterion Downloader 1.3.88 — data-preserving, retained-owner-signed acceptance APK.
+# Asterion Downloader 1.3.89 — data-preserving, retained-owner-signed acceptance APK.
 # Run only in the existing owner's Windows Control environment; never print DPAPI plaintext.
 param([Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{40}$')][string]$ExpectedCommit)
 Set-StrictMode -Version Latest
@@ -8,7 +8,7 @@ $gradle='C:\Users\mimim\.gradle\wrapper\dists\gradle-8.13-bin\5xuhj0ry160q40clul
 $ks='D:\AsterionControlRelease\signing\downloader-acceptance\asterion-downloader-acceptance.p12'
 $dp='D:\AsterionControlRelease\signing\downloader-acceptance\password.dpapi'
 $apk=Join-Path $w 'app\build\outputs\apk\acceptance\app-acceptance.apk'
-$log='D:\AsterionControlRelease\diagnostics\downloader_1388_owner_signed_build.log'
+$log='D:\AsterionControlRelease\diagnostics\downloader_1389_owner_signed_build.log'
 $expected='8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19'
 if (-not(Test-Path $w) -or -not(Test-Path $gradle)) { throw 'Owner Windows release build environment unavailable' }
 if (-not(Test-Path $ks) -or -not(Test-Path $dp)) { throw 'Existing stable signer unavailable' }
@@ -21,8 +21,8 @@ if ($LASTEXITCODE -ne 0 -or $tracked.Count -gt 0) {
     throw 'Tracked Windows worktree changes prevent safe owner build'
 }
 $source=Get-Content (Join-Path $w 'app\build.gradle.kts') -Raw
-if ($source -notmatch 'versionCode\s*=\s*117' -or
-    $source -notmatch 'versionName\s*=\s*"1\.3\.88"') {
+if ($source -notmatch 'versionCode\s*=\s*118' -or
+    $source -notmatch 'versionName\s*=\s*"1\.3\.89"') {
     throw 'Wrong version for owner in-place update'
 }
 $wheel=Join-Path $w 'app\src\main\assets\yt_dlp-2026.10.26-py3-none-any.whl'
@@ -73,25 +73,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read APK identity' }
     $identity=$badge | Where-Object {$_ -match '^package:'} | Select-Object -First 1
     if ($identity -notmatch "name='com.azrael.pixivdumpsync.acceptance'" -or
-        $identity -notmatch "versionCode='117'" -or
-        $identity -notmatch "versionName='1.3.88-acceptance'") {
+        $identity -notmatch "versionCode='118'" -or
+        $identity -notmatch "versionName='1.3.89-acceptance'") {
         throw 'APK package/version mismatch'
     }
-    $dest=Join-Path $HOME ('Downloads\AsterionDownloader-v1.3.88-'+$head.Substring(0,12)+'-OwnerSigned.apk')
+    # Do not duplicate another 50MB APK in the owner's Downloads folder.
+    # The existing D: build output is already owner-signed and is installed
+    # in place directly from its known original artifact path.
     $digest=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-    if (Test-Path -LiteralPath $dest) {
-        if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest) {
-            throw 'Existing output path contains different APK; no overwrite'
-        }
-    } else {
-        Copy-Item -LiteralPath $apk -Destination $dest
-    }
-    if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest) {
-        throw 'Signed APK staging hash mismatch'
-    }
     Write-Output "APK_PACKAGE=$identity"
-    Write-Output "SIGNED_APK_STAGED=$dest"
-    Write-Output "SIGNED_APK_BYTES=$((Get-Item -LiteralPath $dest).Length)"
+    Write-Output "SIGNED_APK_OUTPUT=$apk"
+    Write-Output "SIGNED_APK_BYTES=$((Get-Item -LiteralPath $apk).Length)"
     Write-Output "SIGNED_APK_SHA256=$digest"
     Write-Output 'SIGNED_COMPATIBLE_READY_FOR_PHONE_TRANSFER=true'
 } finally {
