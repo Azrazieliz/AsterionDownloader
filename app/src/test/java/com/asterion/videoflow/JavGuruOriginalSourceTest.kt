@@ -165,6 +165,26 @@ class JavGuruOriginalSourceTest {
             listOf(player("JK"))).isEmpty())
     }
 
+    @Test fun primaryCanTryPublisherSelectedJkAfterNonJkHostersFail(){
+        val player: (String)->JavGuruOriginalSource.Player={server->
+            JavGuruOriginalSource.Player(server,wrapper)
+        }
+        val sources=listOf(player("JK"),player("VO"),player("SB"),
+            player("JK"),player("LU"))
+        assertEquals(listOf("LU","SB","VO","JK"),
+            JavGuruNonJkRouting.primaryOrder(sources).map{it.server})
+        // A JK-only article must not fall through to unsupported Python
+        // before the first-party Maxstream HLS can be validated.
+        assertEquals(listOf("JK"),
+            JavGuruNonJkRouting.primaryOrder(
+                listOf(player("JK"))).map{it.server})
+        assertEquals(listOf("LU","VO"),
+            JavGuruNonJkRouting.primaryOrder(
+                listOf(player("VO"),player("LU"))).map{it.server})
+        // Preserve the independent native-only secondary admission policy.
+        assertFalse(SecondaryLightNativeOriginal.eligible(selected))
+    }
+
     @Test fun nonJkHydrationTargetsOnlySelectedPostWhenLuSbMissing() {
         val current=org.jsoup.Jsoup.parse(post,selected)
         val existing=JavGuruOriginalSource.published(selected,current.outerHtml())
