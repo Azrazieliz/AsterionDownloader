@@ -5,6 +5,26 @@ import org.junit.Test
 
 /** URL validation only; transport for non-public hosts is configured separately. */
 class WebDiscoveryTest {
+    @Test fun dsysavHttp200EmptyNextShellMustUseActualBrowserCatalog(){
+        val home="https://dsysav.com/en"
+        val shell=org.jsoup.Jsoup.parse(
+            "<html><body><div id='__next'></div></body></html>",home)
+        assertTrue(WebDiscovery.dsysavCatalogNeedsBrowser(home,shell))
+        val selected=org.jsoup.Jsoup.parse(
+            "<main><a href='/en/watch?v=MxWT7NmlUoT'>Selected</a></main>",home)
+        assertFalse(WebDiscovery.dsysavCatalogNeedsBrowser(home,selected))
+        val otherSite=org.jsoup.Jsoup.parse(
+            "<main><a href='https://dsysav.com.evil.example/en/watch?v=MxWT7NmlUoT'>Ad</a></main>",home)
+        assertTrue(WebDiscovery.dsysavCatalogNeedsBrowser(home,otherSite))
+        val wrongId=org.jsoup.Jsoup.parse(
+            "<main><a href='/en/watch?v=wrong'>Other</a></main>",home)
+        assertTrue(WebDiscovery.dsysavCatalogNeedsBrowser(home,wrongId))
+        assertFalse(WebDiscovery.dsysavCatalogNeedsBrowser(
+            "https://dsysav.com/en/watch?v=MxWT7NmlUoT",shell))
+        assertFalse(WebDiscovery.dsysavCatalogNeedsBrowser(
+            "http://dsysav.com/en",shell))
+    }
+
     @Test fun selectedAvple402GetsAuthorizedBrowserNotBlindVideoFallback(){
         val selected="https://avple.tv/video/1000101415221"
         assertTrue(WebDiscovery.selectedBrowserFallbackAllowed(selected,402))
