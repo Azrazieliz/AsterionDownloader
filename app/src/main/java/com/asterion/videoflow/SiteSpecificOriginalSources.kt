@@ -1067,15 +1067,28 @@ internal object SiteSpecificOriginalSources {
             !VideoSiteProfiles.isVideoPage(selected))return emptyList()
         val out=LinkedHashMap<String,Source>()
         for(frame in doc.select("main .video-player iframe[src],"+
-            ".embed-responsive.player:not(.d-none) iframe[src]").take(10)){
+            ".embed-responsive.player:not(.d-none) iframe[src]").take(20)){
+            // A related player can be nested inside main .video-player.
+            // Its iframe is never evidence of the selected article.
+            if(frame.closest("aside,.related,.recommended,.recommendations,"+
+                    ".ads,.advertisement,.sidebar,[data-ad]")!=null)continue
             val link=https(frame.attr("src"),selected)?:continue
-            val h=host(link)
             if(!selectedExtractorFrame(selected,link))continue
             out.putIfAbsent(link,Source(link,selected))
         }
-        // Never substitute a related card, an advert, or a different server
-        // if more than one distinct player claims to be the selected one.
-        return out.values.toList().takeIf{it.size==1}.orEmpty()
+        // The default play.javideo.net frame can remain visible in DOM
+        // after the user-selected STAPE#01 frame is activated. Treating
+        // those two as competing originals discarded a genuine signed
+        // hoster selection and fell back to unsupported player HTML.
+        // Only one publisher-verified Streamtape frame is admissible.
+        val signed=out.values.filter{
+            StreamtapeSelectedOriginal.selectedFrame(selected,it.url)!=null
+        }
+        return when {
+            signed.size==1->signed
+            signed.size>1->emptyList()
+            else->out.values.toList().takeIf{it.size==1}.orEmpty()
+        }
     }
 
     internal fun selectedStatic(doc:Document,selected:String,owner:String):List<Source>{
