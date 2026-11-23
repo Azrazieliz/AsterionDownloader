@@ -37,6 +37,26 @@ class PublisherOriginalExtractorsTest {
         "cosplaytele.com" to "https://cosplaytele.com/selected-cosplay-set/"
     )
 
+    @Test fun avpleSelectedLazyPlayerDoesNotDiscardDataSrcOrAdmitRelatedClips(){
+        val selected="https://avple.tv/video/sample-123"
+        val original="https://media.example/full-movie.mp4"
+        val html="""<main>
+            <aside class="related"><div class="video-player">
+                <video data-src="https://ads.example/related.mp4"></video>
+            </div></aside>
+            <div class="video-player"><video data-src="$original"></video></div>
+        </main>"""
+        assertEquals(listOf(original),PublisherOriginalExtractors.fromHtml(
+            selected,html).map{it.url})
+        assertTrue(PublisherOriginalExtractors.fromHtml(
+            selected,"<main><aside class='related'><div class='video-player'>"+
+                "<video data-src='$original'></video></div></aside></main>")
+            .isEmpty())
+        assertTrue(PublisherOriginalExtractors.fromHtml(
+            selected,"<main><div class='video-player'>"+
+                "<video data-src='https://media.example/preview.mp4'>"+
+                "</video></div></main>").isEmpty())
+    }
     @Test fun eachExistingVideoPublisherHasItsOwnNamedParser(){
         assertEquals(VideoSiteProfiles.coveredHosts,
             PublisherOriginalExtractors.coveredHosts)
