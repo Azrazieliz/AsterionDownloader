@@ -1295,6 +1295,31 @@ object SourceIndex {
                             "4KGirl returned masked HTTP 403; "+
                             "publisher browser access required")
                     val doc=Jsoup.parse(body,response.url().toString())
+                    val fourKGirlEmpty=SiteControls.key(source.url)=="4kgirl.com" &&
+                        source.area=="COSPLAY" &&
+                        SiteBackfillProfiles.entries(
+                            doc,source.url,"COSPLAY",System.currentTimeMillis())
+                            .isNullOrEmpty()
+                    if(fourKGirlEmpty &&
+                        (SiteSession.bound(context,current) ||
+                            BrowserPageFetch.publicEligible(current))){
+                        // A 4KGirl WordPress listing can return HTTP 200
+                        // but expose zero gallery cards before JavaScript.
+                        // This is the real SourceIndex worker, not only
+                        // Kyora's independent cover-preview cache.
+                        val html=BrowserPageFetch.html(context,current)
+                        if(GalleryAccessGate.isMaskedForbidden(current,200,html))
+                            throw com.azrael.galleryflow.HttpStatusException(403,
+                                "4KGirl browser still requires publisher access")
+                        val rendered=Jsoup.parse(html,current)
+                        check(!SiteBackfillProfiles.entries(
+                            rendered,source.url,"COSPLAY",
+                            System.currentTimeMillis()).isNullOrEmpty()){
+                            "4KGirl browser exposed no first-party gallery "+
+                                "cards after rendering; verify publisher access"
+                        }
+                        return rendered
+                    }
                     if(com.asterion.videoflow.WebDiscovery
                             .dsysavCatalogNeedsBrowser(current,doc)){
                         // SourceIndex is the ACTUAL Home/Backfill scanner.
