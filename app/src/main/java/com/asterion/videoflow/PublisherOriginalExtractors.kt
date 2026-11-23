@@ -302,8 +302,18 @@ internal object PublisherOriginalExtractors {
             val isFrame=tag=="iframe"
             val duration=element.attr("data-duration").toLongOrNull()
                 ?:element.closest("[data-duration]")?.attr("data-duration")?.toLongOrNull()
-            val source=if(tag=="meta")element.attr("content") else
-                element.attr("src").ifBlank{element.attr("data-src")}
+            // Real HTML5 player may promote a MediaSource blob: URL to
+            // src while retaining its publisher-authored signed media in
+            // data-src. The old ifBlank() read only blob: and dropped the
+            // actual selected original before source attribution. Never
+            // accept blob/data URLs themselves as downloadable originals.
+            val source=if(tag=="meta")element.attr("content") else {
+                val primary=element.attr("src")
+                if(primary.isBlank() || primary.startsWith("blob:",true) ||
+                    primary.startsWith("data:",true))
+                    element.attr("data-src")
+                else primary
+            }
             add(source,isFrame,duration)
         }
         return found.values.toList()
