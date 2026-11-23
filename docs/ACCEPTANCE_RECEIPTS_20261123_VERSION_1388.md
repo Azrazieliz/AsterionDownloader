@@ -15,7 +15,7 @@
 - `KyoraCreatorPreviews.kt` had separately parsed this disguised denial as zero galleries and cached `No gallery thumbnails exposed by listing`, although other source workers detect masked 403. Applied `requirePublisherListing` to both raw HTML and public WebView fallbacks. Source commit `27d8f0911a6eaeda5dd29a9267d212d500487521`.
 - Regression test commit `c5c7095c8ee34364c2eac731f0917fc037360683`: masked 403 maps to publisher access denial, unrelated 4KHD/empty pages unchanged. This is correct diagnosis/reporting; **4KGirl originals are not accessible without the publisher granting normal access**.
 - Windows Control command `dl-20261123-1400-public-index-probe-d2c6`: `dsysav.com/en` returned HTTP **200**, approximately **10,364** HTML chars with **zero watch anchors**, a Next.js shell. Existing WebView indexer requires real publisher `/en/watch?v=<ID>` links. No synthetic cards or URLs may be counted as success.
-- The earlier existing first-party **catalog metadata-only** probe (`dl-1123-1424-dsysav-publiccatalog-probe-d4c9`) returned bridge **HTTP 403 Forbidden**; no restricted media was downloaded, no access-control bypass attempted. DSYSAV requires normal valid publisher access or a later genuinely accessible public catalog.
+- The metadata-only probe (`dl-1123-1424-dsysav-publiccatalog-probe-d4c9`) was rejected with **HTTP 403 in the Control command receipt**, without a Windows execution log proving whether the publisher API was contacted. Thus the publisher catalog API's real status is **unknown**, not verified denied. No restricted media was downloaded or access-control bypass attempted.
 - 4KHD public `/pages/cosplay` listing returned HTTP 200 with 44 anchors; one first-party publisher bridge `https://m.4khd.com/CIY30g` returned HTTP 200 and a TeraBox reference. Native parser supports exact first-party bridges, but **no completed original archive / verified file contents or file size** has been observed. Its true TeraBox share access and original acquisition remain OPEN.
 
 ## Build/test/signing
@@ -33,7 +33,7 @@
 
 ## Acceptance still open — do not claim completion
 1. 4KGirl actual authorized gallery/originals: upstream masked access denial still present, now correctly diagnosed.
-2. DSYSAV actual first-party watch cards: upstream public HTML shell empty and catalog metadata endpoint denied, no manufactured catalog entries.
+2. DSYSAV actual first-party watch cards: public HTML shell empty; browser-rendered catalog and metadata endpoint remain unverified due lack of completed source evidence, no manufactured catalog entries.
 3. 4KHD entire native selected original archive: first-party bridge reachable, completion/contents not validated.
 4. JAV Guru, xChina HTTP 401/403; JAVIDEO, UncensoredHentai selected originals; no bypass, no preview substitutions.
 5. Crash, foreground-service and low-memory stress, thumbnail HTTP 502/404, exact performer, torrent files, general search, end-to-end device acceptance.
