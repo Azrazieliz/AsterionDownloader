@@ -4,6 +4,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class KyoraPreviewSourceIsolationTest {
+    @Test fun galleryDnsAnd4kGirlEmptyJsCatalogAreNotCachedForHours(){
+        val source="https://4kgirl.com/"
+        val hour=60L*60*1000
+        assertEquals(12L*hour,KyoraCreatorPreviews.retryDelayMs(source,null))
+        assertEquals(30_000L,KyoraCreatorPreviews.retryDelayMs(
+            source,"UnknownHostException: Unable to resolve host 4kgirl.com"))
+        assertEquals(30_000L,KyoraCreatorPreviews.retryDelayMs(
+            source,"Publisher DNS lookup failed"))
+        assertEquals(90_000L,KyoraCreatorPreviews.retryDelayMs(
+            source,"No gallery thumbnails exposed by listing"))
+        assertEquals(30L*60*1000,KyoraCreatorPreviews.retryDelayMs(
+            source,"HTTP 403 Forbidden; authorized publisher session required"))
+        assertEquals(2L*hour,KyoraCreatorPreviews.retryDelayMs(
+            "https://4khd.com/","Site original identity unavailable"))
+        assertEquals(5L*60*1000,KyoraCreatorPreviews.retryDelayMs(
+            "https://kiutaku.com/","Unrecognized gallery markup"))
+    }
+
     @Test fun differentPublishersCannotShareAlbumCards(){
         val fourKhd="https://www.4khd.com/content/12345/gallery.html"
         val buondua="https://buondua.net/albums/genuine-gallery"
