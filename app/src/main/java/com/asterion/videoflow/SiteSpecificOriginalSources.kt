@@ -134,12 +134,19 @@ internal object SiteSpecificOriginalSources {
             "hqpornerxxx.com" -> Regex("""^/embed/[A-Za-z0-9_-]{8,64}/?$""")
             else -> Regex("""^/v/[A-Za-z0-9]{8,40}/?$""")
         }
-        for(iframe in doc.select("iframe[src]").take(30)){
+        // A watch page can have a standalone legitimate publisher iframe.
+        // Scope all candidates by selected host/route, exclude sidebars/ads,
+        // and reject ambiguity rather than choosing the first unrelated frame.
+        val attributable=LinkedHashSet<String>()
+        for(iframe in doc.select("iframe[src]").take(60)){
+            if(iframe.closest("aside,.related,.recommended,.recommendations,"+
+                    ".ads,.advertisement,.sidebar,[data-ad]")!=null)continue
             val candidate=https(iframe.attr("src"),doc.location())?:continue
-            if(host(candidate)==target && route.matches(URI(candidate).path.orEmpty()))
-                return candidate
+            if(host(candidate)==target &&
+                route.matches(URI(candidate).path.orEmpty()))
+                attributable.add(candidate)
         }
-        return null
+        return attributable.singleOrNull()
     }
     private fun selectedPlayer(context:Context,link:String,referer:String,
                                owner:String):Document {
