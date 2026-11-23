@@ -1529,6 +1529,35 @@ object VideoEngine {
                 throw (last?:IllegalStateException(
                     "TaiAV first-party original HLS did not transfer; "+
                     "the movie article or preview is not a video original"))
+            if(strictJavGuru && userRequested && !downloaded &&
+                !VideoTransferLimits.preparationBudgetExceeded(
+                    android.os.SystemClock.elapsedRealtime()-preparationStart,
+                    VideoPayloadBytes.count(parent)>0L)){
+                // The selected LU/SB playlist can be publisher-attested but
+                // its Python transport still returns HTTP 401/403. A valid
+                // published JK server is independently playable through the
+                // existing native Maxstream HLS lane. Resolve ONLY that exact
+                // selected article's JK shortcode after the other attempted
+                // originals failed, so short-lived LU signatures are not
+                // delayed by unnecessary browser/hoster inspection.
+                val jk=runCatching {
+                    inspectPublisher {
+                        val page=WebDiscovery.selectedDocument(item.url,context)
+                        SiteSpecificOriginalSources.javGuru(
+                            context,page,item.url,nativeJkOnly=true)
+                            .singleOrNull()
+                    }
+                }.getOrNull()
+                if(jk!=null &&
+                    JavGuruJkNativeHls.eligible(item.url,jk.url,jk.referer)){
+                    try{
+                        VideoTransferJournal.record(context,item.id,
+                            "selected_jk_fallback","Publisher-attested native HLS")
+                        execute(jk.url,jk.referer)
+                        downloaded=true
+                    }catch(t:Exception){last=t}
+                }
+            }
             if(strictJavGuru && !downloaded)
                 throw (last?:IllegalStateException(
                     "Jav Guru selected STREAM players failed. "+
