@@ -24,12 +24,17 @@ internal object PosterHostCooldown {
     }
     @Synchronized fun record(page:String,error:Throwable,
                               now:Long=System.currentTimeMillis()):Boolean {
-        val status=Regex("""(?:HTTP[ :]\s*|poster_http_)(429|500|502|503|504)\b""",
-            RegexOption.IGNORE_CASE)
-            .find(error.message.orEmpty())?:return false
-        if(status.groupValues[1].isBlank())return false
+        val dnsFailure=generateSequence(error as Throwable?){it.cause}
+            .take(5).any{it is java.net.UnknownHostException}
+        val overloaded=Regex("""(?:HTTP[ :]\s*|poster_http_)(429|500|502|503|504)\b""",
+            RegexOption.IGNORE_CASE).containsMatchIn(error.message.orEmpty())
+        if(!dnsFailure && !overloaded)return false
         val key=host(page).takeIf{it.isNotBlank()}?:return false
-        suspended[key]=now+20_000L
+        // DNS outages in the owner's diagnostics affected 30+ poster
+        // requests across many sites in the same few milliseconds. Suppress
+        // repeated requests to ONE failing host only, then retry after a
+        // short bounded interval. Never suppress downloads or other hosts.
+        suspended[key]=now+(if(dnsFailure)12_000L else 20_000L)
         while(suspended.size>128){
             val oldest=suspended.keys.iterator()
             if(oldest.hasNext()){oldest.next();oldest.remove()}else break
@@ -164,6 +169,9 @@ object VideoSearchPreviews {
                 }
             }
             for(candidateUrl in candidates){
+                // A single CDN's DNS failure must not occupy every preview
+                // worker with repeated 6s connection waits from many cards.
+                if(!PosterHostCooldown.allowed(candidateUrl))continue
                 bitmap=runCatching{
                 // Respect an explicitly configured poster/CDN route; otherwise
                 // inherit the selected publisher's existing route.
@@ -235,6 +243,7 @@ object VideoSearchPreviews {
                         inPreferredConfig=Bitmap.Config.RGB_565
                     })
                 }.onFailure{problem->
+                    PosterHostCooldown.record(candidateUrl,problem)
                     failure=problem.javaClass.simpleName+": "+
                         problem.message.orEmpty().take(100)
                 }.getOrNull()
