@@ -9,6 +9,35 @@ import android.widget.ImageView
 import java.net.URL
 import java.util.concurrent.Executors
 
+/** A publisher returning an HTTP 5xx/429 for its poster page should
+ * not be hammered by dozens of cards in the same render. Keep this
+ * independent from original-video downloads and direct poster URLs.
+ */
+internal object PosterHostCooldown {
+    private val suspended=LinkedHashMap<String,Long>()
+    private fun host(value:String)=runCatching{
+        java.net.URI(value).host.orEmpty().lowercase(java.util.Locale.ROOT)
+    }.getOrDefault("")
+    @Synchronized fun allowed(page:String,now:Long=System.currentTimeMillis()):Boolean {
+        val key=host(page)
+        return key.isNotBlank() && (suspended[key]?:0L)<=now
+    }
+    @Synchronized fun record(page:String,error:Throwable,
+                              now:Long=System.currentTimeMillis()):Boolean {
+        val status=Regex("""(?:HTTP[ :]\\s*|poster_http_)(429|500|502|503|504)\\b""",
+            RegexOption.IGNORE_CASE)
+            .find(error.message.orEmpty())?:return false
+        if(status.groupValues[1].isBlank())return false
+        val key=host(page).takeIf{it.isNotBlank()}?:return false
+        suspended[key]=now+20_000L
+        while(suspended.size>128){
+            val oldest=suspended.keys.iterator()
+            if(oldest.hasNext()){oldest.next();oldest.remove()}else break
+        }
+        return true
+    }
+}
+
 /** Bounded 3-thread video-result thumbnail loader; never blocks the UI. */
 object VideoSearchPreviews {
     // A screen may queue 120 video cards. The previous queue held 72 and
@@ -110,23 +139,27 @@ object VideoSearchPreviews {
                     yieldAll(PublisherPreviewFallback.candidates(verifiedPoster,referer))
                 }
                 rule34Page?.let{source->
-                    val poster=runCatching{
-                        Rule34PosterEvidence.readPoster(app,source)
-                    }.onFailure{problem->
-                        failure="selected_page_"+problem.javaClass.simpleName+
-                            ": "+problem.message.orEmpty().take(80)
-                    }.getOrNull()
+                    val poster=if(!PosterHostCooldown.allowed(source))null else
+                        runCatching{
+                            Rule34PosterEvidence.readPoster(app,source)
+                        }.onFailure{problem->
+                            PosterHostCooldown.record(source,problem)
+                            failure="selected_page_"+problem.javaClass.simpleName+
+                                ": "+problem.message.orEmpty().take(80)
+                        }.getOrNull()
                     if(poster!=null && poster!=validUrl)yield(poster)
                 }
                 selectedPage?.takeIf{
                     it!=rule34Page && it!=exactOnScreens
                 }?.let{source->
-                    val poster=runCatching{
-                        PublisherSearchPoster.fetch(app,source)
-                    }.onFailure{problem->
-                        failure="publisher_poster_"+problem.javaClass.simpleName+
-                            ": "+problem.message.orEmpty().take(80)
-                    }.getOrNull()
+                    val poster=if(!PosterHostCooldown.allowed(source))null else
+                        runCatching{
+                            PublisherSearchPoster.fetch(app,source)
+                        }.onFailure{problem->
+                            PosterHostCooldown.record(source,problem)
+                            failure="publisher_poster_"+problem.javaClass.simpleName+
+                                ": "+problem.message.orEmpty().take(80)
+                        }.getOrNull()
                     if(poster!=null && poster!=validUrl)yield(poster)
                 }
             }
