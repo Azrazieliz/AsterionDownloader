@@ -356,7 +356,7 @@ open class HttpClient(private val context:android.content.Context?=null) {
         // external ZIP. The selected article may publish a genuine first-
         // party ZIP/RAR/7z CDN instead of a TeraBox share.
         return (host=="4khd.com" || host.endsWith(".4khd.com")) &&
-            Regex("""(?i)\\.(?:zip|rar|7z)$""").containsMatchIn(path)
+            Regex("""(?i)\.(?:zip|rar|7z)$""").containsMatchIn(path)
     }
 
     private fun extractRedirect(doc: Document): String? {
