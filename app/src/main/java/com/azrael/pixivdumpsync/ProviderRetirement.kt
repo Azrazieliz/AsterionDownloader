@@ -13,7 +13,8 @@ object ProviderRetirement {
     // FreePornVideos in the 2026-11-11 verified listing comparison.
     private val retired=setOf("chaturbate.com","camstreams.tv","pornpics.com","celeb.st","onscreens.me","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
         "porntrex.com","xnxx.com","xvideos.com","peekvids.com","tnaflix.com",
-        "mp4hentai.com","hentaihaven.xxx","helloporn.com","pornavhd.com")
+        "mp4hentai.com","hentaihaven.xxx","helloporn.com","pornavhd.com",
+        "avple.tv")
 
     fun isRetired(address:String):Boolean {
         val uri=runCatching { URI(address) }.getOrNull() ?: return false
