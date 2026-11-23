@@ -254,8 +254,8 @@ open class HttpClient(private val context:android.content.Context?=null) {
                         browserContext,url,referer)
                     val rendered=Jsoup.parse(html,url)
                     rendered.selectFirst("a#custom_button[href]")
-                        ?.absUrl("href")?.takeIf{isTeraBoxHost(hostOf(it))}
-                        ?:extractTeraBoxUrl(html)
+                        ?.absUrl("href")?.takeIf(::isReal4khdBridge)
+                        ?:extractTeraBoxUrl(html)?.takeIf(::isReal4khdBridge)
                 }.getOrNull()
             }else null
             val bridgeTarget=staticBridge?:browserBridge
@@ -337,8 +337,26 @@ open class HttpClient(private val context:android.content.Context?=null) {
             parsed.host.isNullOrBlank() || parsed.port!=-1 ||
             parsed.rawFragment!=null)return false
         val host=parsed.host!!.lowercase(Locale.ROOT)
-        val path=parsed.path.orEmpty().lowercase(Locale.ROOT)
-        return isTeraBoxHost(host) || isDirectFilePath(path)
+        val path=parsed.path.orEmpty()
+        // The public bridge HTML can contain generic TeraBox home/help
+        // links before its actual share. A host match ALONE made us open
+        // the homepage and then fail the original, even when a real share
+        // appeared later. Only an explicitly published SHARE is usable.
+        if(isTeraBoxHost(host)){
+            if(Regex("""^/s/[A-Za-z0-9_-]{6,160}/?$""").matches(path))
+                return true
+            if(path !in setOf("/wap/share/filelist","/sharing/link",
+                    "/share/link"))return false
+            val query=parsed.rawQuery.orEmpty().split('&')
+            val ids=query.filter{it.startsWith("surl=")}
+            return ids.size==1 && ids.single().removePrefix("surl=")
+                .matches(Regex("[A-Za-z0-9_-]{4,160}"))
+        }
+        // A 4KHD archive is NOT a preview JPG, a video or an unrelated
+        // external ZIP. The selected article may publish a genuine first-
+        // party ZIP/RAR/7z CDN instead of a TeraBox share.
+        return (host=="4khd.com" || host.endsWith(".4khd.com")) &&
+            Regex("""(?i)\\.(?:zip|rar|7z)$""").containsMatchIn(path)
     }
 
     private fun extractRedirect(doc: Document): String? {
@@ -371,7 +389,8 @@ open class HttpClient(private val context:android.content.Context?=null) {
         val html = unescapeHtmlJs(text)
         return URL_REGEX.findAll(html)
             .map { it.value.trimEnd(')', ']', '}', ',', ';') }
-            .firstOrNull { isTeraBoxHost(hostOf(it)) }
+            .firstOrNull { isTeraBoxHost(hostOf(it)) &&
+                isReal4khdBridge(it) }
     }
 
     private fun extractDirectFromText(text: String): String? {
