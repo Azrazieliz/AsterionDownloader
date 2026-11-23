@@ -77,7 +77,7 @@ try {
         $identity -notmatch "versionName='1.3.86-acceptance'") {
         throw 'APK package/version mismatch'
     }
-    $dest=Join-Path $HOME ('Downloads\AsterionDownloader-v1.3.86-+$head.Substring(0,12)+'-OwnerSigned.apk')
+    $dest=Join-Path $HOME ('Downloads\AsterionDownloader-v1.3.86-'+$head.Substring(0,12)+'-OwnerSigned.apk')
     $digest=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
     if (Test-Path -LiteralPath $dest) {
         if ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest) {
