@@ -37,6 +37,30 @@ class PublisherOriginalExtractorsTest {
         "cosplaytele.com" to "https://cosplaytele.com/selected-cosplay-set/"
     )
 
+    @Test fun avpleSelectedSignedDataSrcSurvivesMediaSourceBlobPromotion(){
+        val selected="https://avple.tv/video/sample-123"
+        val original="https://media.example/full-movie.mp4?auth=site-signed"
+        val html="""<main><div class="video-player">
+            <video src="blob:https://avple.tv/123"
+                data-src="$original"></video></div>
+            <aside class="related"><div class="video-player">
+                <video src="blob:https://avple.tv/ad"
+                    data-src="https://ads.example/unrelated.mp4"></video>
+            </div></aside></main>"""
+        assertEquals(listOf(original),PublisherOriginalExtractors.fromHtml(
+            selected,html).map{it.url})
+        val unrelatedOnly="""<main><aside class="related"><div class="video-player">
+            <video src="blob:https://avple.tv/ad" data-src="$original">
+            </video></div></aside></main>"""
+        assertTrue(PublisherOriginalExtractors.fromHtml(
+            selected,unrelatedOnly).isEmpty())
+        val noSigned="""<main><div class="video-player">
+            <video src="blob:https://avple.tv/123"></video>
+            </div></main>"""
+        assertTrue(PublisherOriginalExtractors.fromHtml(
+            selected,noSigned).isEmpty())
+    }
+
     @Test fun avpleSelectedLazyPlayerDoesNotDiscardDataSrcOrAdmitRelatedClips(){
         val selected="https://avple.tv/video/sample-123"
         val original="https://media.example/full-movie.mp4"
