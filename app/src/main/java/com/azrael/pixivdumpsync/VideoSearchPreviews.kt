@@ -24,7 +24,7 @@ internal object PosterHostCooldown {
     }
     @Synchronized fun record(page:String,error:Throwable,
                               now:Long=System.currentTimeMillis()):Boolean {
-        val status=Regex("""(?:HTTP[ :]\\s*|poster_http_)(429|500|502|503|504)\\b""",
+        val status=Regex("""(?:HTTP[ :]\s*|poster_http_)(429|500|502|503|504)\b""",
             RegexOption.IGNORE_CASE)
             .find(error.message.orEmpty())?:return false
         if(status.groupValues[1].isBlank())return false
