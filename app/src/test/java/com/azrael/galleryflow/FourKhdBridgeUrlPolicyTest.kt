@@ -40,6 +40,17 @@ class FourKhdBridgeUrlPolicyTest {
             client.isReal4khdBridge(unrelated))
     }
 
+    @Test fun bridgeScriptSkipsGenericHostLinksAndKeepsExactPublicShare(){
+        val script="""<script>const site="https://www.terabox.com/";
+            const help="https://www.terabox.com/help";
+            const real="https://www.terabox.com/s/1me4uCqbx20DyhHcItQaShQ";
+            const ad="https://unrelated.example/unverified.zip";</script>"""
+        assertEquals("https://www.terabox.com/s/1me4uCqbx20DyhHcItQaShQ",
+            client.extractTeraBoxUrl(script))
+        assertNull(client.extractTeraBoxUrl(
+            """<script>const home="https://www.terabox.com/";</script>"""))
+    }
+
     @Test fun placeholdersAndDeceptiveSitesCannotBlockSelectedBrowserBridge(){
         for(candidate in listOf(
             "", "#", "javascript:void(0)",
