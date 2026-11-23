@@ -178,6 +178,12 @@ class JavGuruOriginalSourceTest {
         assertEquals(listOf("JK"),
             JavGuruNonJkRouting.primaryOrder(
                 listOf(player("JK"))).map{it.server})
+        assertEquals(listOf("JK"),
+            JavGuruNonJkRouting.nativeJkOrder(
+                listOf(player("LU"),player("JK"),player("JK"),player("SB")))
+                .map{it.server})
+        assertTrue(JavGuruNonJkRouting.nativeJkOrder(
+            listOf(player("LU"),player("SB"),player("VO"))).isEmpty())
         assertEquals(listOf("LU","VO"),
             JavGuruNonJkRouting.primaryOrder(
                 listOf(player("VO"),player("LU"))).map{it.server})
