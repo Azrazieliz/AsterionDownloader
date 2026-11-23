@@ -171,6 +171,27 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(FullPornerOriginalSource.verifiedMedia(selected,player,
             "https://xiaoshenke.net/other/339123456789000"))
     }
+    @Test fun selectedPublisherDnsAndTimeoutStayRetryableNotUnsupported(){
+        val owner="uncensoredhentai.xxx"
+        val dns=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,java.io.IOException("browser",java.net.UnknownHostException(
+                "Unable to resolve host nhplayer.com")))
+        assertNotNull(dns)
+        assertEquals(VideoFailurePolicy.Kind.DNS,
+            VideoFailurePolicy.classify(dns!!.message.orEmpty()))
+        assertEquals(1,VideoFailurePolicy.maxRetries(
+            VideoFailurePolicy.Kind.DNS))
+        val timeout=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,java.net.SocketTimeoutException("timed out"))
+        assertNotNull(timeout)
+        assertEquals(VideoFailurePolicy.Kind.TRANSIENT,
+            VideoFailurePolicy.classify(timeout!!.message.orEmpty()))
+        assertNull(SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,IllegalStateException("HTTP 403; verified access required")))
+        assertNull(SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,null))
+    }
+
     @Test fun selectedIframeCanBeStandaloneButNeverFromAdOrAmbiguousPlayers(){
         val page="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
         val selected="https://fullporner.com/player/9509933/14"
