@@ -27,6 +27,13 @@ internal object PerformerFollowPolicy {
                 word.any{it.isLetter()} && word !in generic}
     }
 
+    /** Profile-attributed originals already carry first-party provenance.
+     * Their video titles need not repeat the performer's full name.
+     * Title-only search candidates still require the exact ordered name.
+     */
+    fun visibleVideoTitle(name:String,title:String,profileAttested:Boolean):Boolean =
+        profileAttested || SearchExactness.mediaMatches(name,title)
+
     fun permittedName(raw:String):Boolean {
         val name=Normalizer.normalize(raw.trim(),Normalizer.Form.NFKC)
             .replace(Regex("\\s+")," ")
