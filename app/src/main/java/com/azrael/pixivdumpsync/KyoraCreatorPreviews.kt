@@ -308,6 +308,22 @@ object KyoraCreatorPreviews {
             else 2L*60*60*1000
     }
 
+    /** Source-specific upstream denial, not a completed empty gallery.
+     * 4KGirl's nginx returned 138 HTML bytes carrying 403 Forbidden while
+     * the transport still reported HTTP 200. The preview worker previously
+     * interpreted that as zero albums and cached a misleading empty result.
+     * The same guard already exists in Kyora HTTP and SourceIndex; apply it
+     * to the separate preview worker without weakening authorization. */
+    internal fun requirePublisherListing(
+        source:String,status:Int,html:String
+    ) {
+        if(com.azrael.galleryflow.GalleryAccessGate
+                .isMaskedForbidden(source,status,html))
+            throw com.azrael.galleryflow.HttpStatusException(
+                403,"4KGirl publisher returned a masked 403 Forbidden; "+
+                    "connect an authorized website session to access galleries")
+    }
+
     fun load(a:Activity,url:String,force:Boolean=false,
              onReady:(Snapshot)->Unit){
         if(!force)cached(a,url)?.let{onReady(it)}
@@ -358,6 +374,7 @@ object KyoraCreatorPreviews {
                             "Provider HTTP "+response.statusCode()+
                                 "; connect an authorized account if required"
                         }
+                        requirePublisherListing(current,response.statusCode(),response.body())
                         page=response.parse()
                         break
                     }
@@ -371,6 +388,7 @@ object KyoraCreatorPreviews {
                     (SiteSession.bound(a.applicationContext,url) ||
                         BrowserPageFetch.publicEligible(url))){
                     val html=BrowserPageFetch.html(a.applicationContext,url)
+                    requirePublisherListing(url,200,html)
                     items=parse(html,url)
                 }
                 if(SiteControls.key(url)=="kiutaku.com"){
