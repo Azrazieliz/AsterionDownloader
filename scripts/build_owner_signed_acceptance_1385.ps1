@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0 -or $tracked.Count -gt 0) {
     throw 'Tracked Windows worktree changes prevent safe owner build'
 }
 $source=Get-Content (Join-Path $w 'app\build.gradle.kts') -Raw
-if ($source -notmatch 'versionCode\s*=\s*113' -or
+if ($source -notmatch 'versionCode\s*=\s*114' -or
     $source -notmatch 'versionName\s*=\s*"1\.3\.84"') {
     throw 'Wrong version for owner in-place update'
 }
