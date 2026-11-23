@@ -171,6 +171,27 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(FullPornerOriginalSource.verifiedMedia(selected,player,
             "https://xiaoshenke.net/other/339123456789000"))
     }
+    @Test fun selectedIframeCanBeStandaloneButNeverFromAdOrAmbiguousPlayers(){
+        val page="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
+        val selected="https://fullporner.com/player/9509933/14"
+        val unrelated="https://fullporner.com/player/1111111/22"
+        val exact="""<main><aside class="related">
+            <iframe src="$unrelated"></iframe></aside>
+            <iframe src="$selected"></iframe></main>"""
+        assertEquals(selected,SiteSpecificOriginalSources.playerLink(
+            Jsoup.parse(exact,page),"fullporner.com"))
+        val ambiguous="""<main><iframe src="$unrelated"></iframe>
+            <iframe src="$selected"></iframe></main>"""
+        assertNull(SiteSpecificOriginalSources.playerLink(
+            Jsoup.parse(ambiguous,page),"fullporner.com"))
+        val nhPage="https://uncensoredhentai.xxx/watch/episode-3/"
+        val nhSelected="https://nhplayer.com/v/Z2flAXXPucyCbVJ/"
+        val nhOther="https://nhplayer.com/v/ABCDEFGHIJKL/"
+        val nhHtml="""<aside class="advertisement"><iframe src="$nhOther">
+            </iframe></aside><iframe src="$nhSelected"></iframe>"""
+        assertEquals(nhSelected,SiteSpecificOriginalSources.playerLink(
+            Jsoup.parse(nhHtml,nhPage),"uncensoredhentai.xxx"))
+    }
     @Test fun exactFullPornerPlayerRejectsOtherIframes(){
         val page="https://fullporner.com/watch/6af6fbcd2f7835591446cb0f"
         val selected="https://fullporner.com/player/9509933/14"
