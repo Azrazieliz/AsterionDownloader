@@ -102,6 +102,31 @@ object WebDiscovery {
                 NetworkRoute.siteKey(url)=="avple.tv" &&
                 VideoSiteProfiles.isVideoPage(url))
 
+    /** DSYSAV's Next.js /en catalog returns HTTP 200 before publishing
+     * any video cards. An empty server-rendered shell is not a successful
+     * catalog. Only a unique first-party /en/watch?v=<ID> link counts. */
+    internal fun dsysavCatalogNeedsBrowser(
+        address:String,document:Document
+    ):Boolean {
+        val root=runCatching{URI(address)}.getOrNull()?:return false
+        if(root.scheme!="https" ||
+            root.host.orEmpty().lowercase()!="dsysav.com" ||
+            root.userInfo!=null || root.port!=-1 ||
+            root.rawQuery!=null || root.rawFragment!=null ||
+            root.path.orEmpty().trimEnd('/')!="/en")return false
+        return document.select("a[href]").none{a->
+            val link=runCatching{
+                root.resolve(a.attr("href"))
+            }.getOrNull()
+            link?.scheme=="https" &&
+                link.host.orEmpty().lowercase()=="dsysav.com" &&
+                link.userInfo==null && link.port==-1 &&
+                link.path=="/en/watch" && link.rawFragment==null &&
+                Regex("""v=[A-Za-z0-9_-]{8,45}""")
+                    .matches(link.rawQuery.orEmpty())
+        }
+    }
+
     private fun open(url:String,context:Context?=null):Document{
         require(isUrl(url)){"Invalid public provider URL"}
         var current=url
@@ -145,6 +170,22 @@ object WebDiscovery {
                 val document=response.parse()
                 val sourceHost=runCatching{URI(url).host.orEmpty()
                     .lowercase().removePrefix("www.")}.getOrDefault("")
+                if(context!=null &&
+                    dsysavCatalogNeedsBrowser(current,document) &&
+                    (SiteSession.bound(context,current) ||
+                        com.azrael.pixivdumpsync.BrowserPageFetch.publicEligible(current))){
+                    // A genuine JS-rendered watch card, not the HTTP 200
+                    // Next.js empty shell or an invented first-party API.
+                    val rendered=Jsoup.parse(
+                        com.azrael.pixivdumpsync.BrowserPageFetch.html(
+                            context,current),current)
+                    check(!dsysavCatalogNeedsBrowser(current,rendered)){
+                        "DSYSAV public catalog still exposes no publisher-owned "+
+                        "watch cards after browser rendering; verify normal "+
+                        "website access before retrying this source"
+                    }
+                    return rendered
+                }
                 if(sourceHost=="hentaihaven.xxx" && accessChallenge(document)){
                     if(context!=null &&
                         (SiteSession.bound(context,current) ||
