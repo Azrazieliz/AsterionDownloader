@@ -78,7 +78,13 @@ internal object EmbeddedYtDlpTransfer {
         put("retries",2)
         put("fragment_retries",3)
         put("socket_timeout",20)
-        put("concurrent_fragment_downloads",3)
+        // The owner's selected xChina HLS received ~3 MB then got
+        // 401/403 during concurrent fragment requests. Keep normal signed
+        // headers and the same owner/playlist; use sequential fragments on
+        // this exact matched source to avoid request bursts and RAM spikes.
+        // This cannot override a genuine site authorization denial.
+        put("concurrent_fragment_downloads",
+            if(VideoHlsDispatch.isSelectedXChinaHls(referer,url))1 else 3)
         if(cookies?.isFile==true && cookies.length()>0L)
             put("cookiefile",cookies.absolutePath)
         if(!proxy.isNullOrBlank())put("proxy",proxy)
