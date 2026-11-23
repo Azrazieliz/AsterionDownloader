@@ -171,6 +171,35 @@ class ReportedSiteSpecificOriginalsTest {
         assertFalse(FullPornerOriginalSource.verifiedMedia(selected,player,
             "https://xiaoshenke.net/other/339123456789000"))
     }
+    @Test fun WebViewMainFrameNetworkErrorsRetryInsteadOfPretendingNoOriginal(){
+        val owner="uncensoredhentai.xxx"
+        val dns=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,IllegalStateException("Browser main-frame network error -2"))
+        assertNotNull(dns)
+        assertEquals(VideoFailurePolicy.Kind.DNS,
+            VideoFailurePolicy.classify(dns!!.message.orEmpty()))
+        val connect=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,IllegalStateException("Browser main-frame network error -6"))
+        assertNotNull(connect)
+        assertEquals(VideoFailurePolicy.Kind.TRANSIENT,
+            VideoFailurePolicy.classify(connect!!.message.orEmpty()))
+        val timeout=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+            owner,RuntimeException("WebView failed",
+                IllegalStateException("Browser main-frame network error -8")))
+        assertNotNull(timeout)
+        assertEquals(VideoFailurePolicy.Kind.TRANSIENT,
+            VideoFailurePolicy.classify(timeout!!.message.orEmpty()))
+        // Authentication and publisher rejection must never be rewritten
+        // as a DNS outage or silently retried as another original.
+        for(error in listOf(
+            "Browser main-frame network error -4",
+            "Browser main-frame network error -15",
+            "Browser main-frame network error -2 HTTP 403",
+            "HTTP 403; publisher account required"))
+            assertNull(error,SiteSpecificOriginalSources.selectedPlayerTransportFailure(
+                owner,IllegalStateException(error)))
+    }
+
     @Test fun selectedPublisherDnsAndTimeoutStayRetryableNotUnsupported(){
         val owner="uncensoredhentai.xxx"
         val dns=SiteSpecificOriginalSources.selectedPlayerTransportFailure(
