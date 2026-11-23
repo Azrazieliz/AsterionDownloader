@@ -22,6 +22,36 @@ class KyoraPreviewSourceIsolationTest {
             "https://kiutaku.com/","Unrecognized gallery markup"))
     }
 
+    @Test fun fourKGirlGridwpSiblingLazyCoverIsIndexedAsOneRealAlbum(){
+        val source="https://www.4kgirl.com/"
+        val html="""<main><div class="gridwp-grid-post">
+            <div class="post-thumbnail"><img
+                src="/wp-content/themes/theme/loading.gif"
+                data-lazy-src="/wp-content/uploads/2026/11/original-cover.jpg"
+                alt="Verified publisher image"></div>
+            <h2><a href="/first-party-cosplay-set/">First party set</a></h2>
+            </div>
+            <div class="gridwp-grid-post"><a href="/category/cosplay/">
+                <img src="/wp-content/uploads/2026/11/category-cover.jpg"></a>
+            </div>
+            <div class="gridwp-grid-post"><a href="https://4kgirl.com.evil.example/fake-set/">
+                <img src="https://4kgirl.com.evil.example/img.jpg"></a>
+            </div></main>"""
+        val doc=org.jsoup.Jsoup.parse(html,source)
+        val entries=SiteBackfillProfiles.entries(
+            doc,source,"COSPLAY",100L).orEmpty()
+        assertEquals(1,entries.size)
+        assertEquals("https://www.4kgirl.com/first-party-cosplay-set/",
+            entries.single().url)
+        assertEquals("First party set",entries.single().title)
+        assertEquals("https://www.4kgirl.com/wp-content/uploads/2026/11/original-cover.jpg",
+            entries.single().preview)
+        val tiles=KyoraCreatorPreviews.parse(html,source)
+        assertEquals(1,tiles.size)
+        assertEquals(entries.single().url,tiles.single().url)
+        assertEquals(entries.single().preview,tiles.single().cover)
+    }
+
     @Test fun differentPublishersCannotShareAlbumCards(){
         val fourKhd="https://www.4khd.com/content/12345/gallery.html"
         val buondua="https://buondua.net/albums/genuine-gallery"
