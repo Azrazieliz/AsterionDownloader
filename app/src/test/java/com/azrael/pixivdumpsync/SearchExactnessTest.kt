@@ -38,4 +38,13 @@ class SearchExactnessTest {
         assertTrue(SearchExactness.mediaMatches("Alice","Alice original scene"))
     }
 
+    @Test fun broadDescriptionCanReorderWordsWithoutInvitingWrongPerformers() {
+        assertTrue(SearchExactness.mediaMatches("space documentary 2026",
+            "2026 documentary about deep space"))
+        assertTrue(SearchExactness.mediaMatches("nature documentary",
+            "Documentary about remote nature"))
+        assertFalse(SearchExactness.mediaMatches("Bella Alice",
+            "Barbara Bella and Alice Marshall"))
+    }
+
 }
