@@ -165,6 +165,29 @@ class JavGuruOriginalSourceTest {
             listOf(player("JK"))).isEmpty())
     }
 
+    @Test fun primaryJkRecoveryHydratesSelectedPostEvenWhenLuAlreadyExists(){
+        val document=org.jsoup.Jsoup.parse(post,selected)
+        val static=JavGuruOriginalSource.published(selected,document.outerHtml())
+        assertEquals(listOf("LU"),static.map{it.server})
+        // Non-JK resolution correctly skips an unnecessary second read.
+        assertFalse(SiteSpecificOriginalSources.shouldHydrateSelectedJavGuru(
+            document,selected,static,jkRecovery=false))
+        // After LU has failed at the transport layer, the primary MUST
+        // load the same article again to obtain its JS-injected JK button.
+        assertTrue(SiteSpecificOriginalSources.shouldHydrateSelectedJavGuru(
+            document,selected,static,jkRecovery=true))
+        // A different post's shortcode cannot be treated as this item.
+        assertFalse(SiteSpecificOriginalSources.shouldHydrateSelectedJavGuru(
+            document,selected.replace("1077002","9999999"),static,
+            jkRecovery=true))
+        assertFalse(SiteSpecificOriginalSources.shouldHydrateSelectedJavGuru(
+            document,"https://jav.guru/category/uncensored/",static,
+            jkRecovery=true))
+        val withJk=static+JavGuruOriginalSource.Player("JK",wrapper)
+        assertFalse(SiteSpecificOriginalSources.shouldHydrateSelectedJavGuru(
+            document,selected,withJk,jkRecovery=true))
+    }
+
     @Test fun primaryCanTryPublisherSelectedJkAfterNonJkHostersFail(){
         val player: (String)->JavGuruOriginalSource.Player={server->
             JavGuruOriginalSource.Player(server,wrapper)
