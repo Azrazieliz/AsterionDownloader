@@ -159,6 +159,29 @@ internal object SiteSpecificOriginalSources {
         }
         return attributable.singleOrNull()
     }
+    /** Transport failure is retryable; an inaccessible player never
+     * becomes an original. Keep publisher authentication checks unchanged. */
+    internal fun selectedPlayerTransportFailure(
+        owner:String,vararg errors:Throwable?
+    ):java.io.IOException? {
+        val network=errors.asSequence().filterNotNull()
+            .flatMap { generateSequence(it){cause->cause.cause}.take(5) }
+            .firstOrNull {
+                it is java.net.UnknownHostException ||
+                    it is java.net.SocketTimeoutException ||
+                    it is java.net.ConnectException
+            } ?:return null
+        val message=when(network){
+            is java.net.UnknownHostException->
+                "Selected "+owner+" player DNS lookup failed; retry after "+
+                    "network name resolution recovers"
+            is java.net.SocketTimeoutException->
+                "Selected "+owner+" player connection timed out; retry"
+            else->"Selected "+owner+" player network unreachable; retry"
+        }
+        return java.io.IOException(message,network)
+    }
+
     private fun selectedPlayer(context:Context,link:String,referer:String,
                                owner:String):Document {
         val h=host(link)
@@ -177,6 +200,8 @@ internal object SiteSpecificOriginalSources {
         // browser session into HTTP 403 before the player can be examined.
         // A failed static request must reach the existing, owner-authorized
         // WebView renderer instead of aborting the whole selected original.
+        var initialFailure:Throwable?=null
+        var browserFailure:Throwable?=null
         val response=runCatching {
             Jsoup.connect(link)
                 .userAgent(NativeMediaDownloader.USER_AGENT)
@@ -196,7 +221,7 @@ internal object SiteSpecificOriginalSources {
                     SiteSession.cookie(context,link)?.takeIf{it.isNotBlank()}
                         ?.let{header("Cookie",it)}
                 }.execute()
-        }.getOrNull()
+        }.onFailure{initialFailure=it}.getOrNull()
         if(response!=null && response.statusCode() in 200..299 &&
             response.contentType().contains("html",ignoreCase=true)) {
             val page=Jsoup.parse(response.body(),link)
@@ -208,13 +233,15 @@ internal object SiteSpecificOriginalSources {
         if(BrowserPageFetch.publicEligible(link) || SiteSession.bound(context,link)){
             val rendered=runCatching {
                 BrowserPageFetch.html(context,link,playerReferer=referer)
-            }.getOrNull()
+            }.onFailure{browserFailure=it}.getOrNull()
             if(!rendered.isNullOrBlank()){
                 val page=Jsoup.parse(rendered,link)
                 if(!SiteSpecificPlayerPolicy.accessGate(page))
                     return page
             }
         }
+        selectedPlayerTransportFailure(owner,initialFailure,browserFailure)
+            ?.let{throw it}
         error("Selected "+owner+" player requires its authorized site session "+
             "or browser verification; no selected original was exposed")
     }
