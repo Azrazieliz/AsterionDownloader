@@ -29,22 +29,32 @@ object SearchExactness {
         }
     }
 
-    /** In the unified video search, two or more name/title words are one
-     * ordered identity. The prior unordered OR fallback turned "Bella Alice"
-     * into "Barbara Bella and Alice Marshall", an unrelated recording.
-     * Broad unordered keyword matching remains available for other explicit
-     * metadata uses via matches(), but not to claim an exact video hit.
+    /** Two-word performer identities are ordered and must use complete
+     * tokens; descriptive queries remain broad (a documentary needn't
+     * repeat the user's keyword order in its title). This specifically
+     * prevents "Bella Alice" matching unrelated Bella + Alice performers.
      */
+    private val descriptiveWords=setOf(
+        "documentary","documentaries","movie","movies","film","films",
+        "video","videos","scene","scenes","episode","episodes",
+        "trailer","trailers","tutorial","tutorials","review","reviews",
+        "game","games","music","song","songs","full","complete",
+        "official","funny","best","hentai","porn","gallery","photos"
+    )
+    private fun likelyPersonName(query:String,requested:List<String>):Boolean {
+        if(requested.size !in 2..4 ||
+            requested.any{it.length<2 || !it.all(Char::isLetter)} ||
+            requested.any{it in descriptiveWords})return false
+        return requested.size==2 || query.any(Char::isUpperCase)
+    }
     fun mediaMatches(query:String,title:String):Boolean {
         val requested=terms(query)
         if(requested.isEmpty())return false
-        // A model name must match full tokens, not a prefix such as
-        // "Alice" matching "Alicez". Loose prefix matching still exists
-        // for explicit autocomplete via matches()/matchesPhrase().
-        return if(requested.size>=2){
+        if(likelyPersonName(query,requested)){
             val actual=terms(title)
-            actual.windowed(requested.size).any{it==requested}
-        }else matches(query,title)
+            return actual.windowed(requested.size).any{it==requested}
+        }
+        return matches(query,title)
     }
 
     fun matches(query:String,title:String):Boolean {
