@@ -453,7 +453,8 @@ object AsterionUnifiedFollowing {
                 else db.listForQuery(creator.name,perPage,
                     if(full)pageIndex*perPage else 0)
             }.filter{
-                SearchExactness.matchesPhrase(creator.name,it.title) &&
+                PerformerFollowPolicy.visibleVideoTitle(
+                    creator.name,it.title,verified) &&
                     !IndexedMediaQuality.navigationTitle(it.title) &&
                     !ProviderRetirement.isRetired(it.url) &&
                     com.asterion.videoflow.VideoSiteProfiles.isVideoPage(it.url) &&
