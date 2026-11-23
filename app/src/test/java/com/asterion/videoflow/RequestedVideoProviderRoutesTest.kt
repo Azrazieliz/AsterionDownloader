@@ -9,8 +9,10 @@ class RequestedVideoProviderRoutesTest {
     @Test fun ownerRequestedProvidersRegisteredWithoutRetiredOnScreens(){
         val sites=AlohaSources.all.map{it.host}.toSet()
         assertTrue(sites.containsAll(setOf(
-            "avple.tv","pimpbunny.com","en.xchina.co",
+            "pimpbunny.com","en.xchina.co",
             "bubblecum.lol")))
+        assertFalse("Removed Avple must stay absent", "avple.tv" in sites)
+        assertTrue(ProviderRetirement.isRetired("https://avple.tv/watch/old"))
         assertFalse("OnScreens must not reappear in catalog",
             "onscreens.me" in sites)
         assertTrue(ProviderRetirement.isRetired(
