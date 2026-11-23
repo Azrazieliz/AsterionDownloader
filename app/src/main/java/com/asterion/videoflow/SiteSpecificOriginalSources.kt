@@ -541,6 +541,16 @@ internal object SiteSpecificOriginalSources {
         return posts.isEmpty() || posts.any{it.id()==post}
     }
 
+    /** Pure acceptance contract for primary JAV Guru selected-player hydration.
+     * JK recovery must not be confused with the disabled secondary worker.
+     * It still requires an exact matching publisher post and route. */
+    internal fun shouldHydrateSelectedJavGuru(
+        doc:Document,selected:String,
+        initial:List<JavGuruOriginalSource.Player>,
+        jkRecovery:Boolean
+    ):Boolean=if(jkRecovery)shouldInspectSelectedJk(doc,selected,initial)
+        else shouldInspectSelectedNonJk(doc,selected,initial)
+
     /** JavGuru: STREAM buttons belong to the exact selected WordPress post,
      * whereas its only static iframe is a pop-under advertisement. Follow
      * the publisher-attested shortcode and its first-party /searcho/ relay
@@ -556,9 +566,8 @@ internal object SiteSpecificOriginalSources {
         // publisher's JS-injected JK shortcode. Keep the established
         // native-only SECONDARY disabled for this host; this path runs on
         // the primary, selects the same post and admits only JK.
-        val needsHydration=if(nativeJkOnly)
-            shouldInspectSelectedJk(doc,selected,initial)
-        else shouldInspectSelectedNonJk(doc,selected,initial)
+        val needsHydration=shouldHydrateSelectedJavGuru(
+            doc,selected,initial,jkRecovery=nativeJkOnly)
         val inspectRendered=needsHydration &&
             (BrowserPageFetch.publicEligible(selected) ||
              SiteSession.bound(context,selected))
