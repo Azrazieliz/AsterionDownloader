@@ -164,18 +164,30 @@ internal object SiteSpecificOriginalSources {
     internal fun selectedPlayerTransportFailure(
         owner:String,vararg errors:Throwable?
     ):java.io.IOException? {
+        // WebViewClient.onReceivedError delivers network errors as
+        // Android ERROR_HOST_LOOKUP=-2 / ERROR_CONNECT=-6 /
+        // ERROR_TIMEOUT=-8. BrowserPageFetch converts them to a fixed
+        // IllegalStateException string, not UnknownHostException, so the
+        // earlier exception-type-only check still mislabeled a DNS outage
+        // as "original unsupported" and discarded automatic retries.
+        // Match ONLY that exact WebView main-frame error format. HTTP
+        // 401/403, auth and unrelated player failures remain excluded.
+        val webError=Regex("""^Browser main-frame network error (-[0-9]{1,2})$""")
+        fun code(e:Throwable):Int?=webError.matchEntire(
+            e.message.orEmpty().trim())?.groupValues?.get(1)?.toIntOrNull()
         val network=errors.asSequence().filterNotNull()
             .flatMap { generateSequence(it){cause->cause.cause}.take(5) }
             .firstOrNull {
                 it is java.net.UnknownHostException ||
                     it is java.net.SocketTimeoutException ||
-                    it is java.net.ConnectException
+                    it is java.net.ConnectException ||
+                    code(it) in setOf(-2,-6,-8)
             } ?:return null
-        val message=when(network){
-            is java.net.UnknownHostException->
+        val message=when{
+            network is java.net.UnknownHostException || code(network)==-2->
                 "Selected "+owner+" player DNS lookup failed; retry after "+
                     "network name resolution recovers"
-            is java.net.SocketTimeoutException->
+            network is java.net.SocketTimeoutException || code(network)==-8->
                 "Selected "+owner+" player connection timed out; retry"
             else->"Selected "+owner+" player network unreachable; retry"
         }
