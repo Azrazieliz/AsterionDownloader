@@ -474,6 +474,35 @@ class ReportedSiteSpecificOriginalsTest {
         assertTrue(SiteSpecificOriginalSources.helloPorn(
             Jsoup.parse(ambiguous,page),page).isEmpty())
     }
+    @Test fun javideoPrefersOneSelectedStapeOverPersistentDefaultFrame(){
+        val page="https://javideo.net/en/mida-863-mosaic"
+        val original="https://streamtape.com/e/AaBbCcDdEe12345"
+        val defaultFrame="https://play.javideo.net/embed/selectedplayer123"
+        val html="""<main><div class="video-player">
+            <iframe src="$defaultFrame"></iframe>
+            <iframe src="$original"></iframe>
+            <aside class="related">
+              <iframe src="https://streamtape.com/e/AdPreview99999"></iframe>
+            </aside>
+          </div></main>"""
+        val candidates=SiteSpecificOriginalSources.javideoSelected(
+            Jsoup.parse(html,page),page)
+        assertEquals(listOf(original),candidates.map{it.url})
+        assertEquals(page,candidates.single().referer)
+        // Two competing selected hoster frames are ambiguous. Never
+        // choose a related clip or the first iframe by DOM order.
+        val extra=html.replace("</div></main>",
+            "<iframe src='https://streamtape.com/e/Another99999'></iframe>"+
+                "</div></main>")
+        assertTrue(SiteSpecificOriginalSources.javideoSelected(
+            Jsoup.parse(extra,page),page).isEmpty())
+        // A Streamtape frame visible only in a related panel is not selected.
+        val relatedOnly="""<main><div class="video-player">
+            <aside class="related"><iframe src="$original"></iframe></aside>
+            </div></main>"""
+        assertTrue(SiteSpecificOriginalSources.javideoSelected(
+            Jsoup.parse(relatedOnly,page),page).isEmpty())
+    }
     @Test fun javideoRealMidaRouteAcceptsOnlySelectedStreamTapeIframe(){
         val selected="https://javideo.net/en/mida-863-mosaic"
         val player="https://streamtape.com/e/AaBbCcDdEe12345"
