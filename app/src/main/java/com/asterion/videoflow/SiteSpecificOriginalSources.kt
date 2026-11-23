@@ -34,6 +34,13 @@ internal object JavGuruNonJkRouting {
                 "VI"->3
                 else->4
             }}
+    // Keep the established LU/SB/VO/VI/DD precedence, but do not discard
+    // the publisher-selected JK -> Maxstream HLS when those hosters are
+    // denied or expose only unsupported HTML. JK is authenticated by its
+    // exact selected shortcode and then by JavGuruJkNativeHls.eligible().
+    fun primaryOrder(players:List<JavGuruOriginalSource.Player>):
+            List<JavGuruOriginalSource.Player> =
+        order(players)+players.filter{it.server=="JK"}.distinctBy{it.server}
 }
 
 /** Exact selected-publisher resolvers. Never treat cards, ads or thumbnails as originals. */
@@ -556,7 +563,7 @@ internal object SiteSpecificOriginalSources {
         // transfers, not the older LU/SB Python-backed signed HLS path.
         // Defer this article to the primary rather than silently promote JK.
         val order=if(nativeJkOnly)emptyList()
-            else JavGuruNonJkRouting.order(streams)
+            else JavGuruNonJkRouting.primaryOrder(streams)
         for(stream in order.take(6)){
             val wrapper=runCatching{
                 Jsoup.connect(stream.url)
