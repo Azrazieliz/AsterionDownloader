@@ -207,7 +207,9 @@ class SyncEngine(private val context: Context) {
                     if(targeted && galleries.isNotEmpty()){
                         val latest=galleries.first()
                         if(processGallery(entity,latest,adapter,db,files,flow,stats,progress,
-                                exactSelection=exactAlbumRequest)){
+                                exactSelection=exactAlbumRequest,
+                            manuallyRequestedSite=targeted &&
+                                entity.source==SourceId.COSPLAYTELE)){
                             db.setLiveCursor(entity.source,entity.entityId,newest)
                         }else{
                             db.queueRetry(latest,"Initial new-album check incomplete")
@@ -226,7 +228,9 @@ class SyncEngine(private val context: Context) {
                         !com.azrael.pixivdumpsync.SiteControls.sync(context,entity.canonicalUrl))
                         break
                     if (processGallery(entity, gallery, adapter, db, files, flow,
-                            stats, progress,exactSelection=exactAlbumRequest)) {
+                            stats, progress,exactSelection=exactAlbumRequest,
+                            manuallyRequestedSite=targeted &&
+                                entity.source==SourceId.COSPLAYTELE)) {
                         db.setLiveCursor(entity.source, entity.entityId, gallery.stableId)
                     } else {
                         break
@@ -306,7 +310,9 @@ class SyncEngine(private val context: Context) {
                     progress("Retrying failed gallery: " + retry.title)
                     if (processGallery(entity, retry, adapter, db, files,
                             flow, stats, progress,
-                            exactSelection=exactAlbumRequest)) {
+                            exactSelection=exactAlbumRequest,
+                            manuallyRequestedSite=targeted &&
+                                entity.source==SourceId.COSPLAYTELE)) {
                         db.clearRetry(retry)
                     } else {
                         failedCount++
@@ -335,7 +341,9 @@ class SyncEngine(private val context: Context) {
                     SyncControl.updateMessage(message)
                     progress(message)
                     val completed = processGallery(entity, gallery, adapter, db, files,
-                        flow, stats, progress,exactSelection=exactAlbumRequest)
+                        flow, stats, progress,exactSelection=exactAlbumRequest,
+                            manuallyRequestedSite=targeted &&
+                                entity.source==SourceId.COSPLAYTELE)
                     if (completed) {
                         db.clearRetry(gallery)
                     } else {
@@ -399,7 +407,8 @@ class SyncEngine(private val context: Context) {
         flow: FlowLinkEmitter,
         stats: Stats,
         progress: (String) -> Unit,
-        exactSelection:Boolean=false
+        exactSelection:Boolean=false,
+        manuallyRequestedSite:Boolean=false
     ): Boolean {
         stats.galleriesSeen++
         // Cancel All must not be undone by an automatic sync or rescan. Do
@@ -611,7 +620,8 @@ class SyncEngine(private val context: Context) {
             if(meta.source==SourceId.COSPLAYTELE &&
                 CosplayTeleVideoCompleteness.queueVideoFallback(
                     exactSelection,missingVideos,
-                    mediaItems.any{it.kind==MediaKind.ARCHIVE}) &&
+                    mediaItems.any{it.kind==MediaKind.ARCHIVE},
+                    manuallyRequestedSite=manuallyRequestedSite) &&
                 com.azrael.pixivdumpsync.AppPower.enabled(context) &&
                 com.asterion.videoflow.VideoSiteProfiles.isVideoPage(
                     meta.canonicalUrl)){
@@ -623,7 +633,8 @@ class SyncEngine(private val context: Context) {
                 val queued=runCatching{
                     com.asterion.videoflow.VideoDb(context).use{db->
                         db.addVideo(meta.canonicalUrl,
-                            "CosplayTele video: "+meta.title)
+                            "CosplayTele video: "+meta.title,
+                            origin=if(exactSelection)"user" else "website")
                     }
                 }.getOrDefault(false)
                 if(queued){
