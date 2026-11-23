@@ -21,6 +21,31 @@ class SourceIndexTest {
         assertFalse(cards[0].queued)
     }
 
+    @Test fun dsysavNextJsCatalogOnlyAdmitsSelectedFirstPartyWatchIds(){
+        val root="https://dsysav.com/en"
+        val html="""<main>
+          <article><a href="/en/watch?v=MxWT7NmlUoT">
+            <img src="/posters/actual.jpg" alt="Selected catalog entry"></a></article>
+          <a href="https://dsysav.com.evil.example/en/watch?v=MXWT7NmlUoT">
+            Fake publisher</a>
+          <a href="/en/watch?v=bad">Invalid ID</a>
+          <a href="/en/search?q=foo">Search</a>
+          <a href="/en/watch?v=Another1234" title="Original video two">Video</a>
+          <a href="/en/watch?v=Another1234" title="Duplicate">Same</a>
+        </main>"""
+        val doc=Jsoup.parse(html,root)
+        val results=SourceIndexParser.entries(doc,root,"ADULT",100L)
+        assertEquals(2,results.size)
+        assertEquals(listOf("https://dsysav.com/en/watch?v=MxWT7NmlUoT",
+            "https://dsysav.com/en/watch?v=Another1234"),results.map{it.url})
+        assertTrue(results.all{it.kind=="video"})
+        assertTrue(results.all{it.source==root})
+        assertTrue(SourceIndexParser.entries(
+            Jsoup.parse("<div id='__next'></div>",root),root,"ADULT",100L).isEmpty())
+        assertNull(SourceIndexParser.dsysavEntries(doc,
+            "https://example.org/", "ADULT",100L))
+    }
+
     @Test fun approvedIndexDoesNotAcceptLocalOrForeignLinks(){
         assertFalse(SourceIndexParser.safe("http://127.0.0.1/internal"))
         assertFalse(SourceIndexParser.safe("https://localhost/account"))
