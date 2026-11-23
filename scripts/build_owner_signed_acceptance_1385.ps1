@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0 -or $tracked.Count -gt 0) {
 }
 $source=Get-Content (Join-Path $w 'app\build.gradle.kts') -Raw
 if ($source -notmatch 'versionCode\s*=\s*116' -or
-    $source -notmatch 'versionName\s*=\s*"1\.3\.86"') {
+    $source -notmatch 'versionName\s*=\s*"1\.3\.87"') {
     throw 'Wrong version for owner in-place update'
 }
 $wheel=Join-Path $w 'app\src\main\assets\yt_dlp-2026.10.26-py3-none-any.whl'
