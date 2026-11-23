@@ -62,6 +62,31 @@ internal object VideoHlsDispatch {
             (host=="dsysav.com" && VideoSiteProfiles.isVideoPage(url))
     }
 
+    /** Exact xChina article => same-ID first-party HLS only.
+     * HLS concurrency can be reduced for this verified publisher stream
+     * without changing auth, signed URLs, accounts or external routes.
+     */
+    internal fun isSelectedXChinaHls(
+        selected:String?,playlist:String
+    ):Boolean {
+        val article=runCatching{URI(selected ?: return false)}
+            .getOrNull()?:return false
+        val manifest=runCatching{URI(playlist)}.getOrNull()?:return false
+        val hosts=setOf("xchina.co","en.xchina.co","www.xchina.co")
+        if(article.scheme!="https" || manifest.scheme!="https" ||
+            article.host.orEmpty().lowercase() !in hosts ||
+            manifest.host.orEmpty().lowercase() !in hosts ||
+            article.port!=-1 || manifest.port!=-1 ||
+            article.userInfo!=null || manifest.userInfo!=null ||
+            article.rawFragment!=null || manifest.rawFragment!=null ||
+            manifest.rawQuery.orEmpty().length>2048)return false
+        val id=Regex("""(?i)^/video/(?:id-)?([a-f0-9]{10,32})(?:\\.html)?/?$""")
+            .matchEntire(article.path.orEmpty())?.groupValues?.get(1)
+                ?:return false
+        return Regex("""(?i)^/hls/"""+Regex.escape(id)+"""/master\\.m3u8$""")
+            .matches(manifest.path.orEmpty())
+    }
+
     fun isSelectedManifest(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull() ?: return false
         return uri.scheme=="https" && !uri.host.isNullOrBlank() &&
