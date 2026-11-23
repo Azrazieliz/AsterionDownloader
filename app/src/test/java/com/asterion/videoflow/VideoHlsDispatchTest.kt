@@ -4,6 +4,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoHlsDispatchTest {
+    @Test fun xChinaSequentialFragmentPolicyOnlyForSelectedSameIdManifest(){
+        val article="https://en.xchina.co/video/6b00b2b6032b1"
+        val media="https://en.xchina.co/hls/6b00b2b6032b1/master.m3u8?sig=real"
+        assertTrue(VideoHlsDispatch.isSelectedXChinaHls(article,media))
+        assertTrue(VideoHlsDispatch.isSelectedXChinaHls(
+            "https://xchina.co/video/id-6b00b2b6032b1",
+            "https://xchina.co/hls/6b00b2b6032b1/master.m3u8"))
+        for(other in listOf(
+            "https://en.xchina.co/hls/6b00b2b6032b2/master.m3u8",
+            "https://en.xchina.co/hls/6b00b2b6032b1/preview.m3u8",
+            "https://en.xchina.co/hls/6b00b2b6032b1/master.m3u8#fragment",
+            "https://xchina.co.evil.example/hls/6b00b2b6032b1/master.m3u8",
+            "http://en.xchina.co/hls/6b00b2b6032b1/master.m3u8"
+        ))assertFalse(other,VideoHlsDispatch.isSelectedXChinaHls(article,other))
+        assertFalse(VideoHlsDispatch.isSelectedXChinaHls(
+            "https://en.xchina.co/",media))
+        assertFalse(VideoHlsDispatch.isSelectedXChinaHls(
+            "https://en.xchina.co/video/other",media))
+    }
+
     @Test fun selectedSignedPublisherHlsUsesTypedEngineFirst(){
         assertTrue(VideoHlsDispatch.isSelectedManifest(
             "https://tnmr.org/hls4/abc123/master.m3u8?signature=publisher"))
