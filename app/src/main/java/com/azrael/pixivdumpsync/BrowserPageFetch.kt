@@ -783,13 +783,37 @@ object BrowserPageFetch {
                                 .map(el=>el.tagName.toLowerCase()==='video'?
                                     el:el.closest('video')).filter((el,i,list)=>
                                     !!el && list.indexOf(el)===i &&
-                                    !el.closest('.related,.recommendations,'+
-                                        '.happy-under-player,.ads,.advertisement') &&
+                                    !el.closest('aside,.related,.recommended,'+
+                                        '.recommendations,.happy-under-player,'+
+                                        '.ads,.advertisement,.sidebar,[data-ad]') &&
                                     (selectedPlayerHost!=='hentaibros.net' ||
                                         !!el.closest('.video-player .flowplayer')))
                                 .slice(0,40).map(video=>{
-                                    const src=video.currentSrc||video.getAttribute('src')||
+                                    // Avple's selected HTML5 player can be
+                                    // lazy: <video data-src> or <source
+                                    // data-src> is not in currentSrc yet.
+                                    // The selected-only Kotlin parser already
+                                    // supports data-src, but this compact
+                                    // browser snapshot formerly discarded it.
+                                    // Admit it only from the selected main/
+                                    // article player, never a related/ad card.
+                                    const selectedAvple=selectedPlayerHost==='avple.tv' &&
+                                        !!video.closest('main .video-player,'+
+                                            'main #player,article .video-player,'+
+                                            'article #player') &&
+                                        !video.closest('aside,.related,.recommended,'+
+                                            '.recommendations,.ads,.advertisement,'+
+                                            '.sidebar,[data-ad]');
+                                    const lazy=selectedAvple?(
+                                        video.getAttribute('data-src')||
+                                        video.querySelector('source[data-src]')
+                                            ?.getAttribute('data-src')||''):'';
+                                    const normal=video.currentSrc||
+                                        video.getAttribute('src')||
                                         video.querySelector('source[src]')?.src||'';
+                                    const src=(normal.startsWith('blob:') ||
+                                        normal.startsWith('data:'))?lazy:(normal||lazy);
+                                    if(!src)return '';
                                     const duration=Number.isFinite(video.duration)?
                                         Math.round(video.duration):0;
                                     return '<video src="'+esc(src)+'" data-duration="'+
