@@ -215,6 +215,12 @@ object KyoraCreatorPreviews {
             val target=runCatching{URI(page)}.getOrNull()?:continue
             if(target.scheme!="https" ||
                 !previewBelongsToSource(base,page))continue
+            // GridWP category/navigation tiles can have an <img> but are
+            // never an individual 4KGirl album. The dedicated fallback
+            // already checks exact first-party post URLs; the generic
+            // first pass must enforce the same contract.
+            if(provider=="4kgirl.com" &&
+                !SiteBackfillProfiles.recognizesGalleryPage(base,page))continue
             val card=anchor.closest(
                 ".video-item,.video-card,.item,.thumb,.video-block,.card,.item-inner,"+
                 ".movie-card,.hots-card,.uk-card-media-top")
