@@ -20,6 +20,8 @@ class ProviderRetirementTest {
         assertFalse(ProviderRetirement.isRetired("https://pimpbunny.com/videos/"))
         assertTrue(ProviderRetirement.isRetired("https://www.camstreams.tv/videos/1363858/selected/"))
         assertTrue(ProviderRetirement.isRetired("https://www.onscreens.me/"))
+        assertTrue(ProviderRetirement.isRetired("https://avple.tv/video/example"))
+        assertTrue(ProviderRetirement.isRetired("https://m.avple.tv/watch/123"))
         assertTrue(ProviderRetirement.isRetired("https://chaturbate.com/"))
         assertTrue(ProviderRetirement.isRetired("https://www.chaturbate.com/performer/"))
         assertFalse(ProviderRetirement.isRetired("https://archivebate.com/"))
@@ -31,5 +33,6 @@ class ProviderRetirementTest {
         assertFalse(ProviderRetirement.isRetired("https://omg.porn.attacker.example/"))
         assertFalse(ProviderRetirement.isRetired("https://chaturbate.com.evil.example/"))
         assertFalse(ProviderRetirement.isRetired("https://hentaibros.net/"))
+        assertFalse(ProviderRetirement.isRetired("https://avple.tv.attacker.example/"))
     }
 }
