@@ -37,7 +37,14 @@ internal object SiteBackfillProfiles {
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
         Profile("nhentai.xxx","COMICS",comics,
             Regex("^/g/[0-9]{1,12}/?$"),"comics"),
-        Profile("4kgirl.com","COSPLAY",cosplay,
+        Profile("4kgirl.com","COSPLAY",
+            // The real publisher uses GridWP listing tiles, often with a
+            // post-heading link SIBLING to its lazy-loaded photo. Generic
+            // article h2/post-grid selectors miss every such card and
+            // falsely index zero even though DirectGalleryAdapter knows it.
+            cosplay+",.gridwp-grid-post a[href],"+
+                ".gridwp-grid-post-item a[href],.post-grid a[href],"+
+                ".gallery-item a[href],.post-thumbnail a[href]",
             Regex("^/[a-z0-9][a-z0-9_-]{2,190}/?$"),"cosplay"),
         Profile("everia.club","COSPLAY",cosplay,
             Regex("^/\\d{4}/\\d{2}/\\d{2}/[a-z0-9][a-z0-9_-]{1,190}/?$"),"cosplay"),
