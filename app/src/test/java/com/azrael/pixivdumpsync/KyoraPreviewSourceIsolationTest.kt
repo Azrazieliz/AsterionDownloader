@@ -4,6 +4,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class KyoraPreviewSourceIsolationTest {
+    @Test fun maskedPublisher403IsNotSilentlyCachedAsAnEmpty4kGirlListing(){
+        val source="https://www.4kgirl.com/"
+        val denied="""<html><head><title>403 Forbidden</title></head>
+            <body><h1>403 Forbidden</h1><hr><center>nginx</center>
+            </body></html>"""
+        try{
+            KyoraCreatorPreviews.requirePublisherListing(source,200,denied)
+            fail("A masked nginx denial must not be called zero thumbnails")
+        }catch(e:com.azrael.galleryflow.HttpStatusException){
+            assertEquals(403,e.code)
+        }
+        // A genuine public empty page stays empty, not an invented 403.
+        KyoraCreatorPreviews.requirePublisherListing(source,200,
+            "<html><body><main></main></body></html>")
+        KyoraCreatorPreviews.requirePublisherListing(
+            "https://www.4khd.com/",200,denied)
+    }
+
     @Test fun galleryDnsAnd4kGirlEmptyJsCatalogAreNotCachedForHours(){
         val source="https://4kgirl.com/"
         val hour=60L*60*1000
