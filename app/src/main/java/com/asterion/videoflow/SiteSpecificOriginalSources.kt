@@ -41,6 +41,10 @@ internal object JavGuruNonJkRouting {
     fun primaryOrder(players:List<JavGuruOriginalSource.Player>):
             List<JavGuruOriginalSource.Player> =
         order(players)+players.filter{it.server=="JK"}.distinctBy{it.server}
+    /** No generic Python or alternative player during native JK recovery. */
+    fun nativeJkOrder(players:List<JavGuruOriginalSource.Player>):
+            List<JavGuruOriginalSource.Player> =
+        players.filter{it.server=="JK"}.distinctBy{it.server}
 }
 
 /** Exact selected-publisher resolvers. Never treat cards, ads or thumbnails as originals. */
@@ -562,7 +566,7 @@ internal object SiteSpecificOriginalSources {
         // A native-only secondary is reserved for independent native
         // transfers, not the older LU/SB Python-backed signed HLS path.
         // Defer this article to the primary rather than silently promote JK.
-        val order=if(nativeJkOnly)emptyList()
+        val order=if(nativeJkOnly)JavGuruNonJkRouting.nativeJkOrder(streams)
             else JavGuruNonJkRouting.primaryOrder(streams)
         for(stream in order.take(6)){
             val wrapper=runCatching{
