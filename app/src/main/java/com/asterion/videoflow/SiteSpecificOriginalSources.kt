@@ -549,12 +549,17 @@ internal object SiteSpecificOriginalSources {
     internal fun javGuru(context:Context,doc:Document,selected:String,
                          nativeJkOnly:Boolean=false):List<Source>{
         val initial=JavGuruOriginalSource.published(selected,doc.outerHtml())
-        // Restore the original non-JK publisher relay. The static HTML
-        // sometimes exposes only VO/JK or a thin HTTP 200 shell; inspect
-        // the same selected post once for its LU/SB controls if missing.
-        // Native-only secondary workers cannot hydrate browser pages.
-        val inspectRendered=!nativeJkOnly &&
-            shouldInspectSelectedNonJk(doc,selected,initial) &&
+        // The primary transfer's JK recovery is invoked only after the
+        // attempted LU/SB original failed. Its older "nativeJkOnly" flag
+        // accidentally suppressed browser hydration as well as non-JK
+        // candidates: a static LU-only article could NEVER discover the
+        // publisher's JS-injected JK shortcode. Keep the established
+        // native-only SECONDARY disabled for this host; this path runs on
+        // the primary, selects the same post and admits only JK.
+        val needsHydration=if(nativeJkOnly)
+            shouldInspectSelectedJk(doc,selected,initial)
+        else shouldInspectSelectedNonJk(doc,selected,initial)
+        val inspectRendered=needsHydration &&
             (BrowserPageFetch.publicEligible(selected) ||
              SiteSession.bound(context,selected))
         val fromBrowser=if(inspectRendered)runCatching {
