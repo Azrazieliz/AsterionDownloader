@@ -17,9 +17,15 @@ internal object CosplayTeleVideoCompleteness {
      */
     @Suppress("UNUSED_PARAMETER")
     fun queueVideoFallback(exactSelection:Boolean,audit:Audit?,
-                           archiveAvailable:Boolean):Boolean =
-        exactSelection && audit!=null && !audit.complete &&
-            audit.expectedVideos>0
+                           archiveAvailable:Boolean,
+                           manuallyRequestedSite:Boolean=false):Boolean =
+        // A selected album or explicitly pressed site CHECK NEW/BACKFILL
+        // can request its *published, exact article* video. The previous
+        // exactSelection-only condition abandoned all site-level video
+        // originals while displaying the photo subset as partially saved.
+        // Untargeted scheduled scans still cannot enqueue videos.
+        (exactSelection || manuallyRequestedSite) &&
+            audit!=null && !audit.complete && audit.expectedVideos>0
 
     /** Legacy single-album entities are explicit selections only for an
      * owner-targeted row. Automatic site backfill must not rearm a cancelled
