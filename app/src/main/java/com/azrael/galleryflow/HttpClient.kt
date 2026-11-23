@@ -385,7 +385,7 @@ open class HttpClient(private val context:android.content.Context?=null) {
         return null
     }
 
-    private fun extractTeraBoxUrl(text: String): String? {
+    internal fun extractTeraBoxUrl(text: String): String? {
         val html = unescapeHtmlJs(text)
         return URL_REGEX.findAll(html)
             .map { it.value.trimEnd(')', ']', '}', ',', ';') }
