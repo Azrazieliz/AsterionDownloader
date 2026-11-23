@@ -17,6 +17,32 @@ class PosterHostCooldownTest {
         assertTrue(PosterHostCooldown.allowed(second,21_001L))
     }
 
+    @Test fun transientDnsOutagePausesOnlyAffectedPosterHost(){
+        val first="https://cdn-dns-a.example/images/poster1.jpg"
+        val second="https://cdn-dns-a.example/images/poster2.jpg"
+        val unrelated="https://cdn-dns-b.example/images/poster.jpg"
+        val time=50_000L
+        assertTrue(PosterHostCooldown.record(first,
+            java.net.UnknownHostException("DNS resolver temporarily unavailable"),time))
+        assertFalse(PosterHostCooldown.allowed(second,time+1))
+        assertTrue(PosterHostCooldown.allowed(unrelated,time+1))
+        assertFalse(PosterHostCooldown.allowed(second,time+11_999))
+        assertTrue(PosterHostCooldown.allowed(second,time+12_001))
+    }
+
+    @Test fun nestedDnsFailureBacksOffButOtherIoErrorsStillRetry(){
+        val first="https://cdn-nested-dns.example/a.webp"
+        val second="https://cdn-nested-dns.example/b.webp"
+        val time=85_000L
+        val nested=java.io.IOException("Poster lookup",java.net.UnknownHostException("offline"))
+        assertTrue(PosterHostCooldown.record(first,nested,time))
+        assertFalse(PosterHostCooldown.allowed(second,time+1))
+        val unrelated="https://unrelated-timeout.example/other.webp"
+        assertFalse(PosterHostCooldown.record(unrelated,
+            java.net.SocketTimeoutException("slow"),time))
+        assertTrue(PosterHostCooldown.allowed(unrelated,time+1))
+    }
+
     @Test fun authAndNetworkFailuresDoNotDisableOtherPublisherPosters() {
         val page="https://poster-auth-test.example/video/1"
         assertFalse(PosterHostCooldown.record(page,
