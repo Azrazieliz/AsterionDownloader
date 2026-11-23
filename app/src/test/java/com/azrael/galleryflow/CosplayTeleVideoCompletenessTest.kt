@@ -57,6 +57,15 @@ class CosplayTeleVideoCompletenessTest {
             true,missing,false))
         assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
             false,missing,false))
+        // Owner-pressed site BACKFILL/CHECK NEW may recover published
+        // missing videos for that exact article; scheduled crawls may not.
+        assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
+            false,missing,false,manuallyRequestedSite=true))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            false,CosplayTeleVideoCompleteness.Audit(2,2,true),false,
+            manuallyRequestedSite=true))
+        assertFalse(CosplayTeleVideoCompleteness.queueVideoFallback(
+            false,null,false,manuallyRequestedSite=true))
         // A publisher archive link is not evidence that its video bytes
         // were saved; allow the exact article's VideoFlow recovery.
         assertTrue(CosplayTeleVideoCompleteness.queueVideoFallback(
