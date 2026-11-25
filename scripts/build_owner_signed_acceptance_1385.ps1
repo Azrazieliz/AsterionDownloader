@@ -9,7 +9,7 @@ $ks='D:\AsterionControlRelease\signing\downloader-acceptance\asterion-downloader
 $dp='D:\AsterionControlRelease\signing\downloader-acceptance\password.dpapi'
 $apk=Join-Path $w 'app\build\outputs\apk\acceptance\app-acceptance.apk'
 $log='D:\AsterionControlRelease\diagnostics\downloader_1390_owner_signed_build.log'
-$expected='8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161195a4216dcc0c19'
+$expected='8914af1b2713e1d7e93c52abfddf11cbc6bba8d7057906161185a4216dcc0c19'
 if (-not(Test-Path $w) -or -not(Test-Path $gradle)) { throw 'Owner Windows release build environment unavailable' }
 if (-not(Test-Path $ks) -or -not(Test-Path $dp)) { throw 'Existing stable signer unavailable' }
 $head=(& git -C $w rev-parse HEAD).Trim().ToLowerInvariant()
