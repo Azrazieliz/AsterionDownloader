@@ -18,7 +18,8 @@ enum class CatalogKind { EPUB, BOOK_FILE, APK, GAME_ARCHIVE, TORRENT }
 data class CatalogHit(val title:String, val source:String, val url:String,
                       val kind:CatalogKind, val filename:String="", val details:String="",
                       val coverUrl:String="")
-data class CatalogOutcome(val hits:List<CatalogHit>, val failures:List<String>, val searched:Int)
+data class CatalogOutcome(val hits:List<CatalogHit>, val failures:List<String>, val searched:Int,
+    val successful:Int=searched)
 
 object CatalogDiscovery {
     private fun enc(s:String)=URLEncoder.encode(s.trim(),"UTF-8")
@@ -211,6 +212,7 @@ object CatalogDiscovery {
         val all=ArrayList<CatalogHit>()
         val failures=ArrayList<String>()
         var completed=0
+        var successful=0
         // One deadline across every publisher, not 50 seconds multiplied
         // by the number of results still outstanding. Preserve every fast
         // completed provider result even when a different source hangs.
@@ -228,6 +230,7 @@ object CatalogDiscovery {
                 completed++
                 all+=hits
                 if(error!=null)failures+=error
+                else successful++
             }
             if(completed<providers.size)
                 failures+=(providers.size-completed).toString()+
@@ -240,6 +243,6 @@ object CatalogDiscovery {
             .distinctBy{if(it.url.startsWith("magnet:?"))it.url.substringAfter("urn:btih:").substringBefore("&").uppercase() else SearchRanking.canonicalKey(it.url)}
             .sortedWith(compareByDescending<CatalogHit>{relevance(title,it.title+" "+(if(games)"" else it.details))}
                 .thenBy{it.source}).take(100)
-        return CatalogOutcome(results,failures,completed)
+        return CatalogOutcome(results,failures,completed,successful)
     }
 }

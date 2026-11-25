@@ -70,9 +70,9 @@ object AsterionSearchHub {
         val url="https://sepiasearch.org/api/v1/search/videos?search="+
             URLEncoder.encode(term,"UTF-8")+"&count=30"
         val json=JSONObject(Jsoup.connect(url).ignoreContentType(true).timeout(18000)
-            .maxBodySize(2500000).execute().body()).optJSONArray("data")
-        return (0 until minOf(json?.length()?:0,30)).mapNotNull{i->
-            val hit=json?.optJSONObject(i)?:return@mapNotNull null
+            .maxBodySize(2500000).execute().body()).getJSONArray("data")
+        return (0 until minOf(json.length(),30)).mapNotNull{i->
+            val hit=json.optJSONObject(i)?:return@mapNotNull null
             val link=hit.optString("url")
             if(!PeerTubeResultPolicy.isVideoWatch(link))return@mapNotNull null
             Found(hit.optString("name"),link,"PeerTube",hit.optString("thumbnailUrl"))
@@ -87,7 +87,7 @@ object AsterionSearchHub {
                     it.kind==CatalogKind.APK) && !GameTorrentPolicy.clearlyNonGameTitle(it.title)
             }else catalog.hits.filter{it.kind==CatalogKind.EPUB}
             return Reply(results.map{Found(it.title,it.url,it.source,it.coverUrl,
-                it.filename,it.details)},catalog.failures,catalog.searched)
+                it.filename,it.details)},catalog.failures,catalog.successful)
         }
         val areas=when(mode){
             1->listOf(VideoSearchArea.PORN)
@@ -135,7 +135,7 @@ object AsterionSearchHub {
                 if(outcome!=null){
                     items+=outcome.hits
                     errors+=outcome.failures
-                    checked+=outcome.checked
+                    checked+=outcome.successful
                 }
                 if(error!=null)errors+=area.name+": "+error
             }
@@ -217,7 +217,7 @@ object AsterionSearchHub {
             invalidateSearch()
             status.text="Search stopped · previous results retained"
         }.apply{visibility=android.view.View.GONE}
-        p.addOnAttachStateChangeListener(object:android.view.View.OnAttachStateChangeListener{
+        results.addOnAttachStateChangeListener(object:android.view.View.OnAttachStateChangeListener{
             override fun onViewAttachedToWindow(v:android.view.View){}
             override fun onViewDetachedFromWindow(v:android.view.View){
                 invalidateSearch()

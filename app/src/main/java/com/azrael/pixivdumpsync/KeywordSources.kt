@@ -524,6 +524,7 @@ object KeywordSources {
         val collected=ArrayList<RankedHit>()
         val errors=ArrayList<String>()
         var finished=0
+        var successful=0
         try {
             for((label,task) in scheduled)completion.submit(java.util.concurrent.Callable {
                 try {
@@ -546,6 +547,7 @@ object KeywordSources {
                 finished++
                 collected.addAll(hits)
                 if(error!=null)errors.add(label+": "+error)
+                else successful++
             }
             if(finished<tasks.size)
                 errors.add((tasks.size-finished).toString()+" search sources timed out")
@@ -556,7 +558,7 @@ object KeywordSources {
                     eligibleDiscoveryUrl(it.url)})
             else SearchRanking.deduplicateDiscovery(keyword,collected.filter{
                 eligibleDiscoveryUrl(it.url)}),
-            finished,errors)
+            finished,errors,successful)
     }
     /** Search one explicitly supplied site, including HTML sites with unusual page URLs. */
     fun searchCustom(context:Context,keyword:String,address:String):SearchOutcome {
@@ -574,7 +576,7 @@ object KeywordSources {
                 .distinctBy{SearchRanking.canonicalKey(it.url)},1,emptyList())
         }catch(t:Exception) {
             SearchOutcome(emptyList(),1,listOf(
-                "Custom site: ${t.message?:t.javaClass.simpleName}"))
+                "Custom site: ${t.message?:t.javaClass.simpleName}"),0)
         }
     }
     /** Compatibility entry point for older UI and stored creator watch records. */

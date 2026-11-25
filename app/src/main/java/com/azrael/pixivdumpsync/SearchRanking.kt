@@ -11,7 +11,8 @@ enum class SearchProviderKind { SEARXNG, HTML }
 data class SearchProvider(val kind:SearchProviderKind,val url:String,val label:String)
 data class RankedHit(val title:String,val url:String,val source:String,
     val description:String="",val score:Int=0,val thumbnail:String?=null)
-data class SearchOutcome(val hits:List<RankedHit>,val checked:Int,val failures:List<String>)
+data class SearchOutcome(val hits:List<RankedHit>,val checked:Int,val failures:List<String>,
+    val successful:Int=checked)
 
 object SearchRanking {
     private val tracking=setOf("fbclid","gclid","ref","ref_src","source","mc_cid","mc_eid")
