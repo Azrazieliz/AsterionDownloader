@@ -207,11 +207,23 @@ object AsterionSearchHub {
         val siteFilters=LinearLayout(a).apply{orientation=LinearLayout.HORIZONTAL}
         val searchVersion=java.util.concurrent.atomic.AtomicLong()
         var searchWorker:Thread?=null
-        val cancelSearch=ui.action(a,"STOP SEARCH",false){
-            searchVersion.incrementAndGet()
+        fun invalidateSearch():Long {
+            val version=searchVersion.incrementAndGet()
             searchWorker?.interrupt()
+            searchWorker=null
+            return version
+        }
+        val cancelSearch=ui.action(a,"STOP SEARCH",false){
+            invalidateSearch()
             status.text="Search stopped · previous results retained"
         }.apply{visibility=android.view.View.GONE}
+        p.addOnAttachStateChangeListener(object:android.view.View.OnAttachStateChangeListener{
+            override fun onViewAttachedToWindow(v:android.view.View){}
+            override fun onViewDetachedFromWindow(v:android.view.View){
+                invalidateSearch()
+                cancelSearch.visibility=android.view.View.GONE
+            }
+        })
         fun draw(found:List<Found>){
             results.removeAllViews()
             siteFilters.removeAllViews()
@@ -406,7 +418,7 @@ object AsterionSearchHub {
                     if(requestedTerm.isBlank())return@action
                     val nextPage=prefs.getInt(
                         "index_page_"+requestedMode,0).coerceAtLeast(0)+1
-                    val version=searchVersion.incrementAndGet()
+                    val version=invalidateSearch()
                     status.text="Searching more of the internet · page "+
                         (nextPage+1)+" (original results preserved)"
                     cancelSearch.visibility=android.view.View.VISIBLE
@@ -419,6 +431,10 @@ object AsterionSearchHub {
                                 searchVersion.get()!=version)return@runOnUiThread
                             cancelSearch.visibility=android.view.View.GONE
                             answer.onSuccess{reply->
+                                if(reply.searched==0 && reply.errors.isNotEmpty() && reply.results.isEmpty()){
+                                    status.text="Search routes unavailable · same page can be retried"
+                                    return@onSuccess
+                                }
                                 val previous=stored(a,requestedMode)
                                 val oldKeys=previous.map{
                                     SearchRanking.canonicalKey(it.url)
@@ -454,6 +470,8 @@ object AsterionSearchHub {
             override fun onNothingSelected(parent:android.widget.AdapterView<*>?){}
             override fun onItemSelected(parent:android.widget.AdapterView<*>?,v:android.view.View?,index:Int,id:Long){
                 if(selected==index)return
+                invalidateSearch()
+                cancelSearch.visibility=android.view.View.GONE
                 selected=index;prefs.edit().putInt("mode",index).apply()
                 field.setText(prefs.getString("query_"+index,""))
                 draw(stored(a,index))
@@ -464,6 +482,8 @@ object AsterionSearchHub {
             val term=field.text.toString().trim()
             if(SearchRanking.validUrl(term) ||
                 term.startsWith("magnet:?xt=urn:",true)){
+                invalidateSearch()
+                cancelSearch.visibility=android.view.View.GONE
                 AsterionSmartAdd.enrollFromSearch(a,term,status){
                     status.text="Source saved to its module · select that module to manage Sync"
                 }
@@ -471,7 +491,7 @@ object AsterionSearchHub {
             }
             val selectedAtStart=selected
             if(term.length<2){status.text="Enter a specific title or name";return@action}
-            val version=searchVersion.incrementAndGet()
+            val version=invalidateSearch()
             status.text="Searching "+modes[selectedAtStart]+
                 " · previous results remain visible"
             cancelSearch.visibility=android.view.View.VISIBLE
@@ -482,6 +502,10 @@ object AsterionSearchHub {
                         searchVersion.get()!=version)return@runOnUiThread
                     cancelSearch.visibility=android.view.View.GONE
                     found.onSuccess{reply->
+                        if(reply.searched==0 && reply.errors.isNotEmpty() && reply.results.isEmpty()){
+                            status.text="Search routes unavailable · previous results retained"
+                            return@onSuccess
+                        }
                         save(a,selectedAtStart,term,reply.results)
                         prefs.edit().putInt(
                             "index_page_"+selectedAtStart,0).apply()

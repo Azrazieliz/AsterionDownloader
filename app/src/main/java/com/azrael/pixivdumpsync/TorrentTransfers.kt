@@ -398,6 +398,17 @@ class TorrentTransferService : Service() {
     // still unwinding its native worker. Preserve the selected job instead
     // of falsely pausing it and leaving VIEW TRANSFERS without an engine.
     private val deferredJobs=java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var latestStartId=0
+    private var destroyed=false
+    // All stop/admission decisions run on the Service main thread. A worker
+    // finishing concurrently with a new onStartCommand must never call the
+    // unqualified stopSelf() and kill that newer command.
+    private fun settleAfterWorker(){
+        mainHandler.post {
+            if(!destroyed)stopIfIdle(latestStartId)
+        }
+    }
     /** A second UI command must never stop the :torrent service while the
      * first command still owns a native JNI metadata/transfer operation.
      * stopSelfResult(latest startId) otherwise tears down ALL earlier starts.
@@ -439,8 +450,9 @@ class TorrentTransferService : Service() {
         }
         // One native torrent operation at a time on the device after an
         // owner-observed full-device crash; no competing metadata session.
-        if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty() ||
-            nativeCleanup.get()>0){
+        if(inFlight.contains(id))return true
+        if(!TorrentServiceLifetimePolicy.mayStartNative(
+                inFlight.size,metadataWorkers.size,exportWorkers.size,nativeCleanup.get())){
             if(id !in deferredJobs)deferredJobs.add(id)
             // Android may terminate the :torrent process during metadata
             // unwinding. Preserve THIS exact previously user-selected job.
@@ -492,13 +504,7 @@ class TorrentTransferService : Service() {
                 }finally{nativeCleanup.decrementAndGet()}
                 // Start only a previously selected deferred job, after the
                 // last native operation has actually released its session.
-                startDeferredIfIdle()
-                if(TorrentServiceLifetimePolicy.mayStop(
-                        inFlight.size,metadataWorkers.size,exportWorkers.size,
-                        nativeCleanup.get())){
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                }
+                settleAfterWorker()
             }
         }
         workers[id]=worker
@@ -519,8 +525,9 @@ class TorrentTransferService : Service() {
      * mandatory. Saved file indices/targets are not reconstructed or guessed.
      */
     @Synchronized private fun startDeferredIfIdle():Boolean {
-        if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty() ||
-            nativeCleanup.get()>0)return false
+        if(!TorrentServiceLifetimePolicy.mayStartNative(
+                inFlight.size,metadataWorkers.size,exportWorkers.size,nativeCleanup.get()))
+            return false
         val prefs=getSharedPreferences("torrent_transfers",MODE_PRIVATE)
         restoreDeferredSelections()
         while(true){
@@ -545,6 +552,7 @@ class TorrentTransferService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId=startId
         try { startForeground(NOTIFICATION, notification("Preparing torrent…")) }
         catch(t:Exception){
             android.util.Log.w("AsterionTorrent",
@@ -568,8 +576,8 @@ class TorrentTransferService : Service() {
             }
             // Export never initializes libtorrent, but simultaneous disk
             // copies and native peer traffic could again overload this phone.
-            if(inFlight.isNotEmpty() || metadataWorkers.isNotEmpty() ||
-                exportWorkers.isNotEmpty()){
+            if(!TorrentServiceLifetimePolicy.mayStartNative(
+                    inFlight.size,metadataWorkers.size,exportWorkers.size,nativeCleanup.get())){
                 update(target,"QUARANTINED · Export deferred until torrent engine idle")
                 return START_NOT_STICKY
             }
@@ -588,11 +596,7 @@ class TorrentTransferService : Service() {
                         (t.message?:t.javaClass.simpleName).take(130))
                 }finally{
                     exportWorkers.remove(Thread.currentThread())
-                    if(inFlight.isEmpty() && metadataWorkers.isEmpty() &&
-                        exportWorkers.isEmpty()){
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    }
+                    settleAfterWorker()
                 }
             }
             exportWorkers.add(worker)
@@ -638,8 +642,8 @@ class TorrentTransferService : Service() {
                     android.os.ResultReceiver::class.java)
                 else intent.getParcelableExtra<android.os.ResultReceiver>(
                     TorrentMetadataBridge.RECEIVER)
-            if(metadataWorkers.isNotEmpty() || inFlight.isNotEmpty() ||
-                nativeCleanup.get()>0){
+            if(!TorrentServiceLifetimePolicy.mayStartNative(
+                    inFlight.size,metadataWorkers.size,exportWorkers.size,nativeCleanup.get())){
                 receiver?.send(0,android.os.Bundle().apply{
                     putString("error","Native torrent worker already busy; "+
                         "no parallel metadata JNI will be started")
@@ -673,13 +677,7 @@ class TorrentTransferService : Service() {
                     }finally{nativeCleanup.decrementAndGet()}
                     // The selected transfer may have arrived during metadata
                     // cleanup. Re-arm only AFTER the old JNI session stopped.
-                    startDeferredIfIdle()
-                    if(TorrentServiceLifetimePolicy.mayStop(
-                            inFlight.size,metadataWorkers.size,exportWorkers.size,
-                            nativeCleanup.get())){
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    }
+                    settleAfterWorker()
                 }
             }
             metadataWorkers.add(worker)
@@ -724,6 +722,7 @@ class TorrentTransferService : Service() {
             RESUME->{
                 if(TorrentTransfers.isMarkedCancelled(this,id)){
                     update(id,"Cancelled · select torrent again to restart")
+                    stopIfIdle(startId)
                     return START_NOT_STICKY
                 }
                 paused.remove(id)
@@ -732,9 +731,13 @@ class TorrentTransferService : Service() {
                 val indices=prefs.getString("job_indices_$id","").orEmpty()
                 if(!inFlight.contains(id))startJob(id,folder,indices)
                 else update(id,"Resuming")
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
             ADD->{
+                // An already-running job owns its immutable file selection.
+                // Repeated ADD cannot replace its manifest indices mid-write.
+                if(inFlight.contains(id))return START_NOT_STICKY
                 // Explicit user selection is the sole way to re-arm a
                 // previously cancelled infohash, never background polling.
                 if(!TorrentTransfers.clearCancellationForExplicitSelection(this,id)){
@@ -753,6 +756,7 @@ class TorrentTransferService : Service() {
                 if(prefs.getBoolean("job_paused_$id",false))paused.add(id)
                 else paused.remove(id)
                 startJob(id,folder,indices)
+                stopIfIdle(startId)
                 return START_NOT_STICKY
             }
         }
@@ -778,6 +782,7 @@ class TorrentTransferService : Service() {
         stopSelf()
     }
     override fun onDestroy() {
+        destroyed=true
         metadataWorkers.toList().forEach{it.interrupt()}
         exportWorkers.toList().forEach{it.interrupt()}
         for(id in inFlight){

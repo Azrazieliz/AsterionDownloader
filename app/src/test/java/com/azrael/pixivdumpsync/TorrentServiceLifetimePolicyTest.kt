@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TorrentServiceLifetimePolicyTest {
+    @Test fun noNativeAdmissionDuringExportOrCleanup(){
+        assertTrue(TorrentServiceLifetimePolicy.mayStartNative(0,0,0,0))
+        assertFalse(TorrentServiceLifetimePolicy.mayStartNative(0,0,1,0))
+        assertFalse(TorrentServiceLifetimePolicy.mayStartNative(0,0,0,1))
+        assertFalse(TorrentServiceLifetimePolicy.mayStartNative(1,0,0,0))
+        assertFalse(TorrentServiceLifetimePolicy.mayStartNative(0,1,0,0))
+    }
+
     @Test fun idleServiceMayStopAfterAllNativeWorkReturns(){
         assertTrue(TorrentServiceLifetimePolicy.mayStop(0,0,0))
     }
