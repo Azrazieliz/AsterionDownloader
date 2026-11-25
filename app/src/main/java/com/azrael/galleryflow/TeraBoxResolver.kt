@@ -8,11 +8,15 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 class TeraBoxResolver(private val http: HttpClient) {
-    fun resolvePublicShare(url: String, referer: String? = null): String {
+    fun resolvePublicShare(url: String, referer: String? = null,
+                           requireArchive:Boolean=false): String {
         val landing = http.textResponse(url, referer)
         val html = unescape(landing.body)
 
-        extractDirect(html)?.let { return it }
+        // A selected 4KHD album must resolve an actual archive, not a
+        // share landing page's generic direct URL or promotional video.
+        if(!requireArchive)extractDirect(html)?.let { return it }
+        else uniqueArchiveLandingLink(html)?.let{return it}
 
         val jsToken = extractJsToken(html)
             ?: throw InteractiveProviderRequiredException(
@@ -43,11 +47,24 @@ class TeraBoxResolver(private val http: HttpClient) {
             )
         }
 
-        val preferred = files.firstOrNull { isArchive(it.name) }
+        val preferred = if(requireArchive){
+            val candidates=files.filter{
+                it.size>0 && isArchive(it.name) && secureFileUrl(it.url)
+            }.distinctBy{it.name to it.url}
+            if(candidates.size!=1)
+                throw InteractiveProviderRequiredException(
+                    "TeraBox",landing.finalUrl,
+                    if(candidates.isEmpty())"Selected share exposed no complete archive"
+                    else "Selected share contains multiple archives; choose the matching file")
+            candidates.single()
+        }else files.firstOrNull { isArchive(it.name) }
             ?: files.firstOrNull { isMedia(it.name) }
             ?: files.maxByOrNull { it.size }
 
-        val direct = preferred?.url?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        val direct = preferred?.url?.takeIf {
+            if(requireArchive)secureFileUrl(it)
+            else it.startsWith("http://") || it.startsWith("https://")
+        }
         if (!direct.isNullOrBlank()) return direct
 
         throw InteractiveProviderRequiredException(
@@ -212,6 +229,23 @@ class TeraBoxResolver(private val http: HttpClient) {
             .mapNotNull { it.find(html)?.groupValues?.getOrNull(1) }
             .map { decodePercent(it) }
             .firstOrNull { it.isNotBlank() }
+    }
+
+    internal fun secureFileUrl(url:String):Boolean=runCatching{
+        val uri=URI(url)
+        uri.scheme=="https" && !uri.host.isNullOrBlank() &&
+            uri.userInfo==null && uri.port==-1 && uri.rawFragment==null
+    }.getOrDefault(false)
+
+    internal fun uniqueArchiveLandingLink(html:String):String? {
+        // Only explicit file-valued metadata, not arbitrary .zip text or
+        // unrelated page resources. Ambiguous metadata falls through to
+        // the normal published share file list.
+        val field=Regex("""["'](?:dlink|downloadUrl|download_url|directUrl|direct_url)["']\s*[:=]\s*["'](https?://[^"']+)""",
+            RegexOption.IGNORE_CASE)
+        return field.findAll(html).map{unescape(it.groupValues[1])}
+            .filter{secureFileUrl(it) && isArchive(URI(it).path.orEmpty())}
+            .distinct().toList().singleOrNull()
     }
 
     private fun extractDirect(html: String): String? {

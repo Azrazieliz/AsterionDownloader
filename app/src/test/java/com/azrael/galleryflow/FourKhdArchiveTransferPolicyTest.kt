@@ -5,6 +5,22 @@ import org.junit.Test
 
 /** Covers only 4KHD's official selected bridge; no live network or file writes. */
 class FourKhdArchiveTransferPolicyTest {
+    @Test fun selectedArchiveShareRejectsUnrelatedVideoAndAmbiguousMetadata(){
+        val resolver=TeraBoxResolver(HttpClient())
+        val valid="https://files.example.test/selected.zip"
+        val video="https://files.example.test/preview.mp4"
+        assertEquals(valid,resolver.uniqueArchiveLandingLink(
+            """{"downloadUrl":"$valid","directUrl":"$video"}"""))
+        assertNull(resolver.uniqueArchiveLandingLink(
+            """{"downloadUrl":"$valid","directUrl":"https://files.example.test/another.zip"}"""))
+        assertNull(resolver.uniqueArchiveLandingLink(
+            """{"downloadUrl":"$video"}"""))
+        assertNull(resolver.uniqueArchiveLandingLink(
+            """{"downloadUrl":"http://files.example.test/selected.zip"}"""))
+        assertNull(resolver.uniqueArchiveLandingLink(
+            """{"downloadUrl":"https://user@files.example.test/selected.zip"}"""))
+    }
+
     private val selected="https://www.4khd.com/content/14/yeha-yeha-pure2.html"
     private fun media(url:String,provider:String?,kind:MediaKind=MediaKind.ARCHIVE)=
         MediaRef(SourceId.FOUR_K_HD,"selected-archive","album",0,

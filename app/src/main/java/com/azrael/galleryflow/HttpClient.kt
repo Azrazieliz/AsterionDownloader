@@ -170,13 +170,15 @@ open class HttpClient(private val context:android.content.Context?=null) {
     }
 
     fun resolveDownloadUrl(url: String, referer: String? = null, provider: String? = null): String =
-        resolveDownloadUrlInternal(url, referer, provider, 0)
+        resolveDownloadUrlInternal(url, referer, provider, 0,
+            requireArchive=provider.equals("4KHD",true))
 
     private fun resolveDownloadUrlInternal(
         url: String,
         referer: String?,
         provider: String?,
-        depth: Int
+        depth: Int,
+        requireArchive:Boolean=false
     ): String {
         if (!SyncControl.checkpoint()) throw SyncCancelledException()
         if (depth > 6) {
@@ -265,13 +267,14 @@ open class HttpClient(private val context:android.content.Context?=null) {
                     bridgeTarget,
                     page.finalUrl,
                     if (isTeraBoxHost(hostOf(bridgeTarget))) "TeraBox" else provider,
-                    depth + 1
+                    depth + 1,
+                    requireArchive
                 )
             }
 
             val finalHost = hostOf(page.finalUrl)
             if (isTeraBoxHost(finalHost)) {
-                return TeraBoxResolver(this).resolvePublicShare(page.finalUrl, referer)
+                return TeraBoxResolver(this).resolvePublicShare(page.finalUrl, referer,requireArchive)
             }
 
             throw InteractiveProviderRequiredException(
@@ -282,7 +285,7 @@ open class HttpClient(private val context:android.content.Context?=null) {
         }
 
         if (normalizedProvider == "terabox" || isTeraBoxHost(host)) {
-            return TeraBoxResolver(this).resolvePublicShare(url, referer)
+            return TeraBoxResolver(this).resolvePublicShare(url, referer,requireArchive)
         }
 
         if (normalizedProvider == "sorafolder" || "sorafolder.com" in host) {
