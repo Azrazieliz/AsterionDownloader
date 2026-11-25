@@ -5,6 +5,28 @@ import org.junit.Test
 import java.util.concurrent.ExecutionException
 
 class VideoErrorDetailTest {
+    @Test fun urlDigitsAreNotHttpAuthorizationErrors(){
+        val msg=VideoErrorDetail.summary(IllegalStateException(
+            "Unable to extract https://example.test/item/403?token=secret"))
+        assertEquals(VideoFailurePolicy.Kind.UNSUPPORTED,VideoFailurePolicy.classify(msg))
+        assertFalse(msg.contains("secret"))
+    }
+
+    @Test fun actualResolverTimeoutIsRetryableNotUnsupported(){
+        val msg=VideoErrorDetail.summary(java.util.concurrent.TimeoutException(
+            "Selected publisher did not expose a transferable original within the resolver time budget"))
+        assertEquals(VideoFailurePolicy.Kind.TRANSIENT,VideoFailurePolicy.classify(msg))
+    }
+
+    @Test fun cookieHostRemainsExactAndHttpsOnly(){
+        assertEquals("www.example.test",
+            AuthorizedVideoSession.cookieHost("https://www.example.test/watch"))
+        assertEquals("example.test",
+            AuthorizedVideoSession.cookieHost("https://example.test/watch"))
+        assertNull(AuthorizedVideoSession.cookieHost("http://example.test/watch"))
+        assertNull(AuthorizedVideoSession.cookieHost("https://user@example.test/watch"))
+    }
+
     @Test fun realOrWrappedWorkerInterruptionIsNotASiteError(){
         assertTrue(VideoErrorDetail.workerInterrupted(InterruptedException()))
         assertTrue(VideoErrorDetail.workerInterrupted(

@@ -596,7 +596,7 @@ internal object SourceIndexParser {
             "DSYSAV browser exposed no publisher watch cards"
         }
         if(SiteControls.key(base)=="4kgirl.com" && area=="COSPLAY" &&
-            !com.azrael.galleryflow.SelectedAlbumScope.owns(address)){
+            !SiteBackfillProfiles.recognizesGalleryPage(base,address)){
             check(!SiteBackfillProfiles.entries(
                 doc,base,area,System.currentTimeMillis()).isNullOrEmpty()){
                 "4KGirl browser exposed no first-party gallery cards; verify publisher access"
@@ -1328,6 +1328,7 @@ object SourceIndex {
                     val doc=Jsoup.parse(body,response.url().toString())
                     val fourKGirlEmpty=SiteControls.key(source.url)=="4kgirl.com" &&
                         source.area=="COSPLAY" &&
+                        !SiteBackfillProfiles.recognizesGalleryPage(source.url,current) &&
                         SiteBackfillProfiles.entries(
                             doc,source.url,"COSPLAY",System.currentTimeMillis())
                             .isNullOrEmpty()

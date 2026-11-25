@@ -202,6 +202,32 @@ class VideoDb(context: Context): SQLiteOpenHelper(context, "videoflow.sqlite", n
             "SELECT 1 FROM videos WHERE url=? LIMIT 1",
             arrayOf(normalized)).use{it.moveToFirst()}
     }
+    /** A GalleryFlow fallback may count only a completed, exact selected
+     * article receipt that still points to a readable local video. A queued,
+     * cloud-pending, unrelated, or missing file never qualifies. */
+    internal fun verifiedLocalVideoForUrl(url:String):Boolean {
+        val normalized=WebDiscovery.normalize(url)?:return false
+        val uriValue=readableDatabase.rawQuery(
+            "SELECT saved_uri FROM videos WHERE url=? AND state='done' LIMIT 1",
+            arrayOf(normalized)).use{c->if(c.moveToFirst())c.getString(0)else null}
+            ?:return false
+        if(!savedFileReadable(uriValue))return false
+        val uri=Uri.parse(uriValue)
+        if(uri.scheme!="content")return false
+        return runCatching{
+            val retriever=android.media.MediaMetadataRetriever()
+            try{
+                retriever.setDataSource(appContext,uri)
+                val duration=retriever.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()?:0L
+                val hasVideo=retriever.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO)
+                duration>0L && hasVideo=="yes"
+            }finally{retriever.release()}
+        }.getOrDefault(false)
+    }
+
     fun stateForUrl(url:String):String? {
         val normalized=WebDiscovery.normalize(url)?:return null
         return readableDatabase.rawQuery(

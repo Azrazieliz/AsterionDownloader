@@ -675,9 +675,23 @@ class SyncEngine(private val context: Context) {
                         files.exists(it.contentUri))
             }.map{it.mediaId}.toSet()
             val requiredIds=mediaItems.map{it.stableId}.toSet()
-            val missingVideos=if(meta.source==SourceId.COSPLAYTELE)
-                CosplayTeleVideoCompleteness.audit(meta.expectedVideoCount,
-                    mediaItems,records,validIds) else null
+            val missingVideos=if(meta.source==SourceId.COSPLAYTELE){
+                val audit=CosplayTeleVideoCompleteness.audit(meta.expectedVideoCount,
+                    mediaItems,records,validIds)
+                // Reconcile the existing VideoFlow job after its verified
+                // local original has completed. Previously Kyora queued
+                // that exact article but never consumed its saved receipt.
+                if(!audit.complete && audit.expectedVideos==1 &&
+                    mediaItems.none{it.kind==MediaKind.VIDEO}){
+                    val verified=runCatching{
+                        com.asterion.videoflow.VideoDb(context).use{
+                            it.verifiedLocalVideoForUrl(meta.canonicalUrl)
+                        }
+                    }.getOrDefault(false)
+                    CosplayTeleVideoCompleteness.audit(meta.expectedVideoCount,
+                        mediaItems,records,validIds,verified)
+                }else audit
+            }else null
             if(missingVideos!=null && !missingVideos.complete){
                 stats.incompleteGalleries++
                 progress("CosplayTele video originals incomplete: "+

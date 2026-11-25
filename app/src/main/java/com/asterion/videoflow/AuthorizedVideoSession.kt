@@ -9,12 +9,21 @@ import java.net.URI
  * Each temporary Netscape cookie file stays in private cache and is deleted
  * immediately after the extractor attempts. No third-party paywall bypass. */
 internal object AuthorizedVideoSession {
+    /** A Netscape host-only cookie must name the actual request host.
+     * Removing www from the host while keeping FALSE (no subdomains)
+     * silently drops the explicitly connected session on www URLs.
+     * Do not broaden the cookie's domain or add any other host. */
+    internal fun cookieHost(videoUrl:String):String? {
+        val uri=runCatching{URI(videoUrl)}.getOrNull()?:return null
+        if(uri.scheme!="https" || uri.userInfo!=null || uri.port!=-1)return null
+        val host=uri.host.orEmpty().lowercase(java.util.Locale.ROOT)
+        return host.takeIf{it.isNotBlank() &&
+            it.matches(Regex("[a-z0-9.-]+"))}
+    }
+
     fun temporaryCookies(context:Context,videoUrl:String):File? {
         if(!SiteSession.bound(context,videoUrl)) return null
-        val uri=URI(videoUrl)
-        if(uri.scheme!="https")return null
-        val host=uri.host.orEmpty().lowercase().removePrefix("www.")
-        if(host.isBlank()||host.contains("\t")||host.contains("\n"))return null
+        val host=cookieHost(videoUrl)?:return null
         val cookie=SiteSession.cookie(context,videoUrl).orEmpty()
         val rows=cookie.split(';').mapNotNull { part->
             val token=part.trim()

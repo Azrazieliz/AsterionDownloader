@@ -37,8 +37,12 @@ internal object VideoErrorDetail {
             .take(9).toList()
         val root=chain.lastOrNull{!it.message.isNullOrBlank()}
             ?:chain.lastOrNull()?:throwable
-        val raw=(root.message?:root.javaClass.simpleName).trim()
+        // Strip URLs/credentials BEFORE interpreting HTTP status. An item
+        // ID or signed query containing 403 is not evidence of access denial.
+        val raw=safe((root.message?:root.javaClass.simpleName).trim())
         val lower=raw.lowercase(Locale.ROOT)
+        val timedOut=chain.any{it is java.util.concurrent.TimeoutException ||
+            it is java.net.SocketTimeoutException}
         val clear=when {
             // A public publisher host resolving to 127.0.0.1 cannot reach its
             // genuine HTTPS server. This is a phone DNS/blocker/route issue,
@@ -66,6 +70,9 @@ internal object VideoErrorDetail {
             Regex("""read.only file system|erofs|permission denied|eacces""")
                 .containsMatchIn(lower)->
                 "Video staging is not writable: "+raw
+            timedOut->
+                "Selected publisher resolution or transfer timed out; "+
+                "verified partial bytes retained for retry"
             Regex("""unsupported url|no suitable extractor|unable to extract|no video formats""")
                 .containsMatchIn(lower)->
                 "Video extractor cannot resolve this publisher's current player (extractor repair required): "+raw

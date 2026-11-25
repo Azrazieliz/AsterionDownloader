@@ -36,7 +36,8 @@ internal object CosplayTeleVideoCompleteness {
             (kind=="selected_album" || kind=="gallery_only")
 
     fun audit(expected:Int?,selected:List<MediaRef>,
-              records:List<MediaRecord>,onDisk:Set<String>):Audit {
+              records:List<MediaRecord>,onDisk:Set<String>,
+              verifiedExactFallback:Boolean=false):Audit {
         val selectedVideos=selected.asSequence()
             .filter{it.kind==MediaKind.VIDEO}
             .map{it.stableId}.toSet()
@@ -59,9 +60,14 @@ internal object CosplayTeleVideoCompleteness {
                             videoExtension.containsMatchIn(record.filename.orEmpty())
                     })
         }.map{it.mediaId}.toSet()
-        val complete=selectedVideos.all{it in verifiedIds} &&
-            verifiedIds.size>=required
-        return Audit(required,verifiedIds.size,complete)
+        // One exact article fallback cannot stand in for multiple videos
+        // or a separately identified direct video. Do not double-count it
+        // with an extracted archive member.
+        val fallback=verifiedExactFallback && required==1 &&
+            selectedVideos.isEmpty() && verifiedIds.isEmpty()
+        val count=verifiedIds.size+if(fallback)1 else 0
+        val complete=selectedVideos.all{it in verifiedIds} && count>=required
+        return Audit(required,count,complete)
     }
 
 }

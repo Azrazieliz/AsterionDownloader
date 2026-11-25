@@ -13,6 +13,19 @@ class CosplayTeleVideoCompletenessTest {
         "content://media/external/file/1",name,TransferState.COMPLETE,
         null,null,null)
 
+    @Test fun exactCompletedFallbackCountsOnlyOneUnidentifiedVideo(){
+        val photo=media("photo",MediaKind.IMAGE,"https://cdn.example/photo.jpg")
+        assertTrue(CosplayTeleVideoCompleteness.audit(1,listOf(photo),
+            emptyList(),emptySet(),verifiedExactFallback=true).complete)
+        assertFalse(CosplayTeleVideoCompleteness.audit(2,listOf(photo),
+            emptyList(),emptySet(),verifiedExactFallback=true).complete)
+        val video=media("video",MediaKind.VIDEO,"https://cdn.example/video.mp4")
+        assertFalse(CosplayTeleVideoCompleteness.audit(1,listOf(video),
+            emptyList(),emptySet(),verifiedExactFallback=true).complete)
+        assertFalse(CosplayTeleVideoCompleteness.audit(1,listOf(photo),
+            emptyList(),emptySet(),verifiedExactFallback=false).complete)
+    }
+
     @Test fun photoReceiptCannotCompleteAdvertisedVideo(){
         val photo=media("photo",MediaKind.IMAGE,"https://cdn.example/photo.jpg")
         val result=CosplayTeleVideoCompleteness.audit(1,listOf(photo),
