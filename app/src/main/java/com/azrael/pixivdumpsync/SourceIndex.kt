@@ -1083,7 +1083,7 @@ object SourceIndex {
     fun refreshSitePreview(context:Context,area:String,address:String,
                            finished:(Boolean)->Unit={}) {
         thread(name="asterion-single-site-preview"){
-            if(!AppPower.enabled(context)){ finished(false); return@thread }
+            if(ProviderRetirement.isRetired(address) || !AppPower.enabled(context)){ finished(false); return@thread }
             ensure(context)
             val source=SourceIndexDb(context).use{db->
                 db.sources().firstOrNull{

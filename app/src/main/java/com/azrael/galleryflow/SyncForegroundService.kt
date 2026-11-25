@@ -105,6 +105,7 @@ class SyncForegroundService : Service() {
         // backfills. Do not discard those durable jobs; process them AFTER
         // the current explicit selection instead of appearing hung on source.
         val jobs=(listOfNotNull(requested)+GalleryRequestLedger.pending(this))
+            .filterNot{it.retired}
             .distinctBy{it.signature()}
         synchronized(pending){
             if(currentRun?.isDone==false){
