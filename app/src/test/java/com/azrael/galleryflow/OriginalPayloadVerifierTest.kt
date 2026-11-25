@@ -4,6 +4,19 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class OriginalPayloadVerifierTest {
+    @Test fun archiveMembersRequireBothOriginalSignatureAndDeclaredSize(){
+        val png=byteArrayOf(0x89.toByte(),0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a)
+        OriginalPayloadVerifier.verifyArchiveMember(MediaKind.IMAGE,4096,4096,png,png.size)
+        assertThrows(AdapterException::class.java){
+            OriginalPayloadVerifier.verifyArchiveMember(MediaKind.IMAGE,4095,4096,png,png.size)
+        }
+        val html="<html>not an image</html>".toByteArray()
+        assertThrows(AdapterException::class.java){
+            OriginalPayloadVerifier.verifyArchiveMember(
+                MediaKind.IMAGE,html.size.toLong(),html.size.toLong(),html,html.size)
+        }
+    }
+
     @Test fun acceptsOriginalJpegPngAndWebp() {
         val jpeg=byteArrayOf(0xff.toByte(),0xd8.toByte(),0xff.toByte(),0xe0.toByte(),1,2)
         OriginalPayloadVerifier.verify(MediaKind.IMAGE,4096,jpeg,jpeg.size)

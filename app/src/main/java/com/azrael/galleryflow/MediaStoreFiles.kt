@@ -88,6 +88,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
             var bytes = 0L
             val signature=ByteArray(40)
             var signatureSize=0
+            var extracted:List<ExtractedDownload> = emptyList()
             try {
                 context.contentResolver.openOutputStream(uri, "w")!!.use { out ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 4)
@@ -108,7 +109,6 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                 if (bytes <= 0L || (response.contentLength > 0L && bytes != response.contentLength))
                     throw java.io.IOException("Incomplete download: " + bytes + " of " + response.contentLength)
                 OriginalPayloadVerifier.verify(media.kind,bytes,signature,signatureSize)
-                finishRow(uri)
                 val primary = DownloadResult(
                     contentUri = uri.toString(),
                     filename = filename,
@@ -117,7 +117,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
                     aHash64 = if (mime.startsWith("image/")) averageHash64(uri) else null
                 )
-                val extracted = when {
+                extracted = when {
                     media.kind != MediaKind.ARCHIVE -> emptyList()
                     isZip(filename, mime) -> extractZip(entity, gallery, media, uri)
                     isRar(filename, mime) -> extractRar(entity, gallery, media, uri)
@@ -125,8 +125,13 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                         throw AdapterException("Archive format is not supported: $filename")
                     else -> emptyList()
                 }
+                // All members have been checked before exposing any new
+                // original. Roll back only rows belonging to this attempt.
+                extracted.forEach { finishRow(Uri.parse(it.result.contentUri)) }
+                finishRow(uri)
                 return DownloadOutcome(primary, extracted)
             } catch (t: Throwable) {
+                extracted.forEach { delete(it.result.contentUri) }
                 runCatching { context.contentResolver.delete(uri, null, null) }
                 throw t
             }
@@ -221,21 +226,9 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                 val uri = createRow(filename, mime, relativePath(entity, gallery))
                 createdUris += uri
                 val digest = MessageDigest.getInstance("SHA-256")
-                var bytes = 0L
-                zip.getInputStream(header).use { input ->
-                    context.contentResolver.openOutputStream(uri, "w")!!.use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 4)
-                        while (true) {
-                            if (!SyncControl.checkpoint()) throw SyncCancelledException()
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            output.write(buffer, 0, read)
-                            digest.update(buffer, 0, read)
-                            bytes += read
-                        }
-                    }
+                val bytes = zip.getInputStream(header).use { input ->
+                    writeVerifiedMember(input,uri,kind,header.uncompressedSize,digest)
                 }
-                finishRow(uri)
                 val syntheticUrl = "archive:" + archive.normalizedUrl + "#" + entryName
                 val media = MediaRef(
                     source = archive.source,
@@ -310,21 +303,9 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     createdUris += uri
 
                     val digest = MessageDigest.getInstance("SHA-256")
-                    var bytes = 0L
-                    opened.getInputStream(header).use { input ->
-                        context.contentResolver.openOutputStream(uri, "w")!!.use { output ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 4)
-                            while (true) {
-                                if (!SyncControl.checkpoint()) throw SyncCancelledException()
-                                val read = input.read(buffer)
-                                if (read < 0) break
-                                output.write(buffer, 0, read)
-                                digest.update(buffer, 0, read)
-                                bytes += read
-                            }
-                        }
+                    val bytes = opened.getInputStream(header).use { input ->
+                        writeVerifiedMember(input,uri,kind,header.fullUnpackSize,digest)
                     }
-                    finishRow(uri)
 
                     val syntheticUrl = "archive:" + archive.normalizedUrl + "#" + entryName
                     val media = MediaRef(
@@ -366,6 +347,34 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
         }
     }
 
+    private fun writeVerifiedMember(input:java.io.InputStream,uri:Uri,
+                                    kind:MediaKind,declared:Long,digest:MessageDigest):Long {
+        val signature=ByteArray(40)
+        var signatureSize=0
+        var bytes=0L
+        context.contentResolver.openOutputStream(uri,"w")!!.use{output->
+            val buffer=ByteArray(DEFAULT_BUFFER_SIZE*4)
+            while(true){
+                if(!SyncControl.checkpoint())throw SyncCancelledException()
+                val read=input.read(buffer)
+                if(read<0)break
+                if(read==0)continue
+                bytes+=read
+                if(declared>=0L && bytes>declared)
+                    throw AdapterException("Archive member exceeds declared size")
+                if(signatureSize<signature.size){
+                    val amount=minOf(read,signature.size-signatureSize)
+                    buffer.copyInto(signature,signatureSize,0,amount)
+                    signatureSize+=amount
+                }
+                output.write(buffer,0,read)
+                digest.update(buffer,0,read)
+            }
+        }
+        OriginalPayloadVerifier.verifyArchiveMember(kind,bytes,declared,signature,signatureSize)
+        return bytes
+    }
+
     private fun createRow(filename: String, mime: String, relativePath: String): Uri {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, filename)
@@ -378,12 +387,12 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
     }
 
     private fun finishRow(uri: Uri) {
-        context.contentResolver.update(
+        check(context.contentResolver.update(
             uri,
             ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
             null,
             null
-        )
+        )==1){"Unable to publish verified original"}
     }
 
     // Every media entry, including extracted archive entries, lives in one flat folder.

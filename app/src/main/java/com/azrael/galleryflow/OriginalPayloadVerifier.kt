@@ -36,6 +36,13 @@ internal object OriginalPayloadVerifier {
         return null
     }
 
+    internal fun verifyArchiveMember(kind:MediaKind,bytes:Long,declared:Long,
+                                     first:ByteArray,firstSize:Int){
+        if(declared>=0L && bytes!=declared)
+            throw AdapterException("Incomplete archive member: $bytes of $declared bytes")
+        verify(kind,bytes,first,firstSize)
+    }
+
     internal fun verify(kind:MediaKind,bytes:Long,first:ByteArray,firstSize:Int){
         if(bytes<=0 || firstSize<=0)throw AdapterException("Empty original response")
         val n=firstSize.coerceIn(0,first.size)
