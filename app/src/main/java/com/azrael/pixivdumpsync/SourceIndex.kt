@@ -79,6 +79,7 @@ class SourceIndexDb(context:Context):
             "ALTER TABLE entries ADD COLUMN dispatch_until INTEGER NOT NULL DEFAULT 0")
     }
     fun add(url:String,name:String,area:String,adapter:String="generic"){
+        if(ProviderRetirement.isRetired(url))return
         val v=ContentValues().apply{
             put("url",url);put("name",name);put("area",area);put("adapter",adapter)
         }
@@ -1123,7 +1124,7 @@ object SourceIndex {
      * cursors or changing other providers' include/live preferences.
      */
     fun scanSourceNow(context:Context,address:String,manual:Boolean=false) {
-        if(!AppPower.enabled(context))return
+        if(ProviderRetirement.isRetired(address) || !AppPower.enabled(context))return
         thread(name="asterion-source-specific-backfill"){
             if(!busy.compareAndSet(false,true))return@thread
             try {
@@ -1151,7 +1152,7 @@ object SourceIndex {
     }
     fun enroll(context:Context,address:String,area:String,sourceName:String,
                native:Boolean=false){
-        if(!SourceIndexParser.safe(address))return
+        if(!SourceIndexParser.safe(address) || ProviderRetirement.isRetired(address))return
         SourceIndexDb(context).use{it.add(address,sourceName,area,
             if(native)"native" else "generic")}
         if(native||!AppPower.enabled(context))return
@@ -1366,6 +1367,7 @@ object SourceIndex {
     }
     /** A real synchronous single-site scan, owned by a cancellable site job. */
     fun scanSingle(context:Context,address:String,stop:()->Boolean){
+        require(!ProviderRetirement.isRetired(address)){"Retired provider"}
         val source=SourceIndexDb(context).use{db->
             db.sources().firstOrNull{it.url==address}
         }?:error("Site is not registered")
@@ -1445,6 +1447,7 @@ object SourceIndex {
     private fun scanOne(context:Context,source:IndexedSource,
                         stop:()->Boolean={false},manual:Boolean=false,
                         previewOnly:Boolean=false){
+        if(ProviderRetirement.isRetired(source.url))return
         // For providers with a verified, first-party JSON listing, parse the
         // published catalog directly. An authentic cover is not an original
         // download, and a preview-only refresh must not move history cursors.

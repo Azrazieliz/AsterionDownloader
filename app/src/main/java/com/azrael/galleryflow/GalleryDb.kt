@@ -242,6 +242,10 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
 
     fun addEntity(entity: SourceEntity) {
+        require(entity.source!=SourceId.FOUR_K_GIRL &&
+            !com.azrael.pixivdumpsync.ProviderRetirement.isRetired(entity.canonicalUrl)){
+            "Retired provider; saved history retained"
+        }
         val values = ContentValues().apply {
             put("source", entity.source.wireName)
             put("entity_id", entity.stableId)
@@ -329,12 +333,40 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
         return result
     }
 
+    /** Owner retired 4KGirl. Archive subscriptions and stop unfinished
+     * requests without deleting gallery, media, retry history or saved files. */
+    fun retireFourKGirl(){
+        val db=writableDatabase
+        db.beginTransactionNonExclusive()
+        try{
+            val ids=mutableListOf<Pair<String,String>>()
+            db.rawQuery("SELECT source,entity_id,canonical_url FROM entities WHERE archived=0",null)
+                .use{c->
+                    while(c.moveToNext()){
+                        val host=runCatching{java.net.URI(c.getString(2)).host.orEmpty()
+                            .lowercase(java.util.Locale.ROOT)}.getOrDefault("")
+                        if(c.getString(0)=="4kgirl" || host=="4kgirl.com" ||
+                            host.endsWith(".4kgirl.com"))ids+=c.getString(0) to c.getString(1)
+                    }
+                }
+            for((source,id) in ids){
+                db.execSQL("UPDATE entities SET archived=1,selected=0,live_enabled=0 WHERE source=? AND entity_id=?",
+                    arrayOf(source,id))
+                db.execSQL("UPDATE media SET state='cancelled' WHERE source=? AND entity_id=? AND state IN ('unseen','pending','downloading','partial','retrying')",
+                    arrayOf(source,id))
+                db.execSQL("UPDATE galleries SET state='cancelled',last_error='Source retired by owner' WHERE source=? AND entity_id=? AND state IN ('unseen','pending','downloading','partial','retrying')",
+                    arrayOf(source,id))
+            }
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
+
     fun listEntities(): List<EntityRecord> {
         val out = mutableListOf<EntityRecord>()
         readableDatabase.query(
             "entities",
             arrayOf("source","entity_id","display_name","canonical_url","kind","selected","live_enabled","live_cursor","last_sync_at","last_error"),
-            "archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
+            "archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','everia','generic')",
             null,null,null,"display_name COLLATE NOCASE ASC"
         ).use { c ->
             while (c.moveToNext()) {
@@ -352,7 +384,9 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
                 )
             }
         }
-        return out
+        return out.filterNot{
+            com.azrael.pixivdumpsync.ProviderRetirement.isRetired(it.canonicalUrl)
+        }
     }
 
     fun archiveEntity(source: SourceId, entityId: String) {
@@ -389,11 +423,11 @@ class GalleryDb(context: Context) : SQLiteOpenHelper(context.applicationContext,
     }
 
     fun setAllSelected(value:Boolean) {
-        writableDatabase.execSQL("UPDATE entities SET selected=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
+        writableDatabase.execSQL("UPDATE entities SET selected=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','everia','generic')",
             arrayOf(if(value)1 else 0))
     }
     fun setAllLiveEnabled(value:Boolean) {
-        writableDatabase.execSQL("UPDATE entities SET live_enabled=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','4kgirl','everia','generic')",
+        writableDatabase.execSQL("UPDATE entities SET live_enabled=? WHERE archived=0 AND source IN ('kiutaku','4khd','buondua','cosplaytele','everia','generic')",
             arrayOf(if(value)1 else 0))
     }
     fun setSelected(source: SourceId, entityId: String, value: Boolean) =

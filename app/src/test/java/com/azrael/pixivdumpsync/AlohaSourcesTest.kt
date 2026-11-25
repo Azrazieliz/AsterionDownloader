@@ -6,13 +6,13 @@ import org.junit.Test
 class AlohaSourcesTest {
     @Test fun userApprovedBookmarksOnly() {
         val sites=AlohaSources.all
-        assertEquals(42,sites.size)
-        assertEquals(42,sites.map{it.url}.toSet().size)
+        assertEquals(41,sites.size)
+        assertEquals(41,sites.map{it.url}.toSet().size)
         assertTrue(sites.all{it.url.startsWith("https://")})
         assertTrue(sites.none{it.url.contains("slot-id=")})
         assertTrue(sites.none{it.area==AlohaArea.REFERENCE ||
             it.area==AlohaArea.STUDY || it.area==AlohaArea.ARTWORK})
-        assertEquals(6,AlohaSources.by(AlohaArea.COSPLAY).size)
+        assertEquals(5,AlohaSources.by(AlohaArea.COSPLAY).size)
         assertEquals(20,AlohaSources.by(AlohaArea.ADULT).size)
         assertTrue(AlohaSources.by(AlohaArea.VIDEOS).isEmpty())
         assertEquals(3,AlohaSources.by(AlohaArea.TORRENTS).size)
@@ -24,7 +24,7 @@ class AlohaSourcesTest {
         assertFalse(sites.any{it.host in setOf("pornpics.com","celeb.st")})
         assertFalse(AlohaSources.by(AlohaArea.COSPLAY).any{
             it.host=="pimpbunny.com" })
-        assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="4kgirl.com"})
+        assertFalse(sites.any{it.host=="4kgirl.com"})
         assertTrue(AlohaSources.by(AlohaArea.COSPLAY).any{it.host=="everia.club"})
         assertTrue(AlohaSources.by(AlohaArea.ADULT).any{
             it.host=="pimpbunny.com" && it.url=="https://pimpbunny.com/" })

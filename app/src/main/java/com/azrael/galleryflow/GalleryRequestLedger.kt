@@ -37,6 +37,9 @@ internal object GalleryRequestLedger {
                        val albumTitle:String?=null,
                        val siteSource:String?=null) {
         val targeted get()=entityId!=null || siteHost!=null || albumUrl!=null
+        val retired get()=siteSource=="4kgirl" ||
+            siteHost?.let{com.azrael.pixivdumpsync.ProviderRetirement.isRetired("https://"+it+"/")}==true ||
+            albumUrl?.let{com.azrael.pixivdumpsync.ProviderRetirement.isRetired(it)}==true
         fun signature():String=mode.name+"|"+entityId.orEmpty()+"|"+
             siteHost.orEmpty()+"|"+albumUrl.orEmpty()+"|"+siteSource.orEmpty()
     }
@@ -58,7 +61,7 @@ internal object GalleryRequestLedger {
                     val source=value.optString("source").takeIf{it.isNotBlank()}
                         ?:legacySource(host)
                     val req=Request(mode,entity,host,album,title,source)
-                    if(req.targeted && none{it.signature()==req.signature()})
+                    if(req.targeted && !req.retired && none{it.signature()==req.signature()})
                         add(req)
                 }
             }.toMutableList()
@@ -86,7 +89,7 @@ internal object GalleryRequestLedger {
     }
 
     fun remember(context:Context,request:Request)=synchronized(lock){
-        if(!request.targeted)return@synchronized
+        if(!request.targeted || request.retired)return@synchronized
         val all=read(context)
         if(all.none{it.signature()==request.signature()}){
             check(all.size<MAX_REQUESTS){

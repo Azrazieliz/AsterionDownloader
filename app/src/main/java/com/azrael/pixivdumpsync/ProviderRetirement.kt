@@ -14,7 +14,7 @@ object ProviderRetirement {
     private val retired=setOf("chaturbate.com","camstreams.tv","pornpics.com","celeb.st","onscreens.me","cums.net","pornhits.com","omg.porn","omg.xxx","recu.me",
         "porntrex.com","xnxx.com","xvideos.com","peekvids.com","tnaflix.com",
         "mp4hentai.com","hentaihaven.xxx","helloporn.com","pornavhd.com",
-        "avple.tv")
+        "avple.tv","4kgirl.com")
 
     fun isRetired(address:String):Boolean {
         val uri=runCatching { URI(address) }.getOrNull() ?: return false
@@ -85,7 +85,8 @@ object ProviderRetirement {
             // subscriptions. Keep entities, original files, and history.
             val galleries=runCatching {
                 com.azrael.galleryflow.GalleryDb(app).use { db ->
-                    db.listEntities().filter { belongs(it.canonicalUrl) }.forEach {
+                    if(domain=="4kgirl.com")db.retireFourKGirl()
+                    else db.listEntities().filter { belongs(it.canonicalUrl) }.forEach {
                         db.setSelected(it.source,it.entityId,false)
                         db.setLiveEnabled(it.source,it.entityId,false)
                     }
