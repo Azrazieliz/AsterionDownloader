@@ -3,6 +3,7 @@ package com.azrael.pixivdumpsync
 import java.net.URI
 import java.net.URLDecoder
 import java.util.Locale
+import java.text.Normalizer
 import com.asterion.videoflow.VideoSiteProfiles
 
 /** Parsing and ranking are independent of Android and never remove user query terms. */
@@ -162,15 +163,19 @@ object SearchRanking {
     }
     /** Require most user terms in the title; descriptions cannot rescue junk titles. */
     fun relevance(query:String,title:String,description:String):Int {
-        val words=query.trim().lowercase(Locale.ROOT).split(Regex("\\s+"))
-            .filter{it.length>1}.distinct()
+        fun normalized(text:String)=Normalizer.normalize(text,Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+")," ").trim()
+        val phrase=normalized(query)
+        val words=phrase.split(' ').filter{it.isNotBlank()}.distinct()
         if(words.isEmpty())return 0
-        val head=title.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+")," ")
-        val body=description.lowercase(Locale.ROOT)
-        val titleMatches=words.count{head.contains(it)}
+        val head=normalized(title)
+        val body=normalized(description)
+        val titleTokens=head.split(' ')
+        val titleMatches=words.count{word->titleTokens.any{
+            it==word || (word.length>3 && it.startsWith(word))
+        }}
         val required=when(words.size){1->1;2->2;3->3;4->4;else->kotlin.math.ceil(words.size*0.8).toInt()}
         if(titleMatches<required)return 0
-        val phrase=query.trim().lowercase(Locale.ROOT)
         return titleMatches*30+
             (if(head.contains(phrase))150 else 0)+
             words.count{body.contains(it)}*3

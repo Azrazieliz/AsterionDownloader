@@ -4,6 +4,19 @@ package com.azrael.pixivdumpsync
  * Peer connections and nonzero downloadRate do not establish file progress.
  */
 internal object TorrentPeerDiagnostics {
+    /** Piece checks can take minutes on large resumed files. Checking and
+     * explicit pauses are not elapsed peer-stall time. Reset the baseline
+     * if libtorrent invalidates old pieces during a recheck. */
+    data class ProgressClock(val verifiedBytes:Long,val lastAdvanceMs:Long,
+                             val reannounced:Boolean=false) {
+        fun observe(nowMs:Long,verified:Long,checking:Boolean):ProgressClock =
+            if(checking || verified!=verifiedBytes)
+                ProgressClock(verified,nowMs)
+            else this
+        fun resume(nowMs:Long):ProgressClock = copy(lastAdvanceMs=nowMs,reannounced=false)
+        fun idle(nowMs:Long):Long = (nowMs-lastAdvanceMs).coerceAtLeast(0L)
+    }
+
     fun shouldReannounce(idleMs:Long,connectedSeeders:Int,
                          alreadyRequested:Boolean):Boolean =
         idleMs>=120_000L && !alreadyRequested

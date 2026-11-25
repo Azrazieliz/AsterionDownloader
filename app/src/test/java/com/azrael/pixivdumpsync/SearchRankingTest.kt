@@ -4,6 +4,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SearchRankingTest {
+    @Test fun rankingNormalizesPunctuationAndUnicodeBeforeFiltering(){
+        assertTrue(SearchRanking.relevance("Spider-Man","Spider Man documentary","")>0)
+        assertTrue(SearchRanking.relevance("Ｂｌｕｅ Archive","Blue Archive trailer","")>0)
+        assertTrue(SearchRanking.relevance("空","空 documentary","")>0)
+        assertTrue(SearchRanking.relevance("あおい・空","あおい 空","")>0)
+        assertEquals(0,SearchRanking.relevance("AI","Railway documentary",""))
+        assertEquals(0,SearchRanking.relevance("C++ tutorial","Python tutorial",""))
+    }
+
     @Test fun configuredProviderList() {
         val list=SearchRanking.parseProviders(
             "searxng|https://search.example|General\n"+

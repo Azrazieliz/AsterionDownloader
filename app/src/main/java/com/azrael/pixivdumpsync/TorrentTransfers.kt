@@ -836,9 +836,8 @@ class TorrentTransferService : Service() {
         // handle after restoring the user's file selection.
         if(session.isPaused)session.resume()
         handle.resume()
-        var lastVerifiedWanted=0L
-        var lastAdvance=android.os.SystemClock.elapsedRealtime()
-        var reannouncedSinceAdvance=false
+        var progressClock=TorrentPeerDiagnostics.ProgressClock(
+            0L,android.os.SystemClock.elapsedRealtime())
         while (true) {
             if(stopRequests.contains(id) || Thread.currentThread().isInterrupted ||
                 TorrentTransfers.isMarkedCancelled(this,id))
@@ -853,7 +852,7 @@ class TorrentTransferService : Service() {
                     Thread.sleep(500)
                 }
                 handle.resume()
-                lastAdvance=android.os.SystemClock.elapsedRealtime()
+                progressClock=progressClock.resume(android.os.SystemClock.elapsedRealtime())
             }
             val status = handle.status()
             val currentProgress=status.progress()
@@ -861,23 +860,19 @@ class TorrentTransferService : Service() {
             val wantedBytes=status.totalWanted().coerceAtLeast(0L)
             val checking=status.state().toString().contains("checking",ignoreCase=true)
             val now=android.os.SystemClock.elapsedRealtime()
-            if(checkedBytes>lastVerifiedWanted){
-                lastVerifiedWanted=checkedBytes
-                lastAdvance=now
-                reannouncedSinceAdvance=false
-            }
+            progressClock=progressClock.observe(now,checkedBytes,checking)
             val connected=status.numPeers().coerceAtLeast(0)
             val seeds=status.numSeeds().coerceIn(0,connected)
             val leechers=(connected-seeds).coerceAtLeast(0)
-            val idle=now-lastAdvance
+            val idle=progressClock.idle(now)
             if(!checking && !status.isFinished() &&
                 TorrentPeerDiagnostics.shouldReannounce(
-                    idle,seeds,reannouncedSinceAdvance)){
+                    idle,seeds,progressClock.reannounced)){
                 // Reannounce only once per 2-minute stall, respecting the
                 // tracker's own min_interval. Discover new seeders without
                 // discarding verified pieces or restarting the torrent.
                 handle.forceReannounce(0,-1)
-                reannouncedSinceAdvance=true
+                progressClock=progressClock.copy(reannounced=true)
             }
             // Connected peers are not necessarily seeders; a swarm can have
             // many leechers and still lack the pieces we need. Expose both.

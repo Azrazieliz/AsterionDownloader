@@ -4,6 +4,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TorrentPeerDiagnosticsTest {
+    @Test fun longRecheckDoesNotTriggerImmediatePeerTimeout(){
+        val clock=TorrentPeerDiagnostics.ProgressClock(50L,0L,true)
+            .observe(480_000L,0L,true)
+            .observe(482_000L,0L,false)
+        assertEquals(2_000L,clock.idle(482_000L))
+        assertFalse(clock.reannounced)
+        assertFalse(TorrentPeerDiagnostics.shouldReannounce(
+            clock.idle(482_000L),0,clock.reannounced))
+    }
+    @Test fun resumedOrInvalidatedPiecesResetStallBaseline(){
+        val old=TorrentPeerDiagnostics.ProgressClock(100L,0L,true)
+        val resumed=old.resume(600_000L)
+        assertEquals(0L,resumed.idle(600_000L))
+        assertFalse(resumed.reannounced)
+        val rechecked=old.observe(600_000L,20L,false)
+        assertEquals(20L,rechecked.verifiedBytes)
+        assertEquals(0L,rechecked.idle(600_000L))
+        assertEquals(0L,rechecked.observe(700_000L,21L,false).idle(700_000L))
+    }
+
     @Test fun connectedSeedersCannotMaskAStalledSelectedPiece(){
         assertTrue(TorrentPeerDiagnostics.shouldReannounce(120_000L,4,false))
         assertFalse(TorrentPeerDiagnostics.shouldReannounce(119_999L,4,false))
