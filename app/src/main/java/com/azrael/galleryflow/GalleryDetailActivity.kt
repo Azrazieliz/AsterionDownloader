@@ -38,12 +38,13 @@ class GalleryDetailActivity : Activity() {
             SourceId.fromWire(intent.getStringExtra(EXTRA_SOURCE).orEmpty())
         }.getOrNull()
         if (source == null || id.isEmpty()) { finish(); return }
-        images = GalleryDb(this).use { db ->
-            db.galleryMedia(source, id).filter {
-                it.contentUri != null && it.state == TransferState.COMPLETE &&
-                    it.filename.orEmpty().matches(
-                        Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$"""))
-            }
+        val (saved,albumUrl)=GalleryDb(this).use { db ->
+            db.galleryMedia(source,id) to db.galleryCanonicalUrl(source,id)
+        }
+        images=saved.filter{
+            it.contentUri != null && it.state == TransferState.COMPLETE &&
+                it.filename.orEmpty().matches(
+                    Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$"""))
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -88,6 +89,59 @@ class GalleryDetailActivity : Activity() {
         root.addView(grid)
         loadMore = D.action(this, "Show more images") { addPage() }
         root.addView(loadMore, D.lp(this, 16))
+        // CosplayTele can have an independently completed video fallback
+        // in VideoFlow. Keep that exact same local file accessible from its
+        // gallery as well, without copying it or calling a queued item saved.
+        if(source==SourceId.COSPLAYTELE){
+            val videos=LinearLayout(this).apply{
+                orientation=LinearLayout.VERTICAL
+                visibility=View.GONE
+            }
+            root.addView(videos,D.lp(this,16))
+            pool.execute{
+                val originals=LinkedHashMap<String,String>()
+                for(record in saved){
+                    if(record.state!=TransferState.COMPLETE ||
+                        !record.filename.orEmpty().matches(
+                            Regex("""(?i)^.*\.(?:mp4|m4v|webm|mov|mkv|avi|ts)$""")))continue
+                    val value=record.contentUri?:continue
+                    val uri=Uri.parse(value)
+                    if(uri.scheme!="content")continue
+                    val readable=runCatching{
+                        contentResolver.openFileDescriptor(uri,"r")
+                            ?.use{it.statSize>0L}?:false
+                    }.getOrDefault(false)
+                    if(readable)originals[value]=record.filename.orEmpty()
+                }
+                if(!albumUrl.isNullOrBlank()){
+                    val fallback=runCatching{
+                        com.asterion.videoflow.VideoDb(this).use{
+                            it.verifiedLocalVideoUriForUrl(albumUrl)
+                        }
+                    }.getOrNull()
+                    if(fallback!=null)originals.putIfAbsent(fallback,"Saved article video")
+                }
+                runOnUiThread{
+                    if(isFinishing || isDestroyed || originals.isEmpty())return@runOnUiThread
+                    videos.visibility=View.VISIBLE
+                    videos.addView(D.text(this,"Saved videos · "+originals.size,
+                        15f,D.white,true))
+                    for((uri,label) in originals){
+                        videos.addView(D.action(this,label){
+                            runCatching{
+                                startActivity(Intent(Intent.ACTION_VIEW).apply{
+                                    setDataAndType(Uri.parse(uri),"video/*")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                })
+                            }.onFailure{
+                                android.widget.Toast.makeText(this,
+                                    "No compatible video player",android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },D.lp(this,8))
+                    }
+                }
+            }
+        }
         setContentView(shell)
         addPage()
     }

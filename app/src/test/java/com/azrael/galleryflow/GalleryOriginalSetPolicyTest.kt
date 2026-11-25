@@ -22,6 +22,9 @@ class GalleryOriginalSetPolicyTest {
             counted,listOf(own),emptySet()))
         assertTrue(GalleryOriginalSetPolicy.archiveNeedsRecovery(
             counted,listOf(foreign),setOf("foreign")))
+        val held=own.copy(state=TransferState.CANCELLED)
+        assertTrue(GalleryOriginalSetPolicy.archiveRecoveryHeld(counted,listOf(held)))
+        assertFalse(GalleryOriginalSetPolicy.archiveNeedsRecovery(counted,listOf(held),emptySet()))
     }
 
     @Test fun unrelatedHistoricRetryRowsMustNotStarveCorrectSelectedOriginals(){

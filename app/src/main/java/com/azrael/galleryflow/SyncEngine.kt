@@ -36,8 +36,15 @@ internal object GalleryOriginalSetPolicy {
             it.kind==MediaKind.ARCHIVE
         }.flatMap{archiveMemberIds(it,records)}
 
+    fun archiveRecoveryHeld(archive:MediaRef,records:List<MediaRecord>):Boolean {
+        val members=archiveMemberIds(archive,records)
+        return records.any{it.mediaId in members &&
+            it.state in setOf(TransferState.CANCELLED,TransferState.SKIPPED)}
+    }
+
     fun archiveNeedsRecovery(archive:MediaRef,records:List<MediaRecord>,
                              valid:Set<String>):Boolean {
+        if(archiveRecoveryHeld(archive,records))return false
         val members=archiveMemberIds(archive,records)
         val verified=records.filter{
             it.mediaId in members && it.mediaId in valid &&
@@ -555,7 +562,10 @@ class SyncEngine(private val context: Context) {
                                     it.state==TransferState.COMPLETE &&
                                         files.exists(it.contentUri)
                                 }.map{it.mediaId}.toSet()
-                                if(GalleryOriginalSetPolicy.archiveNeedsRecovery(
+                                if(GalleryOriginalSetPolicy.archiveRecoveryHeld(media,records)){
+                                    allComplete=false
+                                    progress("Archive contains an owner-held member; saved files retained")
+                                }else if(GalleryOriginalSetPolicy.archiveNeedsRecovery(
                                         media,records,valid)){
                                     try{
                                         val recovered=files.recoverArchiveMembers(
