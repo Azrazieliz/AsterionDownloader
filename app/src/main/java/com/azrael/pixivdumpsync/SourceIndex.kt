@@ -589,6 +589,21 @@ internal object SourceIndexParser {
         return out.values.toList()
     }
 
+    /** Validate BOTH browser routes, including the exception fallback.
+     * An empty JS shell must not clear source errors or advance its cursor. */
+    internal fun requireRenderedCatalog(address:String,base:String,area:String,doc:Document){
+        check(!com.asterion.videoflow.WebDiscovery.dsysavCatalogNeedsBrowser(address,doc)){
+            "DSYSAV browser exposed no publisher watch cards"
+        }
+        if(SiteControls.key(base)=="4kgirl.com" && area=="COSPLAY" &&
+            !com.azrael.galleryflow.SelectedAlbumScope.owns(address)){
+            check(!SiteBackfillProfiles.entries(
+                doc,base,area,System.currentTimeMillis()).isNullOrEmpty()){
+                "4KGirl browser exposed no first-party gallery cards; verify publisher access"
+            }
+        }
+    }
+
     internal fun entries(doc:Document,base:String,area:String,clock:Long):List<IndexedItem>{
         // The generic path filters video cards by a path-depth heuristic.
         // DSYSAV's /en/watch?v=ID must instead be exact and same-publisher.
@@ -1252,6 +1267,18 @@ object SourceIndex {
      * each destination instead of forwarding a manually supplied Cookie off-site.
      */
     private fun fetchPage(context:Context,source:IndexedSource,address:String):Document {
+        var browserAttempted=false
+        fun renderedCatalog(current:String):Document {
+            browserAttempted=true
+            val html=BrowserPageFetch.html(context,current)
+            if(GalleryAccessGate.isMaskedForbidden(current,200,html))
+                throw com.azrael.galleryflow.HttpStatusException(403,
+                    "4KGirl publisher still forbids this browser session")
+            val rendered=Jsoup.parse(html,current)
+            SourceIndexParser.requireRenderedCatalog(current,source.url,
+                source.area,rendered)
+            return rendered
+        }
         try{
             var current=address
             repeat(4){
@@ -1266,7 +1293,11 @@ object SourceIndex {
                     .followRedirects(false).ignoreHttpErrors(true)
                     .apply{
                         NetworkRoute.javaProxy(context,current)?.let{proxy(it)}
-                        SiteSession.cookie(current)?.let{header("Cookie",it)}
+                        val session=if(SiteControls.key(current) in
+                            setOf("dsysav.com","4kgirl.com"))
+                            SiteSession.cookie(context,current)
+                        else SiteSession.cookie(current)
+                        session?.let{header("Cookie",it)}
                     }
                     .execute()
                 if(response.statusCode() in 300..399){
@@ -1307,18 +1338,7 @@ object SourceIndex {
                         // but expose zero gallery cards before JavaScript.
                         // This is the real SourceIndex worker, not only
                         // Kyora's independent cover-preview cache.
-                        val html=BrowserPageFetch.html(context,current)
-                        if(GalleryAccessGate.isMaskedForbidden(current,200,html))
-                            throw com.azrael.galleryflow.HttpStatusException(403,
-                                "4KGirl browser still requires publisher access")
-                        val rendered=Jsoup.parse(html,current)
-                        check(!SiteBackfillProfiles.entries(
-                            rendered,source.url,"COSPLAY",
-                            System.currentTimeMillis()).isNullOrEmpty()){
-                            "4KGirl browser exposed no first-party gallery "+
-                                "cards after rendering; verify publisher access"
-                        }
-                        return rendered
+                        return renderedCatalog(current)
                     }
                     if(com.asterion.videoflow.WebDiscovery
                             .dsysavCatalogNeedsBrowser(current,doc)){
@@ -1328,14 +1348,7 @@ object SourceIndex {
                         if(!SiteSession.bound(context,current) &&
                             !BrowserPageFetch.publicEligible(current))
                             error("DSYSAV catalog requires normal browser access")
-                        val rendered=Jsoup.parse(
-                            BrowserPageFetch.html(context,current),current)
-                        check(!com.asterion.videoflow.WebDiscovery
-                            .dsysavCatalogNeedsBrowser(current,rendered)){
-                            "DSYSAV catalog still exposed no publisher watch "+
-                                "links after JavaScript rendering"
-                        }
-                        return rendered
+                        return renderedCatalog(current)
                     }
                     return doc
                 }
@@ -1345,13 +1358,9 @@ object SourceIndex {
             // Some sites deliver provider-authorized content only in their
             // browser session. Use the existing safe WebView content parser
             // after the user has actually connected that account.
-            if(!SiteSession.bound(context,address) &&
-                !BrowserPageFetch.publicEligible(address))throw error
-            val browser=BrowserPageFetch.html(context,address)
-            if(GalleryAccessGate.isMaskedForbidden(address,200,browser))
-                throw com.azrael.galleryflow.HttpStatusException(403,
-                    "4KGirl publisher still forbids this browser session")
-            return Jsoup.parse(browser,address)
+            if(browserAttempted || (!SiteSession.bound(context,address) &&
+                !BrowserPageFetch.publicEligible(address)))throw error
+            return renderedCatalog(address)
         }
     }
     /** A real synchronous single-site scan, owned by a cancellable site job. */

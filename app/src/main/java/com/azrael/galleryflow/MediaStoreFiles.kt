@@ -192,18 +192,67 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
         }
     }
 
+    /** Re-open only an existing exact archive receipt; verify its recorded
+     * SHA-256 while copying into private temporary storage. Publication and
+     * rollback concern only newly recovered members. */
+    internal fun recoverArchiveMembers(entity:EntityRecord,gallery:GalleryMeta,
+                                       archive:MediaRef,record:MediaRecord):List<ExtractedDownload>{
+        require(record.source==archive.source && record.mediaId==archive.stableId &&
+            record.galleryId==archive.galleryStableId &&
+            record.state==TransferState.COMPLETE){"No matching saved archive"}
+        val hash=record.sha256?.takeIf{it.matches(Regex("[a-fA-F0-9]{64}"))}
+            ?:throw AdapterException("Saved archive has no verified SHA-256 receipt")
+        val uri=Uri.parse(requireNotNull(record.contentUri))
+        require(uri.scheme=="content"){"Invalid saved archive URI"}
+        val name=record.filename.orEmpty()
+        val mime=context.contentResolver.getType(uri).orEmpty()
+        val members=when{
+            isZip(name,mime)->extractZip(entity,gallery,archive,uri,hash)
+            isRar(name,mime)->extractRar(entity,gallery,archive,uri,hash)
+            else->throw AdapterException("Saved archive format is unsupported")
+        }
+        try{
+            members.forEach{finishRow(Uri.parse(it.result.contentUri))}
+            return members
+        }catch(t:Throwable){
+            members.forEach{delete(it.result.contentUri)}
+            throw t
+        }
+    }
+
+    private fun copyArchiveToTemp(uri:Uri,temp:File,expectedHash:String?){
+        val digest=MessageDigest.getInstance("SHA-256")
+        context.contentResolver.openInputStream(uri)!!.use{source->
+            temp.outputStream().buffered().use{output->
+                val buffer=ByteArray(128*1024)
+                while(true){
+                    if(!SyncControl.checkpoint())throw SyncCancelledException()
+                    val read=source.read(buffer)
+                    if(read<0)break
+                    if(read==0)continue
+                    output.write(buffer,0,read)
+                    if(expectedHash!=null)digest.update(buffer,0,read)
+                }
+            }
+        }
+        if(expectedHash!=null){
+            val actual=digest.digest().joinToString(""){"%02x".format(it)}
+            if(!actual.equals(expectedHash,true))
+                throw AdapterException("Saved archive SHA-256 no longer matches its receipt")
+        }
+    }
+
     private fun extractZip(
         entity: EntityRecord,
         gallery: GalleryMeta,
         archive: MediaRef,
-        archiveUri: Uri
+        archiveUri: Uri,
+        expectedHash:String?=null
     ): List<ExtractedDownload> {
         val temp = File.createTempFile("galleryflow_", ".zip", context.cacheDir)
         val createdUris = mutableListOf<Uri>()
         try {
-            context.contentResolver.openInputStream(archiveUri)!!.use { input ->
-                temp.outputStream().use { output -> input.copyTo(output) }
-            }
+            copyArchiveToTemp(archiveUri,temp,expectedHash)
             val zip = ZipFile(temp)
             if (zip.isEncrypted) {
                 val password = archive.archivePassword?.takeIf { it.isNotBlank() }
@@ -219,6 +268,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                 val entryName = header.fileName.replace('\\', '/')
                 val ext = entryName.substringAfterLast('.', "").lowercase()
                 val mime = mimeForExtension(ext) ?: continue
+                if(!mime.startsWith("image/") && !mime.startsWith("video/"))continue
                 val kind = if (mime.startsWith("video/")) MediaKind.VIDEO else MediaKind.IMAGE
                 if (archive.archiveVideosOnly && kind != MediaKind.VIDEO) continue
                 val base = safeFileName(entryName.substringAfterLast('/').ifBlank { "file.$ext" })
@@ -271,14 +321,13 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
         entity: EntityRecord,
         gallery: GalleryMeta,
         archive: MediaRef,
-        archiveUri: Uri
+        archiveUri: Uri,
+        expectedHash:String?=null
     ): List<ExtractedDownload> {
         val temp = File.createTempFile("galleryflow_", ".rar", context.cacheDir)
         val createdUris = mutableListOf<Uri>()
         try {
-            context.contentResolver.openInputStream(archiveUri)!!.use { input ->
-                temp.outputStream().use { output -> input.copyTo(output) }
-            }
+            copyArchiveToTemp(archiveUri,temp,expectedHash)
 
             val password = archive.archivePassword?.takeIf { it.isNotBlank() }
             val rar = if (password == null) Archive(temp) else Archive(temp, password)
@@ -294,6 +343,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     val entryName = header.fileName.replace('\\', '/')
                     val ext = entryName.substringAfterLast('.', "").lowercase()
                     val mime = mimeForExtension(ext) ?: continue
+                    if(!mime.startsWith("image/") && !mime.startsWith("video/"))continue
                     val kind = if (mime.startsWith("video/")) MediaKind.VIDEO else MediaKind.IMAGE
                     if (archive.archiveVideosOnly && kind != MediaKind.VIDEO) continue
 

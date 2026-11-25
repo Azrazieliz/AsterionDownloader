@@ -37,6 +37,15 @@ class DsysavBrowserCatalogTest {
         assertEquals("video",found.single().kind)
     }
 
+    @Test fun emptyBrowserFallbackIsAnErrorNotAnEmptySuccessfulIndex(){
+        val empty=Jsoup.parse("<html><body><div id='__next'></div></body></html>",home)
+        assertThrows(IllegalStateException::class.java){
+            SourceIndexParser.requireRenderedCatalog(home,home,"ADULT",empty)
+        }
+        val real=Jsoup.parse("<a href='/en/watch?v=abcdefghi'>Publisher item</a>",home)
+        SourceIndexParser.requireRenderedCatalog(home,home,"ADULT",real)
+    }
+
     @Test fun emptyServerShellNeverPretendsToContainVideo(){
         val page=Jsoup.parse("""
             <html><head><title>DSAV</title></head>

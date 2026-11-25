@@ -22,6 +22,35 @@ internal object GalleryBackfillBudget {
 internal object GalleryOriginalSetPolicy {
     fun complete(requested:Set<String>,valid:Set<String>):Boolean =
         requested.isNotEmpty() && requested.all{it in valid}
+
+    fun archiveMemberIds(archive:MediaRef,records:List<MediaRecord>):Set<String> {
+        val prefix="archive:"+archive.normalizedUrl+"#"
+        return records.asSequence().filter{
+            it.source==archive.source && it.galleryId==archive.galleryStableId &&
+                it.url.startsWith(prefix)
+        }.map{it.mediaId}.toSet()
+    }
+
+    fun retainedIds(selected:List<MediaRef>,records:List<MediaRecord>):Set<String> =
+        selected.map{it.stableId}.toSet()+selected.filter{
+            it.kind==MediaKind.ARCHIVE
+        }.flatMap{archiveMemberIds(it,records)}
+
+    fun archiveNeedsRecovery(archive:MediaRef,records:List<MediaRecord>,
+                             valid:Set<String>):Boolean {
+        val members=archiveMemberIds(archive,records)
+        val verified=records.filter{
+            it.mediaId in members && it.mediaId in valid &&
+                it.state==TransferState.COMPLETE
+        }
+        val photos=verified.count{
+            it.filename.orEmpty().matches(
+                Regex("""(?i)^.*\.(?:jpg|jpeg|png|gif|webp|avif)$"""))
+        }
+        return (archive.expectedArchivePhotos?.let{photos!=it}
+            ?: (archive.provider=="4KHD" && photos==0)) ||
+            members.any{it !in valid}
+    }
 }
 
 class SyncEngine(private val context: Context) {
@@ -435,7 +464,8 @@ class SyncEngine(private val context: Context) {
                 if(photoSetVerified){
                     val moved=db.detachUnverifiedSelectedAlbumMedia(
                         meta.source,meta.stableId,
-                        mediaItems.map{it.stableId}.toSet())
+                        GalleryOriginalSetPolicy.retainedIds(mediaItems,
+                            db.galleryMedia(meta.source,meta.stableId)))
                     if(moved>0)progress(
                         "Separated $moved unrelated saved files from "+
                             meta.title+" without deleting originals")
@@ -459,7 +489,8 @@ class SyncEngine(private val context: Context) {
             fun commitSaved(item: MediaRef, fresh: DownloadResult) {
                 val duplicate = db.findCompleteByHash(fresh.sha256)
                 if (duplicate != null && files.exists(duplicate.contentUri)) {
-                    files.delete(fresh.contentUri)
+                    if(duplicate.contentUri!=fresh.contentUri)
+                        files.delete(fresh.contentUri)
                     db.markMediaComplete(
                         item,
                         fresh.copy(
@@ -512,7 +543,39 @@ class SyncEngine(private val context: Context) {
                             continue
                         }
                         if (existing != null && existing.state == TransferState.COMPLETE &&
-                            files.exists(existing.contentUri)) continue
+                            files.exists(existing.contentUri)) {
+                            // A saved archive and its extracted member receipts
+                            // are distinct. Repair missing members from the
+                            // existing verified local archive, never download a
+                            // second copy or remove the owner's original.
+                            if(media.kind==MediaKind.ARCHIVE &&
+                                meta.source in setOf(SourceId.FOUR_K_HD,SourceId.COSPLAYTELE)){
+                                val records=db.galleryMedia(meta.source,meta.stableId)
+                                val valid=records.filter{
+                                    it.state==TransferState.COMPLETE &&
+                                        files.exists(it.contentUri)
+                                }.map{it.mediaId}.toSet()
+                                if(GalleryOriginalSetPolicy.archiveNeedsRecovery(
+                                        media,records,valid)){
+                                    try{
+                                        val recovered=files.recoverArchiveMembers(
+                                            entity,meta,media,existing)
+                                        for(member in recovered){
+                                            db.upsertMedia(entity.entityId,member.media)
+                                            commitSaved(member.media,member.result)
+                                        }
+                                        progress("Recovered archive members from saved original")
+                                    }catch(e:Exception){
+                                        if(e is SyncCancelledException ||
+                                            e is InterruptedException) return false
+                                        allComplete=false
+                                        progress("Saved archive recovery failed: "+
+                                            (e.message?:e.javaClass.simpleName).take(160))
+                                    }
+                                }
+                            }
+                            continue
+                        }
                         if (existing != null && !files.exists(existing.contentUri)) {
                             db.setMediaState(media.source, media.stableId,
                                 TransferState.PENDING)
@@ -552,6 +615,11 @@ class SyncEngine(private val context: Context) {
                                 }
                                 db.setMediaState(media.source, media.stableId, state)
                                 if (cause.code == 429) rateLimited = true
+                            } else if(cause is InteractiveProviderRequiredException){
+                                db.setMediaState(media.source,media.stableId,
+                                    TransferState.INACCESSIBLE)
+                                progress("Original requires normal provider access: "+
+                                    cause.provider)
                             } else {
                                 db.setMediaState(media.source, media.stableId,
                                     TransferState.RETRYING)
