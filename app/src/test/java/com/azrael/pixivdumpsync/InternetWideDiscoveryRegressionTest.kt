@@ -63,7 +63,7 @@ class InternetWideDiscoveryRegressionTest {
         assertEquals(listOf("https://unknown.example/story/rare-show"),urls)
     }
 
-    @Test fun fourKGirlPlaceholderCannotReplaceLazyFullCover(){
+    @Test fun retiredFourKGirlCannotPublishLazyFullCover(){
         val base="https://www.4kgirl.com/"
         val html="""
           <article class="gridwp-grid-post">
@@ -80,11 +80,10 @@ class InternetWideDiscoveryRegressionTest {
         assertEquals(1,entries.size)
         assertTrue(entries.single().preview.orEmpty().endsWith("actual-600.webp"))
         val cards=KyoraCreatorPreviews.parse(html,base)
-        assertEquals(1,cards.size)
-        assertTrue(cards.single().cover.endsWith("actual-600.webp"))
+        assertTrue("Retired provider must not publish cards",cards.isEmpty())
     }
 
-    @Test fun fourKGirlSiblingThumbnailIsFoundOnPublisherListing(){
+    @Test fun retiredFourKGirlSiblingThumbnailCannotResurface(){
         val base="https://www.4kgirl.com/"
         val html="""
           <div class="gridwp-grid-post">
@@ -96,8 +95,6 @@ class InternetWideDiscoveryRegressionTest {
           </div>
         """.trimIndent()
         val found=KyoraCreatorPreviews.parse(html,base)
-        assertEquals(1,found.size)
-        assertEquals("https://www.4kgirl.com/example-cosplay-set/",found.single().url)
-        assertTrue(found.single().cover.contains("example-640.jpg"))
+        assertTrue(found.isEmpty())
     }
 }

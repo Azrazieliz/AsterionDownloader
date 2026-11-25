@@ -3,15 +3,17 @@ package com.azrael.galleryflow
 import org.junit.Assert.*
 import org.junit.Test
 
-/** The working Kyora six-adapter registry is the canonical production contract. */
+/** The five retained Kyora adapters is the canonical production contract. */
 class CoreOnlyRegistryTest {
     @Test fun canonicalKyoraAdaptersAndGenericFallbackShip() {
         assertEquals(setOf(
-            SourceId.BUONDUA, SourceId.KIUTAKU, SourceId.FOUR_K_GIRL,
+            SourceId.BUONDUA, SourceId.KIUTAKU,
             SourceId.EVERIA, SourceId.FOUR_K_HD, SourceId.COSPLAYTELE,
             SourceId.GENERIC
         ), AdapterRegistry.adapters.map { it.source }.toSet())
-        assertEquals(7, AdapterRegistry.adapters.size)
+        assertEquals(6, AdapterRegistry.adapters.size)
+        assertFalse(AdapterRegistry.available(SourceId.FOUR_K_GIRL))
+        assertEquals(SourceId.FOUR_K_GIRL, SourceId.fromWire("4kgirl"))
     }
 
     @Test fun realProvidersOverrideGenericButUnknownSitesRemainAddable() {

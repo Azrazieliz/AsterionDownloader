@@ -40,7 +40,7 @@ class KyoraPreviewSourceIsolationTest {
             "https://kiutaku.com/","Unrecognized gallery markup"))
     }
 
-    @Test fun fourKGirlGridwpSiblingLazyCoverIsIndexedAsOneRealAlbum(){
+    @Test fun fourKGirlLegacyParserRemainsReadableButRetiredTilesAreHidden(){
         val source="https://www.4kgirl.com/"
         val html="""<main><div class="gridwp-grid-post">
             <div class="post-thumbnail"><img
@@ -65,9 +65,7 @@ class KyoraPreviewSourceIsolationTest {
         assertEquals("https://www.4kgirl.com/wp-content/uploads/2026/11/original-cover.jpg",
             entries.single().preview)
         val tiles=KyoraCreatorPreviews.parse(html,source)
-        assertEquals(1,tiles.size)
-        assertEquals(entries.single().url,tiles.single().url)
-        assertEquals(entries.single().preview,tiles.single().cover)
+        assertTrue("Retired publisher must not reappear in the gallery UI",tiles.isEmpty())
     }
 
     @Test fun differentPublishersCannotShareAlbumCards(){
