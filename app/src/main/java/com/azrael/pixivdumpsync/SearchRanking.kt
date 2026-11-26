@@ -130,12 +130,24 @@ object SearchRanking {
             if(score<=0)continue
             val normalized=hit.copy(score=score)
             val key=canonicalKey(hit.url)
-            if(unique[key]?.score?.let{it>=score}==true)continue
-            unique[key]=normalized
+            val previous=unique[key]
+            // Retain a real poster supplied by another index for this exact
+            // same result URL; ranking alone must not discard its metadata.
+            unique[key]=mergeDiscoveryHit(previous,normalized)
         }
         return unique.values.sortedWith(compareByDescending<RankedHit>{it.score}
             .thenBy{it.title.lowercase(Locale.ROOT)})
     }
+    internal fun mergeDiscoveryHit(previous:RankedHit?,candidate:RankedHit):RankedHit {
+        if(previous==null)return candidate
+        require(canonicalKey(previous.url)==canonicalKey(candidate.url))
+        val winner=if(previous.score>=candidate.score)previous else candidate
+        val other=if(winner===previous)candidate else previous
+        val poster=winner.thumbnail?.takeIf{validUrl(it)}
+            ?:other.thumbnail?.takeIf{validUrl(it)}
+        return winner.copy(thumbnail=poster)
+    }
+
     /** Torrent-index detail pages can be discovered, but cannot be queued as videos. */
     fun isIndexPage(url:String):Boolean {
         val uri=runCatching{URI(url)}.getOrNull()?:return false

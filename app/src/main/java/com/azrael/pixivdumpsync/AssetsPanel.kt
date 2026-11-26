@@ -85,16 +85,20 @@ object AssetsPanel {
                     if(obj.has("url")){
                         val url=obj.optString("url")
                         if(safe(url))files+=path to url
-                        return
+                        // A model file can carry an "include" object listing
+                        // required textures and buffers. Do not stop traversal
+                        // just because the parent has its own downloadable URL.
                     }
                     for(key in obj.keys()){
                         if(key.matches(Regex("[A-Za-z0-9_.+-]{1,80}")))
                             obj.optJSONObject(key)?.let{walk(it,path+"/"+key,depth+1)}
                     }
                 }
-                walk(root,"",0);files
+                walk(root,"",0);files.distinctBy{it.second}
             }
             a.runOnUiThread{
+                if(a.isFinishing || a.isDestroyed || !status.isAttachedToWindow)
+                    return@runOnUiThread
                 output.onSuccess{files->
                     if(files.isEmpty()){status.text="No publicly downloadable files";return@onSuccess}
                     val picked=BooleanArray(files.size)
@@ -175,7 +179,8 @@ object AssetsPanel {
                 }
                 a.runOnUiThread{
                     if(a.isDestroyed || a.isFinishing ||
-                        verifyStatus.tag!==token)return@runOnUiThread
+                        !verifyStatus.isAttachedToWindow ||
+                    verifyStatus.tag!==token)return@runOnUiThread
                     verified.onSuccess{actual->
                         val filename=file.title.replace(
                             Regex("[^A-Za-z0-9._-]"),"_").take(95)+
@@ -227,6 +232,14 @@ object AssetsPanel {
             12f,ui.secondary)
         val results=LinearLayout(a).apply{orientation=LinearLayout.VERTICAL}
         var modelWorker:Thread?=null
+        results.addOnAttachStateChangeListener(object:android.view.View.OnAttachStateChangeListener{
+            override fun onViewAttachedToWindow(v:android.view.View){}
+            override fun onViewDetachedFromWindow(v:android.view.View){
+                results.tag=Any()
+                modelWorker?.interrupt()
+                modelWorker=null
+            }
+        })
         val stopSearch=ui.action(a,"STOP MODEL SEARCH",false){
             // Invalidating the view token also prevents a late provider
             // response from repainting a search the owner cancelled.
@@ -274,7 +287,7 @@ object AssetsPanel {
                         OpenWebModelSearch.find(q){batch->
                             a.runOnUiThread{
                                 if(a.isDestroyed || a.isFinishing ||
-                                    results.parent==null ||
+                                    !results.isAttachedToWindow ||
                                     results.tag!==requestToken)return@runOnUiThread
                                 appendIncremental(batch)
                                 status.text=published.size.toString()+
@@ -298,7 +311,7 @@ object AssetsPanel {
                 val (outcome,ambient,web)=searches
                 a.runOnUiThread{
                     if(a.isDestroyed || a.isFinishing ||
-                        results.parent==null || results.tag!==requestToken)
+                        !results.isAttachedToWindow || results.tag!==requestToken)
                         return@runOnUiThread
                     stopSearch.visibility=android.view.View.GONE
                     var polyCount=0
@@ -342,6 +355,7 @@ object AssetsPanel {
                                 if(!safe(url))return@mapNotNull null
                                 f.optString("attributes","pack")+".zip" to url
                             }
+                            if(originals.isEmpty())continue
                             val tile=ui.card(a)
                             val image=ImageView(a).apply{
                                 scaleType=ImageView.ScaleType.FIT_CENTER
@@ -377,7 +391,7 @@ object AssetsPanel {
                     status.text=buildString{
                         append(polyCount).append(" Poly Haven · ")
                         append(ambientCount).append(" ambientCG · ")
-                        append(webCount).append(" verified public model-file links")
+                        append(webCount).append(" indexed public model-file links")
                         if(polyCount+ambientCount+webCount==0 && errors.isEmpty())
                             append(" · No matching originals")
                         if(errors.isNotEmpty())

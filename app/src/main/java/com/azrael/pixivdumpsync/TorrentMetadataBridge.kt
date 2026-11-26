@@ -41,7 +41,7 @@ internal object TorrentMetadataBridge {
     }
     internal fun releaseRequest(key:String){preparing.remove(key)}
     private fun requestKey(value:String):String{
-        val parsed=CloudTorrentPolicy.infoHash(value)
+        val parsed=normalizedHexInfoHash(value)
         if(parsed!=null)return "magnet:"+parsed
         return "metadata:"+id(value.toByteArray(Charsets.UTF_8))
     }
@@ -360,6 +360,13 @@ internal object TorrentMetadataBridge {
         // symbolic links and v2-only descriptors out of native file lists.
         val checked=BencodedTorrentManifest.parse(bytes)
         require(checked.files.size in 1..20_000){"Invalid torrent file count"}
+        if(action==TorrentTransferService.PREPARE_MAGNET){
+            val requested=normalizedHexInfoHash(intent.getStringExtra("magnet").orEmpty())
+                ?:error("Unsupported magnet identity; a v1 info hash is required")
+            require(checked.infoHashHex.equals(requested,true)){
+                "Peer metadata does not match the requested torrent"
+            }
+        }
         val hash=id(bytes)
         val file=File(root(context),"$hash.torrent")
         if(!file.exists())file.writeBytes(bytes)
@@ -369,6 +376,9 @@ internal object TorrentMetadataBridge {
         }
         val list=info.files()
         val entries=(0 until info.numFiles()).map{i->list.filePath(i)}
+        require(checked.files.indices.all{i->
+            checked.files[i].path==entries[i] && checked.files[i].size==list.fileSize(i)
+        }){"Native file ordering or lengths disagree with the verified descriptor"}
         if(folder=="Games")require(GameTorrentPolicy.hasGamePayload(entries)){
             "This torrent contains no identifiable game files"
         }
@@ -401,6 +411,20 @@ internal object TorrentMetadataBridge {
         val list=obj.getJSONArray("files")
         require(list.length() in 1..20000){"Invalid torrent manifest"}
         val paths=(0 until list.length()).map{list.getJSONObject(it).getString("path")}
+        val descriptor=File(root(a),"$hash.torrent")
+        require(descriptor.isFile && descriptor.length() in 33L..8_388_608L){
+            "Original torrent descriptor missing or invalid"
+        }
+        val bytes=descriptor.readBytes()
+        require(id(bytes)==hash){"Torrent descriptor identity mismatch"}
+        val checked=BencodedTorrentManifest.parse(bytes)
+        require(checked.files.size==paths.size && checked.files.indices.all{i->
+            checked.files[i].path==paths[i] &&
+                checked.files[i].size==list.getJSONObject(i).getLong("size")
+        }){"Cached file list disagrees with the original descriptor"}
+        if(folder=="Games")require(GameTorrentPolicy.hasGamePayload(paths)){
+            "This torrent contains no identifiable game files"
+        }
         // Rendering 20,000 CheckBox rows in one AlertDialog could freeze
         // System UI under native memory pressure. Retain ALL 20,000 index
         // choices in one small boolean array; render at most 80 rows at once.
