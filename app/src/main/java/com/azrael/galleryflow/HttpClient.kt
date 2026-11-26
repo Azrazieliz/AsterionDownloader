@@ -49,12 +49,13 @@ open class HttpClient(private val context:android.content.Context?=null) {
     fun textResponse(
         url: String,
         referer: String? = null,
-        accept: String = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        accept: String = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        timeoutMs:Int=30_000
     ): TextResponse {
         if (!SyncControl.checkpoint()) throw SyncCancelledException()
         val connection = Jsoup.connect(url)
             .userAgent(USER_AGENT)
-            .timeout(30_000)
+            .timeout(timeoutMs.coerceIn(1,30_000))
             .followRedirects(true)
             .ignoreHttpErrors(true)
             .ignoreContentType(true)

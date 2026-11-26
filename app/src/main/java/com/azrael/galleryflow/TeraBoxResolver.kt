@@ -10,7 +10,8 @@ import java.util.Locale
 class TeraBoxResolver(private val http: HttpClient) {
     fun resolvePublicShare(url: String, referer: String? = null,
                            requireArchive:Boolean=false): String {
-        val landing = http.textResponse(url, referer)
+        val budget=GalleryAcquisitionBudget()
+        val landing = http.textResponse(url, referer, timeoutMs=budget.nextTimeoutMs())
         val html = unescape(landing.body)
 
         // A selected 4KHD album must resolve an actual archive, not a
@@ -37,7 +38,8 @@ class TeraBoxResolver(private val http: HttpClient) {
             shortUrl = shortUrl,
             logId = publishedLogId(html),
             directory = null,
-            depth = 0
+            depth = 0,
+            budget = budget
         )
         if (files.isEmpty()) {
             throw InteractiveProviderRequiredException(
@@ -80,8 +82,10 @@ class TeraBoxResolver(private val http: HttpClient) {
         shortUrl: String,
         logId: String?,
         directory: String?,
-        depth: Int
+        depth: Int,
+        budget:GalleryAcquisitionBudget
     ): List<RemoteFile> {
+        budget.nextTimeoutMs()
         if (depth > 4) return emptyList()
         // Public shares currently have multiple first-party request shapes.
         // The prior implementation always forced channel=dubox and
@@ -98,16 +102,20 @@ class TeraBoxResolver(private val http: HttpClient) {
 
         var lastError: String? = null
         for (base in hosts) for ((variant,query) in queries.withIndex()) {
+            val timeout=budget.nextTimeoutMs()
             val response = try {
                 http.textResponse("$base/share/list?$query", sharePage,
-                    "application/json,text/plain,*/*")
-            } catch (t: Throwable) {
+                    "application/json,text/plain,*/*",timeoutMs=timeout)
+            } catch (t: Exception) {
+                if(t is SyncCancelledException || t is InterruptedException ||
+                    Thread.currentThread().isInterrupted)throw t
+                if(t is HttpStatusException && t.code in setOf(401,403,429))throw t
                 lastError = t.message?.take(150)
                 continue
             }
             val json = try {
                 JSONObject(response.body)
-            } catch (_: Throwable) {
+            } catch (_: org.json.JSONException) {
                 lastError = "TeraBox share-list response was not JSON"
                 continue
             }
@@ -133,7 +141,7 @@ class TeraBoxResolver(private val http: HttpClient) {
                     // nested directory traversal. An API /share/list URL is
                     // not the authorized share page and can cause errno=-4.
                     files += listFiles(sharePage, jsToken, shortUrl,
-                        logId, path, depth + 1)
+                        logId, path, depth + 1,budget)
                     continue
                 }
                 val name = item.optString("server_filename").ifBlank { "file-$i" }

@@ -60,12 +60,16 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
 
     fun download(entity: EntityRecord, gallery: GalleryMeta, media: MediaRef): DownloadOutcome {
         if (!SyncControl.checkpoint()) throw SyncCancelledException()
+        if(media.kind==MediaKind.ARCHIVE)
+            SyncControl.updateMessage("Resolving selected archive · "+gallery.title.take(90))
         val resolved = if (media.provider.equals("SoraFolder", ignoreCase = true)) {
             SoraFolderWebResolver(context).resolve(media.url)
         } else {
             http.resolveDownloadUrl(media.url, media.referer, media.provider)
         }
         val resolvedReferer = GalleryArchiveRefererPolicy.preferred(media)
+        if(media.kind==MediaKind.ARCHIVE)
+            SyncControl.updateMessage("Opening selected archive · "+gallery.title.take(90))
         openWithFallback(media, resolved, resolvedReferer).use { response ->
             val responseMime = response.contentType?.lowercase()
             if (media.kind == MediaKind.ARCHIVE && responseMime?.startsWith("text/html") == true) {
@@ -88,6 +92,7 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
             var bytes = 0L
             val signature=ByteArray(40)
             var signatureSize=0
+            var lastProgress=0L
             var extracted:List<ExtractedDownload> = emptyList()
             try {
                 context.contentResolver.openOutputStream(uri, "w")!!.use { out ->
@@ -104,6 +109,16 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                         }
                         digest.update(buffer, 0, read)
                         bytes += read
+                        if(media.kind==MediaKind.ARCHIVE){
+                            val now=android.os.SystemClock.elapsedRealtime()
+                            if(now-lastProgress>=2000L){
+                                lastProgress=now
+                                val total=if(response.contentLength>0)
+                                    " / "+(response.contentLength/1048576L)+" MiB" else ""
+                                SyncControl.updateMessage("Archive transfer · "+
+                                    (bytes/1048576L)+" MiB"+total+" · "+gallery.title.take(60))
+                            }
+                        }
                     }
                 }
                 if (bytes <= 0L || (response.contentLength > 0L && bytes != response.contentLength))
@@ -117,6 +132,8 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
                     sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
                     aHash64 = if (mime.startsWith("image/")) averageHash64(uri) else null
                 )
+                if(media.kind==MediaKind.ARCHIVE)
+                    SyncControl.updateMessage("Verifying and extracting selected archive · "+gallery.title.take(90))
                 extracted = when {
                     media.kind != MediaKind.ARCHIVE -> emptyList()
                     isZip(filename, mime) -> extractZip(entity, gallery, media, uri)
@@ -176,7 +193,9 @@ class MediaStoreFiles(private val context: Context, private val http: HttpClient
             } catch (e: HttpStatusException) {
                 last = e
                 if (e.code !in listOf(401, 403)) throw e
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
+                if(t is SyncCancelledException || t is InterruptedException ||
+                    Thread.currentThread().isInterrupted)throw t
                 last = t
                 // Connection/TLS failures can also be referer/path dependent on CDNs.
                 // Try the remaining safe variants before giving up.
