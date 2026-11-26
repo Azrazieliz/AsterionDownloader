@@ -53,6 +53,20 @@ class VideoAgentAdmissionTest {
         assertFalse(VideoAgentAdmission.repeatedRecentPrimaryMemoryKills(
             listOf(now+minute,now-2L*60*minute),now))
     }
+    @Test fun oneRecentPrimaryKillPreventsSecondExtractorDuringCooldown(){
+        val now=1_795_360_000_000L
+        assertTrue(VideoAgentAdmission.recentPrimaryMemoryKill(
+            listOf(now-20L*3600_000L,now-30L*3600_000L),now))
+        assertFalse(VideoAgentAdmission.recentPrimaryMemoryKill(
+            listOf(now-25L*3600_000L,now+1),now))
+    }
+
+    @Test fun primaryDoesNotStartHeavyRuntimeUnderOsMemoryPressure(){
+        assertTrue(VideoAgentAdmission.primaryNativeOnly(5_000_000_000L,true,1_000_000_000L))
+        assertTrue(VideoAgentAdmission.primaryNativeOnly(1_500_000_000L,false,1_000_000_000L))
+        assertFalse(VideoAgentAdmission.primaryNativeOnly(5_350_000_000L,false,1_000_000_000L))
+    }
+
     @Test fun atMemoryThresholdSecondProcessIsEligible(){
         assertFalse(VideoAgentAdmission.secondaryNativeOnly(
             VideoAgentAdmission.MIN_FREE_FOR_TWO_EXTRACTORS,false))

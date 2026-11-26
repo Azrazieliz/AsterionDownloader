@@ -27,16 +27,27 @@ internal object VideoDiagnosticsReport {
         builder.append("Captured: ").append(Date()).append('\n')
         builder.append("Package: ").append(context.packageName).append('\n')
         builder.append("Android: ").append(Build.VERSION.RELEASE).append('\n')
+        runCatching{
+            val pkg=context.packageManager.getPackageInfo(context.packageName,0)
+            builder.append("Version: ").append(pkg.versionName)
+                .append(" (").append(pkg.longVersionCode).append(")\n")
+        }
         val am=context.getSystemService(ActivityManager::class.java)
         val memory=ActivityManager.MemoryInfo()
         if(am!=null)runCatching{
             am.getMemoryInfo(memory)
             builder.append("Available RAM: ").append(memory.availMem)
                 .append(" bytes; low-memory: ").append(memory.lowMemory)
+                .append("; primary native-only: ")
+                .append(VideoAgentAdmission.nativeOnlyForLane(context,false))
                 .append("; secondary native-only: ")
-                .append(VideoAgentAdmission.secondaryNativeOnly(
-                    memory.availMem,memory.lowMemory,
-                    memory.totalMem,memory.threshold)).append('\n')
+                .append(VideoAgentAdmission.nativeOnlyForLane(context,true))
+                .append('\n')
+            val stats=android.os.Debug.MemoryInfo()
+            android.os.Debug.getMemoryInfo(stats)
+            builder.append("Diagnostics process PSS: ").append(stats.totalPss)
+                .append(" KiB; OS pressure threshold: ").append(memory.threshold)
+                .append(" bytes\n")
         }
         builder.append("Expected embedded extractor: ")
             .append(VideoExtractorVersion.VERSION)

@@ -483,8 +483,9 @@ object AsterionAdultHub {
             val publicChecked=KyoraCreatorPreviews.cached(a,site.url)
             val rawState=sourceState(a,site)
             val state=when{
-                issue==null && visibleSources && rawState=="Source error"->
-                    "Covers indexed · original downloads not verified"
+                visibleSources && rawState in setOf("Source error","Check failed")->
+                    if(issue==null)"Cached covers available · latest check inconclusive"
+                    else "Cached covers available · latest check failed"
                 publicChecked?.entries?.isNotEmpty()==true && rawState=="Not checked"->
                     "Catalog covers found · original downloads not verified"
                 else->rawState
@@ -581,7 +582,9 @@ object AsterionAdultHub {
                     issue.contains("redirect",true)->"Provider redirected unexpectedly · adapter needs repair"
                     else->issue.take(116)
                 }
-                card.addView(ui.text(a,readable,11f,ui.danger),ui.lp(a,6))
+                card.addView(ui.text(a,
+                    (if(visibleSources)"Latest check: " else "")+readable,
+                    11f,if(visibleSources)ui.secondary else ui.danger),ui.lp(a,6))
                 val loginRequired=issue.contains("401") ||
                     issue.contains("login required",true) ||
                     issue.contains("sign in",true) ||

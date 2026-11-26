@@ -58,6 +58,15 @@ internal object VideoAgentAdmission {
                 nowMs-stamp<=PRIMARY_KILL_COOLDOWN_MS
         }>=2
 
+    internal fun recentPrimaryMemoryKill(timestamps:List<Long>,nowMs:Long):Boolean =
+        timestamps.any{stamp->stamp>0L && stamp<=nowMs &&
+            nowMs-stamp<=PRIMARY_KILL_COOLDOWN_MS}
+
+    internal fun primaryNativeOnly(freeBytes:Long,lowMemory:Boolean,
+                                  androidPressureThreshold:Long):Boolean =
+        lowMemory || freeBytes<=0L || freeBytes<maxOf(900_000_000L,
+            androidPressureThreshold.coerceAtLeast(0L)+600_000_000L)
+
     private fun recentPrimaryMemoryKills(context:Context):Boolean {
         if(android.os.Build.VERSION.SDK_INT<30)return false
         return runCatching {
@@ -69,23 +78,25 @@ internal object VideoAgentAdmission {
                 it.processName==prefix &&
                     it.reason==android.app.ApplicationExitInfo.REASON_LOW_MEMORY
             }.map{it.timestamp}
-            repeatedRecentPrimaryMemoryKills(
-                timestamps,System.currentTimeMillis())
+            recentPrimaryMemoryKill(timestamps,System.currentTimeMillis())
         }.getOrDefault(false)
     }
 
-    fun nativeOnly(context:Context):Boolean {
-        val secondary=android.app.Application.getProcessName().orEmpty()
-            .endsWith(":videoflow_secondary")
-        if(!secondary)return false
+    fun nativeOnly(context:Context):Boolean =
+        nativeOnlyForLane(context,android.app.Application.getProcessName()
+            .orEmpty().endsWith(":videoflow_secondary"))
+
+    /** Same admission predicate for scheduling and read-only diagnostics. */
+    fun nativeOnlyForLane(context:Context,secondary:Boolean):Boolean {
         val am=context.getSystemService(ActivityManager::class.java)
             ?:return true
         val info=ActivityManager.MemoryInfo()
-        if(recentPrimaryMemoryKills(context))return true
+        if(secondary && recentPrimaryMemoryKills(context))return true
         return try {
             am.getMemoryInfo(info)
-            secondaryNativeOnly(info.availMem,info.lowMemory,
+            if(secondary)secondaryNativeOnly(info.availMem,info.lowMemory,
                 info.totalMem,info.threshold)
+            else primaryNativeOnly(info.availMem,info.lowMemory,info.threshold)
         }catch(_:RuntimeException){
             // No unknown memory state may cause a second large Python engine
             // to start without evidence of sufficient available RAM.

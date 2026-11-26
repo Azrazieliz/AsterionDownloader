@@ -31,7 +31,7 @@ internal object TorrentMetadataBridge {
     private val preparing=java.util.concurrent.ConcurrentHashMap<String,Long>()
     internal fun claimRequest(key:String,now:Long):Boolean{
         require(key.isNotBlank())
-        val until=now+120_000L
+        val until=now+180_000L
         while(true){
             val current=preparing.putIfAbsent(key,until)
             if(current==null)return true
@@ -141,7 +141,11 @@ internal object TorrentMetadataBridge {
                 val output=java.io.ByteArrayOutputStream()
                 input.use { stream ->
                     val block=ByteArray(16_384)
+                    val deadline=android.os.SystemClock.elapsedRealtime()+15_000L
                     while(true){
+                        if(Thread.currentThread().isInterrupted ||
+                            android.os.SystemClock.elapsedRealtime()>=deadline)
+                            throw java.io.IOException("Metadata cache read timed out")
                         val count=stream.read(block)
                         if(count<0)break
                         if(output.size()+count>8_388_608)
