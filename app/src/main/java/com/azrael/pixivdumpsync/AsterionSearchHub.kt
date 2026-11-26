@@ -17,6 +17,11 @@ import com.asterion.videoflow.VideoEngine
  * this exception to the independent PeerTube search API results.
  */
 internal object PeerTubeResultPolicy {
+    internal fun peerTubeSearchUrl(term:String,page:Int):String {
+        require(page>=0){"Negative search page"}
+        return "https://sepiasearch.org/api/v1/search/videos?search="+
+            URLEncoder.encode(term,"UTF-8")+"&count=30&start="+(page.toLong()*30L)
+    }
     fun isVideoWatch(raw:String):Boolean {
         if(!SearchRanking.validUrl(raw) ||
             ProviderRetirement.isRetired(raw))return false
@@ -66,13 +71,8 @@ object AsterionSearchHub {
         preferences(a).edit().putString("results_"+mode,data.toString())
             .putString("query_"+mode,term).apply()
     }
-    internal fun peerTubeSearchUrl(term:String,page:Int):String {
-        require(page>=0){"Negative search page"}
-        return "https://sepiasearch.org/api/v1/search/videos?search="+
-            URLEncoder.encode(term,"UTF-8")+"&count=30&start="+(page.toLong()*30L)
-    }
     private fun peertube(term:String,page:Int):List<Found> {
-        val url=peerTubeSearchUrl(term,page)
+        val url=PeerTubeResultPolicy.peerTubeSearchUrl(term,page)
         val json=JSONObject(Jsoup.connect(url).ignoreContentType(true).timeout(18000)
             .maxBodySize(2500000).execute().body()).getJSONArray("data")
         return (0 until minOf(json.length(),30)).mapNotNull{i->

@@ -5,8 +5,8 @@ import org.junit.Test
 
 class IndependentIndexPaginationTest {
     @Test fun generalVideoIndexUsesRealOffset(){
-        val first=AsterionSearchHub.peerTubeSearchUrl("woodworking tutorial",0)
-        val third=AsterionSearchHub.peerTubeSearchUrl("woodworking tutorial",2)
+        val first=PeerTubeResultPolicy.peerTubeSearchUrl("woodworking tutorial",0)
+        val third=PeerTubeResultPolicy.peerTubeSearchUrl("woodworking tutorial",2)
         assertTrue(first.endsWith("&count=30&start=0"))
         assertTrue(third.endsWith("&count=30&start=60"))
         assertTrue(third.contains("woodworking+tutorial"))
