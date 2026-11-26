@@ -400,34 +400,69 @@ object ResourceDownloads {
     private fun openMagnet(a:Activity,url:String,folder:String){
         TorrentTransfers.prepareMagnet(a,url,folder)
     }
+    /** Never forward an original host's session to a redirect destination.
+     * One total deadline, bounded buffers, and a verified descriptor.
+     */
+    internal fun readTorrentDescriptor(url:String,cookie:(String)->String?):ByteArray {
+        val origin=URI(url)
+        val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(45)
+        var target=origin
+        repeat(5){
+            require(target.scheme=="https" && target.userInfo==null &&
+                target.port in setOf(-1,443) && target.fragment==null &&
+                SearchRanking.validUrl(target.toString())){"Only public HTTPS torrent metadata"}
+            val remaining=java.util.concurrent.TimeUnit.NANOSECONDS
+                .toMillis(deadline-System.nanoTime())
+            require(remaining>0 && !Thread.currentThread().isInterrupted){
+                "Torrent descriptor request timed out"
+            }
+            val response=target.toURL().openConnection() as HttpURLConnection
+            try{
+                response.connectTimeout=minOf(remaining,8000L).toInt().coerceAtLeast(1)
+                response.readTimeout=minOf(remaining,12000L).toInt().coerceAtLeast(1)
+                response.instanceFollowRedirects=false
+                response.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 17)")
+                if(target.host.equals(origin.host,true))
+                    cookie(target.toString())?.let{response.setRequestProperty("Cookie",it)}
+                val status=response.responseCode
+                if(status in 300..399){
+                    val location=response.getHeaderField("Location")
+                        ?:error("Torrent descriptor redirect missing destination")
+                    target=target.resolve(location)
+                }else{
+                    require(status in 200..299){"HTTP "+status}
+                    require(response.contentLengthLong<=8_388_608L){"Torrent descriptor exceeds 8 MB"}
+                    return response.inputStream.use{input->
+                        val block=ByteArray(16_384)
+                        val output=java.io.ByteArrayOutputStream()
+                        while(true){
+                            require(System.nanoTime()<deadline && !Thread.currentThread().isInterrupted){
+                                "Torrent descriptor request timed out"
+                            }
+                            val count=input.read(block)
+                            if(count<0)break
+                            require(output.size()+count<=8_388_608){"Torrent descriptor exceeds 8 MB"}
+                            output.write(block,0,count)
+                        }
+                        output.toByteArray()
+                    }
+                }
+            }finally{response.disconnect()}
+        }
+        error("Too many torrent descriptor redirects")
+    }
+
     private fun fetchTorrent(a:Activity,url:String,folder:String){
         thread(name="asterion-torrent-metadata") {
             val result=runCatching{
-                val u=URL(url)
-                require(u.protocol=="https"){"Only HTTPS torrent metadata"}
-                val response=u.openConnection() as HttpURLConnection
-                response.connectTimeout=25000;response.readTimeout=25000
-                response.instanceFollowRedirects=true
-                response.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 17)")
-                SiteSession.cookie(url)?.let{response.setRequestProperty("Cookie",it)}
-                require(response.responseCode in 200..299){"HTTP "+response.responseCode}
-                val bytes=response.inputStream.use{input->
-                    val buf=ByteArray(8*1024*1024+1)
-                    val stream=java.io.ByteArrayOutputStream()
-                    while(true){
-                        val size=input.read(buf,0,8192)
-                        if(size<0)break
-                        stream.write(buf,0,size)
-                        require(stream.size()<=8*1024*1024){"Torrent descriptor exceeds 8 MB"}
-                    }
-                    stream.toByteArray()
+                val bytes=readTorrentDescriptor(url){address->
+                    SiteSession.cookie(address)
                 }
-                require(bytes.size>32 && bytes[0]== 'd'.code.toByte()){
-                    "Not a torrent descriptor"
+                BencodedTorrentManifest.parse(bytes)
+                a.runOnUiThread {
+                    if(!a.isFinishing && !a.isDestroyed)
+                        TorrentTransfers.prepareDescriptor(a,bytes,folder)
                 }
-                val hash=MessageDigest.getInstance("SHA-256")
-                    .digest(bytes).take(10).joinToString(""){"%02x".format(it)}
-                a.runOnUiThread { TorrentTransfers.prepareDescriptor(a,bytes,folder) }
             }.exceptionOrNull()
             if(result!=null)a.runOnUiThread{note(a,"Torrent metadata error: "+result.message)}
         }
