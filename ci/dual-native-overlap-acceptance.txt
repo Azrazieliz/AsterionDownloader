@@ -1,4 +1,1 @@
-Asterion Download native concurrent-byte acceptance marker
-Source baseline 9367161e774e96ce27a75edec3e88b94841c3ff2
-Source app commit is the published v1.3.67; this marker changes no APK source code.
-Run controlled real-byte native and Python Android emulator instrumentation. Signed owner release already built; do not republish it.
+Owner-authorized isolated emulator simulation 2026-11-26. Source preflight first; phonepilot test APK only, no acceptance release, signing, or phone installation.
