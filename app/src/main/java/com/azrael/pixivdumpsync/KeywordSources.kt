@@ -157,10 +157,16 @@ object KeywordSources {
         if(route!=null)call.proxy(route)
         return call
     }
-    private fun index(context:Context,provider:SearchProvider,keyword:String):List<RankedHit> {
+    internal fun federatedIndexUrl(base:String,keyword:String,page:Int):String {
+        require(page>=0){"Negative search page"}
         val escaped=URLEncoder.encode(keyword,"UTF-8")
-        val address=provider.url.trimEnd('/')+
-            "/search?q=$escaped&format=json&categories=videos,general&safesearch=0"
+        return base.trimEnd('/')+
+            "/search?q=$escaped&format=json&categories=videos,general&pageno="+
+            (page.toLong()+1L)
+    }
+    private fun index(context:Context,provider:SearchProvider,keyword:String,
+                      page:Int=0):List<RankedHit> {
+        val address=federatedIndexUrl(provider.url,keyword,page)
         val response=connection(context,address).ignoreContentType(true).execute()
         require(response.statusCode() in 200..299){
             "Search provider returned HTTP ${response.statusCode()}"
@@ -510,10 +516,15 @@ object KeywordSources {
         // Internet indexes are PRIMARY. Individual provider adapters are
         // optional enrichment, never an allowlist or a prerequisite for search.
         tasks+="Bing Web" to {broadWebIndex(context,keyword,area,indexPage)}
-        if(indexPage==0)for(provider in providers)tasks+=provider.label to {
-            when(provider.kind){
-                SearchProviderKind.SEARXNG->index(context,provider,keyword.trim())
-                SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
+        // An independent configured index is a paged route, not a
+        // first-page-only enrichment. Direct publisher searches are unchanged.
+        for(provider in providers){
+            if(indexPage>0 && provider.kind!=SearchProviderKind.SEARXNG)continue
+            tasks+=provider.label to {
+                when(provider.kind){
+                    SearchProviderKind.SEARXNG->index(context,provider,keyword.trim(),indexPage)
+                    SearchProviderKind.HTML->html(context,provider,keyword.trim(),area)
+                }
             }
         }
         val scheduled=prioritizedTasks(tasks)

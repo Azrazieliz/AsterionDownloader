@@ -66,9 +66,13 @@ object AsterionSearchHub {
         preferences(a).edit().putString("results_"+mode,data.toString())
             .putString("query_"+mode,term).apply()
     }
-    private fun peertube(term:String):List<Found> {
-        val url="https://sepiasearch.org/api/v1/search/videos?search="+
-            URLEncoder.encode(term,"UTF-8")+"&count=30"
+    internal fun peerTubeSearchUrl(term:String,page:Int):String {
+        require(page>=0){"Negative search page"}
+        return "https://sepiasearch.org/api/v1/search/videos?search="+
+            URLEncoder.encode(term,"UTF-8")+"&count=30&start="+(page.toLong()*30L)
+    }
+    private fun peertube(term:String,page:Int):List<Found> {
+        val url=peerTubeSearchUrl(term,page)
         val json=JSONObject(Jsoup.connect(url).ignoreContentType(true).timeout(18000)
             .maxBodySize(2500000).execute().body()).getJSONArray("data")
         return (0 until minOf(json.length(),30)).mapNotNull{i->
@@ -104,14 +108,14 @@ object AsterionSearchHub {
         val sharedDeadline=System.nanoTime()+
             java.util.concurrent.TimeUnit.SECONDS.toNanos(32)
         val workers=java.util.concurrent.Executors.newFixedThreadPool(
-            areas.size+if(mode==0 && indexPage==0)1 else 0)
+            areas.size+if(mode==0)1 else 0)
         var peerFuture:java.util.concurrent.Future<List<Found>>?=null
         var peerResults:List<Found> = emptyList()
         var peerCompleted=0
         try{
-            if(mode==0 && indexPage==0)
+            if(mode==0)
                 peerFuture=workers.submit(java.util.concurrent.Callable{
-                    peertube(term)
+                    peertube(term,indexPage)
                 })
             val completion=java.util.concurrent.ExecutorCompletionService<
                 Triple<VideoSearchArea,SearchOutcome?,String?>>(workers)
