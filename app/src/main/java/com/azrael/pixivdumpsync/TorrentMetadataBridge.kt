@@ -90,7 +90,7 @@ internal object TorrentMetadataBridge {
             }
         }
     }
-    private fun normalizedHexInfoHash(magnet:String):String? {
+    internal fun normalizedHexInfoHash(magnet:String):String? {
         val hash=CloudTorrentPolicy.infoHash(magnet)?:return null
         if(hash.length==40)return hash.lowercase(java.util.Locale.ROOT)
         if(hash.length!=32)return null

@@ -21,15 +21,36 @@ object MultiTorrentSearch {
         for(key in listOf("coverUrl","poster","thumbnail","image","cover",
                 "posterUrl","imageUrl")){
             val candidate=row.optString(key).trim()
-            if(candidate.startsWith("https://") &&
-                SearchRanking.validUrl(candidate) &&
-                runCatching{java.net.URI(candidate).path.orEmpty()
-                    .matches(Regex(""".*\.(?:jpe?g|png|webp|avif)$""",
-                        RegexOption.IGNORE_CASE))}.getOrDefault(false))
-                return candidate
+            // The API explicitly labels this field as an image. Extensionless
+            // CDN paths are valid; RemoteImageLoader verifies actual image MIME
+            // and decoding before publishing the bitmap.
+            if(validPoster(candidate))return candidate
         }
         return ""
     }
+    private fun validPoster(value:String):Boolean = runCatching {
+        val uri=java.net.URI(value)
+        uri.scheme=="https" && uri.port in setOf(-1,443) &&
+            uri.userInfo==null && uri.fragment==null &&
+            uri.path.orEmpty().isNotBlank() && uri.path!="/" &&
+            SearchRanking.validUrl(value)
+    }.getOrDefault(false)
+
+    internal fun mergeExactResults(hits:List<CatalogHit>):List<CatalogHit>{
+        val result=linkedMapOf<String,CatalogHit>()
+        for(hit in hits){
+            val key=if(hit.url.startsWith("magnet:",true)){
+                val hash=TorrentMetadataBridge.normalizedHexInfoHash(hit.url)?:continue
+                "btih:"+hash
+            }else SearchRanking.canonicalKey(hit.url)
+            val existing=result[key]
+            result[key]=if(existing==null)hit else if(
+                !validPoster(existing.coverUrl) && validPoster(hit.coverUrl))
+                existing.copy(coverUrl=hit.coverUrl) else existing
+        }
+        return result.values.toList()
+    }
+
     // Index APIs often return only an infohash, not the original .torrent
     // descriptor or any announce trackers. A trackerless synthesized magnet
     // can wait indefinitely for DHT bootstrap on Android mobile networks.
@@ -331,14 +352,11 @@ object MultiTorrentSearch {
         // title to include EVERY significant search term before displaying it.
         // Adult torrent images/galleries are allowed; quality and identity are
         // still checked against the selected descriptor before downloading.
-        return hits.filter{
+        return mergeExactResults(hits.filter{
             SearchExactness.matches(q,it.title) &&
                 (area!=TorrentArea.GAMES ||
                     !GameTorrentPolicy.clearlyNonGameTitle(it.title))
-        }.distinctBy{
-            if(it.url.startsWith("magnet:"))it.url.substringAfter("urn:btih:").substringBefore("&").lowercase()
-            else it.url
-        } to errors
+        }) to errors
     }
 
 }
