@@ -102,9 +102,10 @@ internal object TorrentSafetyGate {
 
     @Synchronized fun begin(c:Context):Admission{
         val admission=assess(c)
-        if(admission.allowed)prefs(c).edit()
+        if(admission.allowed && !prefs(c).edit()
             .putLong("last_boot_epoch_ms",bootEpoch())
-            .putBoolean("native_request_running",true).commit()
+            .putBoolean("native_request_running",true).commit())
+            return Admission(false,"Unable to persist native incident marker; retry later")
         return admission
     }
     @Synchronized fun finished(c:Context){

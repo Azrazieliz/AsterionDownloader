@@ -140,7 +140,8 @@ internal object TorrentVerifiedExport {
         require(jobPattern.matches(id)){"Invalid torrent job"}
         val root=root(c)
         val status=File(root,"$id.status")
-        require(status.isFile && status.readText().contains("QUARANTINED")){
+        require(status.isFile && TorrentTransfers.classifyStatus(
+            status.readText(),0L,0L,System.currentTimeMillis())=="QUARANTINED"){
             "Torrent is not a completed, quarantined original"
         }
         val review=File(root,"$id.security-review.txt")

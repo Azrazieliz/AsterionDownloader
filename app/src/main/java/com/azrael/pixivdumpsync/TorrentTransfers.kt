@@ -114,18 +114,25 @@ object TorrentTransfers {
     /** An explicit cancellation always wins over incidental text such as
      * "security review" in the cancellation receipt.
      */
+    private fun stateText(text:String):String =
+        text.trim().replaceFirst(Regex("^[a-fA-F0-9]{8,24}\\s+·\\s+"),"")
+            .lowercase(java.util.Locale.ROOT)
+
     internal fun classifyStatus(text:String,updated:Long,
                                 speedBytesPerSec:Long,now:Long):String {
-        val raw=text.lowercase(java.util.Locale.ROOT)
+        val raw=stateText(text)
         val age=now-updated
         return when {
-            "cancelled" in raw->"CANCELLED"
-            "exported" in raw->"EXPORTED"
-            "exporting" in raw->"EXPORTING"
-            "quarantin" in raw || "security review" in raw->"QUARANTINED"
-            "failed:" in raw || "stalled:" in raw->"FAILED"
-            "pause" in raw->"PAUSED"
-            "verify" in raw || "review" in raw->"VERIFYING"
+            raw.startsWith("cancelled")->"CANCELLED"
+            raw.startsWith("failed:") || raw.startsWith("stalled:")->"FAILED"
+            raw.startsWith("paused")->"PAUSED"
+            raw.startsWith("exported")->"EXPORTED"
+            raw.startsWith("exporting") ||
+                raw.startsWith("quarantined · exporting")->"EXPORTING"
+            raw.startsWith("quarantined")->"QUARANTINED"
+            raw.startsWith("verifying") ||
+                raw.startsWith("private quarantine · reviewed")->"VERIFYING"
+            raw.startsWith("queued") || raw.startsWith("resuming")->"QUEUED"
             updated>0L && age in 0..15_000L && speedBytesPerSec>0L->"TRANSFERRING"
             updated>0L && age in 0..15_000L->"WAITING_PEERS"
             else->"QUEUED"
@@ -206,7 +213,8 @@ object TorrentTransfers {
             if(!file.isFile)return@runCatching null
             val value=file.readText().take(350)
             val interrupted=System.currentTimeMillis()-file.lastModified()>15L*60_000L &&
-                value.contains('%') && !value.contains("COMPLETED",true)
+                value.contains('%') &&
+                classifyStatus(value,0L,0L,System.currentTimeMillis())=="QUEUED"
             if(interrupted)"$id · Last transfer progress is stale; resume to check peers"
             else value
         }.getOrNull()
@@ -218,14 +226,16 @@ object TorrentTransfers {
      * unverified pieces. Only TorrentTransferService may stop active JNI work.
      */
     internal fun queueActionLabels(value:String):List<String> {
-        val normalized=value.lowercase(java.util.Locale.ROOT)
-        val exported="exported" in normalized
-        val quarantined="quarantined" in normalized
-        val cancelled="cancelled" in normalized
-        val paused="paused" in normalized || "failed:" in normalized ||
-            "stalled:" in normalized
+        val state=classifyStatus(value,0L,0L,System.currentTimeMillis())
+        val exported=state=="EXPORTED"
+        val quarantined=state=="QUARANTINED"
+        val cancelled=state=="CANCELLED"
+        val normalized=stateText(value)
+        val paused=state in setOf("PAUSED","FAILED") ||
+            normalized.startsWith("queued") || normalized.contains("progress is stale")
         return buildList {
-            if(!exported && !quarantined && !cancelled)
+            if(!exported && !quarantined && !cancelled &&
+                state !in setOf("VERIFYING","EXPORTING"))
                 add(if(paused)"Resume transfer" else "Pause transfer")
             add("Show current status")
             add("Quarantine security report")
@@ -418,7 +428,7 @@ class TorrentTransferService : Service() {
                 inFlight.size,metadataWorkers.size,exportWorkers.size,
                 nativeCleanup.get()))return
         // Preserve owner-selected jobs that arrived while JNI was unwinding.
-        if(deferredJobs.isNotEmpty() && startDeferredIfIdle())return
+        if(startDeferredIfIdle())return
         if(!TorrentServiceLifetimePolicy.mayStop(
                 inFlight.size,metadataWorkers.size,exportWorkers.size,
                 nativeCleanup.get()))return
@@ -802,9 +812,22 @@ class TorrentTransferService : Service() {
             throw InterruptedException("Torrent was discarded before native transfer")
         val descriptor = File(File(filesDir, "torrent-jobs"), "$id.torrent")
         require(descriptor.isFile) { "Torrent metadata missing" }
-        val info = TorrentInfo(descriptor)
-        require(info.isValid()) { "Torrent is invalid" }
-        val selected = encoded.split(',').mapNotNull { it.toIntOrNull() }.toSet()
+        require(descriptor.length() in 33L..8_388_608L){"Invalid torrent descriptor size"}
+        val descriptorBytes=descriptor.readBytes()
+        val descriptorId=MessageDigest.getInstance("SHA-256")
+            .digest(descriptorBytes).take(12).joinToString(""){"%02x".format(it)}
+        require(descriptorId==id){"Torrent descriptor identity mismatch"}
+        val manifest=BencodedTorrentManifest.parse(descriptorBytes)
+        val info = TorrentInfo(descriptorBytes)
+        require(info.isValid() && info.numFiles()==manifest.files.size) { "Torrent is invalid" }
+        val nativeFiles=info.files()
+        require(manifest.files.indices.all{i->
+            manifest.files[i].path==nativeFiles.filePath(i) &&
+                manifest.files[i].size==nativeFiles.fileSize(i)
+        }){"Native file selection differs from the authenticated descriptor"}
+        val selected=encoded.split(',').map{
+            it.toIntOrNull()?:error("Invalid selected file index")
+        }.toSet()
         require(selected.isNotEmpty() && selected.all { it in 0 until info.numFiles() }) {
             "Invalid selected file indices"
         }

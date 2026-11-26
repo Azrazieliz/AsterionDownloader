@@ -51,6 +51,26 @@ class TorrentQueueActionsTest {
         assertEquals("WAITING_PEERS",
             TorrentTransfers.classifyStatus("Waiting",9_000L,0L,10_000L))
     }
+    @Test fun stalledPartialPiecesAreNotCompletedQuarantine(){
+        val receipt="fec0337b · STALLED: torrent stalled; partials quarantined · Resume keeps verified pieces"
+        assertEquals("FAILED",TorrentTransfers.classifyStatus(receipt,9000L,0L,10000L))
+        val actions=TorrentTransfers.queueActionLabels(receipt)
+        assertTrue(actions.contains("Resume transfer"))
+        assertFalse(actions.contains("Review & export selected files"))
+    }
+    @Test fun verificationAndExportRemainDistinctFromCompletedQuarantine(){
+        assertEquals("VERIFYING",TorrentTransfers.classifyStatus(
+            "fec0337b · Verifying selected files in private quarantine",0,0,100))
+        assertEquals("VERIFYING",TorrentTransfers.classifyStatus(
+            "fec0337b · Private quarantine · reviewed 2/3",0,0,100))
+        assertEquals("EXPORTING",TorrentTransfers.classifyStatus(
+            "fec0337b · QUARANTINED · Exporting verified file 2/3",0,0,100))
+    }
+    @Test fun queuedStateDoesNotInheritOldTransferMetrics(){
+        val receipt="fec0337b · QUEUED · waiting for native metadata"
+        assertEquals("QUEUED",TorrentTransfers.classifyStatus(receipt,9000L,2000L,10000L))
+        assertTrue(TorrentTransfers.queueActionLabels(receipt).contains("Resume transfer"))
+    }
     @Test fun cancelledJobsCannotBeResumedOrDiscardedAgain(){
         assertFalse(TorrentTransfers.queueActionLabels(
             "Cancelled · selected torrent removed from queue")
