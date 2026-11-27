@@ -226,6 +226,17 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
         requireOriginalControlCaller();
         if (extras == null || extras.getInt("protocol_version", 0) != 1)
             throw new IllegalArgumentException("Unsupported bridge protocol");
+        // Authenticated read-only discovery does not have an invocation ID.
+        if ("asterion.v1.capabilities".equals(method)) {
+            return reply(new JSONObjectBuilder().put("ok", true).put("pack_version", 1)
+                .put("actions", new JSONArray()
+                    .put(new JSONObjectBuilder().put("name","status").put("intent","status.downloader").build())
+                    .put(new JSONObjectBuilder().put("name","diagnostics.summary").put("intent","diagnostics.downloader").build()))
+                .put("knowledge",new JSONArray().put(new JSONObjectBuilder()
+                    .put("category","limit").put("id","published.scope")
+                    .put("description","Process, Android exit and existing stored VideoFlow queue observations. No transfer or segmented download invocation is exposed.").build()))
+                .build());
+        }
         String requestId = extras.getString("request_id", "");
         if (!requestIdValid(requestId))
             throw new IllegalArgumentException("Invalid durable request ID");
@@ -236,9 +247,11 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
                 .put("reason", "Read-only snapshots are immediate; no cancellable engine action exists")
                 .build());
         if ("asterion.v1.status".equals(method)) {
-            boolean saved = receipts.contains("id:" + requestId);
-            return reply(new JSONObjectBuilder().put("ok", saved)
-                .put("status", saved ? "completed" : "unknown_request")
+            String outcome=receipts.getString("outcome:"+requestId,"");
+            boolean completed="completed".equals(outcome);
+            return reply(new JSONObjectBuilder().put("ok", completed)
+                .put("status",completed?"completed":"failed".equals(outcome)?"failed":
+                    receipts.contains("id:"+requestId)?"outcome_unknown":"unknown_request")
                 .put("request_id", requestId).build());
         }
         if (!"asterion.v1.invoke".equals(method))
@@ -263,12 +276,15 @@ public final class AsterionControlBridgeProvider extends ContentProvider {
             JSONObject result = processEvidence();
             if ("capabilities".equals(action))
                 result.put("capability_type", "read_only_process_and_exit_evidence");
+            if(!receipts.edit().putString("outcome:"+requestId,"completed").commit())
+                throw new IllegalStateException("Unable to persist completed observation");
             return reply(new JSONObjectBuilder().put("ok", true)
                 .put("status", "completed")
                 .put("action", action)
                 .put("request_id", requestId)
                 .put("evidence", result).build());
         } catch (Exception error) {
+            receipts.edit().putString("outcome:"+requestId,"failed").commit();
             return reply(new JSONObjectBuilder().put("ok", false)
                 .put("status", "failed")
                 .put("reason", "Unable to capture process snapshot").build());
